@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
 fun LogicPortStatusScreen() {
     val teams = CricketData.getAllTeams()
     val totalPlayers = teams.sumOf { it.players.size }
+    val summary = "${teams.size} teams loaded, ${totalPlayers} players"
 
     Column(
         modifier = Modifier
@@ -53,7 +54,7 @@ fun LogicPortStatusScreen() {
         Spacer(modifier = Modifier.height(16.dp))
         Text("Native Kotlin port \u2014 logic layer in progress")
         Spacer(modifier = Modifier.height(24.dp))
-        Text("${'$'}{teams.size} teams loaded, ${'$'}{totalPlayers} players")
+        Text(summary)
         Spacer(modifier = Modifier.height(8.dp))
         Text("No gameplay UI yet \u2014 see PORTING_NOTES.md")
     }
