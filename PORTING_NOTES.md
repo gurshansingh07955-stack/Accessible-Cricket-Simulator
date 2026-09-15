@@ -19,6 +19,37 @@ audio, and accessibility layers can't just be "translated".
     Glenn Phillips, Cameron Green, David Warner, Andre Russell)
   - `buildMatchSquad()` and `autoSelectPlayingXI()` (playing-XI /
     captain / vice-captain / wicketkeeper selection logic)
+- **`app/src/main/java/com/cricketsim/logic/PitchType.kt`** — small
+  standalone enum split out of `helpers/matchEngine.tsx`'s type alias,
+  since both `StadiumData.kt` and the eventual `MatchEngine.kt` depend
+  on it.
+- **`app/src/main/java/com/cricketsim/logic/StadiumData.kt`**
+  (from `helpers/stadiumData.tsx`) — all 101 stadiums, every numeric
+  field (rain probability, humidity, temperature, wind, altitude, dew
+  factor, avg T20 score, pitch type, boundary size) verified to exactly
+  match the web source. One deliberate scope cut: flavor-text
+  descriptions were regenerated from pitch type/climate rather than
+  copied verbatim from the original, to keep this pass tractable. If
+  exact original wording is ever needed, re-derive it from the Floot
+  source. *(Note: this file was already in the repo as of this update
+  but had been missing from this notes file — the notes had gone stale,
+  not the code. Fixed here.)*
+- **`app/src/main/java/com/cricketsim/logic/MatchFormat.kt`** — small
+  standalone enum (TEST/T20/ODI) split out of `helpers/matchEngine.tsx`'s
+  type alias, same pattern as `PitchType.kt`, needed by
+  `WeatherSystem.kt` and the eventual `MatchEngine.kt`/`MatchState.kt`.
+- **`app/src/main/java/com/cricketsim/logic/WeatherSystem.kt`**
+  (from `helpers/weatherSystem.tsx`) — weather generation
+  (`generateWeatherForStadium`, `weatherConditionLabel`), stadium/weather
+  match-effect modifiers (`getStadiumMatchEffects`), rain-interruption
+  gating (`shouldTriggerRainInterruption`, `pickOversLost`), and the
+  simplified DLS resource-percentage curve (`resourcePercent`,
+  `computeInningsResourcePercent`, `computeDlsTarget`). All numeric
+  constants (jitter spreads, condition thresholds, the Z0 table, the
+  0.07 decay rate, the 160/245 G50 values) verified to match the web
+  source exactly. Overs counts are modeled as `Int`, matching
+  `MatchState.oversLimit: number` / `MatchScore.overs: number` in the
+  web source, which both track whole completed overs.
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
   correctly (shows team/player counts) — no real gameplay UI yet.
@@ -27,24 +58,17 @@ audio, and accessibility layers can't just be "translated".
 
 In rough priority order for the next session:
 
-1. `helpers/stadiumData.tsx` → `StadiumData.kt` — 101 real venues,
-   mostly data + a couple of filter helpers. Similar shape/size to
-   CricketData.kt.
-2. `helpers/weatherSystem.tsx` → `WeatherSystem.kt` — weather
-   generation, rain-interruption gating, the simplified DLS
-   resource-percentage curve. Small, self-contained, well-tested on the
-   web side — good next target.
-3. `helpers/bowlingSystem.tsx` → `BowlingSystem.kt` — line/length/
+1. `helpers/bowlingSystem.tsx` → `BowlingSystem.kt` — line/length/
    angle/variation system, AI bowling decisions.
-4. `helpers/battingSystem.tsx` → `BattingSystem.kt` — shot/intent/
+2. `helpers/battingSystem.tsx` → `BattingSystem.kt` — shot/intent/
    timing system, AI batting decisions.
-5. `helpers/fieldingSystem.tsx` → `FieldingSystem.kt` — field
+3. `helpers/fieldingSystem.tsx` → `FieldingSystem.kt` — field
    placement templates, AI field-setting logic.
-6. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
+4. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
    ball-by-ball outcome simulation; depends on everything above.
-7. `helpers/matchState.tsx` → `MatchState.kt` — the match state
+5. `helpers/matchState.tsx` → `MatchState.kt` — the match state
    machine (innings transitions, rain interruptions, save/resume).
-8. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
+6. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
    data (text + audio URLs), low risk, can be ported any time.
 
 ## Not ported, and NOT a mechanical translation when it happens
@@ -76,3 +100,8 @@ Each ported `.kt` file should be checked against its source `.tsx` for:
   app's session history, not arbitrary choices
 - doc comments explaining *why* a specific number or override exists
   are preserved, not just the code
+
+**IMPORTANT — keep this file in sync:** it went stale once already
+(missing `StadiumData.kt` after it was ported). After finishing a file,
+update this file in the SAME session/commit rather than leaving it for
+later.
