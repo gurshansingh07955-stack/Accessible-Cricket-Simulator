@@ -31,9 +31,7 @@ audio, and accessibility layers can't just be "translated".
   descriptions were regenerated from pitch type/climate rather than
   copied verbatim from the original, to keep this pass tractable. If
   exact original wording is ever needed, re-derive it from the Floot
-  source. *(Note: this file was already in the repo as of this update
-  but had been missing from this notes file — the notes had gone stale,
-  not the code. Fixed here.)*
+  source.
 - **`app/src/main/java/com/cricketsim/logic/MatchFormat.kt`** — small
   standalone enum (TEST/T20/ODI) split out of `helpers/matchEngine.tsx`'s
   type alias, same pattern as `PitchType.kt`, needed by
@@ -50,6 +48,27 @@ audio, and accessibility layers can't just be "translated".
   source exactly. Overs counts are modeled as `Int`, matching
   `MatchState.oversLimit: number` / `MatchScore.overs: number` in the
   web source, which both track whole completed overs.
+- **`app/src/main/java/com/cricketsim/logic/BowlingSystem.kt`**
+  (from `helpers/bowlingSystem.tsx`) — line/length/angle/variation/speed
+  system: quality scoring (`computeLengthPrecision`,
+  `computeSmoothnessPenalty`, `computeSpeedRiskPenalty`,
+  `computeBowlingQuality`, tier thresholds 85/70/50/30), mis-execution
+  resolution (`resolveActualLength`), the AI bowling decision generator
+  (`generateAiBowlingDecision`), and probability shaping
+  (`applyBowlingDecisionToProbabilities` + per-dimension `apply*`
+  helpers). Two modeling decisions worth knowing about before touching
+  this file again (both documented in the file's own header comment):
+  - `BowlingVariation` is ONE flattened enum covering both the web
+    source's `PaceVariation` and `SpinVariation` unions (they share the
+    "stock" value, so it appears once, not twice).
+  - `BowlingLength` and `MisExecutedLength` stay as two SEPARATE enums
+    behind a shared `DeliveryLength` sealed interface, preserving the
+    web source's real type distinction (`intendedLength` is always a
+    real, selectable `BowlingLength`; a `MisExecutedLength` can only
+    ever come out of `resolveActualLength` as a RESULT).
+  All numeric constants (speed ranges, quality-tier thresholds, penalty
+  caps, probability multipliers, mis-execution chances) verified to
+  match the web source exactly.
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
   correctly (shows team/player counts) — no real gameplay UI yet.
@@ -58,17 +77,17 @@ audio, and accessibility layers can't just be "translated".
 
 In rough priority order for the next session:
 
-1. `helpers/bowlingSystem.tsx` → `BowlingSystem.kt` — line/length/
-   angle/variation system, AI bowling decisions.
-2. `helpers/battingSystem.tsx` → `BattingSystem.kt` — shot/intent/
-   timing system, AI batting decisions.
-3. `helpers/fieldingSystem.tsx` → `FieldingSystem.kt` — field
+1. `helpers/battingSystem.tsx` → `BattingSystem.kt` — shot/intent/
+   timing system, AI batting decisions. Natural next target: it's the
+   direct counterpart to `BowlingSystem.kt` (just ported) and the two
+   are combined every ball in the eventual `MatchEngine.kt`.
+2. `helpers/fieldingSystem.tsx` → `FieldingSystem.kt` — field
    placement templates, AI field-setting logic.
-4. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
+3. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
    ball-by-ball outcome simulation; depends on everything above.
-5. `helpers/matchState.tsx` → `MatchState.kt` — the match state
+4. `helpers/matchState.tsx` → `MatchState.kt` — the match state
    machine (innings transitions, rain interruptions, save/resume).
-6. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
+5. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
    data (text + audio URLs), low risk, can be ported any time.
 
 ## Not ported, and NOT a mechanical translation when it happens
