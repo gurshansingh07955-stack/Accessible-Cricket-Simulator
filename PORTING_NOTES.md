@@ -69,6 +69,29 @@ audio, and accessibility layers can't just be "translated".
   All numeric constants (speed ranges, quality-tier thresholds, penalty
   caps, probability multipliers, mis-execution chances) verified to
   match the web source exactly.
+- **`app/src/main/java/com/cricketsim/logic/FieldingSector.kt`** — small
+  standalone enum (12 fielding positions) split out of
+  `helpers/fieldingSystem.tsx`'s type alias, since `BattingSystem.kt`
+  needed it for `ShotDirection` ahead of the full `FieldingSystem.kt`
+  port. Same split-out pattern as `PitchType.kt`/`MatchFormat.kt`.
+- **`app/src/main/java/com/cricketsim/logic/BattingSystem.kt`**
+  (from `helpers/battingSystem.tsx`) — shot-choice compatibility
+  (`computeShotCompatibility`, with the full per-shot excellent/good
+  tables and the sweep/reverse-sweep pace-vs-spin branch), footwork
+  match (`computeFootworkMatch`), the timing minigame
+  (`computeTimingIntervalMs`, `computeTimingTier`, thresholds
+  0.16/0.30/0.48/0.68), probability shaping
+  (`applyBattingDecisionToProbabilities` + per-dimension `apply*`
+  helpers, including the defensive-shot hard cap and step-out nuance),
+  the AI batting decision generator (`generateAiBattingDecision` —
+  preserves both of the web source's documented rebalance passes
+  verbatim in comments, since they explain WHY specific constants sit
+  where they do), and shot-direction-for-fielding
+  (`getShotDirection`). Reuses `BowlingSystem.kt`'s `DeliveryLength`
+  sealed interface directly (via a `CompatibleLength` typealias) rather
+  than redefining an equivalent union, since it's exactly the same
+  `BowlingLength | MisExecutedLength` union the web source uses. All
+  numeric constants verified to match the web source exactly.
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
   correctly (shows team/player counts) — no real gameplay UI yet.
@@ -77,17 +100,16 @@ audio, and accessibility layers can't just be "translated".
 
 In rough priority order for the next session:
 
-1. `helpers/battingSystem.tsx` → `BattingSystem.kt` — shot/intent/
-   timing system, AI batting decisions. Natural next target: it's the
-   direct counterpart to `BowlingSystem.kt` (just ported) and the two
-   are combined every ball in the eventual `MatchEngine.kt`.
-2. `helpers/fieldingSystem.tsx` → `FieldingSystem.kt` — field
-   placement templates, AI field-setting logic.
-3. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
+1. `helpers/fieldingSystem.tsx` → `FieldingSystem.kt` — field placement
+   templates, `FieldingDepth`/`FieldPlacement` (the `FieldingSector`
+   enum itself is already ported, see above), AI field-setting logic.
+   Natural next target: bowling and batting are both done, and
+   `MatchEngine.kt` needs all three before it can be attempted.
+2. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
    ball-by-ball outcome simulation; depends on everything above.
-4. `helpers/matchState.tsx` → `MatchState.kt` — the match state
+3. `helpers/matchState.tsx` → `MatchState.kt` — the match state
    machine (innings transitions, rain interruptions, save/resume).
-5. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
+4. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
    data (text + audio URLs), low risk, can be ported any time.
 
 ## Not ported, and NOT a mechanical translation when it happens
