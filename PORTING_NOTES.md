@@ -21,8 +21,7 @@ audio, and accessibility layers can't just be "translated".
     captain / vice-captain / wicketkeeper selection logic)
 - **`app/src/main/java/com/cricketsim/logic/PitchType.kt`** — small
   standalone enum split out of `helpers/matchEngine.tsx`'s type alias,
-  since both `StadiumData.kt` and the eventual `MatchEngine.kt` depend
-  on it.
+  since both `StadiumData.kt` and `MatchEngine.kt` depend on it.
 - **`app/src/main/java/com/cricketsim/logic/StadiumData.kt`**
   (from `helpers/stadiumData.tsx`) — all 101 stadiums, every numeric
   field (rain probability, humidity, temperature, wind, altitude, dew
@@ -34,8 +33,8 @@ audio, and accessibility layers can't just be "translated".
   source.
 - **`app/src/main/java/com/cricketsim/logic/MatchFormat.kt`** — small
   standalone enum (TEST/T20/ODI) split out of `helpers/matchEngine.tsx`'s
-  type alias, same pattern as `PitchType.kt`, needed by
-  `WeatherSystem.kt` and the eventual `MatchEngine.kt`/`MatchState.kt`.
+  type alias, same pattern as `PitchType.kt`, needed by `WeatherSystem.kt`
+  and `MatchEngine.kt`.
 - **`app/src/main/java/com/cricketsim/logic/WeatherSystem.kt`**
   (from `helpers/weatherSystem.tsx`) — weather generation
   (`generateWeatherForStadium`, `weatherConditionLabel`), stadium/weather
@@ -105,23 +104,78 @@ audio, and accessibility layers can't just be "translated".
   constants (sector angles, depth radii, the 0.3 attacking/containing
   situational-bias thresholds, the 3/5 legality caps) verified to match
   the web source exactly.
+- **`app/src/main/java/com/cricketsim/logic/DismissalType.kt`**,
+  **`TossDecision.kt`** — small standalone enums split out of inline
+  union types in `helpers/matchState.tsx`, needed now by
+  `BallOutcome.kt`/`MatchEngine.kt`.
+- **`app/src/main/java/com/cricketsim/logic/BallOutcome.kt`** — full
+  port of `helpers/matchState.tsx`'s `BallOutcome` interface, split out
+  since `MatchEngine.kt` needed it as `simulateBall`'s return type
+  ahead of the full `MatchState.kt` port.
+- **`app/src/main/java/com/cricketsim/logic/MatchState.kt`** — ⚠️
+  **PARTIAL, not the real interface** — see its own file-header warning.
+  Contains only the handful of `MatchState`/`MatchScore` fields
+  `MatchEngine.kt` actually reads (format, teams, score, target,
+  currentBatsmen, currentBowler, fieldPlacements, oversLimit). The real
+  `helpers/matchState.tsx` interface is much larger and depends on
+  `InningsData` from `helpers/matchStats.tsx` — see "Newly discovered
+  dependency" below. **This file will be REPLACED, not extended, when
+  the full state machine is ported** — don't build on top of its
+  current shape assuming it's stable.
+- **`app/src/main/java/com/cricketsim/logic/MatchEngine.kt`**
+  (from `helpers/matchEngine.tsx`) — `simulateToss`, `getOutcomeProbabilities`
+  (base rating/pitch-driven probabilities), `applyFieldPlacementToProbabilities`
+  (the field-placement tactical layer — aerial shots into a deep
+  fielder becoming catches, grounded shots getting cut off by a short/
+  close fielder, "finding the gap" when no fielder covers the shot),
+  `simulateBall` (illegal-field and beamer no-ball short-circuits,
+  difficulty modifier, stadium effects, bowling+batting decision
+  layering, outcome sampling, dismissal-type resolution),
+  `generateCommentary` (every phrase pool, keyed off the same
+  dismissalType/isEdge fields the AI voice commentary will eventually
+  use), and `calculateWinProbability`. Reuses `WeatherSystem.kt`'s
+  `StadiumMatchEffects` directly instead of redefining an identical
+  `StadiumEffects` type, since Kotlin has no circular-import constraint
+  forcing the web source's duplication (documented in the file header).
+  All numeric constants (base probabilities, pitch/difficulty
+  modifiers, field-placement multipliers, win-probability RRR
+  thresholds) verified to match the web source exactly.
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
   correctly (shows team/player counts) — no real gameplay UI yet.
+
+## ⚠️ Newly discovered dependency: helpers/matchStats.tsx
+
+While porting `MatchEngine.kt`, `helpers/matchState.tsx` turned out to
+import from **`helpers/matchStats.tsx`** (`InningsData`,
+`createEmptyInningsData`, `recordDismissal`, `endPartnership`,
+`getLastSixBalls`, `updateInningsDataForBall`, `addBowlerIfNotExists`)
+— a completely separate web-source file nobody had looked at yet, not
+mentioned in any earlier handoff. It hasn't been read or ported at all.
+The full `MatchState.kt` port needs this file too (`InningsData` is a
+required field on `MatchState`), so budget for reading AND porting
+`matchStats.tsx` as part of the same effort as `MatchState.kt`, not as
+an afterthought.
 
 ## Not started yet (logic layer)
 
 In rough priority order for the next session:
 
-1. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
-   ball-by-ball outcome simulation. Natural next target: bowling,
-   batting, and fielding are ALL done now — this is the file that
-   actually combines them into one resolved ball, and everything else
-   in the logic layer has been building toward it.
-2. `helpers/matchState.tsx` → `MatchState.kt` — the match state
-   machine (innings transitions, rain interruptions, save/resume).
+1. Read `helpers/matchStats.tsx` (not yet even inspected) and port it
+   as `MatchStats.kt` — `InningsData` and its helper functions
+   (`createEmptyInningsData`, `recordDismissal`, `endPartnership`,
+   `getLastSixBalls`, `updateInningsDataForBall`, `addBowlerIfNotExists`).
+   This blocks the full `MatchState.kt` port below.
+2. `helpers/matchState.tsx` → full `MatchState.kt` — the real match
+   state machine (`createNewMatch`, `applyBallOutcome`, `switchInnings`,
+   `selectBowler`, `changeBowler`, `recordWicketFall`,
+   `bringInNewBatsman`, `applyRainInterruption`, and the rest). This
+   REPLACES the current partial `MatchState.kt` (see its file-header
+   warning) rather than extending it — expect to rewrite, not just add
+   fields.
 3. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
-   data (text + audio URLs), low risk, can be ported any time.
+   data (text + audio URLs), low risk, can be ported any time
+   independently of the above two.
 
 ## Not ported, and NOT a mechanical translation when it happens
 
