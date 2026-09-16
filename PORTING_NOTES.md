@@ -92,6 +92,19 @@ audio, and accessibility layers can't just be "translated".
   than redefining an equivalent union, since it's exactly the same
   `BowlingLength | MisExecutedLength` union the web source uses. All
   numeric constants verified to match the web source exactly.
+- **`app/src/main/java/com/cricketsim/logic/FieldingSystem.kt`**
+  (from `helpers/fieldingSystem.tsx`) — position labels/coordinates
+  (`getPositionLabel`, `getPositionCoords`), drop-to-spot resolution
+  (`resolveDropToSpot` — currently unused by the UI, same as in the web
+  source), default outfielder/placement setup (`getFieldingPlayers`,
+  `createDefaultFieldPlacements`), the AI field-template system
+  (`generateAiFieldPlacements` with the 6 named templates: powerplay /
+  attacking / balanced / containing / bouncer_trap / yorker_trap), depth
+  toggling (`toggleDepth`), and legality checks (`isFieldLegal`,
+  `getIllegalFieldReason`, the 3/5 deep-fielder caps). All numeric
+  constants (sector angles, depth radii, the 0.3 attacking/containing
+  situational-bias thresholds, the 3/5 legality caps) verified to match
+  the web source exactly.
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
   correctly (shows team/player counts) — no real gameplay UI yet.
@@ -100,16 +113,14 @@ audio, and accessibility layers can't just be "translated".
 
 In rough priority order for the next session:
 
-1. `helpers/fieldingSystem.tsx` → `FieldingSystem.kt` — field placement
-   templates, `FieldingDepth`/`FieldPlacement` (the `FieldingSector`
-   enum itself is already ported, see above), AI field-setting logic.
-   Natural next target: bowling and batting are both done, and
-   `MatchEngine.kt` needs all three before it can be attempted.
-2. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
-   ball-by-ball outcome simulation; depends on everything above.
-3. `helpers/matchState.tsx` → `MatchState.kt` — the match state
+1. `helpers/matchEngine.tsx` → `MatchEngine.kt` — the actual
+   ball-by-ball outcome simulation. Natural next target: bowling,
+   batting, and fielding are ALL done now — this is the file that
+   actually combines them into one resolved ball, and everything else
+   in the logic layer has been building toward it.
+2. `helpers/matchState.tsx` → `MatchState.kt` — the match state
    machine (innings transitions, rain interruptions, save/resume).
-4. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
+3. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
    data (text + audio URLs), low risk, can be ported any time.
 
 ## Not ported, and NOT a mechanical translation when it happens
