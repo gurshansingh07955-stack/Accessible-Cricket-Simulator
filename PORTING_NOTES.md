@@ -106,22 +106,9 @@ audio, and accessibility layers can't just be "translated".
   the web source exactly.
 - **`app/src/main/java/com/cricketsim/logic/DismissalType.kt`**,
   **`TossDecision.kt`** — small standalone enums split out of inline
-  union types in `helpers/matchState.tsx`, needed now by
-  `BallOutcome.kt`/`MatchEngine.kt`.
+  union types in `helpers/matchState.tsx`.
 - **`app/src/main/java/com/cricketsim/logic/BallOutcome.kt`** — full
-  port of `helpers/matchState.tsx`'s `BallOutcome` interface, split out
-  since `MatchEngine.kt` needed it as `simulateBall`'s return type
-  ahead of the full `MatchState.kt` port.
-- **`app/src/main/java/com/cricketsim/logic/MatchState.kt`** — ⚠️
-  **PARTIAL, not the real interface** — see its own file-header warning.
-  Contains only the handful of `MatchState`/`MatchScore` fields
-  `MatchEngine.kt` actually reads (format, teams, score, target,
-  currentBatsmen, currentBowler, fieldPlacements, oversLimit). The real
-  `helpers/matchState.tsx` interface is much larger and depends on
-  `InningsData` from `helpers/matchStats.tsx` — see "Newly discovered
-  dependency" below. **This file will be REPLACED, not extended, when
-  the full state machine is ported** — don't build on top of its
-  current shape assuming it's stable.
+  port of `helpers/matchState.tsx`'s `BallOutcome` interface.
 - **`app/src/main/java/com/cricketsim/logic/MatchEngine.kt`**
   (from `helpers/matchEngine.tsx`) — `simulateToss`, `getOutcomeProbabilities`
   (base rating/pitch-driven probabilities), `applyFieldPlacementToProbabilities`
@@ -140,42 +127,55 @@ audio, and accessibility layers can't just be "translated".
   All numeric constants (base probabilities, pitch/difficulty
   modifiers, field-placement multipliers, win-probability RRR
   thresholds) verified to match the web source exactly.
+- **`app/src/main/java/com/cricketsim/logic/MatchStats.kt`**
+  (from `helpers/matchStats.tsx` — discovered mid-session as an
+  undocumented dependency of `matchState.tsx`, see git history) —
+  `BatsmanStats`/`BowlerStats`/`Partnership`/`InningsData`, strike-rate/
+  economy calculators, and every innings-data update helper
+  (`updateBatsmanStats`, `updateBowlerStats`, `recordDismissal`,
+  `updatePartnership`, `endPartnership`, `addBowlerIfNotExists`,
+  `getLastSixBalls`, `updateInningsDataForBall`). Uses `DismissalType`
+  instead of a bare `String` for `BatsmanStats.dismissalType` (a
+  documented, behavior-preserving type tightening — every real call
+  site already passes that domain).
+- **`app/src/main/java/com/cricketsim/logic/MatchState.kt`**
+  (from `helpers/matchState.tsx`) — **the FULL match state machine**,
+  replacing the earlier partial version. `createNewMatch`,
+  `rotateStrike`, `getMaxOversPerBowler`, `getAvailableBatsmen`,
+  `getEligibleBowlers`, `setOpeners`, `selectBowler` (with
+  field-placement carry-over across a bowler change),
+  `changeBowler` (AI bowler-rotation scoring), `recordWicketFall`,
+  `bringInNewBatsman`, `applyBallOutcome`, `switchInnings` (DLS target
+  revision), `setFieldPlacements`, `applyRainInterruption`,
+  `resumeFromRainDelay`. All state-transition logic (rain-interruption
+  overs math, DLS revision, field-placement carry-over, bowler-rotation
+  scoring) verified to match the web source exactly.
+
+  **Deliberately NOT ported** (documented in the file header —
+  see "Not ported" section below too): `saveMatch` / `loadMatch` /
+  `clearMatch` / `hasActiveMatch` and the old-save backfill logic in
+  `loadMatch`, since these are inherently backed by browser
+  `localStorage`. Android persistence (`DataStore` or `Room`) is a real
+  platform layer to design, not a translation — a future session needs
+  to wire loading/saving around the pure state-transition functions
+  that ARE here. `nanoid()` (for `MatchState.id`) is substituted with
+  `java.util.UUID`, the same pattern `CricketData.kt` already uses for
+  player ids.
+
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
   correctly (shows team/player counts) — no real gameplay UI yet.
 
-## ⚠️ Newly discovered dependency: helpers/matchStats.tsx
-
-While porting `MatchEngine.kt`, `helpers/matchState.tsx` turned out to
-import from **`helpers/matchStats.tsx`** (`InningsData`,
-`createEmptyInningsData`, `recordDismissal`, `endPartnership`,
-`getLastSixBalls`, `updateInningsDataForBall`, `addBowlerIfNotExists`)
-— a completely separate web-source file nobody had looked at yet, not
-mentioned in any earlier handoff. It hasn't been read or ported at all.
-The full `MatchState.kt` port needs this file too (`InningsData` is a
-required field on `MatchState`), so budget for reading AND porting
-`matchStats.tsx` as part of the same effort as `MatchState.kt`, not as
-an afterthought.
-
 ## Not started yet (logic layer)
 
-In rough priority order for the next session:
+Just one item left in the pure logic layer:
 
-1. Read `helpers/matchStats.tsx` (not yet even inspected) and port it
-   as `MatchStats.kt` — `InningsData` and its helper functions
-   (`createEmptyInningsData`, `recordDismissal`, `endPartnership`,
-   `getLastSixBalls`, `updateInningsDataForBall`, `addBowlerIfNotExists`).
-   This blocks the full `MatchState.kt` port below.
-2. `helpers/matchState.tsx` → full `MatchState.kt` — the real match
-   state machine (`createNewMatch`, `applyBallOutcome`, `switchInnings`,
-   `selectBowler`, `changeBowler`, `recordWicketFall`,
-   `bringInNewBatsman`, `applyRainInterruption`, and the rest). This
-   REPLACES the current partial `MatchState.kt` (see its file-header
-   warning) rather than extending it — expect to rewrite, not just add
-   fields.
-3. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
-   data (text + audio URLs), low risk, can be ported any time
-   independently of the above two.
+1. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
+   data (text + audio URLs), low risk. Once this lands, the ENTIRE pure
+   game-logic layer (data, weather, bowling, batting, fielding, match
+   engine, match state, stats) is fully ported — everything left after
+   that is UI, audio, and persistence (see below), which are
+   deliberately NOT mechanical translations.
 
 ## Not ported, and NOT a mechanical translation when it happens
 
@@ -196,6 +196,7 @@ In rough priority order for the next session:
 - **Persistence** (`helpers/matchState.tsx`'s `saveMatch`/`loadMatch`,
   currently backed by browser `localStorage`) — Android equivalent is
   likely `DataStore` or a small `Room` database once this is tackled.
+  See the `MatchState.kt` entry above for exactly what was skipped.
 
 ## Verifying a ported file
 
