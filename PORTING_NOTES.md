@@ -162,20 +162,62 @@ audio, and accessibility layers can't just be "translated".
   `java.util.UUID`, the same pattern `CricketData.kt` already uses for
   player ids.
 
+- **`app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt`**
+  (from `helpers/commentaryLibrary.tsx`) — the full AI voice duo
+  commentary library: every category (per-ball outcomes split by
+  clean/edge and dismissal type, milestones, back-to-back/triple
+  boundaries, tight/expensive overs, partnership milestones, bowler
+  wicket hauls, hat-tricks, toss, fielding change, rain, DLS revision),
+  every line's id/text/audioUrl, and the categorization/milestone
+  helpers (`categorizeBallOutcome`, `getMilestoneCrossed`,
+  `getPartnershipMilestoneCrossed`, `getBowlerWicketMilestoneCrossed`,
+  `getHatTrickCategory`, `getRandomCommentaryPair`,
+  `getAllCommentaryLines`). `categorizeBallOutcome` takes `BallOutcome`
+  directly rather than a loose structural type, since its fields are an
+  exact match. `audioUrl` values are carried over verbatim for parity
+  even though they won't resolve without bundling equivalent audio
+  assets on Android (see "Audio" below).
+
+  **🎉 This completes the entire pure game-logic layer** — data,
+  weather, bowling, batting, fielding, match engine, match state,
+  stats, and commentary are all fully ported and verified against the
+  web source. Everything remaining (see "What's next" below) is UI,
+  audio, and persistence — genuine platform-specific design work, not
+  mechanical translation.
+
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
   correctly (shows team/player counts) — no real gameplay UI yet.
 
-## Not started yet (logic layer)
+## What's next
 
-Just one item left in the pure logic layer:
+The pure logic layer (everything under `logic/`) is done. The
+remaining work is building the actual app on top of it — none of it is
+a line-by-line port, since none of it has a Kotlin/Compose equivalent
+to translate from directly:
 
-1. `helpers/commentaryLibrary.tsx` → `CommentaryLibrary.kt` — mostly
-   data (text + audio URLs), low risk. Once this lands, the ENTIRE pure
-   game-logic layer (data, weather, bowling, batting, fielding, match
-   engine, match state, stats) is fully ported — everything left after
-   that is UI, audio, and persistence (see below), which are
-   deliberately NOT mechanical translations.
+1. **UI** — design and build the Jetpack Compose screens (setup/toss
+   flow, the match screen, the three accessible gesture surfaces for
+   pitching/batting/fielding, scorecard, playing-XI selection, etc.),
+   from scratch, around native TalkBack semantics. This is the single
+   largest remaining piece of work. See "Not ported" below for why the
+   web app's ARIA-based screens can't be copied.
+2. **Persistence** — design an Android save/resume layer (`DataStore`
+   or `Room`) and wire it around `MatchStateMachine`'s existing pure
+   state-transition functions (`createNewMatch`, `applyBallOutcome`,
+   etc.), replacing the omitted `saveMatch`/`loadMatch`/`clearMatch`/
+   `hasActiveMatch`.
+3. **Audio** — design the `SoundPool` + `MediaPlayer`/`ExoPlayer`
+   mixing/ducking layer and either bundle or fetch real audio assets
+   for `CommentaryLibrary.kt`'s lines (the current `audioUrl` values
+   point at the web app's CDN and won't resolve as-is).
+4. **The actual APK build** — hasn't been attempted at all yet: signing,
+   testing on a device/emulator, and everything between "code compiles"
+   and "installable app".
+
+A future session tackling any of these should start by re-reading the
+relevant "Not ported, and NOT a mechanical translation" entry below —
+each one records specific reasons the naive translation won't work.
 
 ## Not ported, and NOT a mechanical translation when it happens
 
