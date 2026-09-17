@@ -14,14 +14,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.cricketsim.ui.Screen
 import com.cricketsim.ui.setup.FormatSelectionScreen
-import com.cricketsim.ui.setup.StadiumSelectionPlaceholderScreen
+import com.cricketsim.ui.setup.StadiumSelectionScreen
+import com.cricketsim.ui.setup.TeamSelectionPlaceholderScreen
 
 /**
  * Entry point. The logic layer (see PORTING_NOTES.md) is fully ported;
  * this hosts the start of the real gameplay UI (see UI_NOTES.md),
- * beginning with the pre-match setup flow's first step, format
- * selection. Everything past StadiumSelectionPlaceholderScreen is not
- * built yet.
+ * currently covering the first two steps of the pre-match setup flow
+ * (format, then stadium selection). Everything past
+ * TeamSelectionPlaceholderScreen is not built yet.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,11 +43,16 @@ fun CricketSimApp() {
 
     when (val current = screen) {
         is Screen.FormatSelection -> FormatSelectionScreen(
-            onFormatSelected = { format -> screen = Screen.StadiumSelectionPlaceholder(format) }
+            onFormatSelected = { format -> screen = Screen.StadiumSelection(format) }
         )
-        is Screen.StadiumSelectionPlaceholder -> StadiumSelectionPlaceholderScreen(
-            format = current.format,
+        is Screen.StadiumSelection -> StadiumSelectionScreen(
+            onStadiumSelected = { stadium -> screen = Screen.TeamSelectionPlaceholder(current.format, stadium) },
             onBack = { screen = Screen.FormatSelection }
+        )
+        is Screen.TeamSelectionPlaceholder -> TeamSelectionPlaceholderScreen(
+            format = current.format,
+            stadium = current.stadium,
+            onBack = { screen = Screen.StadiumSelection(current.format) }
         )
     }
 }
