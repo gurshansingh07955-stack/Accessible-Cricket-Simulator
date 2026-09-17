@@ -3,26 +3,25 @@ package com.cricketsim
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.cricketsim.logic.CricketData
+import com.cricketsim.ui.Screen
+import com.cricketsim.ui.setup.FormatSelectionScreen
+import com.cricketsim.ui.setup.StadiumSelectionPlaceholderScreen
 
 /**
- * Placeholder entry point. This repo is currently just a home for the
- * ported game-logic layer (see PORTING_NOTES.md) -- there is no real
- * gameplay UI yet. This screen exists only to prove the Gradle/Kotlin
- * wiring works end to end and that CricketData loads correctly.
+ * Entry point. The logic layer (see PORTING_NOTES.md) is fully ported;
+ * this hosts the start of the real gameplay UI (see UI_NOTES.md),
+ * beginning with the pre-match setup flow's first step, format
+ * selection. Everything past StadiumSelectionPlaceholderScreen is not
+ * built yet.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,7 +29,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    LogicPortStatusScreen()
+                    CricketSimApp()
                 }
             }
         }
@@ -38,24 +37,16 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LogicPortStatusScreen() {
-    val teams = CricketData.getAllTeams()
-    val totalPlayers = teams.sumOf { it.players.size }
-    val summary = "${teams.size} teams loaded, ${totalPlayers} players"
+fun CricketSimApp() {
+    var screen by remember { mutableStateOf<Screen>(Screen.FormatSelection) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("Accessible Cricket Simulator", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Native Kotlin port \u2014 logic layer in progress")
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(summary)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("No gameplay UI yet \u2014 see PORTING_NOTES.md")
+    when (val current = screen) {
+        is Screen.FormatSelection -> FormatSelectionScreen(
+            onFormatSelected = { format -> screen = Screen.StadiumSelectionPlaceholder(format) }
+        )
+        is Screen.StadiumSelectionPlaceholder -> StadiumSelectionPlaceholderScreen(
+            format = current.format,
+            onBack = { screen = Screen.FormatSelection }
+        )
     }
 }
