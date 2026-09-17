@@ -21,13 +21,15 @@ sealed interface Screen {
 
     data class TeamSelection(val format: MatchFormat, val stadium: Stadium) : Screen
 
-    // Placeholder for the next step in the setup flow (playing XI
-    // selection). Carries everything chosen so far forward; will be
-    // replaced by a real screen in a future session (see UI_NOTES.md).
-    data class PlayingXIPlaceholder(
-        val format: MatchFormat,
-        val stadium: Stadium,
-        val userTeam: Team,
-        val opponentTeam: Team
-    ) : Screen
+    // userTeam/opponentTeam here are full squads — PlayingXIScreen
+    // narrows the user's own down to an 11-player XI; the opponent's
+    // XI is auto-picked (CricketData.autoSelectPlayingXI) once this
+    // step completes, before advancing to TossPlaceholder.
+    data class PlayingXISelection(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
+
+    // Placeholder for the next step in the setup flow (the toss).
+    // Carries everything chosen so far forward, with BOTH teams
+    // already finalized 11-player XIs by this point. Will be replaced
+    // by a real screen in a future session (see UI_NOTES.md).
+    data class TossPlaceholder(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
 }

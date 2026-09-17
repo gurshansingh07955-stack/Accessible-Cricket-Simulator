@@ -12,18 +12,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.cricketsim.logic.CricketData
+import com.cricketsim.logic.Team
 import com.cricketsim.ui.Screen
 import com.cricketsim.ui.setup.FormatSelectionScreen
-import com.cricketsim.ui.setup.PlayingXIPlaceholderScreen
+import com.cricketsim.ui.setup.PlayingXIScreen
 import com.cricketsim.ui.setup.StadiumSelectionScreen
 import com.cricketsim.ui.setup.TeamSelectionScreen
+import com.cricketsim.ui.setup.TossPlaceholderScreen
 
 /**
  * Entry point. The logic layer (see PORTING_NOTES.md) is fully ported;
  * this hosts the start of the real gameplay UI (see UI_NOTES.md),
- * currently covering the first three steps of the pre-match setup flow
- * (format, stadium, then team selection). Everything past
- * PlayingXIPlaceholderScreen is not built yet.
+ * currently covering the first four steps of the pre-match setup flow
+ * (format, stadium, team, then playing XI selection). Everything past
+ * TossPlaceholderScreen is not built yet.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,6 +39,23 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+/**
+ * Auto-picks the AI opponent's Playing XI (CricketData.autoSelectPlayingXI)
+ * and builds the finalized 11-player Team from it — the AI side never
+ * gets a selection screen, matching the original design intent ("The
+ * AI opponent gets an auto-picked XI").
+ */
+private fun autoPickOpponentXI(opponentTeam: Team): Team {
+    val auto = CricketData.autoSelectPlayingXI(opponentTeam)
+    return CricketData.buildMatchSquad(
+        fullTeam = opponentTeam,
+        selectedPlayerIds = auto.players.map { it.id },
+        captainId = auto.captainId,
+        viceCaptainId = auto.viceCaptainId,
+        wicketkeeperId = auto.wicketkeeperId
+    )
 }
 
 @Composable
@@ -52,11 +72,19 @@ fun CricketSimApp() {
         )
         is Screen.TeamSelection -> TeamSelectionScreen(
             onTeamsSelected = { userTeam, opponentTeam ->
-                screen = Screen.PlayingXIPlaceholder(current.format, current.stadium, userTeam, opponentTeam)
+                screen = Screen.PlayingXISelection(current.format, current.stadium, userTeam, opponentTeam)
             },
             onBack = { screen = Screen.StadiumSelection(current.format) }
         )
-        is Screen.PlayingXIPlaceholder -> PlayingXIPlaceholderScreen(
+        is Screen.PlayingXISelection -> PlayingXIScreen(
+            userTeam = current.userTeam,
+            onXIConfirmed = { finalUserTeam ->
+                val finalOpponentTeam = autoPickOpponentXI(current.opponentTeam)
+                screen = Screen.TossPlaceholder(current.format, current.stadium, finalUserTeam, finalOpponentTeam)
+            },
+            onBack = { screen = Screen.TeamSelection(current.format, current.stadium) }
+        )
+        is Screen.TossPlaceholder -> TossPlaceholderScreen(
             format = current.format,
             stadium = current.stadium,
             userTeam = current.userTeam,
