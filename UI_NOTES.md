@@ -66,30 +66,38 @@ Per the original project handoff, these apply with zero exceptions:
   format selection, picking a country or stadium here is a one-way
   navigation action, not a persistent selection sitting next to
   unchosen alternatives on screen.
-- **`TeamSelectionPlaceholderScreen`** (same directory) — a deliberate
-  stand-in for step 3, not a real screen. Exists only to prove the
-  navigation flow works end to end after stadium selection.
-  **Replace, don't extend** — the real version needs a picker for both
-  sides' teams, presumably over `CricketData.kt`'s 18 national squads.
-- `MainActivity.kt` now hosts this flow (format -> stadium -> team
-  placeholder) instead of the old logic-loading status screen.
+- **`TeamSelectionScreen`**
+  (`app/src/main/java/com/cricketsim/ui/setup/TeamSelectionScreen.kt`)
+  — step 3 of the setup flow: pick the user's own team, then the
+  opponent, from `CricketData.kt`'s 18 national squads. Same two-step
+  drill-down shape and `Modifier.clickable(..., role = Role.Button)`
+  pattern as `StadiumSelectionScreen`. The opponent list excludes
+  whichever team was just chosen as the user's own, so the user can
+  never end up facing their own side.
+- **`PlayingXIPlaceholderScreen`** (same directory) — a deliberate
+  stand-in for step 4, not a real screen. Exists only to prove the
+  navigation flow works end to end after team selection.
+  **Replace, don't extend** — the real version needs to pick 11 from
+  the full squad and designate Captain / Vice-Captain / Wicketkeeper
+  (`CricketData.buildMatchSquad()` / a user-driven equivalent of
+  `autoSelectPlayingXI()`).
+- `MainActivity.kt` now hosts this flow (format -> stadium -> team ->
+  playing-XI placeholder) instead of the old logic-loading status
+  screen.
 
 ## Not started (the rest of the setup flow, in the web app's own step order)
 
-1. Real team selection for both sides (replacing
-   `TeamSelectionPlaceholderScreen`).
-2. Playing XI selection (pick 11 from the full squad, then designate
-   Captain / Vice-Captain / Wicketkeeper from that XI) —
-   `CricketData.buildMatchSquad()` / a user-driven equivalent of
-   `autoSelectPlayingXI()`.
-3. Toss screen (`MatchEngine.simulateToss`, bat/bowl decision when the
+1. Real playing XI selection (replacing `PlayingXIPlaceholderScreen`):
+   pick 11 from the full squad, then designate Captain / Vice-Captain /
+   Wicketkeeper from that XI.
+2. Toss screen (`MatchEngine.simulateToss`, bat/bowl decision when the
    user wins).
-4. The match screen itself — by far the largest remaining piece:
+3. The match screen itself — by far the largest remaining piece:
    live score display, the three custom gesture surfaces (pitching,
    batting, fielding), scorecard, commentary display, win-probability
    display, rain-delay dialog, wicket/new-batsman flow, bowler-change
    flow. Nothing here has been started.
-5. Persistence-dependent UI (resume-match prompt, save indicator) —
+4. Persistence-dependent UI (resume-match prompt, save indicator) —
    blocked on the Android persistence layer itself (see
    PORTING_NOTES.md).
 
