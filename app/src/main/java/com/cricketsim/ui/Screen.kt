@@ -2,6 +2,7 @@ package com.cricketsim.ui
 
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.Stadium
+import com.cricketsim.logic.Team
 
 /**
  * The app's screen graph, modeled as a plain sealed interface switched
@@ -18,9 +19,15 @@ sealed interface Screen {
 
     data class StadiumSelection(val format: MatchFormat) : Screen
 
-    // Placeholder for the next step in the setup flow (team
-    // selection). Carries the chosen format and stadium forward; will
-    // be replaced by a real screen in a future session (see
-    // UI_NOTES.md).
-    data class TeamSelectionPlaceholder(val format: MatchFormat, val stadium: Stadium) : Screen
+    data class TeamSelection(val format: MatchFormat, val stadium: Stadium) : Screen
+
+    // Placeholder for the next step in the setup flow (playing XI
+    // selection). Carries everything chosen so far forward; will be
+    // replaced by a real screen in a future session (see UI_NOTES.md).
+    data class PlayingXIPlaceholder(
+        val format: MatchFormat,
+        val stadium: Stadium,
+        val userTeam: Team,
+        val opponentTeam: Team
+    ) : Screen
 }

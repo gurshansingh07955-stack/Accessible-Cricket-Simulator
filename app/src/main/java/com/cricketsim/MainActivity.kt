@@ -14,15 +14,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.cricketsim.ui.Screen
 import com.cricketsim.ui.setup.FormatSelectionScreen
+import com.cricketsim.ui.setup.PlayingXIPlaceholderScreen
 import com.cricketsim.ui.setup.StadiumSelectionScreen
-import com.cricketsim.ui.setup.TeamSelectionPlaceholderScreen
+import com.cricketsim.ui.setup.TeamSelectionScreen
 
 /**
  * Entry point. The logic layer (see PORTING_NOTES.md) is fully ported;
  * this hosts the start of the real gameplay UI (see UI_NOTES.md),
- * currently covering the first two steps of the pre-match setup flow
- * (format, then stadium selection). Everything past
- * TeamSelectionPlaceholderScreen is not built yet.
+ * currently covering the first three steps of the pre-match setup flow
+ * (format, stadium, then team selection). Everything past
+ * PlayingXIPlaceholderScreen is not built yet.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,13 +47,21 @@ fun CricketSimApp() {
             onFormatSelected = { format -> screen = Screen.StadiumSelection(format) }
         )
         is Screen.StadiumSelection -> StadiumSelectionScreen(
-            onStadiumSelected = { stadium -> screen = Screen.TeamSelectionPlaceholder(current.format, stadium) },
+            onStadiumSelected = { stadium -> screen = Screen.TeamSelection(current.format, stadium) },
             onBack = { screen = Screen.FormatSelection }
         )
-        is Screen.TeamSelectionPlaceholder -> TeamSelectionPlaceholderScreen(
+        is Screen.TeamSelection -> TeamSelectionScreen(
+            onTeamsSelected = { userTeam, opponentTeam ->
+                screen = Screen.PlayingXIPlaceholder(current.format, current.stadium, userTeam, opponentTeam)
+            },
+            onBack = { screen = Screen.StadiumSelection(current.format) }
+        )
+        is Screen.PlayingXIPlaceholder -> PlayingXIPlaceholderScreen(
             format = current.format,
             stadium = current.stadium,
-            onBack = { screen = Screen.StadiumSelection(current.format) }
+            userTeam = current.userTeam,
+            opponentTeam = current.opponentTeam,
+            onBack = { screen = Screen.TeamSelection(current.format, current.stadium) }
         )
     }
 }
