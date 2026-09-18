@@ -36,79 +36,90 @@ Per the original project handoff, these apply with zero exceptions:
 
 ## Done
 
-**🎉 The entire pre-match setup flow is complete** (format -> stadium
--> team -> playing XI -> toss), all real screens, all following the
-same established accessibility patterns:
+**The entire pre-match setup flow is complete** (format -> stadium ->
+team -> playing XI -> toss), all real screens:
 
 - **Navigation scaffold** (`app/src/main/java/com/cricketsim/ui/Screen.kt`)
   — a plain sealed interface switched on in one composable
   (`MainActivity.CricketSimApp`), not the Navigation-Compose library.
-  The setup flow is short and linear, so a hand-rolled `when` is
-  simpler than a nav graph for now. Revisit once persistence (see
-  PORTING_NOTES.md's "What's next") makes deep-linking into an
-  in-progress match a real requirement.
-- **`FormatSelectionScreen`** — step 1: a single-column `LazyColumn` of
-  format options using `Modifier.selectable(..., role =
-  Role.RadioButton)`, `RadioButton` itself set to `onClick = null` so
-  the whole row (not just the radio circle) is the tap target. This is
-  the ONE screen in the flow where a persistent selection sits visibly
-  next to unchosen alternatives before a separate Continue button is
-  pressed — every other step below picks-and-immediately-advances.
-- **`StadiumSelectionScreen`** — step 2: a two-step drill-down (country,
-  then stadium) over `StadiumData.kt`'s 101 stadiums. Introduced the
-  `Modifier.clickable(..., role = Role.Button)` pattern used by every
-  subsequent pick-and-advance list in the flow.
+  Revisit once persistence (see PORTING_NOTES.md's "What's next")
+  makes deep-linking into an in-progress match a real requirement.
+- **`FormatSelectionScreen`** — step 1: a single-column `LazyColumn`
+  using `Modifier.selectable(..., role = Role.RadioButton)`. The ONE
+  screen where a persistent selection sits next to unchosen
+  alternatives before a separate Continue button — every step after
+  this one picks-and-immediately-advances.
+- **`StadiumSelectionScreen`** — step 2: a two-step drill-down
+  (country, then stadium) over `StadiumData.kt`'s 101 stadiums.
+  Introduced the `Modifier.clickable(..., role = Role.Button)` pattern
+  used by every subsequent pick-and-advance list.
 - **`TeamSelectionScreen`** — step 3: pick the user's team, then the
   opponent (excluded from its own list), from `CricketData.kt`'s 18
-  squads. Same drill-down/`Role.Button` pattern as stadium selection.
-- **`PlayingXIScreen`** — step 4: the most complex screen in the flow.
-  A genuine multi-select squad step (`Modifier.toggleable(..., role =
-  Role.Checkbox)`, live-announced "N of 11 selected" counter via
-  `liveRegion = LiveRegionMode.Polite`), then three chained
-  pick-and-advance steps (captain, vice-captain, wicketkeeper — keeper
-  candidates filtered to specialists in the XI, falling back to the
-  full XI if none exist) using the same `Role.Button` pattern.
-  `CricketData.buildMatchSquad` finalizes the result. The opponent
-  never gets a selection screen — `MainActivity` auto-picks its XI via
-  `CricketData.autoSelectPlayingXI` right after.
+  squads.
+- **`PlayingXIScreen`** — step 4: a genuine multi-select squad step
+  (`Modifier.toggleable(..., role = Role.Checkbox)`, live-announced "N
+  of 11 selected" counter), then three chained pick-and-advance steps
+  (captain, vice-captain, wicketkeeper). `CricketData.buildMatchSquad`
+  finalizes the result; the opponent's XI is auto-picked via
+  `CricketData.autoSelectPlayingXI`.
 - **`TossScreen`** — step 5: call heads/tails
-  (`MatchEngine.simulateToss`), then either a bat/bowl choice
-  (pick-and-advance, overriding `simulateToss`'s placeholder decision
-  per its own doc comment) when the user wins, or a live-announced
-  result readout (`liveRegion = LiveRegionMode.Polite` on a heading —
-  the one case in the flow where the announced text appears already-
-  resolved on screen entry rather than resulting from an action just
-  taken on the same screen) when the AI wins.
-- **`MatchPlaceholderScreen`** (`app/src/main/java/com/cricketsim/ui/match/`)
-  — a deliberate stand-in for the match screen itself, proving the
-  ENTIRE setup flow works end to end. **Replace, don't extend** — see
-  "Not started" below for everything the real version needs.
-- `MainActivity.kt` hosts the complete setup flow instead of the old
-  logic-loading status screen.
+  (`MatchEngine.simulateToss`), then a bat/bowl choice when the user
+  wins (overriding `simulateToss`'s placeholder decision) or a
+  live-announced result readout when the AI wins.
+
+**The match screen has a first slice** (`app/src/main/java/com/cricketsim/ui/match/`),
+proving the whole logic layer works end to end inside the real UI —
+but this is explicitly scaffolding, not the real design:
+- **`MatchSimulation.kt`** — ⚠️ TEMPORARY. Drives one delivery at a
+  time through the full pipeline (`BowlingSystem`/`BattingSystem` AI
+  decisions for BOTH sides, `FieldingSystem` legality,
+  `MatchEngine.simulateBall`, `MatchStateMachine.applyBallOutcome` /
+  `recordWicketFall` / `bringInNewBatsman` / `rotateStrike` /
+  `changeBowler`), plus innings/match-completion detection. Both sides
+  AI-controlled since no gesture surface exists yet to let the user
+  play their own side — see the file's own doc comment for the full
+  list of simplifications (situational bias always 0, no opener/
+  bowler-selection prompts, next batsman always auto-picked).
+- **`MatchScreen.kt`** — live score (a `LiveRegionMode.Polite` region,
+  since it changes every ball), current batsmen/bowler, a manual
+  "Simulate Next Ball" button, a recent-commentary feed, and a
+  match-result readout. **Replace, don't extend** — this is a verify-
+  the-wiring screen, not a starting point to gradually add features to.
+- `MainActivity.kt` hosts the full flow through to this first-slice
+  match screen.
 
 ## Not started
 
-Only one thing is left, but it's the largest and highest-risk piece by
-far — **the match screen itself**, replacing `MatchPlaceholderScreen`:
-- Live score display (runs/wickets/overs, target/required-rate when
-  chasing, win probability via `MatchEngine.calculateWinProbability`)
+Replacing the match screen's first slice with the real thing is the
+single largest remaining piece of work, by far:
 - The three custom gesture surfaces — pitching (line/length/angle/
   variation/speed), batting (footwork/shot/intent/timing), fielding
   (drag-and-tap placement) — each needs its OWN deliberate TalkBack
   design; nothing here can be copied from the web app's ARIA-specific
   versions (`PitcherScreen`/`BattingShotScreen`/`FieldingScreen`), only
   the underlying mechanics they control (`BowlingSystem.kt`/
-  `BattingSystem.kt`/`FieldingSystem.kt`) carry over
-- Scorecard (batting/bowling figures, partnerships — `MatchStats.kt`)
-- Commentary display, tied to `MatchEngine.generateCommentary` /
-  `CommentaryLibrary.kt`
+  `BattingSystem.kt`/`FieldingSystem.kt`) carry over. Building these
+  replaces `MatchSimulation.kt`'s AI-generated decisions for whichever
+  side the user is controlling with real gesture-driven input.
+- A real win-probability display (`MatchEngine.calculateWinProbability`)
+  and required-run-rate display when chasing.
+- Scorecard (batting/bowling figures, partnerships — `MatchStats.kt`).
+- Real commentary/audio, tied to `MatchEngine.generateCommentary` /
+  `CommentaryLibrary.kt` (the first slice just shows the plain
+  `BallOutcome.commentary` string).
 - Rain-delay dialog (`WeatherSystem.shouldTriggerRainInterruption`,
-  `MatchStateMachine.applyRainInterruption`)
-- Wicket / new-batsman selection flow (`MatchStateMachine.recordWicketFall`,
-  `bringInNewBatsman`, `getAvailableBatsmen`)
-- Bowler-change flow (`MatchStateMachine.selectBowler`,
-  `getEligibleBowlers`)
-- Innings-break / match-result screens (`MatchStateMachine.switchInnings`)
+  `MatchStateMachine.applyRainInterruption`).
+- Wicket / new-batsman selection flow for the user's own team
+  (`MatchStateMachine.bringInNewBatsman`, `getAvailableBatsmen` — the
+  first slice always auto-picks the next available player).
+- Bowler-selection flow for the user's own team
+  (`MatchStateMachine.selectBowler`, `getEligibleBowlers` — the first
+  slice always auto-picks via `changeBowler`).
+- Proper innings-break / match-result screens (the first slice just
+  shows a plain result sentence).
+- A real situational-bias calculation feeding into the AI decisions
+  and `changeBowler`'s rotation scoring (currently hardcoded to 0 —
+  neutral — everywhere in `MatchSimulation.kt`).
 
 Also blocked on the Android persistence layer (see PORTING_NOTES.md):
 resume-match prompt, save indicator, and anything else that needs a
