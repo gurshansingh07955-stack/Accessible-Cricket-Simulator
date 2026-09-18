@@ -3,6 +3,7 @@ package com.cricketsim.ui
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
+import com.cricketsim.logic.TossResult
 
 /**
  * The app's screen graph, modeled as a plain sealed interface switched
@@ -24,12 +25,20 @@ sealed interface Screen {
     // userTeam/opponentTeam here are full squads — PlayingXIScreen
     // narrows the user's own down to an 11-player XI; the opponent's
     // XI is auto-picked (CricketData.autoSelectPlayingXI) once this
-    // step completes, before advancing to TossPlaceholder.
+    // step completes, before advancing to TossSelection.
     data class PlayingXISelection(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
 
-    // Placeholder for the next step in the setup flow (the toss).
-    // Carries everything chosen so far forward, with BOTH teams
-    // already finalized 11-player XIs by this point. Will be replaced
-    // by a real screen in a future session (see UI_NOTES.md).
-    data class TossPlaceholder(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
+    // Both teams here are already finalized 11-player XIs.
+    data class TossSelection(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
+
+    // Placeholder for the match screen itself — the setup flow's final
+    // step. Carries everything decided so far. Will be replaced by the
+    // real match screen in a future session (see UI_NOTES.md).
+    data class MatchPlaceholder(
+        val format: MatchFormat,
+        val stadium: Stadium,
+        val userTeam: Team,
+        val opponentTeam: Team,
+        val toss: TossResult
+    ) : Screen
 }

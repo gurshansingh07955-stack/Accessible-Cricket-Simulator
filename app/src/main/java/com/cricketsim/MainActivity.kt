@@ -15,18 +15,19 @@ import androidx.compose.ui.Modifier
 import com.cricketsim.logic.CricketData
 import com.cricketsim.logic.Team
 import com.cricketsim.ui.Screen
+import com.cricketsim.ui.match.MatchPlaceholderScreen
 import com.cricketsim.ui.setup.FormatSelectionScreen
 import com.cricketsim.ui.setup.PlayingXIScreen
 import com.cricketsim.ui.setup.StadiumSelectionScreen
 import com.cricketsim.ui.setup.TeamSelectionScreen
-import com.cricketsim.ui.setup.TossPlaceholderScreen
+import com.cricketsim.ui.setup.TossScreen
 
 /**
  * Entry point. The logic layer (see PORTING_NOTES.md) is fully ported;
- * this hosts the start of the real gameplay UI (see UI_NOTES.md),
- * currently covering the first four steps of the pre-match setup flow
- * (format, stadium, team, then playing XI selection). Everything past
- * TossPlaceholderScreen is not built yet.
+ * this hosts the real gameplay UI (see UI_NOTES.md), which now covers
+ * the ENTIRE pre-match setup flow (format, stadium, team, playing XI,
+ * toss). Only the match screen itself — the largest remaining piece —
+ * is still a placeholder.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,16 +81,25 @@ fun CricketSimApp() {
             userTeam = current.userTeam,
             onXIConfirmed = { finalUserTeam ->
                 val finalOpponentTeam = autoPickOpponentXI(current.opponentTeam)
-                screen = Screen.TossPlaceholder(current.format, current.stadium, finalUserTeam, finalOpponentTeam)
+                screen = Screen.TossSelection(current.format, current.stadium, finalUserTeam, finalOpponentTeam)
             },
             onBack = { screen = Screen.TeamSelection(current.format, current.stadium) }
         )
-        is Screen.TossPlaceholder -> TossPlaceholderScreen(
+        is Screen.TossSelection -> TossScreen(
+            userTeam = current.userTeam,
+            opponentTeam = current.opponentTeam,
+            onTossComplete = { toss ->
+                screen = Screen.MatchPlaceholder(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)
+            },
+            onBack = { screen = Screen.TeamSelection(current.format, current.stadium) }
+        )
+        is Screen.MatchPlaceholder -> MatchPlaceholderScreen(
             format = current.format,
             stadium = current.stadium,
             userTeam = current.userTeam,
             opponentTeam = current.opponentTeam,
-            onBack = { screen = Screen.TeamSelection(current.format, current.stadium) }
+            toss = current.toss,
+            onBack = { screen = Screen.TossSelection(current.format, current.stadium, current.userTeam, current.opponentTeam) }
         )
     }
 }
