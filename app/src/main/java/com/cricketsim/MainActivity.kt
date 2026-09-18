@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import com.cricketsim.logic.CricketData
 import com.cricketsim.logic.Team
 import com.cricketsim.ui.Screen
-import com.cricketsim.ui.match.MatchPlaceholderScreen
+import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.setup.FormatSelectionScreen
 import com.cricketsim.ui.setup.PlayingXIScreen
 import com.cricketsim.ui.setup.StadiumSelectionScreen
@@ -24,10 +24,12 @@ import com.cricketsim.ui.setup.TossScreen
 
 /**
  * Entry point. The logic layer (see PORTING_NOTES.md) is fully ported;
- * this hosts the real gameplay UI (see UI_NOTES.md), which now covers
- * the ENTIRE pre-match setup flow (format, stadium, team, playing XI,
- * toss). Only the match screen itself — the largest remaining piece —
- * is still a placeholder.
+ * this hosts the real gameplay UI (see UI_NOTES.md). The entire
+ * pre-match setup flow (format, stadium, team, playing XI, toss) is
+ * real, and the match screen now runs a first-slice, fully-automated
+ * AI-vs-AI preview loop (see MatchScreen.kt's own doc comment) to
+ * verify the logic layer's wiring — not yet the real gesture-driven
+ * match screen.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,11 +91,11 @@ fun CricketSimApp() {
             userTeam = current.userTeam,
             opponentTeam = current.opponentTeam,
             onTossComplete = { toss ->
-                screen = Screen.MatchPlaceholder(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)
+                screen = Screen.Match(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)
             },
             onBack = { screen = Screen.TeamSelection(current.format, current.stadium) }
         )
-        is Screen.MatchPlaceholder -> MatchPlaceholderScreen(
+        is Screen.Match -> MatchScreen(
             format = current.format,
             stadium = current.stadium,
             userTeam = current.userTeam,

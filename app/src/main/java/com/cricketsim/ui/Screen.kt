@@ -31,10 +31,10 @@ sealed interface Screen {
     // Both teams here are already finalized 11-player XIs.
     data class TossSelection(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
 
-    // Placeholder for the match screen itself — the setup flow's final
-    // step. Carries everything decided so far. Will be replaced by the
-    // real match screen in a future session (see UI_NOTES.md).
-    data class MatchPlaceholder(
+    // The match itself. See MatchScreen.kt's own doc comment — this is
+    // currently a fully-automated AI-vs-AI preview loop, not the real
+    // gesture-driven match screen.
+    data class Match(
         val format: MatchFormat,
         val stadium: Stadium,
         val userTeam: Team,
