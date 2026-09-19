@@ -1,5 +1,6 @@
 package com.cricketsim.ui.match
 
+import com.cricketsim.logic.BattingDecision
 import com.cricketsim.logic.BattingSystem
 import com.cricketsim.logic.BallOutcome
 import com.cricketsim.logic.BowlingSystem
@@ -20,15 +21,21 @@ import com.cricketsim.logic.WeatherSystem
  * generators while the OTHER side is genuinely user-controlled in
  * quite this loop-driven way). This exists to verify the full
  * MatchEngine/MatchStateMachine wiring works correctly end-to-end
- * inside the actual Android UI, and now also hosts the real bridge
- * point for the first working gesture surface: when the user's own
- * team is bowling, MatchScreen.kt collects a real
- * ResolvedBowlingDecision from PitchingScreen and passes it in here as
- * `userBowlingDecision` instead of letting this function generate one
- * with AI. Batting and fielding are NOT wired to a gesture surface yet
- * — both sides' batting and fielding remain fully AI-driven regardless
- * of which side the user is on, until those two surfaces exist (see
- * UI_NOTES.md).
+ * inside the actual Android UI, and hosts the bridge points for the
+ * working gesture surfaces:
+ *
+ * - User BOWLING: MatchScreen.kt collects a real ResolvedBowlingDecision
+ *   from PitchingScreen and passes it in as `presetBowlingDecision`.
+ * - User BATTING: MatchScreen.kt calls `generateBowlingDecision` for the
+ *   AI's delivery (after BattingScreen's blind footwork commit, so the
+ *   batter can be shown the ball), then passes BOTH that delivery as
+ *   `presetBowlingDecision` and the batter's choices as
+ *   `presetBattingDecision`. The delivery is passed back in rather than
+ *   regenerated so the ball the batter was shown is the ball that is
+ *   actually bowled.
+ *
+ * Fielding is NOT wired to a gesture surface yet — both sides' fielding
+ * stays AI-driven until that surface exists (see UI_NOTES.md).
  *
  * Simplifications specific to THIS temporary loop (not permanent
  * design decisions, and not modeled on anything in the web app):
@@ -37,6 +44,9 @@ import com.cricketsim.logic.WeatherSystem
  *   calculation (from score, overs remaining, wickets in hand) is
  *   separate future work — MatchEngine/BattingSystem/BowlingSystem
  *   already accept it as a parameter, nothing there needs to change.
+ * - No reactive AI field placement per delivery (the web sets one once
+ *   each delivery's actual length is known) — `state.fieldPlacements`
+ *   is used exactly as it stands.
  * - `needsOpenerSelection` / `needsBowlerSelection` on MatchState are
  *   ignored — the sensible defaults MatchStateMachine already picks
  *   are used automatically, since no user-facing picker is wired up in
@@ -47,26 +57,37 @@ import com.cricketsim.logic.WeatherSystem
 object MatchSimulation {
 
     /**
+     * The AI bowler's decision for the next delivery. Split out from
+     * simulateOneBall so a user-controlled batting turn can be shown the
+     * ball BEFORE choosing a shot — see the file-level doc comment.
+     */
+    fun generateBowlingDecision(state: MatchState): ResolvedBowlingDecision =
+        BowlingSystem.generateAiBowlingDecision(state.currentBowler, situationalBias = 0.0)
+
+    /**
      * Simulates exactly one delivery (legal or not) and applies it to
-     * the match state. Pass `userBowlingDecision` when the user's own
-     * team is bowling and has just completed PitchingScreen for this
-     * ball; leave it null (the default) to have the bowling side
-     * generate an AI decision instead — this is what keeps the
-     * opposing (AI-controlled) side's bowling working exactly as
-     * before with no caller changes needed.
+     * the match state.
+     *
+     * `presetBowlingDecision`: a delivery the caller has already
+     * resolved — either the user's own via PitchingScreen, or the AI's
+     * from `generateBowlingDecision` when the user is batting and has
+     * already been shown it. Null (the default) generates an AI
+     * decision here.
+     *
+     * `presetBattingDecision`: the user's own batting decision from
+     * BattingScreen. Null (the default) generates an AI decision here.
      */
     fun simulateOneBall(
         state: MatchState,
         stadium: Stadium,
         difficulty: Difficulty,
-        userBowlingDecision: ResolvedBowlingDecision? = null
+        presetBowlingDecision: ResolvedBowlingDecision? = null,
+        presetBattingDecision: BattingDecision? = null
     ): Pair<MatchState, BallOutcome> {
         val striker = state.currentBatsmen.first
-        val bowler = state.currentBowler
 
-        val bowlingDecision = userBowlingDecision
-            ?: BowlingSystem.generateAiBowlingDecision(bowler, situationalBias = 0.0)
-        val battingDecision = BattingSystem.generateAiBattingDecision(
+        val bowlingDecision = presetBowlingDecision ?: generateBowlingDecision(state)
+        val battingDecision = presetBattingDecision ?: BattingSystem.generateAiBattingDecision(
             batsman = striker,
             actualLength = bowlingDecision.actualLength,
             bowlingStyle = bowlingDecision.bowlingStyle,
