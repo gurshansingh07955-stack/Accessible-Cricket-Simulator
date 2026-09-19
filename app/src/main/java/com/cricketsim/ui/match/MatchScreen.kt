@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.BattingDecision
 import com.cricketsim.logic.Difficulty
+import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchStateMachine
 import com.cricketsim.logic.ResolvedBowlingDecision
@@ -34,27 +35,28 @@ import com.cricketsim.logic.WeatherSystem
 
 /**
  * ⚠️ FIRST SLICE of the match screen — NOT the real design. This screen
- * routes to PitchingScreen whenever the user's own team is bowling and
- * to BattingScreen whenever it is batting — the two working gesture
- * surfaces. Every other dimension is still MatchSimulation.kt's
- * temporary path (see its own file-level doc comment): the user's own
- * FIELDING is still fully AI-driven, and so is everything the opposing
- * side does. This screen's remaining purpose is still narrow: verify
- * the growing set of gesture-surface integrations work correctly end to
+ * routes to the three working gesture surfaces: PitchingScreen when the
+ * user's own team is bowling, BattingScreen when it is batting, and
+ * FieldingScreen from a Set field button (editable while the user is
+ * bowling) or a Hear the field button (read-only while the user is
+ * batting). Everything else is still MatchSimulation.kt's temporary
+ * path (see its own file-level doc comment): everything the opposing
+ * side does is AI-driven. This screen's remaining purpose is still
+ * narrow: verify the gesture-surface integrations work correctly end to
  * end inside the real Android UI, one manually-triggered ball at a
  * time.
  *
  * The user's team is always either batting or bowling, so every ball
- * now goes through one of the two gesture surfaces; the earlier
- * AI-vs-AI "Simulate Next Ball" button is gone because nothing can
- * reach it any more.
+ * goes through PitchingScreen or BattingScreen; the earlier AI-vs-AI
+ * "Simulate Next Ball" button is gone because nothing can reach it any
+ * more.
  *
- * A future session builds the real match screen: the fielding gesture
- * surface, scorecard, proper commentary/audio, rain delays, and the
- * wicket/bowler-selection prompts this screen currently skips by
- * always auto-picking. See UI_NOTES.md's "Not started" section for the
- * full list — treat this file as scaffolding to build on top of, not a
- * screen to extend piecemeal into the real thing.
+ * A future session builds the real match screen: scorecard, proper
+ * commentary/audio, rain delays, and the wicket/bowler-selection
+ * prompts this screen currently skips by always auto-picking. See
+ * UI_NOTES.md's "Not started" section for the full list — treat this
+ * file as scaffolding to build on top of, not a screen to extend
+ * piecemeal into the real thing.
  */
 @Composable
 fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentTeam: Team, toss: TossResult, onBack: () -> Unit) {
@@ -77,12 +79,17 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
     var resultText by remember { mutableStateOf<String?>(null) }
     var showPitchingScreen by remember { mutableStateOf(false) }
     var showBattingScreen by remember { mutableStateOf(false) }
+    var showFieldScreen by remember { mutableStateOf(false) }
+    // Outcome of the last Set field, announced on this screen (the
+    // fielding screen is gone by then). Cleared as soon as a ball is played.
+    var fieldMessage by remember { mutableStateOf("") }
 
     fun advanceOneBall(
         presetBowlingDecision: ResolvedBowlingDecision? = null,
         presetBattingDecision: BattingDecision? = null
     ) {
         if (matchOver) return
+        fieldMessage = ""
         val (nextState, outcome) = MatchSimulation.simulateOneBall(
             matchState,
             stadium,
@@ -135,7 +142,31 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
         return
     }
 
+    val isPowerplayNow = FieldingSystem.isPowerplayOver(matchState.format, matchState.score.overs)
     val isUserBowling = matchState.bowlingTeam.id == userTeam.id
+
+    if (showFieldScreen) {
+        FieldingScreen(
+            teamName = matchState.bowlingTeam.name,
+            players = matchState.bowlingTeam.players,
+            placements = matchState.fieldPlacements,
+            isPowerplay = isPowerplayNow,
+            isReadOnly = !isUserBowling,
+            onConfirm = { placements ->
+                matchState = MatchStateMachine.setFieldPlacements(matchState, placements)
+                fieldMessage = fieldSetMessage(placements, isPowerplayNow)
+                showFieldScreen = false
+            },
+            onBack = { showFieldScreen = false }
+        )
+        return
+    }
+
+    val userFieldReason = if (isUserBowling) {
+        FieldingSystem.getIllegalFieldReason(matchState.fieldPlacements, isPowerplayNow)
+    } else {
+        null
+    }
 
     Column(
         modifier = Modifier
@@ -168,6 +199,22 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
             style = MaterialTheme.typography.bodyMedium
         )
 
+        if (fieldMessage.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = fieldMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
+        if (userFieldReason != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Your field is illegal. $userFieldReason Every delivery will be a no-ball until it is fixed.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         if (matchOver) {
@@ -183,9 +230,17 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
             Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("Bowl")
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Set field")
+            }
         } else {
             Button(onClick = { showBattingScreen = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("Face next ball")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Hear the field")
             }
         }
 

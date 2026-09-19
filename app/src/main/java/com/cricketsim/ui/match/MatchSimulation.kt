@@ -33,9 +33,10 @@ import com.cricketsim.logic.WeatherSystem
  *   `presetBattingDecision`. The delivery is passed back in rather than
  *   regenerated so the ball the batter was shown is the ball that is
  *   actually bowled.
- *
- * Fielding is NOT wired to a gesture surface yet — both sides' fielding
- * stays AI-driven until that surface exists (see UI_NOTES.md).
+ * - User FIELDING: FieldingScreen edits `state.fieldPlacements` through
+ *   MatchStateMachine.setFieldPlacements, and this loop then uses that
+ *   field as it stands (including its legality) for every delivery.
+ *   See the over-end handling below for how it is kept across overs.
  *
  * Simplifications specific to THIS temporary loop (not permanent
  * design decisions, and not modeled on anything in the web app):
@@ -45,8 +46,8 @@ import com.cricketsim.logic.WeatherSystem
  *   separate future work — MatchEngine/BattingSystem/BowlingSystem
  *   already accept it as a parameter, nothing there needs to change.
  * - No reactive AI field placement per delivery (the web sets one once
- *   each delivery's actual length is known) — `state.fieldPlacements`
- *   is used exactly as it stands.
+ *   each delivery's actual length is known) — when the AI is bowling,
+ *   `state.fieldPlacements` is whatever the last bowler change set.
  * - `needsOpenerSelection` / `needsBowlerSelection` on MatchState are
  *   ignored — the sensible defaults MatchStateMachine already picks
  *   are used automatically, since no user-facing picker is wired up in
@@ -129,7 +130,23 @@ object MatchSimulation {
 
         if (overJustCompleted && newState.score.wickets < 10) {
             newState = MatchStateMachine.rotateStrike(newState)
-            newState = MatchStateMachine.changeBowler(newState, situationalBias = 0.0)
+            val beforeBowlerChange = newState
+            newState = MatchStateMachine.changeBowler(beforeBowlerChange, situationalBias = 0.0)
+
+            // changeBowler always installs a fresh AI-generated field. That
+            // is right for the AI's own side, but for the user's side it
+            // would silently overwrite the field they set on FieldingScreen
+            // at the end of every over. Redo the change for the user's side
+            // through selectBowler (same bowler) instead, which carries the
+            // existing field across the swap the way the web does for a
+            // user-picked bowler — the incoming bowler steps out of their
+            // fielding slot and the outgoing bowler takes it — and only
+            // resets it when the powerplay has just ended.
+            val userSideBowling = beforeBowlerChange.bowlingTeam.id == beforeBowlerChange.userTeam.id
+            val bowlerActuallyChanged = newState.currentBowler.id != beforeBowlerChange.currentBowler.id
+            if (userSideBowling && bowlerActuallyChanged) {
+                newState = MatchStateMachine.selectBowler(beforeBowlerChange, newState.currentBowler)
+            }
         }
 
         return newState to outcome
