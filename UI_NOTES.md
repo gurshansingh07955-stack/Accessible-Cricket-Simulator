@@ -88,38 +88,72 @@ but this is explicitly scaffolding, not the real design:
 - `MainActivity.kt` hosts the full flow through to this first-slice
   match screen.
 
+**The first of the three custom gesture surfaces exists**
+(`app/src/main/java/com/cricketsim/ui/match/PitchingScreen.kt`), but is
+**not yet wired into the match loop**:
+- **`PitchingScreen`** — a fresh TalkBack-native design, not a port of
+  the web app's continuous-drag `PitcherScreen`. Angle, line,
+  variation, target length, and speed are all discrete single-swipe
+  list picks (same `Role.Button`/`Role.RadioButton` patterns as the
+  setup flow). Execution quality — which `BowlingSystem.computeBowlingQuality`
+  needs as a continuous `verticalFraction` — comes from a genuine skill
+  mechanic instead of a drag: a repeating HAPTIC PULSE timed by
+  `BattingSystem.computeTimingIntervalMs(speedKmh)` (deliberately
+  reused from the batting timing minigame for a consistent feel), where
+  the player releases on the final pulse and timing error shifts the
+  release point away from the target band's center (early -> shorter,
+  late -> fuller) — able to drift into a neighboring band on a bad
+  miss, which `computeBowlingQuality`/`resolveActualLength` then score
+  exactly as they would any other `verticalFraction` source. See the
+  file's own doc comment for the full list of known v1 simplifications
+  (no overshoot penalty yet, no player-controlled swing, haptic-only
+  timing cue pending the audio layer).
+
 ## Not started
 
-Replacing the match screen's first slice with the real thing is the
-single largest remaining piece of work, by far:
-- The three custom gesture surfaces — pitching (line/length/angle/
-  variation/speed), batting (footwork/shot/intent/timing), fielding
-  (drag-and-tap placement) — each needs its OWN deliberate TalkBack
-  design; nothing here can be copied from the web app's ARIA-specific
-  versions (`PitcherScreen`/`BattingShotScreen`/`FieldingScreen`), only
-  the underlying mechanics they control (`BowlingSystem.kt`/
-  `BattingSystem.kt`/`FieldingSystem.kt`) carry over. Building these
-  replaces `MatchSimulation.kt`'s AI-generated decisions for whichever
-  side the user is controlling with real gesture-driven input.
-- A real win-probability display (`MatchEngine.calculateWinProbability`)
-  and required-run-rate display when chasing.
-- Scorecard (batting/bowling figures, partnerships — `MatchStats.kt`).
-- Real commentary/audio, tied to `MatchEngine.generateCommentary` /
-  `CommentaryLibrary.kt` (the first slice just shows the plain
-  `BallOutcome.commentary` string).
-- Rain-delay dialog (`WeatherSystem.shouldTriggerRainInterruption`,
-  `MatchStateMachine.applyRainInterruption`).
-- Wicket / new-batsman selection flow for the user's own team
-  (`MatchStateMachine.bringInNewBatsman`, `getAvailableBatsmen` — the
-  first slice always auto-picks the next available player).
-- Bowler-selection flow for the user's own team
-  (`MatchStateMachine.selectBowler`, `getEligibleBowlers` — the first
-  slice always auto-picks via `changeBowler`).
-- Proper innings-break / match-result screens (the first slice just
-  shows a plain result sentence).
-- A real situational-bias calculation feeding into the AI decisions
-  and `changeBowler`'s rotation scoring (currently hardcoded to 0 —
-  neutral — everywhere in `MatchSimulation.kt`).
+The single largest remaining piece of work is finishing the match
+screen and wiring the gesture surfaces into it:
+
+1. **Wire `PitchingScreen` into `MatchScreen`/`MatchSimulation`** — the
+   screen itself works standalone but nothing calls it yet. This needs
+   `MatchSimulation`'s ball loop to check whether `matchState.bowlingTeam.id
+   == userTeam.id` and, if so, pause the automated loop, show
+   `PitchingScreen`, and feed its resulting `ResolvedBowlingDecision`
+   into `MatchEngine.simulateBall` in place of
+   `BowlingSystem.generateAiBowlingDecision`'s output — the AI path
+   stays exactly as `MatchSimulation.kt` already has it for whichever
+   side the user is NOT bowling for.
+2. **Batting gesture surface** — footwork/shot/intent/timing
+   (`BattingSystem.kt`). Needs the same fresh-design treatment as
+   pitching; the existing `computeTimingIntervalMs`/`computeTimingTier`
+   functions are already proven reusable (pitching reuses them too) so
+   batting's own timing step can very likely share UI patterns with
+   `PitchingScreen`'s release step.
+3. **Fielding gesture surface** — placement (`FieldingSystem.kt`). The
+   web app's drag-and-drop field map has the least obvious accessible
+   analogue of the three; likely wants its own discrete-list redesign
+   (e.g. picking a sector then a depth from a list, rather than any
+   kind of spatial placement) — worth extra design thought before
+   starting.
+4. A real win-probability display (`MatchEngine.calculateWinProbability`)
+   and required-run-rate display when chasing.
+5. Scorecard (batting/bowling figures, partnerships — `MatchStats.kt`).
+6. Real commentary/audio, tied to `MatchEngine.generateCommentary` /
+   `CommentaryLibrary.kt` (the first slice just shows the plain
+   `BallOutcome.commentary` string).
+7. Rain-delay dialog (`WeatherSystem.shouldTriggerRainInterruption`,
+   `MatchStateMachine.applyRainInterruption`).
+8. Wicket / new-batsman selection flow for the user's own team
+   (`MatchStateMachine.bringInNewBatsman`, `getAvailableBatsmen` — the
+   first slice always auto-picks the next available player).
+9. Bowler-selection flow for the user's own team
+   (`MatchStateMachine.selectBowler`, `getEligibleBowlers` — the first
+   slice always auto-picks via `changeBowler`).
+10. Proper innings-break / match-result screens (the first slice just
+    shows a plain result sentence).
+11. A real situational-bias calculation feeding into the AI decisions
+    and `changeBowler`'s rotation scoring (currently hardcoded to 0 —
+    neutral — everywhere in `MatchSimulation.kt`).
 
 Also blocked on the Android persistence layer (see PORTING_NOTES.md):
 resume-match prompt, save indicator, and anything else that needs a
