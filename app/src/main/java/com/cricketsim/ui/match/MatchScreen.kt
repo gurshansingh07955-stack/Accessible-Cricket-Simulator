@@ -25,30 +25,31 @@ import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.Difficulty
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchStateMachine
+import com.cricketsim.logic.ResolvedBowlingDecision
 import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossResult
 import com.cricketsim.logic.WeatherSystem
 
 /**
- * ⚠️ FIRST SLICE of the match screen — NOT the real design. Both sides
- * are simulated by MatchSimulation.kt's temporary AI-vs-AI loop (see
- * its own file-level doc comment) rather than the user actually
- * playing their own side, since none of the three custom gesture
- * surfaces (pitching/batting/fielding) exist yet. This screen's
- * purpose is narrow: prove the full MatchEngine/MatchStateMachine
- * wiring — ball simulation, wicket handling, strike rotation, over
- * completion, bowler changes, innings switching, match completion —
- * works correctly end to end inside the real Android UI, one manually-
- * triggered ball at a time.
+ * ⚠️ FIRST SLICE of the match screen — NOT the real design. This screen
+ * now routes to PitchingScreen (the first working gesture surface)
+ * whenever the user's own team is bowling — the top item from
+ * UI_NOTES.md's "Not started" list — but every other dimension is still
+ * MatchSimulation.kt's temporary AI-vs-AI path (see its own file-level
+ * doc comment): the user's own BATTING and FIELDING are still fully
+ * AI-driven, and so is the opposing side's bowling. This screen's
+ * remaining purpose is still narrow: verify the growing set of
+ * gesture-surface integrations work correctly end to end inside the
+ * real Android UI, one manually-triggered ball at a time.
  *
- * A future session builds the real match screen: the actual gesture
- * surfaces (replacing the user's own side's AI decisions here),
- * scorecard, proper commentary/audio, rain delays, and the
- * wicket/bowler-selection prompts this screen currently skips by
- * always auto-picking. See UI_NOTES.md's "Not started" section for the
- * full list — treat this file as scaffolding to build on top of, not
- * a screen to extend piecemeal into the real thing.
+ * A future session builds the real match screen: the batting and
+ * fielding gesture surfaces (replacing more of the user's own side's
+ * AI decisions here), scorecard, proper commentary/audio, rain delays,
+ * and the wicket/bowler-selection prompts this screen currently skips
+ * by always auto-picking. See UI_NOTES.md's "Not started" section for
+ * the full list — treat this file as scaffolding to build on top of,
+ * not a screen to extend piecemeal into the real thing.
  */
 @Composable
 fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentTeam: Team, toss: TossResult, onBack: () -> Unit) {
@@ -69,10 +70,11 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
     var recentCommentary by remember { mutableStateOf<List<String>>(emptyList()) }
     var matchOver by remember { mutableStateOf(false) }
     var resultText by remember { mutableStateOf<String?>(null) }
+    var showPitchingScreen by remember { mutableStateOf(false) }
 
-    fun advanceOneBall() {
+    fun advanceOneBall(userBowlingDecision: ResolvedBowlingDecision? = null) {
         if (matchOver) return
-        val (nextState, outcome) = MatchSimulation.simulateOneBall(matchState, stadium, Difficulty.MEDIUM)
+        val (nextState, outcome) = MatchSimulation.simulateOneBall(matchState, stadium, Difficulty.MEDIUM, userBowlingDecision)
         matchState = nextState
         recentCommentary = (recentCommentary + outcome.commentary).takeLast(6)
 
@@ -92,6 +94,20 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
             }
         }
     }
+
+    if (showPitchingScreen) {
+        PitchingScreen(
+            bowler = matchState.currentBowler,
+            onDeliveryResolved = { decision ->
+                showPitchingScreen = false
+                advanceOneBall(decision)
+            },
+            onBack = { showPitchingScreen = false }
+        )
+        return
+    }
+
+    val isUserBowling = matchState.bowlingTeam.id == userTeam.id
 
     Column(
         modifier = Modifier
@@ -135,6 +151,10 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
                     liveRegion = LiveRegionMode.Polite
                 }
             )
+        } else if (isUserBowling) {
+            Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Bowl")
+            }
         } else {
             Button(onClick = { advanceOneBall() }, modifier = Modifier.fillMaxWidth()) {
                 Text("Simulate Next Ball")
