@@ -10,11 +10,21 @@ import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.MatchEngine
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.MatchStateMachine
+import com.cricketsim.logic.MatchStatus
 import com.cricketsim.logic.PendingDismissal
 import com.cricketsim.logic.Player
+import com.cricketsim.logic.RainInterruption
 import com.cricketsim.logic.ResolvedBowlingDecision
 import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.WeatherSystem
+
+/**
+ * One delivery, fully resolved: the new match state, what happened, and
+ * the batting decision it was played against (the user's own, or the
+ * AI's). The batting decision is returned because the last-ball line
+ * reports the shot and timing for BOTH sides, as the web does.
+ */
+data class BallResult(val state: MatchState, val outcome: BallOutcome, val battingDecision: BattingDecision)
 
 /**
  * ⚠️ TEMPORARY, MOSTLY-AUTOMATED MATCH LOOP — not the real match
@@ -58,6 +68,19 @@ import com.cricketsim.logic.WeatherSystem
  * - Nobody is prompted when the innings (or the chase) ends on that
  *   very ball — there is no next batsman or over to pick for.
  *
+ * RAIN, matching the web's once-per-completed-over roll: at the end of
+ * every over that doesn't also end the innings, after the bowling
+ * change, WeatherSystem.shouldTriggerRainInterruption is rolled. If it
+ * fires, the interruption is built from the state at that moment and
+ * applied with MatchStateMachine.applyRainInterruption (which cuts
+ * `oversLimit`, marks the one-interruption-per-match flag, revises the
+ * target by DLS if a chase is under way, and sets `activeRainDelay`).
+ * MatchScreen then blocks play behind RainDelayScreen until Resume. One
+ * small difference: the web only rolls when an over ends normally, so an
+ * over whose last ball was a wicket for the user's side (deferred until
+ * the replacement is picked) never rolled; here that over-end rolls too,
+ * because it is the same over-end, just later.
+ *
  * Simplifications specific to THIS temporary loop (not permanent
  * design decisions):
  * - Situational bias is always 0 (neutral) for every AI decision and
@@ -69,7 +92,6 @@ import com.cricketsim.logic.WeatherSystem
  * - The AI's next batsman is simply the next in squad order (the web
  *   uses a situational selectAiNextBatsman that lives in match.tsx, not
  *   in helpers/, so it wasn't part of the logic port).
- * - No rain interruptions are rolled yet.
  */
 object MatchSimulation {
 
@@ -108,15 +130,15 @@ object MatchSimulation {
     /**
      * Sends in the user's chosen replacement after a wicket, then
      * finishes the over if the wicket fell on its last ball (see
-     * `deferredOverEnd`): strike rotation, and the AI's bowling change.
-     * The deferral only ever happens for the user's own batting side, so
-     * the bowling side here is always the AI.
+     * `deferredOverEnd`): strike rotation, the AI's bowling change, and
+     * the rain roll. The deferral only ever happens for the user's own
+     * batting side, so the bowling side here is always the AI.
      */
-    fun completeWicketReplacement(state: MatchState, newBatsman: Player): MatchState {
+    fun completeWicketReplacement(state: MatchState, newBatsman: Player, stadium: Stadium): MatchState {
         val pending = state.pendingDismissal ?: return state
         var updated = MatchStateMachine.bringInNewBatsman(state, pending.playerId, newBatsman)
         if (updated.deferredOverEnd) {
-            updated = endOfOver(updated).copy(deferredOverEnd = false)
+            updated = endOfOver(updated, stadium).copy(deferredOverEnd = false)
         }
         return updated
     }
@@ -124,17 +146,39 @@ object MatchSimulation {
     /**
      * The end-of-over housekeeping: swap the batsmen's ends, then either
      * hand the choice of next bowler to the user (their side is bowling)
-     * or let the AI rotate its attack. Skipped when the innings or chase
-     * is over, since there is nobody left to bowl to.
+     * or let the AI rotate its attack, then roll for rain. Skipped when
+     * the innings or chase is over, since there is nobody left to bowl to.
      */
-    private fun endOfOver(state: MatchState): MatchState {
+    private fun endOfOver(state: MatchState, stadium: Stadium): MatchState {
         val rotated = MatchStateMachine.rotateStrike(state)
         if (isInningsOver(rotated) || isTargetReached(rotated)) return rotated
-        return if (rotated.bowlingTeam.id == rotated.userTeam.id) {
+        val withBowlerHandled = if (rotated.bowlingTeam.id == rotated.userTeam.id) {
             rotated.copy(needsBowlerSelection = true)
         } else {
             MatchStateMachine.changeBowler(rotated, situationalBias = 0.0)
         }
+        return maybeInterruptForRain(withBowlerHandled, stadium)
+    }
+
+    /**
+     * Rolls once for rain. `shouldTriggerRainInterruption` itself rules
+     * out Tests, the first over, the last two overs, and a second
+     * interruption in the same match.
+     */
+    private fun maybeInterruptForRain(state: MatchState, stadium: Stadium): MatchState {
+        val triggers = WeatherSystem.shouldTriggerRainInterruption(
+            stadium, state.format, state.score.overs, state.oversLimit, state.rainInterruptionUsed
+        )
+        if (!triggers) return state
+
+        val oversRemaining = state.oversLimit - state.score.overs
+        val interruption = RainInterruption(
+            originalOversAllocated = state.oversLimit,
+            oversBowledAtInterruption = state.score.overs,
+            wicketsLostAtInterruption = state.score.wickets,
+            oversLost = WeatherSystem.pickOversLost(oversRemaining, state.format)
+        )
+        return MatchStateMachine.applyRainInterruption(state, interruption)
     }
 
     /**
@@ -156,7 +200,7 @@ object MatchSimulation {
         difficulty: Difficulty,
         presetBowlingDecision: ResolvedBowlingDecision? = null,
         presetBattingDecision: BattingDecision? = null
-    ): Pair<MatchState, BallOutcome> {
+    ): BallResult {
         val striker = state.currentBatsmen.first
 
         val bowlingDecision = presetBowlingDecision ?: generateBowlingDecision(state)
@@ -245,10 +289,10 @@ object MatchSimulation {
         }
 
         if (overJustCompleted && !overEndDeferred) {
-            newState = endOfOver(newState)
+            newState = endOfOver(newState, stadium)
         }
 
-        return newState to outcome
+        return BallResult(newState, outcome, battingDecision)
     }
 
     /** True once the current innings should end: all out, or the overs limit is used up. */
@@ -261,6 +305,22 @@ object MatchSimulation {
     fun isTargetReached(state: MatchState): Boolean {
         val target = state.target ?: return false
         return state.currentInnings == 2 && state.score.runs >= target
+    }
+
+    /**
+     * Marks the match completed and records who won, as the web does
+     * (matchStatus = completed, winnerId). The winner is the chasing
+     * side if the target was reached, nobody on a tie, otherwise the
+     * side that was bowling.
+     */
+    fun finishMatch(state: MatchState): MatchState {
+        val target = state.target
+        val winnerId = when {
+            isTargetReached(state) -> state.battingTeam.id
+            target != null && state.score.runs == target - 1 -> null
+            else -> state.bowlingTeam.id
+        }
+        return state.copy(matchStatus = MatchStatus.COMPLETED, winnerId = winnerId)
     }
 
     /** A short plain-text result summary once the match is over. Null while the match is still in progress. */

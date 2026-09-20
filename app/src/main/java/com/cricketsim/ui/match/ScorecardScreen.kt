@@ -50,6 +50,10 @@ import com.cricketsim.logic.MatchState
  * the rows. The rows are a LazyColumn, so the section switch and the
  * innings total stay put while the rows scroll.
  *
+ * `startOnFirstInnings` opens on the first innings' card instead of the
+ * current one — used from the innings break, where the second innings
+ * has no balls in it yet and the first innings is what you want to hear.
+ *
  * Maidens and fall of wickets (wicket number in the order they actually
  * fell, plus the team score at each) come from MatchStats — two
  * additions beyond the web source, documented in its file header.
@@ -63,9 +67,9 @@ private enum class CardSection(val label: String) {
 }
 
 @Composable
-fun ScorecardScreen(state: MatchState, onBack: () -> Unit) {
+fun ScorecardScreen(state: MatchState, onBack: () -> Unit, startOnFirstInnings: Boolean = false) {
     val firstInnings = state.firstInningsData
-    var showFirstInnings by remember { mutableStateOf(false) }
+    var showFirstInnings by remember { mutableStateOf(startOnFirstInnings) }
     var section by remember { mutableStateOf(CardSection.BATTING) }
 
     // firstInningsData only exists once the second innings is under way.

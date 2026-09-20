@@ -1,5 +1,9 @@
 package com.cricketsim.ui.match
 
+import com.cricketsim.logic.BallOutcome
+import com.cricketsim.logic.BattingDecision
+import com.cricketsim.logic.BattingSystem
+import com.cricketsim.logic.BowlingSystem
 import com.cricketsim.logic.DismissalType
 import com.cricketsim.logic.InningsData
 import com.cricketsim.logic.MatchEngine
@@ -109,6 +113,34 @@ object MatchLines {
         return "${dismissal.playerName} is out for ${countOf(dismissal.runs, "run")} off " +
             "${countOf(dismissal.ballsFaced, "ball")}. $how, bowled by ${dismissal.dismissedBy}."
     }
+
+    /**
+     * What just happened on a ball, worded like the web's
+     * formatBallOutcomeText (minus its "Last ball:" prefix, which the
+     * screen adds so older balls can reuse this text): the result and
+     * commentary, how good the bowling was, and — for either side's
+     * batting — the shot played and how well it was timed. The last two
+     * are what let a batter learn from a ball.
+     */
+    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?): String {
+        val base = when {
+            outcome.isWicket -> "WICKET. ${outcome.commentary}"
+            outcome.isWide -> "Wide, 1 run. ${outcome.commentary}"
+            outcome.isNoBall -> "No ball, ${countOf(outcome.extraRuns, "run")}. ${outcome.commentary}"
+            else -> "${countOf(outcome.runs, "run")}. ${outcome.commentary}"
+        }
+        val quality = outcome.bowlingQualityTier?.let { " Ball quality: ${BowlingSystem.qualityTierLabel(it)}." } ?: ""
+        val shot = decision?.let {
+            " Shot played: ${BattingSystem.shotLabel(it.shot)}. Timing: ${BowlingSystem.qualityTierLabel(it.timingTier)}."
+        } ?: ""
+        return base + quality + shot
+    }
+
+    /** Both innings' totals, for the match-result screen. */
+    fun resultSummaryLines(state: MatchState): List<String> = listOfNotNull(
+        state.firstInningsData?.let { "First innings: ${ScorecardLines.inningsHeader(it)}" },
+        "Second innings: ${ScorecardLines.inningsHeader(state.currentInningsData)}"
+    )
 }
 
 /** Scorecard rows, one self-contained sentence each. */

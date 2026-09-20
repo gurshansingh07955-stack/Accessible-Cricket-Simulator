@@ -24,12 +24,12 @@ import com.cricketsim.ui.setup.TossScreen
 
 /**
  * Entry point. The logic layer (see PORTING_NOTES.md) is fully ported;
- * this hosts the real gameplay UI (see UI_NOTES.md). The entire
- * pre-match setup flow (format, stadium, team, playing XI, toss) is
- * real, and the match screen now runs a first-slice, fully-automated
- * AI-vs-AI preview loop (see MatchScreen.kt's own doc comment) to
- * verify the logic layer's wiring — not yet the real gesture-driven
- * match screen.
+ * this hosts the real gameplay UI (see UI_NOTES.md): the whole pre-match
+ * setup flow (format, stadium, team, playing XI, toss), then the match
+ * screen, which runs a real, user-controlled match — pitching, batting,
+ * fielding, selections, scorecard, rain delays and the innings break —
+ * against an AI opponent. The match screen itself is still a
+ * first-slice scaffold (see MatchScreen.kt's own doc comment).
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,7 +101,10 @@ fun CricketSimApp() {
             userTeam = current.userTeam,
             opponentTeam = current.opponentTeam,
             toss = current.toss,
-            onBack = { screen = Screen.TossSelection(current.format, current.stadium, current.userTeam, current.opponentTeam) }
+            // Abandons the match and returns to the toss.
+            onBack = { screen = Screen.TossSelection(current.format, current.stadium, current.userTeam, current.opponentTeam) },
+            // A finished match: back to the start, ready for a new one.
+            onMatchFinished = { screen = Screen.FormatSelection }
         )
     }
 }

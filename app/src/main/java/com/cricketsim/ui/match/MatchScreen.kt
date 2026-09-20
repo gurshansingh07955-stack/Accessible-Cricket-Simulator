@@ -39,35 +39,52 @@ import com.cricketsim.logic.WeatherSystem
  * user's own team is bowling, BattingScreen when it is batting, and
  * FieldingScreen from a Set field button (editable while the user is
  * bowling) or a Hear the field button (read-only while the user is
- * batting). It also opens the ScorecardScreen, and it puts the three
- * selection screens (openers, next batsman, next bowler) in front of
- * everything else whenever the user's own side owes a pick — see
- * SelectionScreens.kt and MatchSimulation's file comment for when. It
- * is still MatchSimulation.kt's temporary path underneath: everything
- * the opposing side does is AI-driven. This screen's remaining purpose
- * is still narrow: verify the integrations work correctly end to end
- * inside the real Android UI, one manually-triggered ball at a time.
+ * batting). It also owns everything around them: the scorecard, the
+ * three selection screens (openers, next batsman, next bowler), and the
+ * three "play has stopped" screens (rain delay, innings break, match
+ * result — see MatchFlowScreens.kt). It is still MatchSimulation.kt's
+ * temporary path underneath: everything the opposing side does is
+ * AI-driven.
  *
- * Reading order follows the web's match screen, which was tuned with a
- * real screen-reader user: striker, non-striker and bowler lines with
- * their live figures, then the action buttons, then the last ball, the
- * score, the chase figures, the run rates and (in a chase) the win
- * probability. The whole screen scrolls (a plain scrolling Column) so
- * nothing can be pushed off a small screen.
+ * WHICH SCREEN WINS when several apply, in order:
+ *   1. the scorecard (only ever opened from a screen that can go back
+ *      to where it came from),
+ *   2. the match result,
+ *   3. a rain delay,
+ *   4. the innings break,
+ *   5. a pick the user's own side owes (openers, next batsman, bowler),
+ *   6. the gesture surfaces and the field screen,
+ *   7. the ordinary match screen.
+ * Rain outranks a pending pick because play has stopped; the pick simply
+ * appears the moment play resumes.
  *
- * The user's team is always either batting or bowling, so every ball
- * goes through PitchingScreen or BattingScreen; the earlier AI-vs-AI
- * "Simulate Next Ball" button is gone because nothing can reach it any
- * more.
+ * Reading order on the ordinary screen follows the web's match screen,
+ * which was tuned with a real screen-reader user: striker, non-striker
+ * and bowler lines with their live figures, then the action buttons,
+ * then the last ball (with ball quality, shot and timing), the score, the
+ * chase figures, the run rates and (in a chase) the win probability. The
+ * whole screen scrolls (a plain scrolling Column) so nothing can be
+ * pushed off a small screen.
+ *
+ * `onBack` abandons the match (MainActivity sends you back to the toss),
+ * with NO confirmation; `onMatchFinished` is the finished match's Return
+ * to home.
  *
  * A future session builds the real match screen: proper commentary/
- * audio, rain delays, and innings-break screens. See UI_NOTES.md's "Not
- * started" section for the full list — treat this file as scaffolding
- * to build on top of, not a screen to extend piecemeal into the real
- * thing.
+ * audio. See UI_NOTES.md's "Not started" section for the full list —
+ * treat this file as scaffolding to build on top of, not a screen to
+ * extend piecemeal into the real thing.
  */
 @Composable
-fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentTeam: Team, toss: TossResult, onBack: () -> Unit) {
+fun MatchScreen(
+    format: MatchFormat,
+    stadium: Stadium,
+    userTeam: Team,
+    opponentTeam: Team,
+    toss: TossResult,
+    onBack: () -> Unit,
+    onMatchFinished: () -> Unit
+) {
     var matchState by remember {
         mutableStateOf(
             MatchStateMachine.createNewMatch(
@@ -89,9 +106,15 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
     var showBattingScreen by remember { mutableStateOf(false) }
     var showFieldScreen by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
+    var showInningsBreak by remember { mutableStateOf(false) }
+    // The final ball of the first innings, kept for the innings-break
+    // screen because the commentary list is cleared for the new innings.
+    var breakLastBall by remember { mutableStateOf("") }
     // Outcome of the last Set field, announced on this screen (the
     // fielding screen is gone by then). Cleared as soon as a ball is played.
     var fieldMessage by remember { mutableStateOf("") }
+    // "Play resumes." / the revised target, announced after a rain delay.
+    var playNotice by remember { mutableStateOf("") }
 
     fun advanceOneBall(
         presetBowlingDecision: ResolvedBowlingDecision? = null,
@@ -99,28 +122,35 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
     ) {
         if (matchOver) return
         fieldMessage = ""
-        val (nextState, outcome) = MatchSimulation.simulateOneBall(
+        playNotice = ""
+        val result = MatchSimulation.simulateOneBall(
             matchState,
             stadium,
             Difficulty.MEDIUM,
             presetBowlingDecision,
             presetBattingDecision
         )
+        val nextState = result.state
+        val summary = MatchLines.ballSummary(result.outcome, result.battingDecision)
         matchState = nextState
-        recentCommentary = (recentCommentary + outcome.commentary).takeLast(6)
+        recentCommentary = (recentCommentary + summary).takeLast(6)
 
         // MatchSimulation only leaves a pick pending when the innings is
         // NOT ending on this ball, so these checks never fight a prompt.
         when {
             MatchSimulation.isTargetReached(nextState) -> {
+                matchState = MatchSimulation.finishMatch(nextState)
                 matchOver = true
                 resultText = MatchSimulation.matchResultText(nextState)
             }
             MatchSimulation.isInningsOver(nextState) -> {
                 if (nextState.currentInnings == 1) {
+                    breakLastBall = summary
                     matchState = MatchStateMachine.switchInnings(nextState)
                     recentCommentary = emptyList()
+                    showInningsBreak = true
                 } else {
+                    matchState = MatchSimulation.finishMatch(nextState)
                     matchOver = true
                     resultText = MatchSimulation.matchResultText(nextState)
                 }
@@ -128,45 +158,90 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
         }
     }
 
-    // Picks the user's own side owes, before anything else. These replace
-    // the whole screen, like the gesture surfaces do.
-    if (!matchOver) {
-        if (matchState.needsOpenerSelection) {
-            OpenerSelectionScreen(
-                players = matchState.battingTeam.players,
-                onConfirm = { striker, nonStriker ->
-                    matchState = MatchStateMachine.setOpeners(matchState, striker, nonStriker)
-                }
-            )
-            return
-        }
+    if (showScorecard) {
+        ScorecardScreen(
+            state = matchState,
+            startOnFirstInnings = showInningsBreak && !matchOver,
+            onBack = { showScorecard = false }
+        )
+        return
+    }
 
-        val dismissal = matchState.pendingDismissal
-        if (dismissal != null) {
-            NewBatsmanScreen(
-                dismissal = dismissal,
-                scoreLine = MatchLines.scoreLine(matchState),
-                players = MatchStateMachine.getAvailableBatsmen(matchState),
-                onConfirm = { batsman ->
-                    matchState = MatchSimulation.completeWicketReplacement(matchState, batsman)
-                }
-            )
-            return
-        }
+    if (matchOver) {
+        MatchResultScreen(
+            resultText = resultText ?: "Match complete.",
+            summaryLines = MatchLines.resultSummaryLines(matchState),
+            lastBall = recentCommentary.lastOrNull(),
+            onScorecard = { showScorecard = true },
+            onHome = onMatchFinished
+        )
+        return
+    }
 
-        if (matchState.needsBowlerSelection) {
-            val noBallsBowledYet = matchState.currentInningsData.totalBalls == 0 && matchState.currentInningsData.totalOvers == 0
-            BowlerSelectionScreen(
-                title = if (noBallsBowledYet) "Select your opening bowler" else "Select your next bowler",
-                players = MatchSimulation.bowlerChoices(matchState),
-                bowlerStats = matchState.currentInningsData.bowlerStats,
-                maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(matchState.format),
-                onConfirm = { bowler ->
-                    matchState = MatchStateMachine.selectBowler(matchState, bowler)
-                }
-            )
-            return
-        }
+    // Rain has stopped play: nothing else can happen until it's dismissed.
+    if (matchState.activeRainDelay != null) {
+        val revised = matchState.currentInnings == 2 && matchState.secondInningsInterruption != null
+        RainDelayScreen(
+            format = matchState.format,
+            newOversLimit = matchState.oversLimit,
+            innings = matchState.currentInnings,
+            dlsRevised = revised,
+            revisedTarget = if (revised) matchState.target else null,
+            onResume = {
+                playNotice = if (revised) "Play resumes. Revised target is ${matchState.target}." else "Play resumes."
+                matchState = MatchStateMachine.resumeFromRainDelay(matchState)
+            }
+        )
+        return
+    }
+
+    if (showInningsBreak) {
+        InningsBreakScreen(
+            state = matchState,
+            lastBall = breakLastBall,
+            onStart = { showInningsBreak = false },
+            onScorecard = { showScorecard = true }
+        )
+        return
+    }
+
+    // Picks the user's own side owes. These replace the whole screen,
+    // like the gesture surfaces do.
+    if (matchState.needsOpenerSelection) {
+        OpenerSelectionScreen(
+            players = matchState.battingTeam.players,
+            onConfirm = { striker, nonStriker ->
+                matchState = MatchStateMachine.setOpeners(matchState, striker, nonStriker)
+            }
+        )
+        return
+    }
+
+    val dismissal = matchState.pendingDismissal
+    if (dismissal != null) {
+        NewBatsmanScreen(
+            dismissal = dismissal,
+            scoreLine = MatchLines.scoreLine(matchState),
+            players = MatchStateMachine.getAvailableBatsmen(matchState),
+            onConfirm = { batsman ->
+                matchState = MatchSimulation.completeWicketReplacement(matchState, batsman, stadium)
+            }
+        )
+        return
+    }
+
+    if (matchState.needsBowlerSelection) {
+        val noBallsBowledYet = matchState.currentInningsData.totalBalls == 0 && matchState.currentInningsData.totalOvers == 0
+        BowlerSelectionScreen(
+            title = if (noBallsBowledYet) "Select your opening bowler" else "Select your next bowler",
+            players = MatchSimulation.bowlerChoices(matchState),
+            bowlerStats = matchState.currentInningsData.bowlerStats,
+            maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(matchState.format),
+            onConfirm = { bowler ->
+                matchState = MatchStateMachine.selectBowler(matchState, bowler)
+            }
+        )
+        return
     }
 
     if (showPitchingScreen) {
@@ -214,11 +289,6 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
         return
     }
 
-    if (showScorecard) {
-        ScorecardScreen(state = matchState, onBack = { showScorecard = false })
-        return
-    }
-
     val userFieldReason = if (isUserBowling) {
         FieldingSystem.getIllegalFieldReason(matchState.fieldPlacements, isPowerplayNow)
     } else {
@@ -243,6 +313,14 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
         Text(MatchLines.nonStrikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
         Text(MatchLines.bowlerLine(matchState), style = MaterialTheme.typography.bodyLarge)
 
+        if (playNotice.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = playNotice,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
         if (fieldMessage.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -261,16 +339,7 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (matchOver) {
-            Text(
-                text = resultText ?: "Match complete.",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics {
-                    heading()
-                    liveRegion = LiveRegionMode.Polite
-                }
-            )
-        } else if (isUserBowling) {
+        if (isUserBowling) {
             Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("Bowl")
             }
@@ -332,8 +401,9 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+        // Abandons the match — there is no confirmation yet (see UI_NOTES.md).
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Back")
+            Text("Leave match")
         }
     }
 }
