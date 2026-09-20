@@ -37,17 +37,21 @@ import com.cricketsim.logic.WeatherSystem
  *   MatchStateMachine.setFieldPlacements, and this loop then uses that
  *   field as it stands (including its legality) for every delivery.
  *   See the over-end handling below for how it is kept across overs.
+ * - AI FIELDING (the user is batting): the AI captain sets a fresh
+ *   field for every delivery once that delivery's actual length is
+ *   known — a bouncer trap for short balls, a yorker field for full
+ *   ones, the powerplay ring during the powerplay — exactly as the web
+ *   does. The field it set is kept in the returned state, so "Hear the
+ *   field" shows the field the last ball was bowled to.
  *
  * Simplifications specific to THIS temporary loop (not permanent
  * design decisions, and not modeled on anything in the web app):
  * - Situational bias is always 0 (neutral) for every AI decision and
  *   for changeBowler's rotation scoring. A real situational-bias
  *   calculation (from score, overs remaining, wickets in hand) is
- *   separate future work — MatchEngine/BattingSystem/BowlingSystem
- *   already accept it as a parameter, nothing there needs to change.
- * - No reactive AI field placement per delivery (the web sets one once
- *   each delivery's actual length is known) — when the AI is bowling,
- *   `state.fieldPlacements` is whatever the last bowler change set.
+ *   separate future work — MatchEngine/BattingSystem/BowlingSystem/
+ *   FieldingSystem already accept it as a parameter, nothing there
+ *   needs to change.
  * - `needsOpenerSelection` / `needsBowlerSelection` on MatchState are
  *   ignored — the sensible defaults MatchStateMachine already picks
  *   are used automatically, since no user-facing picker is wired up in
@@ -97,13 +101,32 @@ object MatchSimulation {
         )
 
         val isPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)
-        val illegalField = !FieldingSystem.isFieldLegal(state.fieldPlacements, isPowerplay)
+
+        // When the AI is bowling, its captain sets the field for THIS
+        // delivery now that the ball's actual length is known. The user's
+        // own bowling side keeps exactly the field the user set.
+        val aiIsBowling = state.bowlingTeam.id != state.userTeam.id
+        val ballState = if (aiIsBowling) {
+            MatchStateMachine.setFieldPlacements(
+                state,
+                FieldingSystem.generateAiFieldPlacements(
+                    fieldingPlayers = FieldingSystem.getFieldingPlayers(state.bowlingTeam, state.currentBowler.id),
+                    isPowerplay = isPowerplay,
+                    situationalBias = 0.0,
+                    upcomingLength = bowlingDecision.actualLength
+                )
+            )
+        } else {
+            state
+        }
+
+        val illegalField = !FieldingSystem.isFieldLegal(ballState.fieldPlacements, isPowerplay)
 
         val isSecondInningsUnderLights = state.currentInnings == 2 && state.weather.isDayNight
         val stadiumEffects = WeatherSystem.getStadiumMatchEffects(stadium, isSecondInningsUnderLights)
 
         val outcome = MatchEngine.simulateBall(
-            matchState = state,
+            matchState = ballState,
             difficulty = difficulty,
             pitchType = state.pitchType,
             bowlingDecision = bowlingDecision,
@@ -112,7 +135,7 @@ object MatchSimulation {
             stadiumEffects = stadiumEffects
         )
 
-        var newState = MatchStateMachine.applyBallOutcome(state, outcome)
+        var newState = MatchStateMachine.applyBallOutcome(ballState, outcome)
         val isLegal = !outcome.isWide && !outcome.isNoBall
         val overJustCompleted = isLegal && newState.score.balls == 0 && newState.score.overs > state.score.overs
 

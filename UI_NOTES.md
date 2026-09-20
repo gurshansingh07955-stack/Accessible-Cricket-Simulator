@@ -79,14 +79,21 @@ but this is explicitly scaffolding, not the real design:
   surface can supply the user's own decision (and, when the user bats,
   the AI delivery they were already shown). `generateBowlingDecision`
   is split out so a batter can be shown the ball before choosing a
-  shot. At the end of an over, when the USER's side is bowling, it
-  redoes the bowler change through `MatchStateMachine.selectBowler` so
-  the field the user set carries over (`changeBowler` always installs a
-  fresh AI-generated field, which would have silently wiped it every
-  over). See the file's own doc comment for the full list of
-  simplifications (situational bias always 0, no reactive AI field
-  placement, no opener/bowler-selection prompts, next batsman always
-  auto-picked).
+  shot. Two fielding-related behaviours live here:
+  - When the AI is bowling, its captain sets a fresh field for every
+    delivery once the ball's actual length is known (bouncer trap for
+    short balls, yorker field for full ones, powerplay ring in the
+    powerplay), via `FieldingSystem.generateAiFieldPlacements(...,
+    upcomingLength)` — web parity. The field it set is kept in the
+    returned state.
+  - At the end of an over, when the USER's side is bowling, it redoes
+    the bowler change through `MatchStateMachine.selectBowler` so the
+    field the user set carries over (`changeBowler` always installs a
+    fresh AI-generated field, which would have silently wiped it every
+    over).
+  See the file's own doc comment for the remaining simplifications
+  (situational bias always 0, no opener/bowler-selection prompts, next
+  batsman always auto-picked).
 - **`MatchScreen.kt`** — live score (a `LiveRegionMode.Polite` region,
   since it changes every ball), current batsmen/bowler, buttons that
   route to the three gesture surfaces (Bowl + Set field while bowling;
@@ -168,6 +175,9 @@ loop** (`app/src/main/java/com/cricketsim/ui/match/`):
     delivery is a no-ball until fixed.
   - Read-only mode is the web's "browse the AI's field": the same list
     with nothing actionable, reached from Hear the field while batting.
+    It shows the field the AI set for the last delivery, since the
+    next one is only set once that ball's length is known (as on the
+    web).
   - Valid depths per sector are derived from `FieldingSystem.toggleDepth`
     because the source table is private (see `validDepths` in the
     file). Replace with a real accessor if `FieldingSystem` gains one.
@@ -187,25 +197,32 @@ step now measures real elapsed milliseconds with
 While fixing it, a second, worse problem turned up and was fixed in the
 same rewrite: the old Release *button* sat several swipes from the first
 TalkBack focus stop, while the entire rhythm plus its auto-miss timeout
-finished in roughly 1.3-2.1 seconds — so with TalkBack the mechanic was
-effectively unplayable. The release step is now a single full-screen
-`clickable` node, the only focusable element, with a longer lead-in
-under touch exploration (same as batting). The instructions moved to the
-Speed step (read while browsing, not during the rhythm), and there is no
-Back on the release step any more.
+finished in roughly 1.0-2.1 seconds (5.5 intervals of 185-380ms) — so
+with TalkBack the mechanic was effectively unplayable. The release step
+is now a single full-screen `clickable` node, the only focusable
+element, with a longer lead-in under touch exploration (same as
+batting). The instructions moved to the Speed step (read while
+browsing, not during the rhythm), and there is no Back on the release
+step any more.
 
 Behaviour changes to be aware of: first buzz is now at 550ms (1400ms
 with a screen reader) instead of one interval; the final buzz is the
 4th at lead-in + 3 intervals.
 
+The rewrite was diffed against the previous version of the file: only
+the release step, the Speed step's instruction text, the doc comment
+and the new constants differ.
+
 ## Known issues / needs a real device
 
-**Nothing written in the last two sessions has been compiled or run** —
-`BattingScreen`, `FieldingScreen`, the `PitchingScreen` rewrite, and
+**Nothing written in the last three sessions has been compiled or run**
+— `BattingScreen`, `FieldingScreen`, the `PitchingScreen` rewrite, and
 the `MatchScreen`/`MatchSimulation` wiring. They were written against
-the APIs as read from the repo; expect a first-build pass to fix small
-things. The same is true, until proven otherwise, of everything else
-in the UI layer.
+the APIs as read from the repo (the `BattingSystem`, `FieldingSector`
+and `MatchEngine` names and signatures used were re-checked against the
+source afterwards); expect a first-build pass to fix small things. The
+same is true, until proven otherwise, of everything else in the UI
+layer.
 
 TalkBack/device checks for the two timing surfaces (`BattingScreen`,
 `PitchingScreen`):
@@ -239,39 +256,40 @@ TalkBack checks specific to `FieldingScreen`:
 
 ## Not started
 
-All three gesture surfaces now exist. Remaining work is finishing the
-match screen around them:
+All three gesture surfaces now exist, and both sides' fielding is live
+(user-set field for the user's side, per-delivery reactive field for the
+AI's). Remaining work is finishing the match screen around them:
 
-1. **Reactive per-delivery AI field** when the AI is bowling — the web
-   sets one once each delivery's actual length is known (bouncer trap,
-   yorker field); the Kotlin loop uses whatever the last bowler change
-   set. `FieldingSystem.generateAiFieldPlacements(..., upcomingLength)`
-   is ready; it belongs in `MatchSimulation.simulateOneBall`.
-2. Optional field presets for the user (attacking / balanced /
-   containing) on top of `generateAiFieldPlacements`, to cut the
-   two-picks-per-fielder cost. NOT in the web app — a gameplay decision
-   (it hands the user the AI captain's templates), so ask first.
-3. A real win-probability display (`MatchEngine.calculateWinProbability`)
+1. Optional field presets for the user (attacking / balanced /
+   containing) on top of `FieldingSystem.generateAiFieldPlacements`, to
+   cut the two-picks-per-fielder cost. NOT in the web app — a gameplay
+   decision (it hands the user the AI captain's templates), so ask
+   first.
+2. A real win-probability display (`MatchEngine.calculateWinProbability`)
    and required-run-rate display when chasing.
-4. Scorecard (batting/bowling figures, partnerships — `MatchStats.kt`).
-5. Real commentary/audio, tied to `MatchEngine.generateCommentary` /
+3. Scorecard (batting/bowling figures, partnerships — `MatchStats.kt`).
+4. Real commentary/audio, tied to `MatchEngine.generateCommentary` /
    `CommentaryLibrary.kt` (the first slice just shows the plain
    `BallOutcome.commentary` string). The audio layer also unlocks the
    timing tick for both timing minigames.
-6. Rain-delay dialog (`WeatherSystem.shouldTriggerRainInterruption`,
+5. Rain-delay dialog (`WeatherSystem.shouldTriggerRainInterruption`,
    `MatchStateMachine.applyRainInterruption`).
-7. Wicket / new-batsman selection flow for the user's own team
+6. Wicket / new-batsman selection flow for the user's own team
    (`MatchStateMachine.bringInNewBatsman`, `getAvailableBatsmen` — the
    first slice always auto-picks the next available player).
-8. Bowler-selection flow for the user's own team
+7. Bowler-selection flow for the user's own team
    (`MatchStateMachine.selectBowler`, `getEligibleBowlers` — the first
    slice auto-picks). `selectBowler` already carries the field over, so
    the interim `MatchSimulation` workaround can go once this exists.
-9. Proper innings-break / match-result screens (the first slice just
+8. Proper innings-break / match-result screens (the first slice just
    shows a plain result sentence).
-10. A real situational-bias calculation feeding into the AI decisions
-    and `changeBowler`'s rotation scoring (currently hardcoded to 0 —
-    neutral — everywhere in `MatchSimulation.kt`).
+9. A real situational-bias calculation feeding into the AI decisions
+   and `changeBowler`'s rotation scoring (currently hardcoded to 0 —
+   neutral — everywhere in `MatchSimulation.kt`).
+10. **A build.** Nothing here has ever been compiled; the APK build
+    (signing, emulator/device) is still untouched. A CI workflow that
+    builds a debug APK on every push would surface compile errors
+    immediately.
 
 Also blocked on the Android persistence layer (see PORTING_NOTES.md):
 resume-match prompt, save indicator, and anything else that needs a
