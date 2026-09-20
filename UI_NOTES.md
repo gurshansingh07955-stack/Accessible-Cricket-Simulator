@@ -79,64 +79,118 @@ but this is explicitly scaffolding, not the real design:
   surface can supply the user's own decision (and, when the user bats,
   the AI delivery they were already shown). `generateBowlingDecision`
   is split out so a batter can be shown the ball before choosing a
-  shot. It also owns the rules for who picks whom, matching the web's
-  match.tsx:
-  - **The user's own side is never auto-picked.** A wicket in the
-    user's innings sets `pendingDismissal`; if it fell on the last ball
-    of an over it also sets `deferredOverEnd`, so the strike rotation
-    and the AI's bowler change wait for the replacement
-    (`completeWicketReplacement` finishes them). The end of an over
-    while the user is bowling sets `needsBowlerSelection`. The AI's own
-    side is auto-picked as before (next batsman in squad order;
-    `changeBowler`). Nobody is prompted when the innings or chase ends
-    on that very ball.
+  shot. `simulateOneBall` returns a `BallResult(state, outcome,
+  battingDecision)` — the batting decision (the user's or the AI's) is
+  returned because the last-ball line reports the shot and timing for
+  both sides. It also owns:
+  - **Who picks whom**, matching the web's match.tsx. The user's own
+    side is never auto-picked. A wicket in the user's innings sets
+    `pendingDismissal`; if it fell on the last ball of an over it also
+    sets `deferredOverEnd`, so the strike rotation, the AI's bowler
+    change and the rain roll wait for the replacement
+    (`completeWicketReplacement`, which now takes the stadium, finishes
+    them). The end of an over while the user is bowling sets
+    `needsBowlerSelection`. The AI's own side is auto-picked as before
+    (next batsman in squad order; `changeBowler`). Nobody is prompted
+    when the innings or chase ends on that very ball.
   - `bowlerChoices` is `getEligibleBowlers` plus a safety net the web
     lacks: a squad with few genuine bowlers can leave that list EMPTY
     once they've bowled their quota (an empty dialog with no way
     forward on the web), so it widens to anyone under the cap, then to
     anyone but the last bowler.
+  - **Rain.** At the end of every over that doesn't also end the
+    innings, after the bowling change, it rolls
+    `WeatherSystem.shouldTriggerRainInterruption` (which itself rules
+    out Tests, the first over, the last two overs and a second
+    interruption). If it fires it builds a `RainInterruption` from the
+    state at that moment and applies it with
+    `MatchStateMachine.applyRainInterruption` (cuts `oversLimit`,
+    revises the target by DLS if a chase is under way, sets
+    `activeRainDelay`). One deliberate difference from the web: the web
+    only rolls when an over ends normally, so an over whose last ball
+    was a wicket for the user's side (deferred behind the new-batsman
+    pick) never rolled; here that over-end rolls too, since it is the
+    same over-end, just later.
+  - `finishMatch` records `matchStatus = COMPLETED` and `winnerId`
+    (the chasing side if the target was reached, nobody on a tie,
+    otherwise the bowling side), as the web does.
   - When the AI is bowling, its captain sets a fresh field for every
     delivery once the ball's actual length is known (bouncer trap for
     short balls, yorker field for full ones, powerplay ring in the
     powerplay), via `FieldingSystem.generateAiFieldPlacements(...,
     upcomingLength)` — web parity. The field it set is kept in the
     returned state.
-  The user's field carrying over between overs is now simply
-  `MatchStateMachine.selectBowler`'s own behaviour (the earlier interim
-  workaround is gone). Remaining simplifications: situational bias is
-  always 0, the AI's next batsman is just the next in squad order (the
-  web's smarter `selectAiNextBatsman` lives in match.tsx, not helpers/),
-  and no rain interruption is rolled yet.
-- **`MatchScreen.kt`** — puts the three selection screens in front of
-  everything else whenever the user's side owes a pick; buttons that
-  route to the three gesture surfaces (Bowl + Set field while bowling;
-  Face next ball + Hear the field while batting) and the scorecard; a
-  polite live region for the outcome of the last Set field; a
-  persistent line when the user's own field is illegal; and a
-  match-result readout. Reading order follows the web's match screen:
-  striker, non-striker, bowler (each with live figures), the action
-  buttons, then the last ball, score, target / runs needed, current run
-  rate, required run rate and (in a chase) win probability, then
-  earlier commentary. The whole screen scrolls. **The last ball and the
-  score are both polite live regions** — before, only the score was, so
-  a screen-reader user never heard what happened on the ball.
-  **Replace, don't extend** — this is a verify-the-wiring screen, not a
-  starting point to gradually add features to.
+  The user's field carrying over between overs is simply
+  `MatchStateMachine.selectBowler`'s own behaviour. Remaining
+  simplifications: situational bias is always 0, and the AI's next
+  batsman is just the next in squad order (the web's smarter
+  `selectAiNextBatsman` lives in match.tsx, not helpers/).
+- **`MatchScreen.kt`** — decides which screen is showing, in this
+  order: (1) the scorecard, (2) the match result, (3) a rain delay, (4)
+  the innings break, (5) a pick the user's own side owes (openers, next
+  batsman, bowler), (6) the gesture surfaces and the field screen, (7)
+  the ordinary match screen. Rain outranks a pending pick because play
+  has stopped; the pick just appears the moment play resumes. The
+  ordinary screen has buttons that route to the three gesture surfaces
+  (Bowl + Set field while bowling; Face next ball + Hear the field while
+  batting) and the scorecard, a polite live region for the outcome of
+  the last Set field, another for "Play resumes." / the revised target
+  after a rain delay, and a persistent line when the user's own field is
+  illegal. Reading order follows the web's match screen: striker,
+  non-striker, bowler (each with live figures), the action buttons,
+  then the last ball, score, target / runs needed, current run rate,
+  required run rate and (in a chase) win probability, then earlier
+  commentary. The whole screen scrolls. **The last ball and the score
+  are both polite live regions** — before, only the score was, so a
+  screen-reader user never heard what happened on the ball. The last
+  ball now also says how good the bowling was and the shot played and
+  its timing, for either side batting, as the web does. Back is
+  relabelled **Leave match** because that is what it does (see Known
+  issues); a finished match's **Return to home** is a separate
+  `onMatchFinished`. **Replace, don't extend** — this is a
+  verify-the-wiring screen, not a starting point to gradually add
+  features to.
+- **`MatchFlowScreens.kt`** — the three full-screen "play has stopped"
+  moments, all with the same shape (a heading that carries the news, a
+  few plain lines, then buttons) so TalkBack lands on the important
+  thing first:
+  - `RainDelayScreen` — the web's `RainDelayDialog` wording and
+    behaviour: "Rain stops play.", then ONE paragraph (covers on, the
+    new overs cap, the DLS-revised target when a chase is affected, and
+    the note that a first-innings target is finalised at the break),
+    then **Resume play**. It blocks play until Resume. The web
+    auto-focuses the Resume button; here focus is deliberately left on
+    the heading so a TalkBack user hears what happened before they can
+    dismiss it.
+  - `InningsBreakScreen` — an addition (the web only announces "Innings
+    Break. Target is N."): heading "Innings break. Target is N." (or
+    "DLS-revised target"), then the first-innings total, the last ball
+    of that innings, runs needed off balls, the required run rate, and
+    which side you are on. Start second innings / Scorecard (opens on
+    the first innings).
+  - `MatchResultScreen` — the web's "Match Completed" page, fuller: the
+    result is in the heading, then both innings' totals and the last
+    ball (which would otherwise never be heard, since this screen
+    replaces the match screen at the very moment the final ball would
+    have been announced), then View scorecard / Return to home.
 - **`MatchLines.kt`** — every spoken match line as a plain string
   (`MatchLines`) and every scorecard row (`ScorecardLines`), kept out of
   the composables so wording lives in one place. Wording follows the web
   ("Striker: X, 12 runs off 9 balls.", "22 runs needed off 30 balls.",
   "Required run rate: 8.80 runs per over."). Chase figures read
   `state.oversLimit`, so a rain-reduced match shows the revised
-  requirement immediately (as on the web). **Win probability is shown
-  on request — it is NOT on the web's match screen** (the web only uses
-  it to drive crowd-tension audio). It appears after the required run
-  rate, in a chase only (in the first innings
-  `MatchEngine.calculateWinProbability` returns a constant 50, which
-  would be noise). It is a deliberately coarse heuristic — five
-  required-run-rate bands scaled down when few wickets are left — so it
-  moves in steps, not smoothly. `dismissalSummary` words the wicket
-  announcement like the web's Wicket! dialog.
+  requirement immediately (as on the web). `ballSummary` is the web's
+  `formatBallOutcomeText` (result + commentary + "Ball quality: X." +
+  "Shot played: Y. Timing: Z."), without its "Last ball:" prefix so
+  older balls can reuse it. **Win probability is shown on request — it
+  is NOT on the web's match screen** (the web only uses it to drive
+  crowd-tension audio). It appears after the required run rate, in a
+  chase only (in the first innings `MatchEngine.calculateWinProbability`
+  returns a constant 50, which would be noise). It is a deliberately
+  coarse heuristic — five required-run-rate bands scaled down when few
+  wickets are left — so it moves in steps, not smoothly.
+  `dismissalSummary` words the wicket announcement like the web's
+  Wicket! dialog; `resultSummaryLines` gives both innings' totals.
 - **`ScorecardScreen.kt`** — the web's tabbed scorecard for a linear
   screen reader: an innings switch (once a first innings exists), then
   Batting / Bowling / Partnerships / Wickets, each row one
@@ -144,12 +198,14 @@ but this is explicitly scaffolding, not the real design:
   in a `selectableGroup()` inside a horizontally scrolling row. Back to
   match comes FIRST in focus order (long scrolling page), and the
   innings total and section switch stay fixed while the rows scroll.
-  Partnerships lists the current one first. **Maidens and fall of
-  wickets are real now:** bowling rows include maidens, and the wickets
-  list reads "Wicket 3: X, 12 runs off 9 balls, caught, bowler Y. Team
-  45 for 3 after 5.3 overs.", in the order wickets actually fell. Both
-  come from two additions to `MatchStats` in the logic layer, beyond
-  the web source (see PORTING_NOTES.md and that file's header).
+  Partnerships lists the current one first. `startOnFirstInnings` opens
+  it on the first innings, used from the innings break (where the
+  second innings has no balls yet). **Maidens and fall of wickets are
+  real:** bowling rows include maidens, and the wickets list reads
+  "Wicket 3: X, 12 runs off 9 balls, caught, bowler Y. Team 45 for 3
+  after 5.3 overs.", in the order wickets actually fell. Both come from
+  two additions to `MatchStats` in the logic layer, beyond the web
+  source (see PORTING_NOTES.md and that file's header).
 - **`SelectionScreens.kt`** — the three "who?" decisions, each
   replacing the match screen while pending (like the gesture surfaces)
   rather than floating over it as the web's modal dialogs do:
@@ -168,8 +224,10 @@ but this is explicitly scaffolding, not the real design:
   at exactly the moment the ball's outcome would otherwise have been
   announced, so it has to carry that news. Back sits above the list
   where there is one.
-- `MainActivity.kt` hosts the full flow through to this first-slice
-  match screen.
+- `MainActivity.kt` hosts the full flow: the setup screens, then the
+  match screen. Return to home (a finished match) goes to the format
+  screen; Leave match (abandon) goes back to the toss. Its doc comment,
+  which still described an AI-vs-AI preview loop, is corrected.
 
 **All three custom gesture surfaces exist AND are wired into the match
 loop** (`app/src/main/java/com/cricketsim/ui/match/`):
@@ -289,20 +347,30 @@ when a squad has few genuine bowlers and they've all bowled their quota;
 `MatchSimulation.bowlerChoices` widens the list so the match can never
 get stuck.
 
+**The end of the match was silent.** The result screen (and the innings
+break) replace the match screen at the moment the final ball's outcome
+would otherwise have been announced, so both now carry the last ball
+themselves.
+
 ## Known issues / needs a real device
 
-**Nothing written in the last five sessions has been compiled or run** —
+**Nothing written in the last six sessions has been compiled or run** —
 `BattingScreen`, `FieldingScreen`, the `PitchingScreen` rewrite,
-`MatchLines`, `ScorecardScreen`, `SelectionScreens`, the `MatchStats`
-additions and the `MatchScreen`/`MatchSimulation` wiring. They were
-written against the APIs as read from the repo (the `BattingSystem`,
-`FieldingSector`, `MatchEngine`, `MatchStats` and `MatchState` names and
-signatures used were checked against the source, including
-`calculateWinProbability(MatchState): Int` and the state machine's
-selection functions); expect a first-build pass to fix small things. The
-same is true, until proven otherwise, of everything else in the UI
-layer. Compiling is deliberately deferred until the code is
+`MatchLines`, `ScorecardScreen`, `SelectionScreens`, `MatchFlowScreens`,
+the `MatchStats` additions and the `MatchScreen`/`MatchSimulation`
+wiring (including the rain roll). They were written against the APIs as
+read from the repo (the `BattingSystem`, `FieldingSector`, `MatchEngine`,
+`MatchStats`, `MatchState` and `WeatherSystem` names and signatures used
+were checked against the source); expect a first-build pass to fix small
+things. The same is true, until proven otherwise, of everything else in
+the UI layer. Compiling is deliberately deferred until the code is
 feature-complete.
+
+**Leave match abandons the match with NO confirmation.** It is the last
+item on the match screen (so not the first thing a swipe lands on), but a
+single accidental double-tap throws away the whole match, and there is no
+save yet. Needs a confirm step at the very least, and a real save/resume
+once persistence exists.
 
 TalkBack/device checks for the two timing surfaces (`BattingScreen`,
 `PitchingScreen`):
@@ -334,17 +402,24 @@ TalkBack checks specific to `FieldingScreen`:
 - Does `Back (discard changes)` get pressed by accident? Consider a
   confirm if changes exist.
 
-TalkBack checks specific to the match screen, scorecard and selection
-screens:
+TalkBack checks specific to the match screen, scorecard, selection
+screens and the "play has stopped" screens:
 - The last-ball and score live regions live inside a Column that is
-  removed while a gesture or selection screen is showing and re-added
-  afterwards. Is their text spoken when they come back (a newly-added
-  live region isn't a *change*), and in the right order (outcome, then
-  score)? If not, announce explicitly.
+  removed while a gesture, selection or rain/innings-break screen is
+  showing and re-added afterwards. Is their text spoken when they come
+  back (a newly-added live region isn't a *change*), and in the right
+  order (outcome, then score)? If not, announce explicitly. The same
+  question applies to the "Play resumes." notice after a rain delay.
 - After a wicket the match screen is replaced by `NewBatsmanScreen`, so
   the wicket commentary line is not heard until you return. The screen's
   heading carries the dismissal and the score follows, but check it
-  really is enough and that nothing about the ball is lost.
+  really is enough and that nothing about the ball is lost (the shot
+  and timing that led to it, in particular).
+- Does the heading of each of the rain, innings-break and result screens
+  really get read on arrival, and is one long paragraph for the rain
+  detail better or worse than separate lines?
+- The innings-break "Scorecard" button opens on the first innings; does
+  Back to match then return to the break screen rather than skipping it?
 - Do the `Role.Tab` selectors announce as tabs with a selected state, and
   are they reachable inside the horizontally scrolling row?
 - Is Back-to-match-first right for the scorecard, or surprising?
@@ -353,13 +428,16 @@ screens:
 - The win probability line only changes in steps (five bands, then
   scaled for wickets) — confirm that reads as sensible rather than
   jumpy.
+- Rain has no sound or commentary yet (the web plays rain ambience and a
+  RAIN_START commentary line); until the audio layer exists the screen's
+  text is the only signal.
 
 ## Not started
 
 All three gesture surfaces exist, both sides' fielding is live, the
-scorecard/chase information is in, and the user now picks their own
-openers, next batsman and bowlers. Remaining work is finishing the match
-screen around them:
+scorecard/chase information is in, the user picks their own openers,
+next batsman and bowlers, and rain delays, the innings break and the
+match result all work. Remaining work:
 
 1. Optional field presets for the user (attacking / balanced /
    containing) on top of `FieldingSystem.generateAiFieldPlacements`, to
@@ -367,23 +445,21 @@ screen around them:
    decision (it hands the user the AI captain's templates), so ask
    first.
 2. Real commentary/audio, tied to `MatchEngine.generateCommentary` /
-   `CommentaryLibrary.kt` (the first slice just shows the plain
-   `BallOutcome.commentary` string; the web's last-ball line also adds
-   ball quality, shot played and timing, which would help a batter
-   learn). The audio layer also unlocks the timing tick for both timing
-   minigames and the win-probability-driven crowd tension.
-3. Rain-delay dialog and rolling the interruption each over
-   (`WeatherSystem.shouldTriggerRainInterruption`,
-   `MatchStateMachine.applyRainInterruption`, `resumeFromRainDelay`).
-4. Proper innings-break / match-result screens (the first slice just
-   shows a plain result sentence).
-5. A real situational-bias calculation feeding into the AI decisions
+   `CommentaryLibrary.kt` (the match screen currently shows the plain
+   `BallOutcome.commentary` string plus quality/shot/timing). The audio
+   layer also unlocks the timing tick for both timing minigames, rain
+   ambience and the RAIN_START / RAIN_STOP / DLS_REVISED / INNINGS_BREAK
+   / MATCH_WIN commentary events, and the win-probability-driven crowd
+   tension.
+3. A real situational-bias calculation feeding into the AI decisions
    and `changeBowler`'s rotation scoring (currently hardcoded to 0 —
    neutral — everywhere in `MatchSimulation.kt`), plus the web's
    situational `selectAiNextBatsman` for the AI's next batsman. Both
    formulas live in pages/match.tsx, not helpers/. The web's
    required-run-rate-driven bias is the reference.
-6. **A build.** Nothing here has ever been compiled; the APK build
+4. A confirm step before Leave match (see Known issues), and a proper
+   quit/save flow once persistence exists.
+5. **A build.** Nothing here has ever been compiled; the APK build
    (signing, emulator/device) is still untouched. Deliberately deferred
    until feature-complete; a CI workflow that builds a debug APK on
    every push would then surface compile errors immediately.
