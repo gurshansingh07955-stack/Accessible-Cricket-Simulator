@@ -138,6 +138,36 @@ audio, and accessibility layers can't just be "translated".
   instead of a bare `String` for `BatsmanStats.dismissalType` (a
   documented, behavior-preserving type tightening — every real call
   site already passes that domain).
+
+  **⚠️ Two DELIBERATE ADDITIONS BEYOND THE WEB SOURCE** (added when
+  the Android scorecard was built; documented in the file's own
+  header). The web source has two gaps its own scorecard visibly works
+  around — a hardcoded `false` for maiden detection, and a Fall of
+  Wickets table that shows the batsman's own runs and numbers wickets
+  by batting order because the team score at each fall was never
+  recorded. Both are fixed here, additively — nothing the web source
+  computes has changed, so every figure it produced is still produced
+  identically:
+  - **Maidens:** new `InningsData.currentOverRuns` tallies what the
+    over in progress has cost (runs plus wides/no-balls, which count
+    against the bowler). `updateInningsDataForBall` credits a maiden
+    when a legal delivery completes the over with that tally still at
+    zero, and resets the tally on every completed over. Only wides and
+    no-balls exist as extras in this game, so no bye/leg-bye handling is
+    needed, and bowler changes only happen at over boundaries, so one
+    tally per innings suffices.
+  - **Fall of wickets:** new `FallOfWicket` data class and
+    `InningsData.fallOfWickets`, appended by `recordDismissal` with the
+    wicket number (in the order wickets actually fell), the batsman's
+    runs and balls, the TEAM score and the overs. `recordDismissal`
+    runs after `updateInningsDataForBall` has already added the
+    dismissal ball to the totals, which is the order
+    `MatchStateMachine.applyBallOutcome` then `recordWicketFall`
+    already calls them in, so the figures are the score immediately
+    after the dismissal ball.
+  Both new `InningsData` fields have defaults, so nothing constructing
+  an `InningsData` had to change. If the web source is ever re-synced
+  wholesale, re-apply these two additions rather than reverting them.
 - **`app/src/main/java/com/cricketsim/logic/MatchState.kt`**
   (from `helpers/matchState.tsx`) — **the FULL match state machine**,
   replacing the earlier partial version. `createNewMatch`,
@@ -201,7 +231,8 @@ to translate from directly:
    pitching/batting/fielding, scorecard, playing-XI selection, etc.),
    from scratch, around native TalkBack semantics. This is the single
    largest remaining piece of work. See "Not ported" below for why the
-   web app's ARIA-based screens can't be copied.
+   web app's ARIA-based screens can't be copied. **Progress is tracked
+   in `UI_NOTES.md`**, not here.
 2. **Persistence** — design an Android save/resume layer (`DataStore`
    or `Room`) and wire it around `MatchStateMachine`'s existing pure
    state-transition functions (`createNewMatch`, `applyBallOutcome`,
@@ -229,6 +260,10 @@ each one records specific reasons the naive translation won't work.
   + native TalkBack semantics (`Modifier.semantics`,
   `LiveRegionMode`, etc.), following the same accessibility-first
   PRINCIPLES as the web app without copying its DOM-specific mechanics.
+  Also note that match-loop logic living in `pages/match.tsx` rather than
+  `helpers/` (situational-bias formulas, the AI's `selectAiNextBatsman`,
+  the over-end/wicket/rain orchestration) is part of the UI work, not the
+  logic port — see `UI_NOTES.md` and `MatchSimulation.kt`.
 - **Audio** (`helpers/audioManager.tsx`) — built on the Web Audio API
   (`AudioContext`, `GainNode`, buffer scheduling). The Android
   equivalent is `SoundPool` (short one-shots) + `MediaPlayer` or
