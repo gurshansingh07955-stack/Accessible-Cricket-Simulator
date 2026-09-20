@@ -1,14 +1,33 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Downloading the web app's audio recordings and streaming the AI
+         commentary clips (see AudioAssets.kt). Everything still works
+         without a connection: recordings fall back to synthesized sounds
+         and commentary clips are simply skipped. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Wicket and boundary buzzes (the timing rhythm uses Compose's own haptics). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Lets SpokenCommentary find a text-to-speech engine on Android 11+. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- configChanges: rotating the phone (or a keyboard or window-size
+             change) would otherwise recreate the activity, and a match in
+             progress lives only in Compose state, so it would be lost. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
