@@ -18,6 +18,14 @@ import com.cricketsim.logic.TossResult
 sealed interface Screen {
     object FormatSelection : Screen
 
+    /**
+     * The settings page, opened from the first screen. `returnTo` is where
+     * Back goes. (Inside a match, settings is an overlay on the match
+     * screen instead — leaving the match screen would throw the match
+     * away, since it lives only in that screen's state.)
+     */
+    data class Settings(val returnTo: Screen) : Screen
+
     data class StadiumSelection(val format: MatchFormat) : Screen
 
     data class TeamSelection(val format: MatchFormat, val stadium: Stadium) : Screen
@@ -31,9 +39,8 @@ sealed interface Screen {
     // Both teams here are already finalized 11-player XIs.
     data class TossSelection(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
 
-    // The match itself. See MatchScreen.kt's own doc comment — this is
-    // currently a fully-automated AI-vs-AI preview loop, not the real
-    // gesture-driven match screen.
+    // The match itself: a real, user-controlled match against an AI
+    // opponent. See MatchScreen.kt's own doc comment.
     data class Match(
         val format: MatchFormat,
         val stadium: Stadium,

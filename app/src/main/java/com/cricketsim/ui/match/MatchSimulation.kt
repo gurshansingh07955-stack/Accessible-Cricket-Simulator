@@ -27,6 +27,14 @@ import com.cricketsim.logic.WeatherSystem
 data class BallResult(val state: MatchState, val outcome: BallOutcome, val battingDecision: BattingDecision)
 
 /**
+ * The AI's next delivery, prepared for a user who is batting: the match
+ * state with the AI captain's field for THIS delivery already in it, the
+ * delivery itself, and a sentence per fielder who moved ("Kohli moved from
+ * Mid-On to Long-On.").
+ */
+data class AiDelivery(val state: MatchState, val bowling: ResolvedBowlingDecision, val fieldChanges: List<String>)
+
+/**
  * ⚠️ TEMPORARY, MOSTLY-AUTOMATED MATCH LOOP — not the real match
  * screen's mechanic, and not a port of anything in the web app (the
  * web app never has one side's decisions come from this file's AI
@@ -38,13 +46,14 @@ data class BallResult(val state: MatchState, val outcome: BallOutcome, val batti
  *
  * - User BOWLING: MatchScreen.kt collects a real ResolvedBowlingDecision
  *   from PitchingScreen and passes it in as `presetBowlingDecision`.
- * - User BATTING: MatchScreen.kt calls `generateBowlingDecision` for the
- *   AI's delivery (after BattingScreen's blind footwork commit, so the
- *   batter can be shown the ball), then passes BOTH that delivery as
- *   `presetBowlingDecision` and the batter's choices as
+ * - User BATTING: MatchScreen.kt calls `prepareAiDelivery` after
+ *   BattingScreen's blind footwork commit, so the batter can be shown the
+ *   ball AND the field the AI captain has set for it, then passes BOTH
+ *   that delivery as `presetBowlingDecision` and the batter's choices as
  *   `presetBattingDecision`. The delivery is passed back in rather than
  *   regenerated so the ball the batter was shown is the ball that is
- *   actually bowled.
+ *   actually bowled, and the field is already in the state, so the field
+ *   the batter was told about is the field the ball is bowled to.
  * - User FIELDING: FieldingScreen edits `state.fieldPlacements` through
  *   MatchStateMachine.setFieldPlacements, and this loop then uses that
  *   field as it stands (including its legality) for every delivery.
@@ -53,8 +62,11 @@ data class BallResult(val state: MatchState, val outcome: BallOutcome, val batti
  *   known — a bouncer trap for short balls, a yorker field for full
  *   ones, the powerplay ring during the powerplay, otherwise an
  *   attacking / balanced / containing spread chosen by its situational
- *   bias — exactly as the web does. The field it set is kept in the
- *   returned state.
+ *   bias — exactly as the web does. It does this in `prepareAiDelivery`,
+ *   i.e. BEFORE the batter picks a shot, and the changes are reported so
+ *   they can be announced. (An earlier version set it inside
+ *   simulateOneBall, after the batter had already committed, so the
+ *   batter was silently facing a field they had never been told about.)
  *
  * HOW THE AI THINKS. Every AI decision now reads the match through the
  * web's own situational-bias formulas, ported in AiSituation.kt: the AI
@@ -100,12 +112,58 @@ object MatchSimulation {
 
     /**
      * The AI bowler's decision for the next delivery, shaped by the
-     * bowling side's situational bias. Split out from simulateOneBall so
-     * a user-controlled batting turn can be shown the ball BEFORE
-     * choosing a shot — see the file-level doc comment.
+     * bowling side's situational bias. Used by simulateOneBall when no
+     * delivery was supplied; a user-controlled batting turn goes through
+     * prepareAiDelivery instead, which also sets the AI's field.
      */
     fun generateBowlingDecision(state: MatchState): ResolvedBowlingDecision =
         BowlingSystem.generateAiBowlingDecision(state.currentBowler, AiSituation.bowlingBias(state))
+
+    /**
+     * The AI captain's preparation for the next delivery, in the web's
+     * beginBattingFlow order: read the situation, decide the delivery, and
+     * set the field for THAT delivery now that its actual length is known,
+     * all before the batter chooses a shot. Returns the state with the new
+     * field already in it, the delivery, and one sentence per fielder who
+     * moved (in the batter's own terms: who, from where, to where).
+     */
+    fun prepareAiDelivery(state: MatchState): AiDelivery {
+        val bias = AiSituation.bowlingBias(state)
+        val bowling = BowlingSystem.generateAiBowlingDecision(state.currentBowler, bias)
+        val isPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)
+        val placements = FieldingSystem.generateAiFieldPlacements(
+            fieldingPlayers = FieldingSystem.getFieldingPlayers(state.bowlingTeam, state.currentBowler.id),
+            isPowerplay = isPowerplay,
+            situationalBias = bias,
+            upcomingLength = bowling.actualLength
+        )
+        return AiDelivery(
+            state = MatchStateMachine.setFieldPlacements(state, placements),
+            bowling = bowling,
+            fieldChanges = describeFieldChanges(state, placements)
+        )
+    }
+
+    /**
+     * One sentence per fielder whose position differs from the current
+     * field. A fielder with no previous spot (a fresh roster after an
+     * innings switch) is not a "change", as on the web.
+     */
+    private fun describeFieldChanges(state: MatchState, next: List<com.cricketsim.logic.FieldPlacement>): List<String> {
+        val changes = mutableListOf<String>()
+        for (nextSpot in next) {
+            val prevSpot = state.fieldPlacements.firstOrNull { it.playerId == nextSpot.playerId } ?: continue
+            val samePosition = prevSpot.sector == nextSpot.sector &&
+                prevSpot.depth == nextSpot.depth &&
+                prevSpot.variant == nextSpot.variant
+            if (samePosition) continue
+            val name = state.bowlingTeam.players.firstOrNull { it.id == nextSpot.playerId }?.name ?: "A fielder"
+            changes.add(
+                "$name moved from ${FieldingSystem.getPositionLabel(prevSpot)} to ${FieldingSystem.getPositionLabel(nextSpot)}."
+            )
+        }
+        return changes
+    }
 
     /**
      * Everyone who can be offered when the user picks a bowler. This is
@@ -192,9 +250,10 @@ object MatchSimulation {
      *
      * `presetBowlingDecision`: a delivery the caller has already
      * resolved — either the user's own via PitchingScreen, or the AI's
-     * from `generateBowlingDecision` when the user is batting and has
-     * already been shown it. Null (the default) generates an AI
-     * decision here.
+     * from `prepareAiDelivery` when the user is batting and has already
+     * been shown it (in which case the AI's field for it is already in
+     * `state`). Null (the default) generates an AI decision here, with
+     * the field as it stands.
      *
      * `presetBattingDecision`: the user's own batting decision from
      * BattingScreen. Null (the default) generates an AI decision here,
@@ -219,33 +278,13 @@ object MatchSimulation {
         )
 
         val isPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)
-
-        // When the AI is bowling, its captain sets the field for THIS
-        // delivery now that the ball's actual length is known, using the
-        // same situational bias as its bowling decision. The user's own
-        // bowling side keeps exactly the field the user set.
-        val aiIsBowling = state.bowlingTeam.id != state.userTeam.id
-        val ballState = if (aiIsBowling) {
-            MatchStateMachine.setFieldPlacements(
-                state,
-                FieldingSystem.generateAiFieldPlacements(
-                    fieldingPlayers = FieldingSystem.getFieldingPlayers(state.bowlingTeam, state.currentBowler.id),
-                    isPowerplay = isPowerplay,
-                    situationalBias = AiSituation.bowlingBias(state),
-                    upcomingLength = bowlingDecision.actualLength
-                )
-            )
-        } else {
-            state
-        }
-
-        val illegalField = !FieldingSystem.isFieldLegal(ballState.fieldPlacements, isPowerplay)
+        val illegalField = !FieldingSystem.isFieldLegal(state.fieldPlacements, isPowerplay)
 
         val isSecondInningsUnderLights = state.currentInnings == 2 && state.weather.isDayNight
         val stadiumEffects = WeatherSystem.getStadiumMatchEffects(stadium, isSecondInningsUnderLights)
 
         val outcome = MatchEngine.simulateBall(
-            matchState = ballState,
+            matchState = state,
             difficulty = difficulty,
             pitchType = state.pitchType,
             bowlingDecision = bowlingDecision,
@@ -254,7 +293,7 @@ object MatchSimulation {
             stadiumEffects = stadiumEffects
         )
 
-        var newState = MatchStateMachine.applyBallOutcome(ballState, outcome)
+        var newState = MatchStateMachine.applyBallOutcome(state, outcome)
         val isLegal = !outcome.isWide && !outcome.isNoBall
         val overJustCompleted = isLegal && newState.score.balls == 0 && newState.score.overs > state.score.overs
         var overEndDeferred = false

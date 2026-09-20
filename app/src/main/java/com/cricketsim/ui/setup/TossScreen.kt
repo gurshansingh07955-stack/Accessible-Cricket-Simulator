@@ -12,6 +12,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,7 +25,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CoinSide
+import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.MatchEngine
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossDecision
@@ -57,15 +60,26 @@ import com.cricketsim.logic.TossResult
  * result of an action just taken on the same screen, so a live region
  * ensures it's actually announced rather than requiring the user to
  * navigate to it manually.
+ *
+ * AUDIO (as the web's play-match.tsx does it): the coin-flip sound plays
+ * when the coin is called, and the toss commentary ("they've won the
+ * toss and will bat first" / "send the opposition in") is queued once the
+ * decision is known — on the user's own choice, or as soon as the AI's
+ * result readout appears. It keeps playing into the match until the
+ * first ball cuts it off.
  */
 @Composable
 fun TossScreen(userTeam: Team, opponentTeam: Team, onTossComplete: (TossResult) -> Unit, onBack: () -> Unit) {
+    val services = LocalGameServices.current
     var tossResult by remember { mutableStateOf<TossResult?>(null) }
     val result = tossResult
 
     if (result == null) {
         CoinCallStep(
-            onCoinCalled = { choice -> tossResult = MatchEngine.simulateToss(userTeam, opponentTeam, choice) },
+            onCoinCalled = { choice ->
+                services?.sound?.playCoinFlip()
+                tossResult = MatchEngine.simulateToss(userTeam, opponentTeam, choice)
+            },
             onBack = onBack
         )
         return
@@ -77,10 +91,20 @@ fun TossScreen(userTeam: Team, opponentTeam: Team, onTossComplete: (TossResult) 
     if (userWonToss) {
         BatBowlChoiceStep(
             winnerName = winnerName,
-            onChoice = { decision -> onTossComplete(result.copy(decision = decision)) },
+            onChoice = { decision ->
+                services?.sound?.enqueueCommentary(
+                    if (decision == TossDecision.BAT) CommentaryCategory.TOSS_BAT else CommentaryCategory.TOSS_BOWL
+                )
+                onTossComplete(result.copy(decision = decision))
+            },
             onBack = { tossResult = null }
         )
     } else {
+        LaunchedEffect(result) {
+            services?.sound?.enqueueCommentary(
+                if (result.decision == TossDecision.BAT) CommentaryCategory.TOSS_BAT else CommentaryCategory.TOSS_BOWL
+            )
+        }
         TossResultStep(
             winnerName = winnerName,
             decision = result.decision,

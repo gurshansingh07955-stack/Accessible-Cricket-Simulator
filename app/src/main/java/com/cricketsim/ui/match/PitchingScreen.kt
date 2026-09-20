@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.BattingSystem
 import com.cricketsim.logic.BowlingAngle
 import com.cricketsim.logic.BowlingLength
@@ -100,6 +101,12 @@ import kotlin.math.roundToInt
  * There is deliberately no Back on the release step — once the rhythm
  * starts the delivery is committed, same as BattingScreen's timing.
  *
+ * EVERY PULSE is a buzz (Compose's LongPress haptic, if vibration is on in
+ * Settings) AND an audible tick from the sound engine, with the FINAL
+ * pulse accented (higher and louder) so the beat to release on can be
+ * found by ear — the web does the same. The buzzes themselves are all
+ * identical.
+ *
  * KNOWN V1 SIMPLIFICATIONS (not permanent design decisions):
  * - `maxVerticalFractionReached` is always set equal to the final
  *   `verticalFraction` (the release point only ever moves toward its
@@ -113,12 +120,9 @@ import kotlin.math.roundToInt
  *   which this discrete redesign doesn't have an equivalent axis for.
  *   A future iteration could add a dedicated swing-direction list step
  *   if that's judged worth the extra complexity for stock deliveries.
- * - Haptic feedback is the only non-visual timing cue right now — no
- *   audio tone accompanies each pulse, since the audio/mixing layer is
- *   separate future work (see PORTING_NOTES.md's "Audio" entry). All
- *   pulses are the same Compose LongPress buzz.
  * - PITCH_INPUT_LATENCY_COMPENSATION_MS is 0 — touch-to-click latency
- *   under TalkBack is unmeasured; calibrate on a real device.
+ *   under TalkBack, and audio output latency for the tick, are both
+ *   unmeasured; calibrate on a real device.
  * - The timing logic here duplicates BattingScreen's BatTimingStep. If
  *   a third timing surface ever appears, extract a shared composable.
  */
@@ -372,8 +376,8 @@ private fun SpeedStep(bowler: Player, variation: BowlingVariation, onSelected: (
         // The release step has almost no spoken text on purpose (so it
         // never talks over the rhythm), so the instructions live here.
         Text(
-            "Next you'll feel four buzzes. Double-tap anywhere on the fourth to release. " +
-                "Early tends to go shorter, late tends to go fuller.",
+            "Next you'll feel four buzzes and hear four ticks. Double-tap anywhere on the fourth, " +
+                "the higher, louder tick, to release. Early tends to go shorter, late tends to go fuller.",
             style = MaterialTheme.typography.bodySmall
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -411,6 +415,7 @@ private fun computeVerticalFraction(errorMs: Double, intervalMs: Double, targetL
 private fun ReleaseStep(speedKmh: Int, targetLength: BowlingLength, onReleased: (Double) -> Unit) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val services = LocalGameServices.current
     val currentOnReleased by rememberUpdatedState(onReleased)
 
     val screenReaderActive = remember {
@@ -443,7 +448,10 @@ private fun ReleaseStep(speedKmh: Int, targetLength: BowlingLength, onReleased: 
             if (wait > 0) delay(wait)
             if (resolved) return@LaunchedEffect
             pulsesFired = i + 1
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            // Vibration is a setting; the tick is gated by Sound effects in
+            // the engine. The final pulse's tick is the accented one.
+            if (services?.settings?.vibration != false) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            services?.sound?.playTimingTick(accent = i == PULSE_COUNT - 1)
         }
         // Never released: wait a grace window, then score it as a very
         // late release rather than hanging forever.

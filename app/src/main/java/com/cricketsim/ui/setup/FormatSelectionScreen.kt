@@ -59,9 +59,12 @@ import com.cricketsim.logic.MatchFormat
  *   modifier — tapping anywhere in the row (not just the small radio
  *   circle) selects it, which matters for anyone using switch access
  *   or has limited fine motor precision, not just screen-reader users.
+ * - The Settings button sits AFTER Continue so it never competes with the
+ *   main path through the list, but is still the last thing on the
+ *   screen rather than buried.
  */
 @Composable
-fun FormatSelectionScreen(onFormatSelected: (MatchFormat) -> Unit) {
+fun FormatSelectionScreen(onFormatSelected: (MatchFormat) -> Unit, onOpenSettings: () -> Unit = {}) {
     var selected by remember { mutableStateOf<MatchFormat?>(null) }
 
     Column(
@@ -97,6 +100,10 @@ fun FormatSelectionScreen(onFormatSelected: (MatchFormat) -> Unit) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Continue")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+            Text("Settings")
         }
     }
 }

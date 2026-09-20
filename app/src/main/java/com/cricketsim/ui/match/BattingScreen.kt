@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.BattingDecision
 import com.cricketsim.logic.BattingSystem
 import com.cricketsim.logic.BowlingQualityTier
@@ -62,8 +63,12 @@ import kotlinx.coroutines.delay
  *   2. SHOT — the delivery is revealed (ACTUAL length after any
  *      bowling mis-execution, line, variation, angle, speed — same set
  *      the web's summary line reveals; never the bowler's quality tier
- *      or intended length), then one of the 15 named shots is picked
- *      from a plain single-swipe list.
+ *      or intended length), AND any changes the AI captain has just made
+ *      to its field for this delivery ("Kohli moved from Mid-On to
+ *      Long-On."), then one of the 15 named shots is picked from a plain
+ *      single-swipe list. The field matters: it is part of what the
+ *      shot is chosen against, so a batter who can't see it must be TOLD
+ *      it, as the web does.
  *   3. INTENT — aggressive aerial / aggressive grounded / step out /
  *      defensive. Skipped for the two defensive shots, exactly like
  *      the web.
@@ -100,19 +105,17 @@ import kotlinx.coroutines.delay
  *   cleared so it never becomes a second focus stop or a live region
  *   talking over the rhythm.
  *
+ * EVERY PULSE is a buzz (Compose's LongPress haptic, if vibration is on in
+ * Settings) AND an audible tick from the sound engine, with the FINAL
+ * pulse accented (higher and louder) so the beat to swing on can be found
+ * by ear — the web does the same. The buzzes themselves are all identical.
+ *
  * KNOWN V1 SIMPLIFICATIONS (not permanent design decisions):
- * - Haptic-only timing cue via Compose's LongPress feedback. All five
- *   buzzes feel identical (the web used 50ms vs 90ms for the last),
- *   and Compose haptics follow the system touch-feedback setting.
- *   A Vibrator-based pulse (needs the VIBRATE permission) and an audio
- *   tick (needs the audio layer) would both be better.
  * - BAT_INPUT_LATENCY_COMPENSATION_MS is 0 — touch-to-click latency
- *   under TalkBack is unmeasured. The Perfect window is only 16% of the
- *   interval either side (~30-60ms), so a consistent offset of a few
- *   tens of ms matters; calibrate on a real device.
- * - Nothing here changes the field. The match loop never sets reactive
- *   AI field placements for any delivery yet (the web does, per
- *   delivery, once the ball's length is known).
+ *   under TalkBack, and audio output latency for the tick, are both
+ *   unmeasured. The Perfect window is only 16% of the interval either
+ *   side (~30-60ms), so a consistent offset of a few tens of ms matters;
+ *   calibrate on a real device.
  */
 
 private enum class BatStep { FOOTWORK, SHOT, INTENT, TIMING, RESULT }
@@ -133,6 +136,13 @@ private const val BAT_NO_SWING_GRACE_INTERVALS = 2.0
 // Subtracted from the measured tap time. Zero until measured on a
 // device — see the doc comment above.
 private const val BAT_INPUT_LATENCY_COMPENSATION_MS = 0.0
+
+/**
+ * What the batter is shown when the ball is revealed: the delivery itself
+ * and a sentence on how the AI captain re-set its field for it (empty if
+ * nobody moved).
+ */
+data class DeliveryReveal(val bowling: ResolvedBowlingDecision, val fieldNote: String)
 
 private data class BatSwing(
     val tier: BowlingQualityTier,
@@ -174,8 +184,9 @@ private fun swingFeedback(swing: BatSwing): String = when {
 /**
  * @param batsman the striker, for display only.
  * @param generateDelivery called exactly once, AFTER the footwork commit,
- *   to produce the delivery the batter then faces. The caller owns how
- *   (MatchSimulation.generateBowlingDecision today).
+ *   to produce the delivery the batter then faces and the field the AI set
+ *   for it (MatchSimulation.prepareAiDelivery today). The caller owns how,
+ *   and is responsible for putting that field into the match state.
  * @param onBallPlayed the delivery that was revealed plus the batter's
  *   fully-resolved decision, ready to pass straight into
  *   MatchSimulation.simulateOneBall as its preset decisions.
@@ -183,13 +194,15 @@ private fun swingFeedback(swing: BatSwing): String = when {
 @Composable
 fun BattingScreen(
     batsman: Player,
-    generateDelivery: () -> ResolvedBowlingDecision,
+    generateDelivery: () -> DeliveryReveal,
     onBallPlayed: (ResolvedBowlingDecision, BattingDecision) -> Unit,
     onBack: () -> Unit
 ) {
+    val services = LocalGameServices.current
     var step by remember { mutableStateOf(BatStep.FOOTWORK) }
     var footwork by remember { mutableStateOf(FootworkType.FRONT_FOOT) }
     var delivery by remember { mutableStateOf<ResolvedBowlingDecision?>(null) }
+    var fieldNote by remember { mutableStateOf("") }
     var shot by remember { mutableStateOf(NamedShot.FORWARD_DEFENSE) }
     var intent by remember { mutableStateOf<IntentDirection?>(null) }
     var swing by remember { mutableStateOf<BatSwing?>(null) }
@@ -198,8 +211,14 @@ fun BattingScreen(
         BatStep.FOOTWORK -> BatFootworkStep(
             batsmanName = batsman.name,
             onSelected = { chosen ->
+                val reveal = generateDelivery()
                 footwork = chosen
-                delivery = generateDelivery()
+                delivery = reveal.bowling
+                fieldNote = reveal.fieldNote
+                // For someone not using a screen reader, read the reveal aloud.
+                services?.announceSpoken(
+                    "Delivery: ${deliverySummary(reveal.bowling)}. ${reveal.fieldNote}"
+                )
                 step = BatStep.SHOT
             },
             onBack = onBack
@@ -209,6 +228,7 @@ fun BattingScreen(
             if (revealed != null) {
                 BatShotStep(
                     deliverySummary = deliverySummary(revealed),
+                    fieldNote = fieldNote,
                     onSelected = { chosen ->
                         shot = chosen
                         if (BattingSystem.isDefensiveShot(chosen)) {
@@ -307,7 +327,7 @@ private fun BatFootworkStep(batsmanName: String, onSelected: (FootworkType) -> U
 }
 
 @Composable
-private fun BatShotStep(deliverySummary: String, onSelected: (NamedShot) -> Unit) {
+private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: (NamedShot) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         // The delivery is the single most important thing on this step, so
         // it is the heading (read first) AND a polite live region in case
@@ -320,6 +340,16 @@ private fun BatShotStep(deliverySummary: String, onSelected: (NamedShot) -> Unit
                 liveRegion = LiveRegionMode.Polite
             }
         )
+        if (fieldNote.isNotEmpty()) {
+            // How the AI captain just re-set its field for this ball. Empty
+            // (and so absent) when nobody moved.
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Field changes: $fieldNote",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text("Choose your shot", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
@@ -379,6 +409,7 @@ private fun BatIntentStep(shotName: String, onSelected: (IntentDirection) -> Uni
 private fun BatTimingStep(speedKmh: Int, onSwung: (BatSwing) -> Unit) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val services = LocalGameServices.current
     val currentOnSwung by rememberUpdatedState(onSwung)
 
     val screenReaderActive = remember {
@@ -412,7 +443,10 @@ private fun BatTimingStep(speedKmh: Int, onSwung: (BatSwing) -> Unit) {
             if (wait > 0) delay(wait)
             if (resolved) return@LaunchedEffect
             pulsesFired = i + 1
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            // Vibration is a setting; the tick is gated by Sound effects in
+            // the engine. The final pulse's tick is the accented one.
+            if (services?.settings?.vibration != false) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            services?.sound?.playTimingTick(accent = i == BAT_PULSE_COUNT - 1)
         }
         // Never swung: wait a grace window, then score it as a clear miss
         // (two intervals late is well past the Very Bad threshold).

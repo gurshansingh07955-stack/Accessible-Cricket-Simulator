@@ -7,15 +7,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.cricketsim.audio.GameServices
+import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CricketData
 import com.cricketsim.logic.Team
 import com.cricketsim.ui.Screen
 import com.cricketsim.ui.match.MatchScreen
+import com.cricketsim.ui.settings.SettingsScreen
 import com.cricketsim.ui.setup.FormatSelectionScreen
 import com.cricketsim.ui.setup.PlayingXIScreen
 import com.cricketsim.ui.setup.StadiumSelectionScreen
@@ -28,19 +32,47 @@ import com.cricketsim.ui.setup.TossScreen
  * setup flow (format, stadium, team, playing XI, toss), then the match
  * screen, which runs a real, user-controlled match — pitching, batting,
  * fielding, selections, scorecard, rain delays and the innings break —
- * against an AI opponent. The match screen itself is still a
+ * against an AI opponent, with sound. The match screen itself is still a
  * first-slice scaffold (see MatchScreen.kt's own doc comment).
+ *
+ * It also owns the app-wide GameServices (settings + the sound engine),
+ * created once here and handed to every screen through LocalGameServices.
+ * The sound engine is paused when the app leaves the foreground (so the
+ * crowd doesn't keep playing behind another app) and released when the
+ * activity is really finishing.
  */
 class MainActivity : ComponentActivity() {
+
+    private var services: GameServices? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val gameServices = GameServices(applicationContext)
+        services = gameServices
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    CricketSimApp()
+            CompositionLocalProvider(LocalGameServices provides gameServices) {
+                MaterialTheme {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        CricketSimApp()
+                    }
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        services?.sound?.onAppForegrounded()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        services?.sound?.onAppBackgrounded()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing) services?.release()
     }
 }
 
@@ -67,7 +99,11 @@ fun CricketSimApp() {
 
     when (val current = screen) {
         is Screen.FormatSelection -> FormatSelectionScreen(
-            onFormatSelected = { format -> screen = Screen.StadiumSelection(format) }
+            onFormatSelected = { format -> screen = Screen.StadiumSelection(format) },
+            onOpenSettings = { screen = Screen.Settings(returnTo = current) }
+        )
+        is Screen.Settings -> SettingsScreen(
+            onBack = { screen = current.returnTo }
         )
         is Screen.StadiumSelection -> StadiumSelectionScreen(
             onStadiumSelected = { stadium -> screen = Screen.TeamSelection(current.format, stadium) },

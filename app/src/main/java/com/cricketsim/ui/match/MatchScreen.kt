@@ -12,6 +12,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,8 +24,10 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.cricketsim.audio.GameSettings
+import com.cricketsim.audio.LocalGameServices
+import com.cricketsim.audio.MatchAudioDirector
 import com.cricketsim.logic.BattingDecision
-import com.cricketsim.logic.Difficulty
 import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchStateMachine
@@ -32,6 +36,7 @@ import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossResult
 import com.cricketsim.logic.WeatherSystem
+import com.cricketsim.ui.settings.SettingsScreen
 
 /**
  * ⚠️ FIRST SLICE of the match screen — NOT the real design. This screen
@@ -40,22 +45,27 @@ import com.cricketsim.logic.WeatherSystem
  * FieldingScreen from a Set field button (editable while the user is
  * bowling) or a Hear the field button (read-only while the user is
  * batting). It also owns everything around them: the scorecard, the
- * three selection screens (openers, next batsman, next bowler), and the
+ * three selection screens (openers, next batsman, next bowler), the
  * "play has stopped" screens (rain delay, innings break, match result,
- * leave confirmation — see MatchFlowScreens.kt). It is still
- * MatchSimulation.kt's temporary path underneath: everything the
+ * leave confirmation — see MatchFlowScreens.kt), a settings overlay, and
+ * all of the match's SOUND (through MatchAudioDirector — the crowd bed,
+ * the ball and outcome effects, the AI voice commentary, rain). It is
+ * still MatchSimulation.kt's temporary path underneath: everything the
  * opposing side does is AI-driven.
  *
  * WHICH SCREEN WINS when several apply, in order:
  *   0. the leave-match confirmation,
- *   1. the scorecard (only ever opened from a screen that can go back
+ *   1. the settings overlay (opened from the ordinary screen; it is an
+ *      overlay, not a route, because leaving this composable would throw
+ *      the match away),
+ *   2. the scorecard (only ever opened from a screen that can go back
  *      to where it came from),
- *   2. the match result,
- *   3. a rain delay,
- *   4. the innings break,
- *   5. a pick the user's own side owes (openers, next batsman, bowler),
- *   6. the gesture surfaces and the field screen,
- *   7. the ordinary match screen.
+ *   3. the match result,
+ *   4. a rain delay,
+ *   5. the innings break,
+ *   6. a pick the user's own side owes (openers, next batsman, bowler),
+ *   7. the gesture surfaces and the field screen,
+ *   8. the ordinary match screen.
  * Rain outranks a pending pick because play has stopped; the pick simply
  * appears the moment play resumes.
  *
@@ -71,10 +81,10 @@ import com.cricketsim.logic.WeatherSystem
  * and is only reachable through the leave confirmation;
  * `onMatchFinished` is the finished match's Return to home.
  *
- * A future session builds the real match screen: proper commentary/
- * audio. See UI_NOTES.md's "Not started" section for the full list —
- * treat this file as scaffolding to build on top of, not a screen to
- * extend piecemeal into the real thing.
+ * A future session builds the real match screen. See UI_NOTES.md's "Not
+ * started" section for the full list — treat this file as scaffolding
+ * to build on top of, not a screen to extend piecemeal into the real
+ * thing.
  */
 @Composable
 fun MatchScreen(
@@ -86,6 +96,10 @@ fun MatchScreen(
     onBack: () -> Unit,
     onMatchFinished: () -> Unit
 ) {
+    val services = LocalGameServices.current
+    val settings = services?.settings ?: GameSettings()
+    val director = remember(services) { services?.let { MatchAudioDirector(it) } }
+
     var matchState by remember {
         mutableStateOf(
             MatchStateMachine.createNewMatch(
@@ -108,6 +122,7 @@ fun MatchScreen(
     var showFieldScreen by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
     var showInningsBreak by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var confirmingLeave by remember { mutableStateOf(false) }
     // The final ball of the first innings, kept for the innings-break
     // screen because the commentary list is cleared for the new innings.
@@ -118,6 +133,18 @@ fun MatchScreen(
     // "Play resumes." / the revised target, announced after a rain delay.
     var playNotice by remember { mutableStateOf("") }
 
+    // The crowd bed runs while the match is live and sound effects are on;
+    // it stops when the match ends, sound is turned off, or this screen is
+    // left (the director then also silences rain and commentary).
+    DisposableEffect(director) {
+        onDispose { director?.onMatchScreenLeft() }
+    }
+    LaunchedEffect(director, settings.soundEffects, matchOver) {
+        if (director != null) {
+            if (settings.soundEffects && !matchOver) director.startAmbience(matchState) else director.stopAmbience()
+        }
+    }
+
     fun advanceOneBall(
         presetBowlingDecision: ResolvedBowlingDecision? = null,
         presetBattingDecision: BattingDecision? = null
@@ -125,10 +152,12 @@ fun MatchScreen(
         if (matchOver) return
         fieldMessage = ""
         playNotice = ""
+        val before = matchState
+        director?.onDelivery()
         val result = MatchSimulation.simulateOneBall(
-            matchState,
+            before,
             stadium,
-            Difficulty.MEDIUM,
+            settings.difficulty,
             presetBowlingDecision,
             presetBattingDecision
         )
@@ -137,6 +166,15 @@ fun MatchScreen(
         matchState = nextState
         recentCommentary = (recentCommentary + summary).takeLast(6)
 
+        director?.onBallResolved(before, nextState, result.outcome)
+        // A wicket for the user's side is announced by the new-batsman
+        // screen instead, exactly as the web skips its own announcement.
+        if (nextState.pendingDismissal == null) services?.announceSpoken(summary)
+        if (nextState.activeRainDelay != null && before.activeRainDelay == null) {
+            director?.onRainStarted()
+            services?.announceSpoken("Rain has stopped play.")
+        }
+
         // MatchSimulation only leaves a pick pending when the innings is
         // NOT ending on this ball, so these checks never fight a prompt.
         when {
@@ -144,24 +182,38 @@ fun MatchScreen(
                 matchState = MatchSimulation.finishMatch(nextState)
                 matchOver = true
                 resultText = MatchSimulation.matchResultText(nextState)
+                director?.onMatchEnded()
+                resultText?.let { services?.announceSpoken(it) }
             }
             MatchSimulation.isInningsOver(nextState) -> {
                 if (nextState.currentInnings == 1) {
                     breakLastBall = summary
-                    matchState = MatchStateMachine.switchInnings(nextState)
+                    val switched = MatchStateMachine.switchInnings(nextState)
+                    matchState = switched
                     recentCommentary = emptyList()
                     showInningsBreak = true
+                    director?.onInningsBreak(switched)
+                    val targetWord = if (switched.dlsRevised) "DLS-revised target" else "Target"
+                    services?.announceSpoken("Innings break. $targetWord is ${switched.target}.")
                 } else {
                     matchState = MatchSimulation.finishMatch(nextState)
                     matchOver = true
                     resultText = MatchSimulation.matchResultText(nextState)
+                    director?.onMatchEnded()
+                    resultText?.let { services?.announceSpoken(it) }
                 }
             }
+            else -> director?.updateTension(nextState)
         }
     }
 
     if (confirmingLeave) {
         ConfirmLeaveScreen(onStay = { confirmingLeave = false }, onLeave = onBack)
+        return
+    }
+
+    if (showSettings) {
+        SettingsScreen(onBack = { showSettings = false })
         return
     }
 
@@ -196,6 +248,8 @@ fun MatchScreen(
             revisedTarget = if (revised) matchState.target else null,
             onResume = {
                 playNotice = if (revised) "Play resumes. Revised target is ${matchState.target}." else "Play resumes."
+                services?.announceSpoken(playNotice)
+                director?.onRainResumed(matchState.secondInningsInterruption != null)
                 matchState = MatchStateMachine.resumeFromRainDelay(matchState)
             }
         )
@@ -266,7 +320,16 @@ fun MatchScreen(
     if (showBattingScreen) {
         BattingScreen(
             batsman = matchState.currentBatsmen.first,
-            generateDelivery = { MatchSimulation.generateBowlingDecision(matchState) },
+            // Called once, after the footwork commit: the AI captain reads
+            // the situation, decides the delivery and sets its field for it
+            // (all before the batter picks a shot), and the batter is told
+            // the delivery and who moved where.
+            generateDelivery = {
+                val prepared = MatchSimulation.prepareAiDelivery(matchState)
+                matchState = prepared.state
+                director?.onFieldChanges(prepared.fieldChanges)
+                DeliveryReveal(prepared.bowling, prepared.fieldChanges.joinToString(" "))
+            },
             onBallPlayed = { delivery, decision ->
                 showBattingScreen = false
                 advanceOneBall(presetBowlingDecision = delivery, presetBattingDecision = decision)
@@ -408,6 +471,11 @@ fun MatchScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+        // Sound, vibration, commentary and difficulty, changeable mid-match.
+        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Settings")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
         // Asks first: leaving abandons the match, and there is no save yet.
         Button(onClick = { confirmingLeave = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Leave match")
