@@ -25,6 +25,29 @@ import kotlin.math.round
  *
  * All numeric formulas (strike rate and economy rounding, over/ball
  * carry-over arithmetic) are exact matches to the web source.
+ *
+ * ⚠️ DELIBERATE ADDITIONS BEYOND THE WEB SOURCE. The web source has
+ * two gaps its own scorecard visibly works around (a hardcoded
+ * `false` for maiden detection, and a Fall of Wickets table that shows
+ * the batsman's own runs and numbers wickets by batting order because
+ * the team score at each fall was never recorded). Both are fixed here,
+ * additively — nothing the web source computes has changed:
+ * - MAIDENS: InningsData.currentOverRuns tallies what the current over
+ *   has cost (runs plus wides/no-balls, which count against the
+ *   bowler, same as real cricket). When a legal delivery completes the
+ *   over with that tally still at zero, the bowler is credited a
+ *   maiden. Only wides and no-balls exist as extras in this game, so
+ *   there is no bye/leg-bye handling to worry about. Bowler changes
+ *   only ever happen at over boundaries, so one tally per innings is
+ *   enough.
+ * - FALL OF WICKETS: InningsData.fallOfWickets records, at the moment
+ *   recordDismissal runs, the wicket number (in the order wickets
+ *   actually fell), the batsman's runs and balls, the TEAM score, and
+ *   the overs. recordDismissal is called after updateInningsDataForBall
+ *   has already added the dismissal ball to the totals, so the figures
+ *   are the score immediately after that ball.
+ * Both new InningsData fields have defaults, so nothing constructing an
+ * InningsData needs to change.
  */
 
 data class BatsmanStats(
@@ -67,6 +90,24 @@ data class Partnership(
 
 data class Extras(val wides: Int, val noBalls: Int, val total: Int)
 
+/**
+ * One wicket, as it fell. Not in the web source — see the file header.
+ * `teamRuns`/`overs`/`balls` are the team score and over count
+ * immediately after the dismissal ball.
+ */
+data class FallOfWicket(
+    val wicketNumber: Int,
+    val batsmanId: String,
+    val batsmanName: String,
+    val batsmanRuns: Int,
+    val batsmanBalls: Int,
+    val teamRuns: Int,
+    val overs: Int,
+    val balls: Int,
+    val dismissalType: DismissalType,
+    val dismissedBy: String
+)
+
 data class InningsData(
     val battingTeamId: String,
     val battingTeamName: String,
@@ -80,7 +121,13 @@ data class InningsData(
     val totalWickets: Int,
     val totalOvers: Int,
     val totalBalls: Int,
-    val extras: Extras
+    val extras: Extras,
+    // Not in the web source — see the file header.
+    val fallOfWickets: List<FallOfWicket> = emptyList(),
+    // Runs (including wides/no-balls) conceded so far in the over in
+    // progress; reset to 0 whenever an over completes. Drives maiden
+    // detection.
+    val currentOverRuns: Int = 0
 )
 
 object MatchStats {
@@ -251,12 +298,22 @@ object MatchStats {
         return inningsData.copy(bowlerStats = bowlerStats)
     }
 
+    /**
+     * Marks the batsman out and (not in the web source — see the file
+     * header) records the fall of wicket. Must be called AFTER
+     * updateInningsDataForBall has added the dismissal ball to the
+     * innings totals, which is the order MatchStateMachine.applyBallOutcome
+     * then recordWicketFall already runs in, so the team score recorded
+     * is the score right after the dismissal ball.
+     */
     fun recordDismissal(
         inningsData: InningsData,
         batsmanId: String,
         dismissalType: DismissalType,
         dismissedBy: String
     ): InningsData {
+        val dismissed = inningsData.batsmanStats.firstOrNull { it.playerId == batsmanId }
+
         val batsmanStats = inningsData.batsmanStats.map { stats ->
             if (stats.playerId == batsmanId) {
                 stats.copy(
@@ -269,7 +326,25 @@ object MatchStats {
                 stats
             }
         }
-        return inningsData.copy(batsmanStats = batsmanStats)
+
+        val fallOfWickets = if (dismissed == null) {
+            inningsData.fallOfWickets
+        } else {
+            inningsData.fallOfWickets + FallOfWicket(
+                wicketNumber = inningsData.fallOfWickets.size + 1,
+                batsmanId = dismissed.playerId,
+                batsmanName = dismissed.playerName,
+                batsmanRuns = dismissed.runs,
+                batsmanBalls = dismissed.ballsFaced,
+                teamRuns = inningsData.totalRuns,
+                overs = inningsData.totalOvers,
+                balls = inningsData.totalBalls,
+                dismissalType = dismissalType,
+                dismissedBy = dismissedBy
+            )
+        }
+
+        return inningsData.copy(batsmanStats = batsmanStats, fallOfWickets = fallOfWickets)
     }
 
     fun updatePartnership(inningsData: InningsData, strikerId: String, runs: Int, ballFaced: Boolean): InningsData {
@@ -333,11 +408,21 @@ object MatchStats {
         val isBoundary6 = outcome.runs == 6
         updated = updateBatsmanStats(updated, strikerId, outcome.runs, isBoundary4, isBoundary6, isLegalDelivery)
 
-        // Update bowler stats (maiden detection would need more context, set to false for now)
+        // Maiden detection (not in the web source — see the file header):
+        // this delivery completes the over when it's legal and it's the
+        // 6th legal ball (inningsData.totalBalls is still the PRE-ball
+        // count here, so 5 means this ball makes six), and it's a maiden
+        // when nothing at all was conceded in that over.
+        val runsConcededThisBall = outcome.runs + outcome.extraRuns
+        val overRunsSoFar = inningsData.currentOverRuns + runsConcededThisBall
+        val completesOver = isLegalDelivery && inningsData.totalBalls == 5
+        val isMaiden = completesOver && overRunsSoFar == 0
+
+        // Update bowler stats
         updated = updateBowlerStats(
-            updated, outcome.bowlerId, outcome.runs + outcome.extraRuns,
+            updated, outcome.bowlerId, runsConcededThisBall,
             outcome.isWicket, outcome.isWide, outcome.isNoBall,
-            false // maiden detection needs full over context
+            isMaiden
         )
 
         // Update partnership
@@ -374,7 +459,8 @@ object MatchStats {
             totalWickets = totalWickets,
             totalOvers = totalOvers,
             totalBalls = totalBalls,
-            extras = extras
+            extras = extras,
+            currentOverRuns = if (completesOver) 0 else overRunsSoFar
         )
     }
 }

@@ -39,19 +39,21 @@ import com.cricketsim.logic.WeatherSystem
  * user's own team is bowling, BattingScreen when it is batting, and
  * FieldingScreen from a Set field button (editable while the user is
  * bowling) or a Hear the field button (read-only while the user is
- * batting). It also opens the ScorecardScreen. Everything else is still
- * MatchSimulation.kt's temporary path (see its own file-level doc
- * comment): everything the opposing side does is AI-driven. This
- * screen's remaining purpose is still narrow: verify the integrations
- * work correctly end to end inside the real Android UI, one
- * manually-triggered ball at a time.
+ * batting). It also opens the ScorecardScreen, and it puts the three
+ * selection screens (openers, next batsman, next bowler) in front of
+ * everything else whenever the user's own side owes a pick — see
+ * SelectionScreens.kt and MatchSimulation's file comment for when. It
+ * is still MatchSimulation.kt's temporary path underneath: everything
+ * the opposing side does is AI-driven. This screen's remaining purpose
+ * is still narrow: verify the integrations work correctly end to end
+ * inside the real Android UI, one manually-triggered ball at a time.
  *
  * Reading order follows the web's match screen, which was tuned with a
  * real screen-reader user: striker, non-striker and bowler lines with
  * their live figures, then the action buttons, then the last ball, the
- * score, the chase figures and the run rates. The whole screen scrolls
- * (a plain scrolling Column) so nothing can be pushed off a small
- * screen.
+ * score, the chase figures, the run rates and (in a chase) the win
+ * probability. The whole screen scrolls (a plain scrolling Column) so
+ * nothing can be pushed off a small screen.
  *
  * The user's team is always either batting or bowling, so every ball
  * goes through PitchingScreen or BattingScreen; the earlier AI-vs-AI
@@ -59,11 +61,10 @@ import com.cricketsim.logic.WeatherSystem
  * more.
  *
  * A future session builds the real match screen: proper commentary/
- * audio, rain delays, and the opener/wicket/bowler-selection prompts
- * this screen currently skips by always auto-picking. See UI_NOTES.md's
- * "Not started" section for the full list — treat this file as
- * scaffolding to build on top of, not a screen to extend piecemeal into
- * the real thing.
+ * audio, rain delays, and innings-break screens. See UI_NOTES.md's "Not
+ * started" section for the full list — treat this file as scaffolding
+ * to build on top of, not a screen to extend piecemeal into the real
+ * thing.
  */
 @Composable
 fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentTeam: Team, toss: TossResult, onBack: () -> Unit) {
@@ -108,6 +109,8 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
         matchState = nextState
         recentCommentary = (recentCommentary + outcome.commentary).takeLast(6)
 
+        // MatchSimulation only leaves a pick pending when the innings is
+        // NOT ending on this ball, so these checks never fight a prompt.
         when {
             MatchSimulation.isTargetReached(nextState) -> {
                 matchOver = true
@@ -122,6 +125,47 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
                     resultText = MatchSimulation.matchResultText(nextState)
                 }
             }
+        }
+    }
+
+    // Picks the user's own side owes, before anything else. These replace
+    // the whole screen, like the gesture surfaces do.
+    if (!matchOver) {
+        if (matchState.needsOpenerSelection) {
+            OpenerSelectionScreen(
+                players = matchState.battingTeam.players,
+                onConfirm = { striker, nonStriker ->
+                    matchState = MatchStateMachine.setOpeners(matchState, striker, nonStriker)
+                }
+            )
+            return
+        }
+
+        val dismissal = matchState.pendingDismissal
+        if (dismissal != null) {
+            NewBatsmanScreen(
+                dismissal = dismissal,
+                scoreLine = MatchLines.scoreLine(matchState),
+                players = MatchStateMachine.getAvailableBatsmen(matchState),
+                onConfirm = { batsman ->
+                    matchState = MatchSimulation.completeWicketReplacement(matchState, batsman)
+                }
+            )
+            return
+        }
+
+        if (matchState.needsBowlerSelection) {
+            val noBallsBowledYet = matchState.currentInningsData.totalBalls == 0 && matchState.currentInningsData.totalOvers == 0
+            BowlerSelectionScreen(
+                title = if (noBallsBowledYet) "Select your opening bowler" else "Select your next bowler",
+                players = MatchSimulation.bowlerChoices(matchState),
+                bowlerStats = matchState.currentInningsData.bowlerStats,
+                maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(matchState.format),
+                onConfirm = { bowler ->
+                    matchState = MatchStateMachine.selectBowler(matchState, bowler)
+                }
+            )
+            return
         }
     }
 
@@ -253,8 +297,6 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
         // The outcome of the ball just played and the new score are the two
         // things that change every delivery, so both are polite live
         // regions — the outcome first, so it is spoken before the score.
-        // (Previously only the score was live, so a screen-reader user
-        // never heard what actually happened on the ball.)
         Text(
             text = lastBallLine,
             style = MaterialTheme.typography.bodyLarge,
@@ -269,6 +311,7 @@ fun MatchScreen(format: MatchFormat, stadium: Stadium, userTeam: Team, opponentT
         MatchLines.runsNeededLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         Text(MatchLines.currentRunRateLine(matchState), style = MaterialTheme.typography.bodyMedium)
         MatchLines.requiredRunRateLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        MatchLines.winProbabilityLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
 
         if (recentCommentary.size > 1) {
             Spacer(modifier = Modifier.height(16.dp))

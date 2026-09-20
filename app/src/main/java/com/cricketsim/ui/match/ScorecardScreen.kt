@@ -50,9 +50,9 @@ import com.cricketsim.logic.MatchState
  * the rows. The rows are a LazyColumn, so the section switch and the
  * innings total stay put while the rows scroll.
  *
- * See ScorecardLines for two gaps inherited from the logic layer (no
- * maiden detection; no team score at fall of wicket) that are surfaced
- * honestly rather than papered over.
+ * Maidens and fall of wickets (wicket number in the order they actually
+ * fell, plus the team score at each) come from MatchStats — two
+ * additions beyond the web source, documented in its file header.
  */
 
 private enum class CardSection(val label: String) {
