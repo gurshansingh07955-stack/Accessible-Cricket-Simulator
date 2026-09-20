@@ -51,8 +51,22 @@ data class BallResult(val state: MatchState, val outcome: BallOutcome, val batti
  * - AI FIELDING (the user is batting): the AI captain sets a fresh
  *   field for every delivery once that delivery's actual length is
  *   known — a bouncer trap for short balls, a yorker field for full
- *   ones, the powerplay ring during the powerplay — exactly as the web
- *   does. The field it set is kept in the returned state.
+ *   ones, the powerplay ring during the powerplay, otherwise an
+ *   attacking / balanced / containing spread chosen by its situational
+ *   bias — exactly as the web does. The field it set is kept in the
+ *   returned state.
+ *
+ * HOW THE AI THINKS. Every AI decision now reads the match through the
+ * web's own situational-bias formulas, ported in AiSituation.kt: the AI
+ * batting side attacks in the powerplay and the death overs, rebuilds
+ * after an early collapse, chases its required run rate and targets weak
+ * bowlers; the AI bowling side presses home a collapse, attacks a
+ * cruising chase, contains in the death overs and picks its field and
+ * its next bowler to match; and under real pressure the AI sends in its
+ * best available batsman instead of following squad order. This replaces
+ * a flat 0.0 bias that made the AI play the same situation-blind game
+ * all match. It also makes the AI markedly stronger and more varied than
+ * before, as it is on the web — game balance was tuned there, not here.
  *
  * WHO PICKS WHOM, matching the web's match.tsx:
  * - The user's own side is never auto-picked. A wicket in the user's
@@ -63,8 +77,9 @@ data class BallResult(val state: MatchState, val outcome: BallOutcome, val batti
  *   bowler flags come from MatchStateMachine itself. MatchScreen shows
  *   the matching selection screen and calls `completeWicketReplacement`
  *   or MatchStateMachine.setOpeners / selectBowler when the user picks.
- * - The AI's own side is auto-picked, as before: the next available
- *   batsman in squad order, and MatchStateMachine.changeBowler.
+ * - The AI's own side is auto-picked: its next batsman by
+ *   AiSituation.selectNextBatsman, and its bowler by
+ *   MatchStateMachine.changeBowler.
  * - Nobody is prompted when the innings (or the chase) ends on that
  *   very ball — there is no next batsman or over to pick for.
  *
@@ -80,28 +95,17 @@ data class BallResult(val state: MatchState, val outcome: BallOutcome, val batti
  * over whose last ball was a wicket for the user's side (deferred until
  * the replacement is picked) never rolled; here that over-end rolls too,
  * because it is the same over-end, just later.
- *
- * Simplifications specific to THIS temporary loop (not permanent
- * design decisions):
- * - Situational bias is always 0 (neutral) for every AI decision and
- *   for changeBowler's rotation scoring. A real situational-bias
- *   calculation (from score, overs remaining, wickets in hand) is
- *   separate future work — MatchEngine/BattingSystem/BowlingSystem/
- *   FieldingSystem already accept it as a parameter, nothing there
- *   needs to change.
- * - The AI's next batsman is simply the next in squad order (the web
- *   uses a situational selectAiNextBatsman that lives in match.tsx, not
- *   in helpers/, so it wasn't part of the logic port).
  */
 object MatchSimulation {
 
     /**
-     * The AI bowler's decision for the next delivery. Split out from
-     * simulateOneBall so a user-controlled batting turn can be shown the
-     * ball BEFORE choosing a shot — see the file-level doc comment.
+     * The AI bowler's decision for the next delivery, shaped by the
+     * bowling side's situational bias. Split out from simulateOneBall so
+     * a user-controlled batting turn can be shown the ball BEFORE
+     * choosing a shot — see the file-level doc comment.
      */
     fun generateBowlingDecision(state: MatchState): ResolvedBowlingDecision =
-        BowlingSystem.generateAiBowlingDecision(state.currentBowler, situationalBias = 0.0)
+        BowlingSystem.generateAiBowlingDecision(state.currentBowler, AiSituation.bowlingBias(state))
 
     /**
      * Everyone who can be offered when the user picks a bowler. This is
@@ -146,8 +150,9 @@ object MatchSimulation {
     /**
      * The end-of-over housekeeping: swap the batsmen's ends, then either
      * hand the choice of next bowler to the user (their side is bowling)
-     * or let the AI rotate its attack, then roll for rain. Skipped when
-     * the innings or chase is over, since there is nobody left to bowl to.
+     * or let the AI rotate its attack (its choice shaped by the bowling
+     * situational bias), then roll for rain. Skipped when the innings or
+     * chase is over, since there is nobody left to bowl to.
      */
     private fun endOfOver(state: MatchState, stadium: Stadium): MatchState {
         val rotated = MatchStateMachine.rotateStrike(state)
@@ -155,7 +160,7 @@ object MatchSimulation {
         val withBowlerHandled = if (rotated.bowlingTeam.id == rotated.userTeam.id) {
             rotated.copy(needsBowlerSelection = true)
         } else {
-            MatchStateMachine.changeBowler(rotated, situationalBias = 0.0)
+            MatchStateMachine.changeBowler(rotated, AiSituation.bowlingBias(rotated))
         }
         return maybeInterruptForRain(withBowlerHandled, stadium)
     }
@@ -192,7 +197,8 @@ object MatchSimulation {
      * decision here.
      *
      * `presetBattingDecision`: the user's own batting decision from
-     * BattingScreen. Null (the default) generates an AI decision here.
+     * BattingScreen. Null (the default) generates an AI decision here,
+     * shaped by the batting side's situational bias.
      */
     fun simulateOneBall(
         state: MatchState,
@@ -209,14 +215,15 @@ object MatchSimulation {
             actualLength = bowlingDecision.actualLength,
             bowlingStyle = bowlingDecision.bowlingStyle,
             bowlingQualityTier = bowlingDecision.qualityTier,
-            situationalAggressionBias = 0.0
+            situationalAggressionBias = AiSituation.battingBias(state, AiSituation.recentOverRuns(state))
         )
 
         val isPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)
 
         // When the AI is bowling, its captain sets the field for THIS
-        // delivery now that the ball's actual length is known. The user's
-        // own bowling side keeps exactly the field the user set.
+        // delivery now that the ball's actual length is known, using the
+        // same situational bias as its bowling decision. The user's own
+        // bowling side keeps exactly the field the user set.
         val aiIsBowling = state.bowlingTeam.id != state.userTeam.id
         val ballState = if (aiIsBowling) {
             MatchStateMachine.setFieldPlacements(
@@ -224,7 +231,7 @@ object MatchSimulation {
                 FieldingSystem.generateAiFieldPlacements(
                     fieldingPlayers = FieldingSystem.getFieldingPlayers(state.bowlingTeam, state.currentBowler.id),
                     isPowerplay = isPowerplay,
-                    situationalBias = 0.0,
+                    situationalBias = AiSituation.bowlingBias(state),
                     upcomingLength = bowlingDecision.actualLength
                 )
             )
@@ -278,7 +285,10 @@ object MatchSimulation {
                         newState = newState.copy(deferredOverEnd = true)
                     }
                 } else {
-                    val nextBatsman = MatchStateMachine.getAvailableBatsmen(newState).firstOrNull()
+                    // The AI picks by the situation AFTER the wicket: the best
+                    // available batsman under real pressure, else squad order.
+                    val pickBias = AiSituation.battingBias(newState, AiSituation.recentOverRuns(newState))
+                    val nextBatsman = AiSituation.selectNextBatsman(MatchStateMachine.getAvailableBatsmen(newState), pickBias)
                     if (nextBatsman != null) {
                         newState = MatchStateMachine.bringInNewBatsman(newState, striker.id, nextBatsman)
                     }

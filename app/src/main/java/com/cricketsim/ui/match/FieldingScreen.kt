@@ -42,8 +42,8 @@ import com.cricketsim.logic.SlipGullyVariant
  * carry over one for one:
  *
  *   OVERVIEW — the nine fielders as "Position — Name" rows with their
- *     fielding rating, a legality line, and Set field. Pick a fielder to
- *     move.
+ *     fielding rating, a legality line, Set field, and (editable only)
+ *     the three presets. Pick a fielder to move.
  *   SECTOR — the 12 sectors (web: one flat list of 23 slots). Two
  *     levels here instead of one flat list: 12 + at most 3 swipes
  *     rather than up to 23, which matters a lot for linear TalkBack
@@ -57,12 +57,20 @@ import com.cricketsim.logic.SlipGullyVariant
  * with, whether the field is now legal), through one polite live
  * region on the overview.
  *
+ * PRESETS (not in the web): Normal / Defensive / Attacking fields, see
+ * FieldPresets.kt. Applying one only changes the LOCAL arrangement, the
+ * same as a manual move, so it can be tweaked and then confirmed with Set
+ * field, or discarded with Back. Each button reads as one item (name plus
+ * a one-line description), so what it does is heard before it is pressed;
+ * the result is announced through the same live region as a move.
+ *
  * An illegal field can still be set — same as the web — but is called out
  * both here and on the match screen: every delivery is a no-ball until
  * it is fixed (MatchSimulation passes `illegalField` to the engine).
+ * Presets are always legal.
  *
- * READ-ONLY MODE is the web's "browse the AI's field" view: when the
- * user is batting, the same list is shown with nothing actionable.
+ * READ-ONLY MODE is the web's "browse the AI's field": when the user is
+ * batting, the same list is shown with nothing actionable.
  *
  * Back on the editable overview DISCARDS unsaved changes (its label
  * says so). Set field commits them.
@@ -71,11 +79,6 @@ import com.cricketsim.logic.SlipGullyVariant
  * - The valid depths per sector come from FieldingSystem.toggleDepth,
  *   because the source table (SECTOR_DEPTHS) is private there. See
  *   validDepths() below. If FieldingSystem ever exposes it, use that.
- * - No presets. The web has none either, but rearranging a whole field
- *   costs two picks per fielder; an "attacking / balanced / containing"
- *   starting point built on FieldingSystem.generateAiFieldPlacements
- *   would cut that a lot. Deliberately not added without asking — it
- *   would hand the user the AI captain's field templates.
  * - All of it is UNTESTED with TalkBack.
  */
 
@@ -209,6 +212,19 @@ fun FieldingScreen(
 
     fun nameOf(id: String): String = players.firstOrNull { it.id == id }?.name ?: "Fielder"
 
+    fun applyPreset(preset: FieldPreset) {
+        val fielders = local.mapNotNull { placement -> players.firstOrNull { it.id == placement.playerId } }
+        val result = FieldPresets.build(preset, fielders, isPowerplay)
+        local = result.placements
+        val deep = FieldingSystem.countDeepFielders(result.placements)
+        status = buildString {
+            append("${preset.label} applied. ${preset.description} ")
+            append("${countOf(deep, "fielder")} in the deep")
+            if (result.trimmedForPowerplay) append(", trimmed to the powerplay limit")
+            append(". Choose Set field to confirm, or move fielders to adjust.")
+        }
+    }
+
     fun finishMove(slot: FieldSlot) {
         val id = movingId
         val previous = local.firstOrNull { it.playerId == id }
@@ -266,6 +282,7 @@ fun FieldingScreen(
                     movingId = id
                     step = FieldStep.SECTOR
                 },
+                onPreset = { preset -> applyPreset(preset) },
                 onSet = { onConfirm(local) },
                 onBack = onBack
             )
@@ -347,6 +364,7 @@ private fun FieldOverviewStep(
     isReadOnly: Boolean,
     rows: List<FielderRow>,
     onPick: (String) -> Unit,
+    onPreset: (FieldPreset) -> Unit,
     onSet: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -357,10 +375,10 @@ private fun FieldOverviewStep(
             modifier = Modifier.semantics { heading() }
         )
         Spacer(modifier = Modifier.height(8.dp))
-        // One polite live region for the outcome of the last move. The
-        // legality line below is deliberately NOT live: a change of
-        // legality is folded into this message instead, so a single move
-        // isn't announced twice.
+        // One polite live region for the outcome of the last move or
+        // preset. The legality line below is deliberately NOT live: a
+        // change of legality is folded into this message instead, so a
+        // single move isn't announced twice.
         if (status.isNotEmpty()) {
             Text(
                 text = status,
@@ -381,7 +399,20 @@ private fun FieldOverviewStep(
             // shouldn't have to swipe past nine fielders to save.
             Button(onClick = onSet, modifier = Modifier.fillMaxWidth()) { Text("Set field") }
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Choose a fielder to move.", style = MaterialTheme.typography.bodySmall)
+            Text("Start from a ready-made field, then adjust it:", style = MaterialTheme.typography.bodySmall)
+            FieldPreset.values().forEach { preset ->
+                Spacer(modifier = Modifier.height(4.dp))
+                // Name and description in one button, so it reads as one
+                // item and says what it does before it is pressed.
+                Button(onClick = { onPreset(preset) }, modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        Text(preset.label, style = MaterialTheme.typography.titleSmall)
+                        Text(preset.description, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Or choose a fielder to move.", style = MaterialTheme.typography.bodySmall)
         }
         Spacer(modifier = Modifier.height(8.dp))
         LazyColumn(modifier = Modifier.weight(1f)) {

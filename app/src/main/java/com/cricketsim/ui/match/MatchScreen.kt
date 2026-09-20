@@ -41,12 +41,13 @@ import com.cricketsim.logic.WeatherSystem
  * bowling) or a Hear the field button (read-only while the user is
  * batting). It also owns everything around them: the scorecard, the
  * three selection screens (openers, next batsman, next bowler), and the
- * three "play has stopped" screens (rain delay, innings break, match
- * result — see MatchFlowScreens.kt). It is still MatchSimulation.kt's
- * temporary path underneath: everything the opposing side does is
- * AI-driven.
+ * "play has stopped" screens (rain delay, innings break, match result,
+ * leave confirmation — see MatchFlowScreens.kt). It is still
+ * MatchSimulation.kt's temporary path underneath: everything the
+ * opposing side does is AI-driven.
  *
  * WHICH SCREEN WINS when several apply, in order:
+ *   0. the leave-match confirmation,
  *   1. the scorecard (only ever opened from a screen that can go back
  *      to where it came from),
  *   2. the match result,
@@ -66,9 +67,9 @@ import com.cricketsim.logic.WeatherSystem
  * whole screen scrolls (a plain scrolling Column) so nothing can be
  * pushed off a small screen.
  *
- * `onBack` abandons the match (MainActivity sends you back to the toss),
- * with NO confirmation; `onMatchFinished` is the finished match's Return
- * to home.
+ * `onBack` abandons the match (MainActivity sends you back to the toss)
+ * and is only reachable through the leave confirmation;
+ * `onMatchFinished` is the finished match's Return to home.
  *
  * A future session builds the real match screen: proper commentary/
  * audio. See UI_NOTES.md's "Not started" section for the full list —
@@ -107,6 +108,7 @@ fun MatchScreen(
     var showFieldScreen by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
     var showInningsBreak by remember { mutableStateOf(false) }
+    var confirmingLeave by remember { mutableStateOf(false) }
     // The final ball of the first innings, kept for the innings-break
     // screen because the commentary list is cleared for the new innings.
     var breakLastBall by remember { mutableStateOf("") }
@@ -156,6 +158,11 @@ fun MatchScreen(
                 }
             }
         }
+    }
+
+    if (confirmingLeave) {
+        ConfirmLeaveScreen(onStay = { confirmingLeave = false }, onLeave = onBack)
+        return
     }
 
     if (showScorecard) {
@@ -401,8 +408,8 @@ fun MatchScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        // Abandons the match — there is no confirmation yet (see UI_NOTES.md).
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+        // Asks first: leaving abandons the match, and there is no save yet.
+        Button(onClick = { confirmingLeave = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Leave match")
         }
     }

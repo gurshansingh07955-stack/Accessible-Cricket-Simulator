@@ -20,12 +20,12 @@ import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchState
 
 /**
- * The three full-screen "the match has stopped" moments: rain, the
- * innings break, and the end of the match. Each replaces the match
- * screen (like the gesture and selection screens do) and has the same
- * shape on purpose — a heading that carries the news, a few plain
- * lines, then the buttons — so TalkBack lands on the important thing
- * first and the layout is instantly familiar.
+ * The full-screen "the match has stopped" moments: rain, the innings
+ * break, the end of the match, and the confirmation before leaving a
+ * match. Each replaces the match screen (like the gesture and selection
+ * screens do) and has the same shape on purpose — a heading that carries
+ * the news, a few plain lines, then the buttons — so TalkBack lands on
+ * the important thing first and the layout is instantly familiar.
  *
  * The heading is where the news goes because it's what TalkBack reads on
  * arrival: "Innings break. Target is 165.", "Match completed. India won
@@ -46,6 +46,12 @@ import com.cricketsim.logic.MatchState
  * and the last ball, which would otherwise never be heard (the result
  * screen replaces the match screen at the very moment the final ball's
  * outcome would have been announced).
+ *
+ * ConfirmLeaveScreen guards the one button that throws a match away.
+ * There is no save yet, so leaving is final; a single accidental
+ * double-tap on the match screen's Leave match must not be able to do
+ * that. "Keep playing" is FIRST, so it is the default an unsure user
+ * lands on, and the heading is a question so the stakes are heard first.
  */
 
 @Composable
@@ -143,6 +149,18 @@ fun MatchResultScreen(
         actions = listOf(
             "View scorecard" to onScorecard,
             "Return to home" to onHome
+        )
+    )
+}
+
+@Composable
+fun ConfirmLeaveScreen(onStay: () -> Unit, onLeave: () -> Unit) {
+    InfoScreen(
+        title = "Leave this match?",
+        lines = listOf("The match will be abandoned. There is no save yet, so it can't be resumed."),
+        actions = listOf(
+            "Keep playing" to onStay,
+            "Leave match" to onLeave
         )
     )
 }
