@@ -83,16 +83,23 @@ but this is explicitly scaffolding, not the real design:
   battingDecision)` — the batting decision (the user's or the AI's) is
   returned because the last-ball line reports the shot and timing for
   both sides. It also owns:
+  - **How the AI thinks.** Every AI decision is shaped by the web's own
+    situational-bias formulas, ported in `AiSituation.kt` (see below),
+    where before it was a flat `0.0` everywhere: the AI batting
+    decision (`situationalAggressionBias`), the AI bowling decision, the
+    AI's per-delivery field, `changeBowler`'s rotation scoring, and the
+    AI's next-batsman pick (`AiSituation.selectNextBatsman` — the best
+    available batsman under real pressure in either direction, else
+    squad order).
   - **Who picks whom**, matching the web's match.tsx. The user's own
     side is never auto-picked. A wicket in the user's innings sets
     `pendingDismissal`; if it fell on the last ball of an over it also
     sets `deferredOverEnd`, so the strike rotation, the AI's bowler
     change and the rain roll wait for the replacement
-    (`completeWicketReplacement`, which now takes the stadium, finishes
+    (`completeWicketReplacement`, which takes the stadium, finishes
     them). The end of an over while the user is bowling sets
-    `needsBowlerSelection`. The AI's own side is auto-picked as before
-    (next batsman in squad order; `changeBowler`). Nobody is prompted
-    when the innings or chase ends on that very ball.
+    `needsBowlerSelection`. Nobody is prompted when the innings or
+    chase ends on that very ball.
   - `bowlerChoices` is `getEligibleBowlers` plus a safety net the web
     lacks: a squad with few genuine bowlers can leave that list EMPTY
     once they've bowled their quota (an empty dialog with no way
@@ -117,40 +124,59 @@ but this is explicitly scaffolding, not the real design:
   - When the AI is bowling, its captain sets a fresh field for every
     delivery once the ball's actual length is known (bouncer trap for
     short balls, yorker field for full ones, powerplay ring in the
-    powerplay), via `FieldingSystem.generateAiFieldPlacements(...,
-    upcomingLength)` — web parity. The field it set is kept in the
-    returned state.
+    powerplay, otherwise an attacking / balanced / containing spread
+    picked by its bowling bias), via
+    `FieldingSystem.generateAiFieldPlacements(..., upcomingLength)` —
+    web parity. The field it set is kept in the returned state.
   The user's field carrying over between overs is simply
-  `MatchStateMachine.selectBowler`'s own behaviour. Remaining
-  simplifications: situational bias is always 0, and the AI's next
-  batsman is just the next in squad order (the web's smarter
-  `selectAiNextBatsman` lives in match.tsx, not helpers/).
+  `MatchStateMachine.selectBowler`'s own behaviour.
+- **`AiSituation.kt`** — the web's AI "brain", ported from
+  `pages/match.tsx` (where it lives, deliberately outside `helpers/`, so
+  it wasn't part of the logic port): `battingBias`,
+  `bowlingBias`, `selectNextBatsman`, and `recentOverRuns` (the last
+  three completed overs' runs, derived from `state.ballByBall` instead of
+  the web's ref — same numbers, no extra state; `applyBallOutcome`
+  appends every ball and `switchInnings` resets it, checked against the
+  source). Every threshold and coefficient is an exact match to the web.
+  In short: the AI batting side attacks in the powerplay (0.5) and the
+  death overs (0.95, or 0.55 with one wicket left), builds at 0.3 in the
+  middle overs and breaks out into the full attack if the last 2-3 overs
+  all went for under 7, rebuilds after an early collapse (down to
+  -0.9), pushes when the required rate exceeds 8, and goes after weak
+  bowlers / respects strike bowlers; the AI bowling side presses home a
+  collapse, attacks a cruising chase, eases off when the batting side
+  must gamble anyway, and contains in the death overs. **Effect on the
+  game:** the AI is now markedly stronger and more varied than the flat
+  version, exactly as on the web — but game balance was tuned there, not
+  here, so how a match *feels* on Android against this AI is untested.
+- **`FieldPresets.kt`** — Normal / Defensive / Attacking fields for the
+  user's own side (see FieldingScreen below). Not in the web.
 - **`MatchScreen.kt`** — decides which screen is showing, in this
-  order: (1) the scorecard, (2) the match result, (3) a rain delay, (4)
-  the innings break, (5) a pick the user's own side owes (openers, next
-  batsman, bowler), (6) the gesture surfaces and the field screen, (7)
-  the ordinary match screen. Rain outranks a pending pick because play
-  has stopped; the pick just appears the moment play resumes. The
-  ordinary screen has buttons that route to the three gesture surfaces
-  (Bowl + Set field while bowling; Face next ball + Hear the field while
-  batting) and the scorecard, a polite live region for the outcome of
-  the last Set field, another for "Play resumes." / the revised target
-  after a rain delay, and a persistent line when the user's own field is
-  illegal. Reading order follows the web's match screen: striker,
-  non-striker, bowler (each with live figures), the action buttons,
-  then the last ball, score, target / runs needed, current run rate,
-  required run rate and (in a chase) win probability, then earlier
-  commentary. The whole screen scrolls. **The last ball and the score
-  are both polite live regions** — before, only the score was, so a
-  screen-reader user never heard what happened on the ball. The last
-  ball now also says how good the bowling was and the shot played and
-  its timing, for either side batting, as the web does. Back is
-  relabelled **Leave match** because that is what it does (see Known
-  issues); a finished match's **Return to home** is a separate
+  order: (0) the leave-match confirmation, (1) the scorecard, (2) the
+  match result, (3) a rain delay, (4) the innings break, (5) a pick the
+  user's own side owes (openers, next batsman, bowler), (6) the gesture
+  surfaces and the field screen, (7) the ordinary match screen. Rain
+  outranks a pending pick because play has stopped; the pick just
+  appears the moment play resumes. The ordinary screen has buttons that
+  route to the three gesture surfaces (Bowl + Set field while bowling;
+  Face next ball + Hear the field while batting) and the scorecard, a
+  polite live region for the outcome of the last Set field, another for
+  "Play resumes." / the revised target after a rain delay, and a
+  persistent line when the user's own field is illegal. Reading order
+  follows the web's match screen: striker, non-striker, bowler (each
+  with live figures), the action buttons, then the last ball, score,
+  target / runs needed, current run rate, required run rate and (in a
+  chase) win probability, then earlier commentary. The whole screen
+  scrolls. **The last ball and the score are both polite live regions**
+  — before, only the score was, so a screen-reader user never heard what
+  happened on the ball. The last ball also says how good the bowling
+  was and the shot played and its timing, for either side batting, as
+  the web does. **Leave match** now asks first (`ConfirmLeaveScreen`);
+  a finished match's **Return to home** is a separate
   `onMatchFinished`. **Replace, don't extend** — this is a
   verify-the-wiring screen, not a starting point to gradually add
   features to.
-- **`MatchFlowScreens.kt`** — the three full-screen "play has stopped"
+- **`MatchFlowScreens.kt`** — the full-screen "the match has stopped"
   moments, all with the same shape (a heading that carries the news, a
   few plain lines, then buttons) so TalkBack lands on the important
   thing first:
@@ -173,6 +199,10 @@ but this is explicitly scaffolding, not the real design:
     ball (which would otherwise never be heard, since this screen
     replaces the match screen at the very moment the final ball would
     have been announced), then View scorecard / Return to home.
+  - `ConfirmLeaveScreen` — "Leave this match?" Leaving used to abandon
+    the match on a single double-tap with no way back and no save. The
+    heading is a question so the stakes are heard first, and **Keep
+    playing comes first**, so it is the default an unsure user lands on.
 - **`MatchLines.kt`** — every spoken match line as a plain string
   (`MatchLines`) and every scorecard row (`ScorecardLines`), kept out of
   the composables so wording lives in one place. Wording follows the web
@@ -226,8 +256,8 @@ but this is explicitly scaffolding, not the real design:
   where there is one.
 - `MainActivity.kt` hosts the full flow: the setup screens, then the
   match screen. Return to home (a finished match) goes to the format
-  screen; Leave match (abandon) goes back to the toss. Its doc comment,
-  which still described an AI-vs-AI preview loop, is corrected.
+  screen; Leave match (abandon, after the confirmation) goes back to the
+  toss.
 
 **All three custom gesture surfaces exist AND are wired into the match
 loop** (`app/src/main/java/com/cricketsim/ui/match/`):
@@ -282,6 +312,24 @@ loop** (`app/src/main/java/com/cricketsim/ui/match/`):
     rating, a legality line, and **Set field above the list** so a
     TalkBack user doesn't swipe past nine rows to save. Back is
     labelled "Back (discard changes)".
+  - **Presets (not in the web):** three buttons under Set field —
+    **Normal**, **Defensive**, **Attacking** — each one item that reads
+    its name and a one-line description, so what it does is heard before
+    it is pressed. Applying one changes only the LOCAL arrangement, like
+    a manual move: tweak it, then Set field, or Back to discard; the
+    result is announced through the same polite live region as a move.
+    They are built (`FieldPresets`) from the AI captain's own templates —
+    Normal = balanced (4 in the deep), Defensive = containing (5),
+    Attacking = attacking (2) — which also puts the team's best fielders
+    in the most catching-critical slots, so a preset hands the user the
+    AI captain's arrangement. **They are always legal:** the balanced
+    and containing templates have more in the deep than a powerplay's
+    cap of 3, so each is TRIMMED — the least important boundary riders
+    (the end of the template's priority order) are pulled in from deep to
+    short until it fits. That keeps the three distinct during a powerplay
+    (Attacking untouched, Normal one rider fewer, Defensive two fewer)
+    instead of all collapsing into the one powerplay template, and the
+    announcement says when a preset was trimmed.
   - SECTOR: the 12 sectors, each showing who is standing there (with a
     Cancel above the list). The web has one flat list of 23 slots; two
     levels here means at most 12 + 3 swipes instead of up to 23.
@@ -352,25 +400,39 @@ break) replace the match screen at the moment the final ball's outcome
 would otherwise have been announced, so both now carry the last ball
 themselves.
 
+**A flat, situation-blind AI.** Every AI decision used `0.0` for its
+situational bias, so the AI never attacked the death overs, protected
+wickets in a collapse or chased a required rate. Fixed by porting the
+web's formulas (`AiSituation.kt`) and feeding them to all five call
+sites.
+
+**Leave match threw the match away on a single double-tap.** It now goes
+through `ConfirmLeaveScreen`.
+
 ## Known issues / needs a real device
 
-**Nothing written in the last six sessions has been compiled or run** —
-`BattingScreen`, `FieldingScreen`, the `PitchingScreen` rewrite,
-`MatchLines`, `ScorecardScreen`, `SelectionScreens`, `MatchFlowScreens`,
-the `MatchStats` additions and the `MatchScreen`/`MatchSimulation`
-wiring (including the rain roll). They were written against the APIs as
-read from the repo (the `BattingSystem`, `FieldingSector`, `MatchEngine`,
-`MatchStats`, `MatchState` and `WeatherSystem` names and signatures used
-were checked against the source); expect a first-build pass to fix small
-things. The same is true, until proven otherwise, of everything else in
-the UI layer. Compiling is deliberately deferred until the code is
-feature-complete.
+**Nothing written in the last seven sessions has been compiled or run**
+— `BattingScreen`, `FieldingScreen` (incl. presets), the `PitchingScreen`
+rewrite, `MatchLines`, `ScorecardScreen`, `SelectionScreens`,
+`MatchFlowScreens`, `AiSituation`, `FieldPresets`, the `MatchStats`
+additions and the `MatchScreen`/`MatchSimulation` wiring (including the
+rain roll and the AI bias). They were written against the APIs as read
+from the repo (the `BattingSystem`, `FieldingSystem`, `FieldingSector`,
+`MatchEngine`, `MatchStats`, `MatchState`, `BowlingSystem` and
+`WeatherSystem` names and signatures used were checked against the
+source); expect a first-build pass to fix small things. The same is
+true, until proven otherwise, of everything else in the UI layer.
+Compiling is deliberately deferred until the code is feature-complete.
 
-**Leave match abandons the match with NO confirmation.** It is the last
-item on the match screen (so not the first thing a swipe lands on), but a
-single accidental double-tap throws away the whole match, and there is no
-save yet. Needs a confirm step at the very least, and a real save/resume
-once persistence exists.
+**Leaving a match is final.** There is a confirmation now, but still no
+save: leaving throws the match away. A real quit/save flow needs
+persistence (see "Not started").
+
+**Game balance on Android is untested.** The AI now uses the web's
+situational formulas, so it plays the same, stronger, more varied game
+as the web — but the web's numbers were tuned against the web's UI and
+players. Whether a match on Android feels fair (are chases too hard or
+too easy, does the AI collapse or dominate) needs real playing.
 
 TalkBack/device checks for the two timing surfaces (`BattingScreen`,
 `PitchingScreen`):
@@ -395,10 +457,16 @@ TalkBack checks specific to `BattingScreen`:
   read?
 
 TalkBack checks specific to `FieldingScreen`:
-- After a move, does the polite status message get spoken once and in
-  full when focus lands back on the overview? Does the heading steal it?
-- Is 12 sectors + Cancel-above-list comfortable, or would grouping /
-  presets serve better? (See "Not started".)
+- After a move or a preset, does the polite status message get spoken
+  once and in full when focus lands back on the overview? Does the
+  heading steal it?
+- Does each preset button (two `Text`s inside a `Button`) read as ONE
+  item with its description, or as two stops?
+- The editable overview now has six stops before the fielder list (Set
+  field, the "start from a ready-made field" label, three presets, the
+  hint). Is that too many for a screen a captain uses often?
+- Is 12 sectors + Cancel-above-list comfortable, or would grouping be
+  better?
 - Does `Back (discard changes)` get pressed by accident? Consider a
   confirm if changes exist.
 
@@ -415,9 +483,10 @@ screens and the "play has stopped" screens:
   heading carries the dismissal and the score follows, but check it
   really is enough and that nothing about the ball is lost (the shot
   and timing that led to it, in particular).
-- Does the heading of each of the rain, innings-break and result screens
-  really get read on arrival, and is one long paragraph for the rain
-  detail better or worse than separate lines?
+- Does the heading of each of the rain, innings-break, result and
+  leave-confirmation screens really get read on arrival, and is one
+  long paragraph for the rain detail better or worse than separate
+  lines?
 - The innings-break "Scorecard" button opens on the first innings; does
   Back to match then return to the break screen rather than skipping it?
 - Do the `Role.Tab` selectors announce as tabs with a selected state, and
@@ -434,39 +503,27 @@ screens and the "play has stopped" screens:
 
 ## Not started
 
-All three gesture surfaces exist, both sides' fielding is live, the
-scorecard/chase information is in, the user picks their own openers,
-next batsman and bowlers, and rain delays, the innings break and the
-match result all work. Remaining work:
+All three gesture surfaces exist, both sides' fielding is live (with
+user presets), the scorecard/chase information is in, the user picks
+their own openers, next batsman and bowlers, rain delays, the innings
+break and the match result all work, and the AI now plays with the web's
+situational awareness. Remaining work:
 
-1. Optional field presets for the user (attacking / balanced /
-   containing) on top of `FieldingSystem.generateAiFieldPlacements`, to
-   cut the two-picks-per-fielder cost. NOT in the web app — a gameplay
-   decision (it hands the user the AI captain's templates), so ask
-   first.
-2. Real commentary/audio, tied to `MatchEngine.generateCommentary` /
+1. Real commentary/audio, tied to `MatchEngine.generateCommentary` /
    `CommentaryLibrary.kt` (the match screen currently shows the plain
    `BallOutcome.commentary` string plus quality/shot/timing). The audio
    layer also unlocks the timing tick for both timing minigames, rain
    ambience and the RAIN_START / RAIN_STOP / DLS_REVISED / INNINGS_BREAK
    / MATCH_WIN commentary events, and the win-probability-driven crowd
-   tension.
-3. A real situational-bias calculation feeding into the AI decisions
-   and `changeBowler`'s rotation scoring (currently hardcoded to 0 —
-   neutral — everywhere in `MatchSimulation.kt`), plus the web's
-   situational `selectAiNextBatsman` for the AI's next batsman. Both
-   formulas live in pages/match.tsx, not helpers/. The web's
-   required-run-rate-driven bias is the reference.
-4. A confirm step before Leave match (see Known issues), and a proper
-   quit/save flow once persistence exists.
-5. **A build.** Nothing here has ever been compiled; the APK build
+   tension (the web's `computeCrowdTension`, which is the one piece of
+   match.tsx's logic not yet ported).
+2. **Persistence and a real quit/save flow** — `DataStore`/`Room` around
+   `MatchStateMachine`'s pure state transitions, a resume-match prompt
+   and save indicator, and Leave match saving instead of discarding.
+3. **A build.** Nothing here has ever been compiled; the APK build
    (signing, emulator/device) is still untouched. Deliberately deferred
    until feature-complete; a CI workflow that builds a debug APK on
    every push would then surface compile errors immediately.
-
-Also blocked on the Android persistence layer (see PORTING_NOTES.md):
-resume-match prompt, save indicator, and anything else that needs a
-match to survive beyond one app session.
 
 ## Verifying a UI screen
 
