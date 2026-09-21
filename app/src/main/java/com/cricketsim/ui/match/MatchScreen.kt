@@ -36,6 +36,8 @@ import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossResult
 import com.cricketsim.logic.WeatherSystem
+import com.cricketsim.persistence.MatchSaveStore
+import com.cricketsim.persistence.MatchSnapshot
 import com.cricketsim.ui.settings.SettingsScreen
 
 /**
@@ -47,17 +49,33 @@ import com.cricketsim.ui.settings.SettingsScreen
  * batting). It also owns everything around them: the scorecard, the
  * three selection screens (openers, next batsman, next bowler), the
  * "play has stopped" screens (rain delay, innings break, match result,
- * leave confirmation — see MatchFlowScreens.kt), a settings overlay, and
- * all of the match's SOUND (through MatchAudioDirector — the crowd bed,
- * the ball and outcome effects, the AI voice commentary, rain). It is
- * still MatchSimulation.kt's temporary path underneath: everything the
+ * leave confirmation — see MatchFlowScreens.kt), a settings overlay, all of
+ * the match's SOUND (through MatchAudioDirector — the crowd bed, the ball
+ * and outcome effects, the AI voice commentary, rain), and the
+ * AUTOSAVE that lets the match be resumed. It is still
+ * MatchSimulation.kt's temporary path underneath: everything the
  * opposing side does is AI-driven.
+ *
+ * SAVING AND RESUMING. The whole match — MatchState plus what this screen
+ * keeps (stadium, toss, recent commentary, whether the innings break is
+ * still to be shown) — is written as a MatchSnapshot after every change,
+ * off the main thread, and deleted when the match ends. `resume` puts a
+ * saved one back: it just seeds the state this screen would otherwise
+ * create fresh, so everything downstream (pending picks, a rain delay, the
+ * field, the innings break) comes back for free. Two rules keep it from
+ * ever doing damage:
+ *  - A NEW match does not save until its first ball has been bowled (or
+ *    it has reached the second innings), so opening a new match by
+ *    mistake cannot overwrite a saved one.
+ *  - Which sub-screen was open (a delivery in progress, the field screen)
+ *    is not saved: a resumed match opens on its ordinary screen, at the
+ *    state after the last completed action.
  *
  * WHICH SCREEN WINS when several apply, in order:
  *   0. the leave-match confirmation,
  *   1. the settings overlay (opened from the ordinary screen; it is an
- *      overlay, not a route, because leaving this composable would throw
- *      the match away),
+ *      overlay, not a route, because leaving this composable would take
+ *      the live match with it),
  *   2. the scorecard (only ever opened from a screen that can go back
  *      to where it came from),
  *   3. the match result,
@@ -77,9 +95,10 @@ import com.cricketsim.ui.settings.SettingsScreen
  * whole screen scrolls (a plain scrolling Column) so nothing can be
  * pushed off a small screen.
  *
- * `onBack` abandons the match (MainActivity sends you back to the toss)
- * and is only reachable through the leave confirmation;
- * `onMatchFinished` is the finished match's Return to home.
+ * `onBack` leaves the match (MainActivity sends you to the first screen,
+ * where the autosave is offered as Resume) and is only reachable through
+ * the leave confirmation; `onMatchFinished` is the finished match's Return
+ * to home.
  *
  * A future session builds the real match screen. See UI_NOTES.md's "Not
  * started" section for the full list — treat this file as scaffolding
@@ -94,7 +113,8 @@ fun MatchScreen(
     opponentTeam: Team,
     toss: TossResult,
     onBack: () -> Unit,
-    onMatchFinished: () -> Unit
+    onMatchFinished: () -> Unit,
+    resume: MatchSnapshot? = null
 ) {
     val services = LocalGameServices.current
     val settings = services?.settings ?: GameSettings()
@@ -102,7 +122,7 @@ fun MatchScreen(
 
     var matchState by remember {
         mutableStateOf(
-            MatchStateMachine.createNewMatch(
+            resume?.state ?: MatchStateMachine.createNewMatch(
                 format = format,
                 pitchType = stadium.pitchType,
                 userTeam = userTeam,
@@ -114,19 +134,19 @@ fun MatchScreen(
             )
         )
     }
-    var recentCommentary by remember { mutableStateOf<List<String>>(emptyList()) }
+    var recentCommentary by remember { mutableStateOf<List<String>>(resume?.recentCommentary ?: emptyList()) }
     var matchOver by remember { mutableStateOf(false) }
     var resultText by remember { mutableStateOf<String?>(null) }
     var showPitchingScreen by remember { mutableStateOf(false) }
     var showBattingScreen by remember { mutableStateOf(false) }
     var showFieldScreen by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
-    var showInningsBreak by remember { mutableStateOf(false) }
+    var showInningsBreak by remember { mutableStateOf(resume?.showInningsBreak ?: false) }
     var showSettings by remember { mutableStateOf(false) }
     var confirmingLeave by remember { mutableStateOf(false) }
     // The final ball of the first innings, kept for the innings-break
     // screen because the commentary list is cleared for the new innings.
-    var breakLastBall by remember { mutableStateOf("") }
+    var breakLastBall by remember { mutableStateOf(resume?.breakLastBall ?: "") }
     // Outcome of the last Set field, announced on this screen (the
     // fielding screen is gone by then). Cleared as soon as a ball is played.
     var fieldMessage by remember { mutableStateOf("") }
@@ -142,6 +162,30 @@ fun MatchScreen(
     LaunchedEffect(director, settings.soundEffects, matchOver) {
         if (director != null) {
             if (settings.soundEffects && !matchOver) director.startAmbience(matchState) else director.stopAmbience()
+        }
+    }
+
+    // Autosave. Re-runs (cancelling any earlier run) whenever anything that
+    // goes into a snapshot changes. A finished match deletes its save;
+    // a brand-new one waits for its first ball so it cannot overwrite an
+    // older saved match just by being opened.
+    val saves = services?.saves
+    LaunchedEffect(saves, matchState, recentCommentary, showInningsBreak, breakLastBall, matchOver) {
+        if (saves == null) return@LaunchedEffect
+        if (matchOver) {
+            saves.clear()
+        } else if (matchState.ballByBall.isNotEmpty() || matchState.currentInnings == 2) {
+            saves.save(
+                MatchSnapshot(
+                    version = MatchSaveStore.CURRENT_VERSION,
+                    stadium = stadium,
+                    toss = toss,
+                    state = matchState,
+                    recentCommentary = recentCommentary,
+                    showInningsBreak = showInningsBreak,
+                    breakLastBall = breakLastBall
+                )
+            )
         }
     }
 
@@ -476,7 +520,8 @@ fun MatchScreen(
             Text("Settings")
         }
         Spacer(modifier = Modifier.height(8.dp))
-        // Asks first: leaving abandons the match, and there is no save yet.
+        // The match is autosaved, so this is safe; it asks first because it
+        // takes you out to the first screen.
         Button(onClick = { confirmingLeave = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Leave match")
         }

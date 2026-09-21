@@ -5,12 +5,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.cricketsim.persistence.MatchSaveStore
 
 /**
- * The one place the app's settings and sound live, created once by
- * MainActivity and handed down through LocalGameServices so the screens
- * that need it (the timing minigames, the toss, the match, settings) don't
- * each need new parameters threaded through the whole flow.
+ * The one place the app's settings, sound and saved match live, created
+ * once by MainActivity and handed down through LocalGameServices so the
+ * screens that need it (the timing minigames, the toss, the match,
+ * settings, the first screen's Resume button) don't each need new
+ * parameters threaded through the whole flow.
  *
  * `settings` is Compose state, so anything reading it recomposes when the
  * user changes a setting; every change is also saved and pushed into the
@@ -24,6 +26,9 @@ class GameServices(context: Context) {
 
     val sound = SoundEngine(context)
     private val spoken = SpokenCommentary(context)
+
+    /** The match in progress, autosaved by the match screen (see MatchSaveStore). */
+    val saves = MatchSaveStore(context)
 
     init {
         sound.applySettings(settings)
@@ -50,5 +55,5 @@ class GameServices(context: Context) {
     }
 }
 
-/** Null when nothing provided one (e.g. a preview); every use treats that as "no audio, default settings". */
+/** Null when nothing provided one (e.g. a preview); every use treats that as "no audio, default settings, no saves". */
 val LocalGameServices = staticCompositionLocalOf<GameServices?> { null }

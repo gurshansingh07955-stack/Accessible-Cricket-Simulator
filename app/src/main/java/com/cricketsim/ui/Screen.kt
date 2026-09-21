@@ -4,6 +4,7 @@ import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossResult
+import com.cricketsim.persistence.MatchSnapshot
 
 /**
  * The app's screen graph, modeled as a plain sealed interface switched
@@ -11,9 +12,7 @@ import com.cricketsim.logic.TossResult
  * than pulling in the Navigation-Compose library. The setup flow is
  * short and linear (format -> stadium -> teams -> playing XI -> toss
  * -> match), so a hand-rolled `when` is simpler to reason about than a
- * nav graph for now; revisit if the flow grows branchy enough to need
- * one (e.g. deep-linking into an in-progress match once persistence
- * exists).
+ * nav graph for now.
  */
 sealed interface Screen {
     object FormatSelection : Screen
@@ -21,8 +20,8 @@ sealed interface Screen {
     /**
      * The settings page, opened from the first screen. `returnTo` is where
      * Back goes. (Inside a match, settings is an overlay on the match
-     * screen instead — leaving the match screen would throw the match
-     * away, since it lives only in that screen's state.)
+     * screen instead — leaving the match screen would take the live match
+     * with it.)
      */
     data class Settings(val returnTo: Screen) : Screen
 
@@ -39,13 +38,18 @@ sealed interface Screen {
     // Both teams here are already finalized 11-player XIs.
     data class TossSelection(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
 
-    // The match itself: a real, user-controlled match against an AI
-    // opponent. See MatchScreen.kt's own doc comment.
+    /**
+     * The match itself: a real, user-controlled match against an AI
+     * opponent. See MatchScreen.kt's own doc comment. `resume` is set when
+     * this is a saved match being picked back up rather than a new one;
+     * the other fields are then just taken from it.
+     */
     data class Match(
         val format: MatchFormat,
         val stadium: Stadium,
         val userTeam: Team,
         val opponentTeam: Team,
-        val toss: TossResult
+        val toss: TossResult,
+        val resume: MatchSnapshot? = null
     ) : Screen
 }

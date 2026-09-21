@@ -52,6 +52,12 @@ dependencies {
     // Stated explicitly (it already arrives transitively) because the audio
     // engine relies on Dispatchers.Main and coroutine timers.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // Saving and resuming a match: reflection-based JSON over the existing
+    // data classes, so the logic layer needed no annotations (see
+    // persistence/MatchSaveStore.kt). NOTE: if release minification is ever
+    // turned on, keep the com.cricketsim.logic classes from being renamed
+    // or stripped, or saved matches will not read back.
+    implementation("com.google.code.gson:gson:2.11.0")
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")

@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -17,6 +18,8 @@ import com.cricketsim.audio.GameServices
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CricketData
 import com.cricketsim.logic.Team
+import com.cricketsim.persistence.MatchSnapshot
+import com.cricketsim.persistence.summary
 import com.cricketsim.ui.Screen
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.settings.SettingsScreen
@@ -32,14 +35,15 @@ import com.cricketsim.ui.setup.TossScreen
  * setup flow (format, stadium, team, playing XI, toss), then the match
  * screen, which runs a real, user-controlled match — pitching, batting,
  * fielding, selections, scorecard, rain delays and the innings break —
- * against an AI opponent, with sound. The match screen itself is still a
+ * against an AI opponent, with sound, saved automatically so it can be
+ * resumed from the first screen. The match screen itself is still a
  * first-slice scaffold (see MatchScreen.kt's own doc comment).
  *
- * It also owns the app-wide GameServices (settings + the sound engine),
- * created once here and handed to every screen through LocalGameServices.
- * The sound engine is paused when the app leaves the foreground (so the
- * crowd doesn't keep playing behind another app) and released when the
- * activity is really finishing.
+ * It also owns the app-wide GameServices (settings, the sound engine and
+ * the saved match), created once here and handed to every screen through
+ * LocalGameServices. The sound engine is paused when the app leaves the
+ * foreground (so the crowd doesn't keep playing behind another app) and
+ * released when the activity is really finishing.
  */
 class MainActivity : ComponentActivity() {
 
@@ -95,12 +99,35 @@ private fun autoPickOpponentXI(opponentTeam: Team): Team {
 
 @Composable
 fun CricketSimApp() {
+    val services = LocalGameServices.current
     var screen by remember { mutableStateOf<Screen>(Screen.FormatSelection) }
+
+    // The saved match, if any, offered on the first screen. Re-read every
+    // time the first screen is (re)entered — including after leaving a match,
+    // whose last autosave has just landed — and loaded off the main thread.
+    var savedMatch by remember { mutableStateOf<MatchSnapshot?>(null) }
+    val onFirstScreen = screen is Screen.FormatSelection
+    LaunchedEffect(onFirstScreen) {
+        if (onFirstScreen) savedMatch = services?.saves?.load()
+    }
 
     when (val current = screen) {
         is Screen.FormatSelection -> FormatSelectionScreen(
             onFormatSelected = { format -> screen = Screen.StadiumSelection(format) },
-            onOpenSettings = { screen = Screen.Settings(returnTo = current) }
+            onOpenSettings = { screen = Screen.Settings(returnTo = current) },
+            resumeSummary = savedMatch?.summary(),
+            onResume = {
+                savedMatch?.let { saved ->
+                    screen = Screen.Match(
+                        format = saved.state.format,
+                        stadium = saved.stadium,
+                        userTeam = saved.state.userTeam,
+                        opponentTeam = saved.state.opponentTeam,
+                        toss = saved.toss,
+                        resume = saved
+                    )
+                }
+            }
         )
         is Screen.Settings -> SettingsScreen(
             onBack = { screen = current.returnTo }
@@ -137,9 +164,11 @@ fun CricketSimApp() {
             userTeam = current.userTeam,
             opponentTeam = current.opponentTeam,
             toss = current.toss,
-            // Abandons the match and returns to the toss.
-            onBack = { screen = Screen.TossSelection(current.format, current.stadium, current.userTeam, current.opponentTeam) },
-            // A finished match: back to the start, ready for a new one.
+            resume = current.resume,
+            // The match is autosaved as it goes, so leaving is safe: back to
+            // the first screen, where Resume picks it up again.
+            onBack = { screen = Screen.FormatSelection },
+            // A finished match (its save is already cleared): back to the start.
             onMatchFinished = { screen = Screen.FormatSelection }
         )
     }

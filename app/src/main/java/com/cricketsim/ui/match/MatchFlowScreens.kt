@@ -47,11 +47,12 @@ import com.cricketsim.logic.MatchState
  * screen replaces the match screen at the very moment the final ball's
  * outcome would have been announced).
  *
- * ConfirmLeaveScreen guards the one button that throws a match away.
- * There is no save yet, so leaving is final; a single accidental
- * double-tap on the match screen's Leave match must not be able to do
- * that. "Keep playing" is FIRST, so it is the default an unsure user
- * lands on, and the heading is a question so the stakes are heard first.
+ * ConfirmLeaveScreen guards the button that takes you out of the match.
+ * The match is autosaved after every change, so leaving no longer throws
+ * anything away — but it still ends the current session and drops you on
+ * the first screen, so it asks first, and says plainly that the match is
+ * safe and how to get back to it. "Keep playing" is FIRST, so it is the
+ * default an unsure user lands on, and the heading is a question.
  */
 
 @Composable
@@ -156,11 +157,13 @@ fun MatchResultScreen(
 @Composable
 fun ConfirmLeaveScreen(onStay: () -> Unit, onLeave: () -> Unit) {
     InfoScreen(
-        title = "Leave this match?",
-        lines = listOf("The match will be abandoned. There is no save yet, so it can't be resumed."),
+        title = "Save and leave this match?",
+        lines = listOf(
+            "Your match is saved automatically. You can pick it up again from the first screen with Resume saved match."
+        ),
         actions = listOf(
             "Keep playing" to onStay,
-            "Leave match" to onLeave
+            "Save and leave" to onLeave
         )
     )
 }
