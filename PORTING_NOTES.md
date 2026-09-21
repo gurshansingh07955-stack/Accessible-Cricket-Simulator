@@ -204,16 +204,43 @@ audio, and accessibility layers can't just be "translated".
   `getHatTrickCategory`, `getRandomCommentaryPair`,
   `getAllCommentaryLines`). `categorizeBallOutcome` takes `BallOutcome`
   directly rather than a loose structural type, since its fields are an
-  exact match. `audioUrl` values are carried over verbatim for parity
-  even though they won't resolve without bundling equivalent audio
-  assets on Android (see "Audio" below).
+  exact match. `audioUrl` values are the web's root-relative
+  `/_cdn/commentary/<id>.mp3` paths, carried over verbatim; the Android
+  audio layer resolves them against `AudioAssets.BASE_URL` (see "Audio"
+  below).
 
   **🎉 This completes the entire pure game-logic layer** — data,
   weather, bowling, batting, fielding, match engine, match state,
   stats, and commentary are all fully ported and verified against the
-  web source. Everything remaining (see "What's next" below) is UI,
-  audio, and persistence — genuine platform-specific design work, not
-  mechanical translation.
+  web source. Everything else is UI, audio, and persistence — genuine
+  platform-specific design work, not mechanical translation.
+
+- **Audio and settings** (`app/src/main/java/com/cricketsim/audio/`) —
+  built on Android's audio APIs, so a rewrite rather than a port; the
+  behaviour, constants and event mapping follow the web:
+
+  | Web source | Android |
+  |---|---|
+  | `helpers/audioManager.tsx` (synthesized effects) | `Synth.kt` (PCM generation) + `SoundEngine.kt` |
+  | `helpers/audioManager.tsx` (recorded ambience, one-shots, ducking/swell/tension) | `SoundEngine.kt`, `AudioAssets.kt` |
+  | `helpers/commentaryVoice.tsx` | `SoundEngine.kt` (the commentary queue) |
+  | `helpers/gameSettings.tsx` | `GameSettings.kt`, `GameServices.kt` |
+  | the audio half of `pages/match.tsx` (per-ball sound and commentary, special-event detection, `computeCrowdTension`) | `MatchAudioDirector.kt` |
+
+  Points worth knowing before touching it (full detail is in
+  `UI_NOTES.md` and each file's header):
+  - **Assets.** The web's recordings can't be bundled by this tooling.
+    `AudioAssets` looks in `res/raw`, then app storage, then downloads from
+    the web host; every sound has a synthesized stand-in so nothing is
+    silent. The AI commentary clips are streamed, not cached.
+  - **Deliberate differences from the web:** ducking is a count, not a
+    flag (fixes a web bug where a short effect-duck could un-duck
+    commentary); missing recordings get synthesized stand-ins (the web is
+    silent); the timing tick is far louder (it is the audible timing
+    channel on Android); text-to-speech commentary only speaks with
+    TalkBack off; the match screen's settings are an overlay.
+  - **Not ported:** the web's `setVolume` (master volume) has no settings
+    UI on the web either, so it is a constant (0.5).
 
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
@@ -221,34 +248,20 @@ audio, and accessibility layers can't just be "translated".
 
 ## What's next
 
-The pure logic layer (everything under `logic/`) is done. The
-remaining work is building the actual app on top of it — none of it is
-a line-by-line port, since none of it has a Kotlin/Compose equivalent
-to translate from directly:
+The pure logic layer (everything under `logic/`) is done, the UI is
+built (see `UI_NOTES.md`) and so is the audio. What remains:
 
-1. **UI** — design and build the Jetpack Compose screens (setup/toss
-   flow, the match screen, the three accessible gesture surfaces for
-   pitching/batting/fielding, scorecard, playing-XI selection, etc.),
-   from scratch, around native TalkBack semantics. This is the single
-   largest remaining piece of work. See "Not ported" below for why the
-   web app's ARIA-based screens can't be copied. **Progress is tracked
-   in `UI_NOTES.md`**, not here.
-2. **Persistence** — design an Android save/resume layer (`DataStore`
+1. **Persistence** — design an Android save/resume layer (`DataStore`
    or `Room`) and wire it around `MatchStateMachine`'s existing pure
    state-transition functions (`createNewMatch`, `applyBallOutcome`,
    etc.), replacing the omitted `saveMatch`/`loadMatch`/`clearMatch`/
-   `hasActiveMatch`.
-3. **Audio** — design the `SoundPool` + `MediaPlayer`/`ExoPlayer`
-   mixing/ducking layer and either bundle or fetch real audio assets
-   for `CommentaryLibrary.kt`'s lines (the current `audioUrl` values
-   point at the web app's CDN and won't resolve as-is).
-4. **The actual APK build** — hasn't been attempted at all yet: signing,
+   `hasActiveMatch`. (Settings already persist, in `SharedPreferences`.)
+2. **Shipping the audio assets** — the seven recordings into
+   `res/raw`, a check of the crowd recording's licence, and optionally
+   bundling the commentary clips for fully offline voice commentary.
+3. **The actual APK build** — hasn't been attempted at all yet: signing,
    testing on a device/emulator, and everything between "code compiles"
    and "installable app".
-
-A future session tackling any of these should start by re-reading the
-relevant "Not ported, and NOT a mechanical translation" entry below —
-each one records specific reasons the naive translation won't work.
 
 ## Not ported, and NOT a mechanical translation when it happens
 
@@ -256,20 +269,16 @@ each one records specific reasons the naive translation won't work.
   custom drag-gesture surfaces (`PitcherScreen`, `BattingShotScreen`,
   `FieldingScreen`) built specifically around ARIA live regions and
   linear swipe navigation for screen readers. There's no 1:1 Compose
-  equivalent; this needs to be designed fresh for Android using Compose
-  + native TalkBack semantics (`Modifier.semantics`,
-  `LiveRegionMode`, etc.), following the same accessibility-first
-  PRINCIPLES as the web app without copying its DOM-specific mechanics.
-  Also note that match-loop logic living in `pages/match.tsx` rather than
-  `helpers/` (situational-bias formulas, the AI's `selectAiNextBatsman`,
-  the over-end/wicket/rain orchestration) is part of the UI work, not the
-  logic port — see `UI_NOTES.md` and `MatchSimulation.kt`.
-- **Audio** (`helpers/audioManager.tsx`) — built on the Web Audio API
-  (`AudioContext`, `GainNode`, buffer scheduling). The Android
-  equivalent is `SoundPool` (short one-shots) + `MediaPlayer` or
-  `ExoPlayer` (looping ambience beds) — different APIs, different
-  mental model, needs a real rewrite of the mixing/ducking logic, not a
-  line-by-line port.
+  equivalent; this was designed fresh for Android using Compose +
+  native TalkBack semantics (`Modifier.semantics`, `LiveRegionMode`,
+  etc.), following the same accessibility-first PRINCIPLES as the web
+  app without copying its DOM-specific mechanics. Match-loop logic
+  living in `pages/match.tsx` rather than `helpers/` (the
+  situational-bias formulas, the AI's `selectAiNextBatsman`, the
+  over-end/wicket/rain orchestration, the audio triggers, the AI's
+  per-delivery field announcement) is part of the UI work, not the logic
+  port — see `UI_NOTES.md`, `MatchSimulation.kt`, `AiSituation.kt` and
+  `MatchAudioDirector.kt`.
 - **Persistence** (`helpers/matchState.tsx`'s `saveMatch`/`loadMatch`,
   currently backed by browser `localStorage`) — Android equivalent is
   likely `DataStore` or a small `Room` database once this is tackled.
