@@ -8,34 +8,37 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * The real recordings the web app uses. They cannot be bundled from this
- * repo's tooling (binary files), and they live on the web app's own
- * hosting (Floot's `/_cdn/...`), so on Android each is looked for in this
- * order:
+ * The real recordings the web app uses. On Android each is looked for in
+ * this order:
  *
- *   1. `res/raw/<rawName>` in the APK — DROP THE FILES IN THERE to ship
- *      them, which is the reliable option (works offline, doesn't depend
- *      on the web app staying up). Name them exactly as `rawName` below
- *      (lowercase, no extension; e.g. `small_crowd_cheer.mp3`).
+ *   1. `res/raw/<rawName>` in the APK. This is where they SHOULD end up:
+ *      it works offline and doesn't depend on the web app staying up. The
+ *      repo's `Fetch audio into the app` workflow (tools/fetch_audio.sh)
+ *      downloads all of them from the web app and commits them there, so
+ *      there is nothing to copy by hand. Names are the lowercase
+ *      `rawName`s below, with an .mp3 extension.
  *   2. A copy previously downloaded into the app's private storage.
- *   3. Downloaded now from the web app's host (BASE_URL + path), then
- *      kept for next time. Needs the INTERNET permission.
+ *   3. Downloaded now from the web app's host (BASE_URL + path), then kept
+ *      for next time. Needs the INTERNET permission.
  *
  * If none of that works, SoundEngine uses a synthesized stand-in
- * (Synth.kt), so the game is never silent. Whether the BASE_URL paths are
- * actually reachable has NOT been verified from here — the base is the
- * live app's address from the project handoff, and the paths are copied
- * verbatim from helpers/audioManager.tsx.
+ * (Synth.kt), so the game is never silent.
+ *
+ * VERIFIED: every path below answers HTTP 200 (audio/mpeg) on the web
+ * app's public host, and the paths are copied verbatim from
+ * helpers/audioManager.tsx.
  *
  * LICENCE: the crowd recording's file name suggests a third-party stock
- * source. Check its licence before distributing an APK that contains it.
+ * source, and bundling it puts it in this repo and in every APK. Check its
+ * licence before distributing.
  *
- * The AI commentary clips (`/_cdn/commentary/<id>.mp3`) are NOT handled
- * here: they are streamed one at a time straight from BASE_URL by
- * SoundEngine, since there are ~100 of them and they're played rarely.
- * Some of them may not exist yet — the web source's own notes list a
- * batch (partnership 150/200, bowler hauls, hat-tricks) as pending
- * generation; a missing clip is just skipped, as on the web.
+ * The AI commentary clips (`/_cdn/commentary/<id>.mp3`) are handled by
+ * SoundEngine, not here: it plays the copy bundled in
+ * `assets/commentary/` when there is one (the same workflow puts them
+ * there) and otherwise streams the clip from BASE_URL. Of the 190 clips the
+ * library references, 160 exist on the web app; the other 30 (partnership
+ * 150/200, bowler 3/5/10-wicket hauls, every hat-trick line) were never
+ * generated there, so they are skipped, as on the web, until they are.
  */
 enum class RecordedAsset(val fileName: String, val path: String, val rawName: String) {
     CROWD_BED(

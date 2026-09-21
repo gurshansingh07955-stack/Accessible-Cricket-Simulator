@@ -51,13 +51,16 @@ import kotlin.math.max
  *   middle of a commentary sequence.
  * - RAIN. A looping rain bed plus a thunder crack, ducking the crowd for
  *   as long as it runs.
- * - COMMENTARY. The AI voice duo clips, streamed and queued so a wicket's
- *   comment, an over-complete comment and an innings-break comment play
- *   as one conversation rather than over each other; the crowd ducks for
- *   the whole sequence. A clip that can't be fetched is skipped. There is
- *   no text-to-speech fallback for these on purpose: the same line is
- *   already on screen and spoken by TalkBack, and a second synthetic
- *   voice would just talk over it.
+ * - COMMENTARY. The AI voice duo clips, queued so a wicket's comment, an
+ *   over-complete comment and an innings-break comment play as one
+ *   conversation rather than over each other; the crowd ducks for the
+ *   whole sequence. Each clip is played from the copy BUNDLED in
+ *   assets/commentary/ when there is one (instant, offline; put there by
+ *   tools/fetch_audio.sh) and otherwise STREAMED from the web app's host.
+ *   A clip that can't be played either way is skipped. There is no
+ *   text-to-speech fallback for these on purpose: the same line is
+ *   already on screen and spoken by TalkBack, and a second synthetic voice
+ *   would just talk over it.
  *
  * INPUT LATENCY. Android audio output has latency the web doesn't (tens
  * of milliseconds, device-dependent). The timing score is measured against
@@ -592,10 +595,22 @@ class SoundEngine(context: Context) {
 
     // --- AI voice commentary ---
 
+    // Root-relative paths as stored in the commentary library, e.g.
+    // "/_cdn/commentary/dot_1_excited.mp3". Resolved to a bundled asset or a
+    // URL only when a clip is about to play.
     private val commentaryQueue = ArrayDeque<String>()
     private var commentaryPlayer: MediaPlayer? = null
     private var commentaryPlaying = false
     private var commentaryToken = 0
+
+    /**
+     * The file names of the clips bundled into the APK under
+     * assets/commentary/ (empty until tools/fetch_audio.sh has put them
+     * there). Looked up once.
+     */
+    private val bundledCommentary: Set<String> by lazy {
+        runCatching { appContext.assets.list("commentary")?.toSet() }.getOrNull() ?: emptySet()
+    }
 
     /**
      * Queues the duo banter for an event, respecting the commentary mode,
@@ -606,15 +621,15 @@ class SoundEngine(context: Context) {
         val mode = settings.aiCommentaryMode
         if (mode == AiCommentaryMode.OFF) return
         val pair = CommentaryLibrary.getRandomCommentaryPair(category)
-        val urls = mutableListOf<String>()
+        val paths = mutableListOf<String>()
         if (mode == AiCommentaryMode.DUO || mode == AiCommentaryMode.EXCITED) {
-            pair.excited.audioUrl?.let { urls.add(AudioAssets.absoluteUrl(it)) }
+            pair.excited.audioUrl?.let { paths.add(it) }
         }
         if (mode == AiCommentaryMode.DUO || mode == AiCommentaryMode.CALM) {
-            pair.calm.audioUrl?.let { urls.add(AudioAssets.absoluteUrl(it)) }
+            pair.calm.audioUrl?.let { paths.add(it) }
         }
-        if (urls.isEmpty()) return
-        commentaryQueue.addAll(urls)
+        if (paths.isEmpty()) return
+        commentaryQueue.addAll(paths)
         if (!commentaryPlaying) playNextCommentary()
     }
 
@@ -628,8 +643,8 @@ class SoundEngine(context: Context) {
 
     private fun playNextCommentary() {
         releaseCommentaryPlayer()
-        val url = commentaryQueue.removeFirstOrNull()
-        if (url == null) {
+        val path = commentaryQueue.removeFirstOrNull()
+        if (path == null) {
             // The whole sequence has finished: let the crowd come back up.
             if (commentaryPlaying) duckEnd()
             commentaryPlaying = false
@@ -643,11 +658,20 @@ class SoundEngine(context: Context) {
 
         val token = ++commentaryToken
         var started = false
+        val fileName = path.substringAfterLast('/')
         val player = MediaPlayer()
         commentaryPlayer = player
         try {
             player.setAudioAttributes(speechAttributes)
-            player.setDataSource(url)
+            if (fileName in bundledCommentary) {
+                // The copy inside the APK: instant and offline.
+                appContext.assets.openFd("commentary/$fileName").use { afd ->
+                    player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                }
+            } else {
+                // Not bundled: stream it from the web app's host.
+                player.setDataSource(AudioAssets.absoluteUrl(path))
+            }
             player.setVolume(COMMENTARY_VOLUME, COMMENTARY_VOLUME)
             player.setOnPreparedListener {
                 started = true
