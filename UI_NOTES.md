@@ -41,15 +41,16 @@ team -> playing XI -> toss), all real screens:
 - **Navigation scaffold** (`app/src/main/java/com/cricketsim/ui/Screen.kt`)
   — a plain sealed interface switched on in one composable
   (`MainActivity.CricketSimApp`), not the Navigation-Compose library.
-  Revisit once persistence (see PORTING_NOTES.md's "What's next")
-  makes deep-linking into an in-progress match a real requirement.
-  `Screen.Settings(returnTo)` is the settings route from the first screen.
-- **`FormatSelectionScreen`** — step 1: a single-column `LazyColumn`
-  using `Modifier.selectable(..., role = Role.RadioButton)`. The ONE
-  screen where a persistent selection sits next to unchosen
-  alternatives before a separate Continue button — every step after
-  this one picks-and-immediately-advances. A **Settings** button sits
-  after Continue.
+  `Screen.Settings(returnTo)` is the settings route from the first
+  screen; `Screen.Match` carries an optional `resume` snapshot.
+- **`FormatSelectionScreen`** — step 1 and the app's first screen: a
+  single-column `LazyColumn` using `Modifier.selectable(...,
+  role = Role.RadioButton)`. **When there is a saved match, a Resume saved
+  match button goes FIRST, straight after the heading** — one button that
+  reads as one item, its second line describing the match (teams, format,
+  innings, score), so a screen-reader user knows what they are resuming
+  before committing and continuing a match in progress is the fastest
+  thing on the screen. A **Settings** button sits after Continue.
 - **`StadiumSelectionScreen`** — step 2: a two-step drill-down
   (country, then stadium) over `StadiumData.kt`'s 101 stadiums.
   Introduced the `Modifier.clickable(..., role = Role.Button)` pattern
@@ -69,6 +70,52 @@ team -> playing XI -> toss), all real screens:
   live-announced result readout when the AI wins. Plays the coin-flip
   sound when the coin is called and queues the toss commentary
   (`TOSS_BAT` / `TOSS_BOWL`) once the decision is known, as the web does.
+
+**Saving and resuming a match** (`app/src/main/java/com/cricketsim/persistence/`)
+— the Android replacement for the web's `saveMatch` / `loadMatch` /
+`clearMatch` / `hasActiveMatch` (browser `localStorage`), and a stated
+requirement in the web project's own brief ("resume match option"):
+- **`MatchSaveStore.kt`** — a `MatchSnapshot` (the whole `MatchState`,
+  which already contains both XIs, the score, both innings' statistics, the
+  field, weather, rain state and every pending pick, plus what the match
+  SCREEN keeps: the stadium and toss it was created with, the recent
+  commentary, and whether the innings-break screen is still to be shown) is
+  written as JSON to one file in private storage (`saved_match.json`) using
+  Gson's reflection over the existing data classes, **so the logic layer
+  needed no annotations or changes**. Reflection can't handle one thing,
+  the `DeliveryLength` sealed interface (two enums, held by `BallOutcome`),
+  so it has an explicit adapter that records which enum it is.
+- **Safety.** Writes go to a temp file that is renamed over the real one,
+  so a crash or kill mid-save leaves the last good save intact. Save, load
+  and clear share a lock. **Loading never throws**: a missing, corrupt or
+  old-version save is simply "no saved match". A `version` number guards
+  the shape — **bump `MatchSaveStore.CURRENT_VERSION` whenever any class in
+  `MatchState`'s tree changes shape**; older saves are then discarded
+  (deliberately not migrated: the web's `loadMatch` has a block of backfill
+  code for old saves, which is not worth carrying for a game whose matches
+  last an hour).
+- **Autosave (in `MatchScreen`).** After every change, off the main thread;
+  a finished match deletes its save. **A NEW match does not save until its
+  first ball has been bowled (or it reaches the second innings)**, so
+  opening a new match by mistake cannot overwrite a saved one — only
+  actually playing it does.
+- **Resume.** `MatchScreen(resume = snapshot)` just seeds the state the
+  screen would otherwise create fresh, so everything downstream comes back
+  for free: a pending opener/batsman/bowler pick, a rain delay, the field,
+  the innings break. The first screen re-reads the save every time it is
+  (re)entered, off the main thread, so the summary is current after leaving
+  a match.
+- **Not saved:** which sub-screen was open (a delivery in progress, the
+  field screen, the scorecard) — a resumed match opens on its ordinary
+  screen at the state after the last completed action; and the audio
+  director's running tallies (back-to-back boundaries, a bowler's wicket
+  streak), so a hat-trick or run of fours straddling a resume goes
+  uncommented.
+- **Leave match** is now **Save and leave**: the confirmation says the
+  match is saved automatically and how to get back to it (Resume saved
+  match on the first screen), Keep playing is first, and leaving returns to
+  the first screen instead of the toss. Rotation no longer loses the match
+  either (`configChanges`), and now neither does the process being killed.
 
 **Audio and settings** (`app/src/main/java/com/cricketsim/audio/` and
 `ui/settings/`) — a rewrite around Android's audio APIs of the web's
@@ -162,27 +209,25 @@ live on the web app's own hosting. So:
   web's settings (difficulty, vibration, sound effects, spoken commentary,
   AI commentary mode off/duo/excited/calm, crowd volume) in
   `SharedPreferences`, exposed as Compose state through
-  `LocalGameServices` so no screen needed new parameters. **Spoken
-  commentary** (the web's browser text-to-speech toggle) only speaks when
-  TalkBack is off, because TalkBack already reads the live regions; with
-  both, every ball would be read twice in two voices. Its engine is created
-  on first use, so a TalkBack user never pays for it.
+  `LocalGameServices` so no screen needed new parameters (which now also
+  carries the saved-match store). **Spoken commentary** (the web's browser
+  text-to-speech toggle) only speaks when TalkBack is off, because TalkBack
+  already reads the live regions; with both, every ball would be read twice
+  in two voices. Its engine is created on first use, so a TalkBack user
+  never pays for it.
 - **`SettingsScreen.kt`** — one linear scrolling column, **Back first**
   (long page), section headings, `toggleable(role = Switch)` rows and
   `selectable(role = RadioButton)` rows so each is one TalkBack item with
   its state, and a slider for crowd volume with a percentage state
   description. Opens from the first screen, and as an **overlay inside a
-  match** (a route would leave the match screen and throw the match away).
-  Difficulty is here because the web has it and the match screen had it
-  hardcoded to Medium; its labels are just the four level names (what each
-  changes lives in `MatchEngine`'s difficulty modifier, and isn't
-  described in the web's UI either).
+  match** (a route would leave the match screen and take the live match
+  with it). Difficulty is here because the web has it and the match screen
+  had it hardcoded to Medium.
 - **Manifest / build.** Adds `INTERNET` (downloading recordings, streaming
   commentary), `VIBRATE`, a `<queries>` entry so text-to-speech works on
   Android 11+, and `configChanges` so rotating the phone no longer
-  recreates the activity — which would have thrown away an in-progress
-  match, since it lives only in Compose state. `kotlinx-coroutines-android`
-  is now an explicit dependency.
+  recreates the activity. `kotlinx-coroutines-android` and `gson` are
+  explicit dependencies.
 
 **The match screen has a first slice** (`app/src/main/java/com/cricketsim/ui/match/`),
 proving the whole logic layer works end to end inside the real UI —
@@ -249,19 +294,18 @@ but this is explicitly scaffolding, not the real design:
   break, (6) a pick the user's own side owes (openers, next batsman,
   bowler), (7) the gesture surfaces and the field screen, (8) the
   ordinary match screen. Rain outranks a pending pick because play has
-  stopped. It runs a `MatchAudioDirector` for all the match's sound, and
-  reads the **difficulty from settings** (it was hardcoded to Medium).
-  The ordinary screen has buttons for the three gesture surfaces (Bowl +
-  Set field while bowling; Face next ball + Hear the field while
+  stopped. It runs a `MatchAudioDirector` for all the match's sound,
+  **autosaves the match** (see above), and reads the difficulty from
+  settings. The ordinary screen has buttons for the three gesture surfaces
+  (Bowl + Set field while bowling; Face next ball + Hear the field while
   batting), the scorecard, Settings and Leave match. Reading order
   follows the web: striker, non-striker, bowler (each with live
   figures), the action buttons, then the last ball, score, target / runs
   needed, current run rate, required run rate and (in a chase) win
   probability, then earlier commentary. **The last ball and the score are
   both polite live regions.** Text-to-speech (only when TalkBack is off)
-  reads each ball, the rain, the innings break and the result. **Leave
-  match** asks first (`ConfirmLeaveScreen`). **Replace, don't extend** —
-  this is a verify-the-wiring screen.
+  reads each ball, the rain, the innings break and the result. **Replace,
+  don't extend** — this is a verify-the-wiring screen.
 - **`MatchFlowScreens.kt`** — the full-screen "the match has stopped"
   moments, all with the same shape (a heading that carries the news, a
   few plain lines, then buttons): `RainDelayScreen` (the web's
@@ -270,7 +314,8 @@ but this is explicitly scaffolding, not the real design:
   addition: target, first-innings total, last ball, chase figures, which
   side you're on), `MatchResultScreen` (the result in the heading, both
   innings' totals and the last ball, which would otherwise never be
-  heard), and `ConfirmLeaveScreen` (Keep playing first).
+  heard), and `ConfirmLeaveScreen` ("Save and leave this match?", Keep
+  playing first).
 - **`MatchLines.kt`** — every spoken match line as a plain string
   (`MatchLines`) and every scorecard row (`ScorecardLines`). Wording
   follows the web. `ballSummary` is the web's `formatBallOutcomeText`.
@@ -289,9 +334,9 @@ but this is explicitly scaffolding, not the real design:
   new-batsman heading so the news is heard first.
 - `MainActivity.kt` hosts the full flow and owns `GameServices`: it
   provides it through `LocalGameServices`, pauses sound when the app is
-  backgrounded, and releases it when the activity really finishes.
-  Return to home (a finished match) goes to the format screen; Leave
-  match (after the confirmation) goes back to the toss.
+  backgrounded, releases it when the activity really finishes, and offers
+  the saved match on the first screen. Return to home (a finished match)
+  and Save and leave both go to the first screen.
 
 **All three custom gesture surfaces exist AND are wired into the match
 loop** (`app/src/main/java/com/cricketsim/ui/match/`):
@@ -386,8 +431,8 @@ screens now carry the last ball themselves.
 **A flat, situation-blind AI** — fixed by porting the web's formulas
 (`AiSituation.kt`).
 
-**Leave match threw the match away on a single double-tap** — now behind
-`ConfirmLeaveScreen`.
+**Leaving a match threw it away** — first behind a confirmation, and now
+the match is autosaved and Leave match is Save and leave.
 
 **The batter was never told the AI's field.** See `prepareAiDelivery`
 above: the AI's per-delivery field was set silently after the batter had
@@ -397,18 +442,45 @@ committed; it is now set and announced before the shot is chosen.
 the final pulse accented, so the beat can be found by ear.
 
 **Rotating the phone destroyed the match** — `configChanges` in the
-manifest. (Process death still loses it: there is no save yet.)
+manifest; and the process being killed no longer does either, now that the
+match is autosaved.
 
 ## Known issues / needs a real device
 
-**Nothing written in the last nine sessions has been compiled or run** —
-everything in `audio/`, `ui/settings/`, `BattingScreen`, `FieldingScreen`
-(incl. presets), the `PitchingScreen` rewrite, `MatchLines`,
-`ScorecardScreen`, `SelectionScreens`, `MatchFlowScreens`, `AiSituation`,
-`FieldPresets`, the `MatchStats` additions and the `MatchScreen`/
-`MatchSimulation` wiring. They were written against the APIs as read from
-the repo; expect a first-build pass to fix small things. Compiling is
-deliberately deferred until the code is feature-complete.
+**Nothing written in the last ten sessions has been compiled or run** —
+everything in `audio/`, `persistence/`, `ui/settings/`, `BattingScreen`,
+`FieldingScreen` (incl. presets), the `PitchingScreen` rewrite,
+`MatchLines`, `ScorecardScreen`, `SelectionScreens`, `MatchFlowScreens`,
+`AiSituation`, `FieldPresets`, the `MatchStats` additions and the
+`MatchScreen`/`MatchSimulation` wiring. They were written against the APIs
+as read from the repo; expect a first-build pass to fix small things.
+Compiling is deliberately deferred until the code is feature-complete —
+which it now is.
+
+**Saving and resuming — what to check and what to know:**
+- **Reflection is the risk.** Gson builds Kotlin data classes without
+  running their constructors, so a field missing from the JSON would be null
+  in a non-null property. That can't happen for a file this code wrote
+  itself under the same version, and `load()` checks the critical pieces,
+  but the whole save/load round trip has never run: a `Stadium`,
+  `TossResult` or `WeatherSnapshot` with an unexpected field type, or a
+  second sealed type hiding in `MatchState`'s tree, would only show up
+  then. **The first real test is: play a few balls, leave, resume, and
+  check the score, the batsmen, the bowler and the field are all as they
+  were.**
+- Turning on **release minification** later would rename the classes Gson
+  reads by field name, breaking every save (keep rules for
+  `com.cricketsim.logic`).
+- **Only one match can be saved.** Playing a new match's first ball
+  overwrites it. There is no Discard button: a save that somehow can't be
+  resumed can only be replaced by playing a new match (a corrupt file is
+  ignored, not fatal).
+- Resume always opens on the ordinary match screen. If the app was killed
+  mid-delivery, that ball simply hasn't happened, except that a batter's
+  footwork commit has already made the AI set its field for it, which
+  is harmless.
+- The saved match survives an app update only while `CURRENT_VERSION`
+  is unchanged.
 
 **Audio assets — status and what's left:**
 - **Getting the files into the repo is a one-time step for the repo
@@ -457,8 +529,6 @@ deliberately deferred until the code is feature-complete.
   choose a shot. The web announces them all too; consider summarising a
   big reset.
 
-**Leaving a match is final.** There is a confirmation now, but no save.
-
 **Game balance on Android is untested.** The AI now uses the web's
 situational formulas.
 
@@ -488,11 +558,14 @@ TalkBack checks specific to `FieldingScreen`:
 - Does `Back (discard changes)` get pressed by accident?
 
 TalkBack checks specific to the match screen, scorecard, selection
-screens, settings and the "play has stopped" screens:
+screens, settings, the first screen and the "play has stopped" screens:
+- Does the Resume saved match button read as ONE item with its summary
+  (teams, format, innings, score), and is it what TalkBack lands on first
+  after the heading?
 - The last-ball and score live regions live inside a Column that is
   removed while another screen is showing and re-added afterwards. Is
   their text spoken when they come back, and in the right order? The same
-  applies to the "Play resumes." notice.
+  applies to the "Play resumes." notice, and to a resumed match.
 - After a wicket the match screen is replaced by `NewBatsmanScreen`, so
   the wicket commentary line is not heard until you return. Is the
   heading enough?
@@ -505,23 +578,23 @@ screens, settings and the "play has stopped" screens:
 
 ## Not started
 
-Everything the web app does in a match is now in, with sound. Remaining:
+Everything the web app does is now in, with sound and saving. Remaining:
 
-1. **Persistence and a real quit/save flow** — `DataStore`/`Room` around
-   `MatchStateMachine`'s pure state transitions, a resume-match prompt and
-   save indicator, and Leave match saving instead of discarding. (Settings
-   already persist; the match does not.)
-2. **A build.** Nothing here has ever been compiled; the APK build
+1. **A build.** Nothing here has ever been compiled; the APK build
    (signing, emulator/device) is still untouched. Deliberately deferred
-   until feature-complete — which it now is, apart from persistence. A CI
-   workflow that builds a debug APK on every push would then surface
-   compile errors immediately (and, unlike the audio workflow, would need
-   the same one-time move into `.github/workflows`).
-3. **Finish shipping the audio** (see Known issues): move the workflow
+   until feature-complete — which it now is. A CI workflow that builds a
+   debug APK on every push would surface compile errors immediately (and,
+   like the audio workflow, would need the same one-time move into
+   `.github/workflows`, because of the token's restriction).
+2. **Finish shipping the audio** (see Known issues): move the workflow
    into place so the files get bundled, check the crowd recording's
    licence, and generate the 30 missing commentary clips on the web app.
-4. Real-device tuning of everything flagged above — audio latency and
-   loudness, TalkBack behaviour of every screen, game balance.
+3. Real-device tuning of everything flagged above — the save/resume round
+   trip, audio latency and loudness, TalkBack behaviour of every screen,
+   game balance.
+4. Small things deferred on purpose: a Discard saved match button, more
+   than one saved match, the field-change announcement summary, extracting
+   the duplicated timing logic.
 
 ## Verifying a UI screen
 

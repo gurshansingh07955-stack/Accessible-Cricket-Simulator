@@ -168,6 +168,8 @@ audio, and accessibility layers can't just be "translated".
   Both new `InningsData` fields have defaults, so nothing constructing
   an `InningsData` had to change. If the web source is ever re-synced
   wholesale, re-apply these two additions rather than reverting them.
+  (Both are part of what gets saved, so they are covered by
+  `MatchSaveStore.CURRENT_VERSION`; see Persistence below.)
 - **`app/src/main/java/com/cricketsim/logic/MatchState.kt`**
   (from `helpers/matchState.tsx`) — **the FULL match state machine**,
   replacing the earlier partial version. `createNewMatch`,
@@ -181,16 +183,14 @@ audio, and accessibility layers can't just be "translated".
   overs math, DLS revision, field-placement carry-over, bowler-rotation
   scoring) verified to match the web source exactly.
 
-  **Deliberately NOT ported** (documented in the file header —
-  see "Not ported" section below too): `saveMatch` / `loadMatch` /
-  `clearMatch` / `hasActiveMatch` and the old-save backfill logic in
-  `loadMatch`, since these are inherently backed by browser
-  `localStorage`. Android persistence (`DataStore` or `Room`) is a real
-  platform layer to design, not a translation — a future session needs
-  to wire loading/saving around the pure state-transition functions
-  that ARE here. `nanoid()` (for `MatchState.id`) is substituted with
-  `java.util.UUID`, the same pattern `CricketData.kt` already uses for
-  player ids.
+  **Deliberately NOT ported into this file** (its header still says so,
+  and is left as history): `saveMatch` / `loadMatch` / `clearMatch` /
+  `hasActiveMatch` and the old-save backfill logic in `loadMatch`, since
+  these are inherently backed by browser `localStorage`. They ARE now
+  implemented for Android, outside the logic layer, in
+  `persistence/MatchSaveStore.kt` — see the Persistence entry below.
+  `nanoid()` (for `MatchState.id`) is substituted with `java.util.UUID`,
+  the same pattern `CricketData.kt` already uses for player ids.
 
 - **`app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt`**
   (from `helpers/commentaryLibrary.tsx`) — the full AI voice duo
@@ -206,14 +206,35 @@ audio, and accessibility layers can't just be "translated".
   directly rather than a loose structural type, since its fields are an
   exact match. `audioUrl` values are the web's root-relative
   `/_cdn/commentary/<id>.mp3` paths, carried over verbatim; the Android
-  audio layer resolves them against `AudioAssets.BASE_URL` (see "Audio"
-  below).
+  audio layer resolves them against `AudioAssets.BASE_URL`, or plays a
+  bundled copy from `assets/commentary/` (see "Audio" below).
 
   **🎉 This completes the entire pure game-logic layer** — data,
   weather, bowling, batting, fielding, match engine, match state,
   stats, and commentary are all fully ported and verified against the
   web source. Everything else is UI, audio, and persistence — genuine
   platform-specific design work, not mechanical translation.
+
+- **Persistence** (`app/src/main/java/com/cricketsim/persistence/`) —
+  Android's answer to the web's `saveMatch` / `loadMatch` / `clearMatch`
+  / `hasActiveMatch` (browser `localStorage`):
+
+  | Web (`helpers/matchState.tsx`) | Android (`MatchSaveStore`) |
+  |---|---|
+  | `saveMatch(state)` | `save(snapshot)` — atomic write of one JSON file |
+  | `loadMatch()` | `load()` — never throws; unusable save = null |
+  | `clearMatch()` | `clear()` |
+  | `hasActiveMatch()` | `load() != null` (the first screen shows Resume) |
+  | `loadMatch`'s backfill of old saves | **not ported**: a `version` number discards incompatible saves instead |
+
+  The snapshot is the whole `MatchState` plus the stadium, toss, recent
+  commentary and innings-break flag that the match screen keeps itself.
+  It uses Gson reflection over the existing data classes, so **the logic
+  layer was not changed or annotated**; the one thing reflection can't do,
+  the `DeliveryLength` sealed interface inside `BallOutcome`, has an
+  explicit adapter. **Whenever any class in `MatchState`'s tree changes
+  shape, bump `MatchSaveStore.CURRENT_VERSION`.** Details, caveats and the
+  first test to run are in `UI_NOTES.md`.
 
 - **Audio and settings** (`app/src/main/java/com/cricketsim/audio/`) —
   built on Android's audio APIs, so a rewrite rather than a port; the
@@ -229,10 +250,17 @@ audio, and accessibility layers can't just be "translated".
 
   Points worth knowing before touching it (full detail is in
   `UI_NOTES.md` and each file's header):
-  - **Assets.** The web's recordings can't be bundled by this tooling.
-    `AudioAssets` looks in `res/raw`, then app storage, then downloads from
-    the web host; every sound has a synthesized stand-in so nothing is
-    silent. The AI commentary clips are streamed, not cached.
+  - **Assets.** The web's recordings can't be copied by the text-based
+    tooling used to build this. `AudioAssets` looks in `res/raw`, then app
+    storage, then downloads from the web host; every sound has a
+    synthesized stand-in so nothing is silent. `tools/fetch_audio.sh`
+    (run by a GitHub workflow, staged as `tools/fetch-audio.workflow.yml`
+    pending a one-time move into `.github/workflows`) downloads the
+    recordings into `res/raw` and the commentary clips into
+    `assets/commentary`, and `SoundEngine` plays a bundled clip before
+    streaming one. Verified against the live host: all 7 recordings exist;
+    160 of the 190 commentary clips the library references exist and the
+    other 30 were never generated on the web app.
   - **Deliberate differences from the web:** ducking is a count, not a
     flag (fixes a web bug where a short effect-duck could un-duck
     commentary); missing recordings get synthesized stand-ins (the web is
@@ -245,23 +273,24 @@ audio, and accessibility layers can't just be "translated".
 - Android/Gradle project skeleton (Kotlin + Jetpack Compose), with a
   placeholder `MainActivity` that just proves the logic layer loads
   correctly (shows team/player counts) — no real gameplay UI yet.
+  (Long since superseded: see `UI_NOTES.md`.)
 
 ## What's next
 
 The pure logic layer (everything under `logic/`) is done, the UI is
-built (see `UI_NOTES.md`) and so is the audio. What remains:
+built (see `UI_NOTES.md`), and so are audio, settings and
+saving/resuming a match. What remains:
 
-1. **Persistence** — design an Android save/resume layer (`DataStore`
-   or `Room`) and wire it around `MatchStateMachine`'s existing pure
-   state-transition functions (`createNewMatch`, `applyBallOutcome`,
-   etc.), replacing the omitted `saveMatch`/`loadMatch`/`clearMatch`/
-   `hasActiveMatch`. (Settings already persist, in `SharedPreferences`.)
-2. **Shipping the audio assets** — the seven recordings into
-   `res/raw`, a check of the crowd recording's licence, and optionally
-   bundling the commentary clips for fully offline voice commentary.
-3. **The actual APK build** — hasn't been attempted at all yet: signing,
+1. **The actual APK build** — hasn't been attempted at all yet: signing,
    testing on a device/emulator, and everything between "code compiles"
-   and "installable app".
+   and "installable app". Nothing written in the last ten sessions has
+   been compiled, so expect a first-build pass to fix small things.
+2. **Finishing the audio shipping** — moving the staged workflow into
+   `.github/workflows` so the recordings and commentary clips get bundled,
+   a check of the crowd recording's licence, and generating the 30
+   commentary clips that don't exist yet on the web app.
+3. **Real-device testing** of the save/resume round trip, audio timing and
+   loudness, and every screen with TalkBack.
 
 ## Not ported, and NOT a mechanical translation when it happens
 
@@ -279,10 +308,6 @@ built (see `UI_NOTES.md`) and so is the audio. What remains:
   per-delivery field announcement) is part of the UI work, not the logic
   port — see `UI_NOTES.md`, `MatchSimulation.kt`, `AiSituation.kt` and
   `MatchAudioDirector.kt`.
-- **Persistence** (`helpers/matchState.tsx`'s `saveMatch`/`loadMatch`,
-  currently backed by browser `localStorage`) — Android equivalent is
-  likely `DataStore` or a small `Room` database once this is tackled.
-  See the `MatchState.kt` entry above for exactly what was skipped.
 
 ## Verifying a ported file
 
