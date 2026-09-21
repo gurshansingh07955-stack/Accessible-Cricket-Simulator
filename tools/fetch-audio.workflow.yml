@@ -1,0 +1,63 @@
+# MOVE THIS FILE to .github/workflows/fetch-audio.yml to activate it.
+#
+# It is stored here, in tools/, only because the access token used to write
+# to this repo isn't allowed to create files inside .github/workflows. On
+# github.com, open this file, tap the pencil (edit) icon, change the file name
+# at the top to  .github/workflows/fetch-audio.yml  and commit. Because that
+# commit touches this workflow, it runs by itself straight away.
+
+name: Fetch audio into the app
+
+# Downloads every sound recording and AI commentary clip from the web app's
+# hosting into the Android project (see tools/fetch_audio.sh for what goes
+# where), then commits them to main with the repository's own GITHUB_TOKEN.
+#
+# It runs automatically when this file or the script changes, and can be run
+# by hand any time: Actions tab -> "Fetch audio into the app" -> Run workflow.
+# Re-run it after more commentary clips have been generated on the web app;
+# only files that are missing get downloaded, and a run with nothing new
+# commits nothing.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/fetch-audio.yml"
+      - "tools/fetch_audio.sh"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-audio
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Download the recordings and commentary clips
+        run: bash tools/fetch_audio.sh
+
+      - name: Commit anything new
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/res/raw app/src/main/assets/commentary tools/audio_fetch_report.txt
+          if git diff --cached --quiet; then
+            echo "Nothing new to commit."
+            exit 0
+          fi
+          git commit -m "Add audio recordings and commentary clips fetched from the web app"
+          # main may have moved while this ran; rebase and retry rather than fail.
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Could not push after 3 attempts." >&2
+          exit 1

@@ -74,9 +74,9 @@ team -> playing XI -> toss), all real screens:
 `ui/settings/`) — a rewrite around Android's audio APIs of the web's
 `audioManager.tsx`, `commentaryVoice.tsx` and `gameSettings.tsx`, plus
 the audio half of `match.tsx`'s per-ball logic. Design constraint that
-shaped all of it: **binary audio can't be bundled from this repo's
-tooling**, and the web's real recordings live on the web app's own
-hosting. So:
+shaped all of it: **binary audio can't be copied into this repo with
+the text-based tooling used to build it**, and the web's real recordings
+live on the web app's own hosting. So:
 - **`Synth.kt`** — every sound the web *synthesizes* is synthesized here
   too, as generated 16-bit PCM: the timing tick (with its accented final
   pulse), bat hit, boundary arpeggio, wicket sweep, delivery whoosh and
@@ -87,10 +87,28 @@ hosting. So:
   is never silent (the web is silent for a missing cheer).
 - **`AudioAssets.kt`** — the seven recordings (crowd bed, small cheer, big
   roar, coin flip, bat hit, rain, thunder) are looked for in this order:
-  `res/raw/<name>` in the APK (**drop the files in to ship them** —
-  names below), a previous download in app storage, then a download from
-  the web host (`BASE_URL` + the web's path). Reachability of the host is
-  **unverified**.
+  `res/raw/<name>.mp3` in the APK, a previous download in app storage,
+  then a download from the web host. **Verified:** all seven answer HTTP
+  200 (`audio/mpeg`) on the web app's public host.
+- **Bundling the audio: `tools/fetch_audio.sh`.** The recordings and the
+  commentary clips are binary, so instead of copying them this repo has a
+  script that downloads them from the web host into
+  `app/src/main/res/raw/` (the 7 recordings, named `crowd_ambience`,
+  `small_crowd_cheer`, `big_crowd_roar`, `coin_flip`, `bat_hit`,
+  `rain_ambience`, `thunder_crack`) and `app/src/main/assets/commentary/`
+  (the clips). It reads the clip list from `CommentaryLibrary.kt`'s
+  `audioUrl` values, so it can't drift from the code; it is safe to re-run
+  (existing files are kept, so clips generated later are picked up); and
+  it writes `tools/audio_fetch_report.txt` (no timestamps, so a run with
+  nothing new commits nothing). It is meant to be run by a GitHub Actions
+  workflow on GitHub's own servers, which commits the result with the
+  repo's own token — no personal token needed. **The workflow file is
+  staged as `tools/fetch-audio.workflow.yml`** because the access token
+  used to write this repo can't create files under `.github/workflows`
+  (GitHub answers 403); moving it there once, on github.com, activates it
+  and it then runs itself. It can also be run by hand:
+  `bash tools/fetch_audio.sh`. **If `tools/audio_fetch_report.txt` exists
+  in the repo, the files have been fetched.**
 - **`SoundEngine.kt`** — recordings through `SoundPool`, synthesized
   sounds through `AudioTrack`, loops (crowd, rain) through `MediaPlayer`
   or a looping `AudioTrack`. Outcome sounds follow the web's mapping:
@@ -103,13 +121,20 @@ hosting. So:
   for quiet, not one flag — on the web a short effect-duck ending could
   un-duck the crowd in the middle of a commentary sequence. Rain plays a
   thunder crack and a looping bed and ducks the crowd while it runs.
-  Commentary clips are streamed from the web host and queued so a
-  wicket's comment, an over-complete comment and an innings-break comment
-  play as one conversation, ducking the crowd for the whole sequence; a
-  clip that can't be fetched is skipped (a watchdog stops a hung one
-  blocking the queue). **There is deliberately no text-to-speech fallback
-  for the AI clips** — the same line is already on screen and read by
-  TalkBack, and a second synthetic voice would talk over it.
+  Commentary clips are queued so a wicket's comment, an over-complete
+  comment and an innings-break comment play as one conversation, ducking
+  the crowd for the whole sequence. **Each clip plays from the copy
+  bundled in `assets/commentary/` when there is one (instant, offline) and
+  is otherwise streamed from the web host**; a clip that can't be played
+  either way is skipped (a watchdog stops a hung one blocking the queue).
+  **Of the 190 clips the library references, 160 exist on the web app
+  (about 9.3 MB); the other 30 were never generated there** — partnership
+  150/200, bowler 3/5/10-wicket hauls, and every hat-trick line — so those
+  moments are silent, exactly as on the web, until they are generated
+  there and the fetch script is re-run. **There is deliberately no
+  text-to-speech fallback for the AI clips** — the same line is already on
+  screen and read by TalkBack, and a second synthetic voice would talk
+  over it.
 - **The timing tick.** Every pulse of both rhythm minigames (pitching's 4,
   batting's 5) is now a buzz *and* an audible tick, with the FINAL pulse
   accented (higher, louder) — exactly the web's design. This fixes the
@@ -376,7 +401,7 @@ manifest. (Process death still loses it: there is no save yet.)
 
 ## Known issues / needs a real device
 
-**Nothing written in the last eight sessions has been compiled or run** —
+**Nothing written in the last nine sessions has been compiled or run** —
 everything in `audio/`, `ui/settings/`, `BattingScreen`, `FieldingScreen`
 (incl. presets), the `PitchingScreen` rewrite, `MatchLines`,
 `ScorecardScreen`, `SelectionScreens`, `MatchFlowScreens`, `AiSituation`,
@@ -385,19 +410,26 @@ everything in `audio/`, `ui/settings/`, `BattingScreen`, `FieldingScreen`
 the repo; expect a first-build pass to fix small things. Compiling is
 deliberately deferred until the code is feature-complete.
 
-**Audio assets — do these before shipping an APK:**
-- **Bundle the recordings.** Download the seven files from the web app and
-  drop them into `app/src/main/res/raw/` named exactly (lowercase, with
-  their extension): `crowd_ambience`, `small_crowd_cheer`,
-  `big_crowd_roar`, `coin_flip`, `bat_hit`, `rain_ambience`,
-  `thunder_crack`. Until then they download from the web host on first run
-  (unverified that the paths resolve), else synthesized stand-ins play.
-- **Check the crowd recording's licence.** Its file name suggests a
-  third-party stock source.
-- **The AI commentary clips are streamed**, not bundled (~100 of them), so
-  they need a connection and depend on the web app staying up. Some may
-  not exist: the web source lists partnership 150/200, bowler hauls and
-  hat-tricks as pending generation. A missing clip is skipped.
+**Audio assets — status and what's left:**
+- **Getting the files into the repo is a one-time step for the repo
+  owner.** `tools/fetch_audio.sh` is committed and works; the workflow
+  that runs it on GitHub is staged as `tools/fetch-audio.workflow.yml`
+  and must be moved to `.github/workflows/fetch-audio.yml` on github.com
+  (the token used to write this repo is refused write access to that
+  folder). It then runs itself and commits the files. Check for
+  `tools/audio_fetch_report.txt` to see whether it has happened. Until
+  then the recordings download to the phone on first run and the clips
+  stream, so nothing is broken — it just needs a connection.
+- **Check the crowd recording's licence** before it is committed and
+  shipped: its file name suggests a third-party stock source, and
+  bundling puts it in this repo's history and in every APK.
+- **30 commentary clips don't exist anywhere yet** (partnership 150/200,
+  bowler 3/5/10-wicket hauls, every hat-trick line). The web app has an
+  endpoint that generates clips (`commentary_tts_generate`); generating
+  them there, then re-running the fetch, is what fills the gap. Until
+  then those moments have no voice, as on the web.
+- Bundled audio adds about 10 MB to the APK (1.0 MB recordings, 9.3 MB
+  clips), and is committed to git history permanently.
 
 **Audio device checks:**
 - **Commentary vs TalkBack.** The AI voice clips play at about the same
@@ -414,8 +446,8 @@ deliberately deferred until the code is feature-complete.
 - **Loudness.** The crowd gain is the web's (0.09-0.2, times the crowd
   volume and a 0.5 master), so it is quiet by design; the synthesized bed
   is normalised to the same scale. It may be too quiet on a phone speaker.
-- The first ball or two may use synthesized stand-ins if the recordings
-  are still downloading.
+- Until the recordings are bundled, the first ball or two may use
+  synthesized stand-ins while they download.
 - Does `MediaPlayer` speed change (crowd tension) behave, on a looping
   player, without restarting it?
 - With TalkBack off, does the spoken commentary read once, cleanly? With
@@ -483,10 +515,11 @@ Everything the web app does in a match is now in, with sound. Remaining:
    (signing, emulator/device) is still untouched. Deliberately deferred
    until feature-complete — which it now is, apart from persistence. A CI
    workflow that builds a debug APK on every push would then surface
-   compile errors immediately.
-3. **Ship the audio assets** (see Known issues): the seven recordings into
-   `res/raw`, and the licence check. Optionally bundle the commentary
-   clips too, for fully offline voice commentary.
+   compile errors immediately (and, unlike the audio workflow, would need
+   the same one-time move into `.github/workflows`).
+3. **Finish shipping the audio** (see Known issues): move the workflow
+   into place so the files get bundled, check the crowd recording's
+   licence, and generate the 30 missing commentary clips on the web app.
 4. Real-device tuning of everything flagged above — audio latency and
    loudness, TalkBack behaviour of every screen, game balance.
 
