@@ -206,8 +206,8 @@ audio, and accessibility layers can't just be "translated".
   directly rather than a loose structural type, since its fields are an
   exact match. `audioUrl` values are the web's root-relative
   `/_cdn/commentary/<id>.mp3` paths, carried over verbatim; the Android
-  audio layer resolves them against `AudioAssets.BASE_URL`, or plays a
-  bundled copy from `assets/commentary/` (see "Audio" below).
+  audio layer plays the bundled copy from `assets/commentary/`, or
+  streams from `AudioAssets.BASE_URL` (see "Audio" below).
 
   **🎉 This completes the entire pure game-logic layer** — data,
   weather, bowling, batting, fielding, match engine, match state,
@@ -250,17 +250,20 @@ audio, and accessibility layers can't just be "translated".
 
   Points worth knowing before touching it (full detail is in
   `UI_NOTES.md` and each file's header):
-  - **Assets.** The web's recordings can't be copied by the text-based
-    tooling used to build this. `AudioAssets` looks in `res/raw`, then app
-    storage, then downloads from the web host; every sound has a
-    synthesized stand-in so nothing is silent. `tools/fetch_audio.sh`
-    (run by a GitHub workflow, staged as `tools/fetch-audio.workflow.yml`
-    pending a one-time move into `.github/workflows`) downloads the
-    recordings into `res/raw` and the commentary clips into
-    `assets/commentary`, and `SoundEngine` plays a bundled clip before
-    streaming one. Verified against the live host: all 7 recordings exist;
-    160 of the 190 commentary clips the library references exist and the
-    other 30 were never generated on the web app.
+  - **Assets — bundled.** The web's recordings can't be copied by the
+    text-based tooling used to build this, so `tools/fetch_audio.sh` (run
+    by the `Fetch audio into the app` GitHub Actions workflow in
+    `.github/workflows/fetch-audio.yml`) downloads them from the web host
+    and commits them: the 7 recordings into `res/raw`, the commentary
+    clips into `assets/commentary`. **Done: its first run committed 167
+    files, every one checked against the host's own file sizes.**
+    `AudioAssets` still looks in `res/raw`, then app storage, then
+    downloads, and every sound has a synthesized stand-in, so nothing is
+    silent if a file is ever missing; `SoundEngine` plays a bundled clip
+    before streaming one. Verified against the live host: all 7
+    recordings exist; 160 of the 190 commentary clips the library
+    references exist and are bundled; the other 30 were never generated on
+    the web app (listed in `tools/audio_fetch_report.txt`).
   - **Deliberate differences from the web:** ducking is a count, not a
     flag (fixes a web bug where a short effect-duck could un-duck
     commentary); missing recordings get synthesized stand-ins (the web is
@@ -278,17 +281,16 @@ audio, and accessibility layers can't just be "translated".
 ## What's next
 
 The pure logic layer (everything under `logic/`) is done, the UI is
-built (see `UI_NOTES.md`), and so are audio, settings and
+built (see `UI_NOTES.md`), and so are audio (bundled), settings and
 saving/resuming a match. What remains:
 
 1. **The actual APK build** — hasn't been attempted at all yet: signing,
    testing on a device/emulator, and everything between "code compiles"
-   and "installable app". Nothing written in the last ten sessions has
+   and "installable app". Nothing written in the last eleven sessions has
    been compiled, so expect a first-build pass to fix small things.
-2. **Finishing the audio shipping** — moving the staged workflow into
-   `.github/workflows` so the recordings and commentary clips get bundled,
-   a check of the crowd recording's licence, and generating the 30
-   commentary clips that don't exist yet on the web app.
+2. **Finishing the audio** — a check of the crowd recording's licence
+   (it is now in the repo), and generating the 30 commentary clips that
+   don't exist yet on the web app, then re-running the fetch workflow.
 3. **Real-device testing** of the save/resume round trip, audio timing and
    loudness, and every screen with TalkBack.
 
