@@ -1,4 +1,4 @@
-# MOVE THIS FILE to .github/workflows/fetch-audio.yml to activate it.
+githubworkflowsfetch-audio.yml.# MOVE THIS FILE to .github/workflows/fetch-audio.yml to activate it.
 #
 # It is stored here, in tools/, only because the access token used to write
 # to this repo isn't allowed to create files inside .github/workflows. On
