@@ -15,13 +15,19 @@ import com.cricketsim.persistence.MatchSnapshot
  * nav graph for now.
  */
 sealed interface Screen {
+    /** The front door: Play match, Resume match, Settings, About. */
+    object Home : Screen
+
+    /** What this game is and how it is played. */
+    object About : Screen
+
+    /** Step 1 of setting up a NEW match (reached from Home's Play match). */
     object FormatSelection : Screen
 
     /**
-     * The settings page, opened from the first screen. `returnTo` is where
-     * Back goes. (Inside a match, settings is an overlay on the match
-     * screen instead — leaving the match screen would take the live match
-     * with it.)
+     * The settings page, opened from Home. `returnTo` is where Back goes.
+     * (Inside a match, settings is an overlay on the match screen instead —
+     * leaving the match screen would take the live match with it.)
      */
     data class Settings(val returnTo: Screen) : Screen
 

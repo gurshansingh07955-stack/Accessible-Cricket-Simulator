@@ -30,12 +30,11 @@ import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.MatchFormat
 
 /**
- * Step 1 of the pre-match setup flow (format -> stadium -> teams ->
- * playing XI -> toss, matching pages/play-match.tsx's step order in
- * the web app), and the app's first screen. This is the first real
- * gameplay screen in the Android port and establishes the accessibility
- * approach later setup/match screens should follow — see UI_NOTES.md for
- * the full rationale, but in short:
+ * Step 1 of setting up a new match (format -> stadium -> teams -> playing
+ * XI -> toss, matching pages/play-match.tsx's step order in the web app),
+ * reached from Home's Play match. This screen established the
+ * accessibility approach later setup/match screens follow — see
+ * UI_NOTES.md for the full rationale, but in short:
  *
  * - A single vertical LazyColumn of options, one per screen-reader
  *   swipe, mirroring the web app's "single-swipe, list-based
@@ -59,24 +58,12 @@ import com.cricketsim.logic.MatchFormat
  *   modifier — tapping anywhere in the row (not just the small radio
  *   circle) selects it, which matters for anyone using switch access
  *   or has limited fine motor precision, not just screen-reader users.
- * - RESUME goes FIRST, straight after the heading, and only appears when
- *   there is a saved match. It is one button that reads as one item
- *   ("Resume saved match" plus a one-line description of the match: the
- *   teams, format, innings and score), so a screen-reader user knows what
- *   they are resuming before committing, and continuing a match in
- *   progress is the fastest thing on the screen rather than something to
- *   swipe past the format list to find.
- * - The Settings button sits AFTER Continue so it never competes with the
- *   main path through the list, but is still the last thing on the
- *   screen rather than buried.
+ * - Continue then Back, like every later setup screen. (Resume and
+ *   Settings used to sit here, when this was the app's first screen; they
+ *   now live on Home, which is where the app opens.)
  */
 @Composable
-fun FormatSelectionScreen(
-    onFormatSelected: (MatchFormat) -> Unit,
-    onOpenSettings: () -> Unit = {},
-    resumeSummary: String? = null,
-    onResume: () -> Unit = {}
-) {
+fun FormatSelectionScreen(onFormatSelected: (MatchFormat) -> Unit, onBack: () -> Unit) {
     var selected by remember { mutableStateOf<MatchFormat?>(null) }
 
     Column(
@@ -90,16 +77,6 @@ fun FormatSelectionScreen(
             modifier = Modifier.semantics { heading() }
         )
         Spacer(modifier = Modifier.height(16.dp))
-
-        if (resumeSummary != null) {
-            Button(onClick = onResume, modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    Text("Resume saved match", style = MaterialTheme.typography.titleMedium)
-                    Text(resumeSummary, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
 
         LazyColumn(
             modifier = Modifier
@@ -124,8 +101,8 @@ fun FormatSelectionScreen(
             Text("Continue")
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-            Text("Settings")
+        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text("Back")
         }
     }
 }
