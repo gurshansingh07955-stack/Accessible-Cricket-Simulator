@@ -1,4 +1,4 @@
-githubworkflowsfetch-audio.yml.#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Downloads every audio file the game uses from the web app's hosting and
 # puts it where the Android app looks for it:
 #
