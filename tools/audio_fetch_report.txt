@@ -1,0 +1,36 @@
+Audio fetch report
+Source: https://5764.floot.app
+Sound recordings expected: 7
+Commentary clips referenced by CommentaryLibrary.kt: 190
+Files present after this run: 167
+Not available on the web app (skipped): 30
+  bowler10wkts_1_calm.mp3
+  bowler10wkts_1_excited.mp3
+  bowler10wkts_2_calm.mp3
+  bowler10wkts_2_excited.mp3
+  bowler3wkts_1_calm.mp3
+  bowler3wkts_1_excited.mp3
+  bowler3wkts_2_calm.mp3
+  bowler3wkts_2_excited.mp3
+  bowler5wkts_1_calm.mp3
+  bowler5wkts_1_excited.mp3
+  bowler5wkts_2_calm.mp3
+  bowler5wkts_2_excited.mp3
+  doublehattrick_1_calm.mp3
+  doublehattrick_1_excited.mp3
+  doublehattrick_2_calm.mp3
+  doublehattrick_2_excited.mp3
+  hattrick_1_calm.mp3
+  hattrick_1_excited.mp3
+  hattrick_2_calm.mp3
+  hattrick_2_excited.mp3
+  onhattrick_1_calm.mp3
+  onhattrick_1_excited.mp3
+  onhattrick_2_calm.mp3
+  onhattrick_2_excited.mp3
+  partnership150_2_calm.mp3
+  partnership150_2_excited.mp3
+  partnership200_1_calm.mp3
+  partnership200_1_excited.mp3
+  partnership200_2_calm.mp3
+  partnership200_2_excited.mp3
