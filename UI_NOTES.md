@@ -137,25 +137,27 @@ live on the web app's own hosting. So:
   `res/raw/<name>.mp3` in the APK, a previous download in app storage,
   then a download from the web host. **Verified:** all seven answer HTTP
   200 (`audio/mpeg`) on the web app's public host.
-- **Bundling the audio: `tools/fetch_audio.sh`.** The recordings and the
-  commentary clips are binary, so instead of copying them this repo has a
-  script that downloads them from the web host into
-  `app/src/main/res/raw/` (the 7 recordings, named `crowd_ambience`,
-  `small_crowd_cheer`, `big_crowd_roar`, `coin_flip`, `bat_hit`,
-  `rain_ambience`, `thunder_crack`) and `app/src/main/assets/commentary/`
-  (the clips). It reads the clip list from `CommentaryLibrary.kt`'s
-  `audioUrl` values, so it can't drift from the code; it is safe to re-run
-  (existing files are kept, so clips generated later are picked up); and
-  it writes `tools/audio_fetch_report.txt` (no timestamps, so a run with
-  nothing new commits nothing). It is meant to be run by a GitHub Actions
-  workflow on GitHub's own servers, which commits the result with the
-  repo's own token — no personal token needed. **The workflow file is
-  staged as `tools/fetch-audio.workflow.yml`** because the access token
-  used to write this repo can't create files under `.github/workflows`
-  (GitHub answers 403); moving it there once, on github.com, activates it
-  and it then runs itself. It can also be run by hand:
-  `bash tools/fetch_audio.sh`. **If `tools/audio_fetch_report.txt` exists
-  in the repo, the files have been fetched.**
+- **The audio is now bundled in the repo — DONE.** The recordings and
+  clips are binary, so they could not be copied with the text-based
+  tooling; instead `tools/fetch_audio.sh` downloads them from the web
+  host, run by the `Fetch audio into the app` GitHub Actions workflow
+  (`.github/workflows/fetch-audio.yml`) on GitHub's own servers, which
+  commits the result with the repo's own token — no personal token needed.
+  **Its first run succeeded and committed 167 files**: the 7 recordings
+  into `app/src/main/res/raw/` (named `crowd_ambience`, `small_crowd_cheer`,
+  `big_crowd_roar`, `coin_flip`, `bat_hit`, `rain_ambience`,
+  `thunder_crack`) and the 160 commentary clips that exist into
+  `app/src/main/assets/commentary/`. **Every committed file was checked
+  against the web host's own file size (160 of 160 and 7 of 7 identical)**
+  and a sample begins with a valid MP3 (`ID3`) header, so nothing was
+  truncated or corrupted. The clip list is read from `CommentaryLibrary.kt`'s
+  `audioUrl` values so it can't drift from the code; the run's summary is
+  `tools/audio_fetch_report.txt`. It is safe to re-run (Actions tab -> Run
+  workflow): only missing files are fetched, and a run with nothing new
+  commits nothing — which is how the 30 not-yet-generated clips get picked
+  up once they exist. (The workflow file had to be created through
+  github.com: the access token used to write this repo is refused write
+  access to `.github/workflows`, GitHub answering 403.)
 - **`SoundEngine.kt`** — recordings through `SoundPool`, synthesized
   sounds through `AudioTrack`, loops (crowd, rain) through `MediaPlayer`
   or a looping `AudioTrack`. Outcome sounds follow the web's mapping:
@@ -171,14 +173,14 @@ live on the web app's own hosting. So:
   Commentary clips are queued so a wicket's comment, an over-complete
   comment and an innings-break comment play as one conversation, ducking
   the crowd for the whole sequence. **Each clip plays from the copy
-  bundled in `assets/commentary/` when there is one (instant, offline) and
-  is otherwise streamed from the web host**; a clip that can't be played
-  either way is skipped (a watchdog stops a hung one blocking the queue).
-  **Of the 190 clips the library references, 160 exist on the web app
-  (about 9.3 MB); the other 30 were never generated there** — partnership
+  bundled in `assets/commentary/` (instant, offline)** and would otherwise
+  be streamed from the web host; a clip that can't be played either way is
+  skipped (a watchdog stops a hung one blocking the queue). **Of the 190
+  clips the library references, 160 exist on the web app (about 9.3 MB) and
+  are bundled; the other 30 were never generated there** — partnership
   150/200, bowler 3/5/10-wicket hauls, and every hat-trick line — so those
   moments are silent, exactly as on the web, until they are generated
-  there and the fetch script is re-run. **There is deliberately no
+  there and the workflow is re-run. **There is deliberately no
   text-to-speech fallback for the AI clips** — the same line is already on
   screen and read by TalkBack, and a second synthetic voice would talk
   over it.
@@ -223,11 +225,11 @@ live on the web app's own hosting. So:
   match** (a route would leave the match screen and take the live match
   with it). Difficulty is here because the web has it and the match screen
   had it hardcoded to Medium.
-- **Manifest / build.** Adds `INTERNET` (downloading recordings, streaming
-  commentary), `VIBRATE`, a `<queries>` entry so text-to-speech works on
-  Android 11+, and `configChanges` so rotating the phone no longer
-  recreates the activity. `kotlinx-coroutines-android` and `gson` are
-  explicit dependencies.
+- **Manifest / build.** Adds `INTERNET` (streaming a commentary clip that
+  isn't bundled, downloading a recording that isn't), `VIBRATE`, a
+  `<queries>` entry so text-to-speech works on Android 11+, and
+  `configChanges` so rotating the phone no longer recreates the activity.
+  `kotlinx-coroutines-android` and `gson` are explicit dependencies.
 
 **The match screen has a first slice** (`app/src/main/java/com/cricketsim/ui/match/`),
 proving the whole logic layer works end to end inside the real UI —
@@ -447,7 +449,7 @@ match is autosaved.
 
 ## Known issues / needs a real device
 
-**Nothing written in the last ten sessions has been compiled or run** —
+**Nothing written in the last eleven sessions has been compiled or run** —
 everything in `audio/`, `persistence/`, `ui/settings/`, `BattingScreen`,
 `FieldingScreen` (incl. presets), the `PitchingScreen` rewrite,
 `MatchLines`, `ScorecardScreen`, `SelectionScreens`, `MatchFlowScreens`,
@@ -483,24 +485,22 @@ which it now is.
   is unchanged.
 
 **Audio assets — status and what's left:**
-- **Getting the files into the repo is a one-time step for the repo
-  owner.** `tools/fetch_audio.sh` is committed and works; the workflow
-  that runs it on GitHub is staged as `tools/fetch-audio.workflow.yml`
-  and must be moved to `.github/workflows/fetch-audio.yml` on github.com
-  (the token used to write this repo is refused write access to that
-  folder). It then runs itself and commits the files. Check for
-  `tools/audio_fetch_report.txt` to see whether it has happened. Until
-  then the recordings download to the phone on first run and the clips
-  stream, so nothing is broken — it just needs a connection.
-- **Check the crowd recording's licence** before it is committed and
-  shipped: its file name suggests a third-party stock source, and
-  bundling puts it in this repo's history and in every APK.
+- **Bundled and verified** (see "Done"): 7 recordings and 160 commentary
+  clips are in the repo and will ship inside the APK, so audio works
+  offline. Nothing is left to do to *get* them there.
+- **Check the crowd recording's licence.** It is now committed to this
+  repo (`res/raw/crowd_ambience.mp3`) and will be in every APK, and its
+  original file name suggests a third-party stock source. If the licence
+  doesn't allow redistribution, delete the file: the game falls back to
+  the synthesized crowd bed, and the workflow must then be stopped from
+  re-adding it (remove its line from `tools/fetch_audio.sh`).
 - **30 commentary clips don't exist anywhere yet** (partnership 150/200,
-  bowler 3/5/10-wicket hauls, every hat-trick line). The web app has an
-  endpoint that generates clips (`commentary_tts_generate`); generating
-  them there, then re-running the fetch, is what fills the gap. Until
-  then those moments have no voice, as on the web.
-- Bundled audio adds about 10 MB to the APK (1.0 MB recordings, 9.3 MB
+  bowler 3/5/10-wicket hauls, every hat-trick line — the exact list is in
+  `tools/audio_fetch_report.txt`). The web app has an endpoint that
+  generates clips (`commentary_tts_generate`); generating them there, then
+  re-running the workflow, bundles them. Until then those moments have no
+  voice, as on the web.
+- Bundled audio adds about 10.4 MB to the APK (1.0 MB recordings, 9.3 MB
   clips), and is committed to git history permanently.
 
 **Audio device checks:**
@@ -518,8 +518,6 @@ which it now is.
 - **Loudness.** The crowd gain is the web's (0.09-0.2, times the crowd
   volume and a 0.5 master), so it is quiet by design; the synthesized bed
   is normalised to the same scale. It may be too quiet on a phone speaker.
-- Until the recordings are bundled, the first ball or two may use
-  synthesized stand-ins while they download.
 - Does `MediaPlayer` speed change (crowd tension) behave, on a looping
   player, without restarting it?
 - With TalkBack off, does the spoken commentary read once, cleanly? With
@@ -578,17 +576,24 @@ screens, settings, the first screen and the "play has stopped" screens:
 
 ## Not started
 
-Everything the web app does is now in, with sound and saving. Remaining:
+Everything the web app does is now in, with sound and saving, and the
+audio is bundled. Remaining:
 
 1. **A build.** Nothing here has ever been compiled; the APK build
    (signing, emulator/device) is still untouched. Deliberately deferred
-   until feature-complete — which it now is. A CI workflow that builds a
-   debug APK on every push would surface compile errors immediately (and,
-   like the audio workflow, would need the same one-time move into
-   `.github/workflows`, because of the token's restriction).
-2. **Finish shipping the audio** (see Known issues): move the workflow
-   into place so the files get bundled, check the crowd recording's
-   licence, and generate the 30 missing commentary clips on the web app.
+   until feature-complete — which it now is. Plan: a GitHub workflow that
+   runs `./gradlew assembleDebug` on every push. Because the access token
+   can't create workflow files, it has to be created through github.com,
+   which is easy with a link that pre-fills the file name and contents
+   (the same way the audio workflow was created). To let compile errors be
+   read WITHOUT access to Actions logs (which need authentication), have the
+   workflow commit the compiler's output to a report file in the repo
+   (like `tools/audio_fetch_report.txt`), which can then be read like any
+   other file. The status of a run, but not its logs, can be read from
+   GitHub's public API.
+2. **Finish the audio** (see Known issues): check the crowd recording's
+   licence, and generate the 30 missing commentary clips on the web app,
+   then re-run the fetch workflow.
 3. Real-device tuning of everything flagged above — the save/resume round
    trip, audio latency and loudness, TalkBack behaviour of every screen,
    game balance.
