@@ -1,0 +1,31 @@
+name: Fetch audio into the app
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/fetch-audio.yml"
+      - "tools/fetch_audio.sh"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the recordings and commentary clips
+        run: bash tools/fetch_audio.sh
+      - name: Commit anything new
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/res/raw app/src/main/assets/commentary tools/audio_fetch_report.txt
+          if git diff --cached --quiet; then echo "Nothing new to commit."; exit 0; fi
+          git commit -m "Add audio recordings and commentary clips fetched from the web app"
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            sleep 5
+          done
+          exit 1
