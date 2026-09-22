@@ -9,17 +9,55 @@ android {
 
     defaultConfig {
         applicationId = "com.cricketsim"
+        // 24 = Android 7.0 (Nougat). This already covers the requirement of
+        // "Android 9 at minimum, 8 if possible" — 7.0 is lower than both, so
+        // nothing needed to change here. There is no native (NDK/C++) code
+        // anywhere in this app — no bundled .so libraries, nothing
+        // architecture-specific — so a single APK built from this module
+        // already runs unmodified on 32-bit devices (armeabi-v7a, x86)
+        // exactly as it does on 64-bit ones. Nothing here needs an
+        // `ndk { abiFilters }` or a `splits { abi }` block, because there is
+        // nothing to filter or split.
         minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0-logic-port"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The key/IV that decrypt the bundled audio pack (see
+        // audio/AudioPack.kt and tools/fetch_audio.sh) — read into
+        // BuildConfig so a plain build works with zero setup, using the
+        // same constant checked into fetch_audio.sh. Passing
+        // -PaudioPackKeyHex=... -PaudioPackIvHex=... (from a CI secret
+        // that is NEVER committed) overrides it. See AudioPack.kt's doc
+        // comment for why that is the meaningfully more secure option.
+        buildConfigField(
+            "String", "AUDIO_PACK_KEY_HEX",
+            "\"${project.findProperty("audioPackKeyHex") ?: "df49894bbeb5bc80ee17563f080390e2eae82814a6d58bcf8315519abc24ec66"}\""
+        )
+        buildConfigField(
+            "String", "AUDIO_PACK_IV_HEX",
+            "\"${project.findProperty("audioPackIvHex") ?: "48b415240d5285efe644906d4b4a3b2a"}\""
+        )
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isDebuggable = false
+            // Obfuscates and shrinks the compiled code, and removes unused
+            // resources. Two things that would otherwise break silently:
+            // - Gson reads the persistence data classes by field NAME to
+            //   save/load a match; proguard-rules.pro keeps those classes
+            //   exactly as compiled, or every saved match would fail to
+            //   read back after this is turned on.
+            // - R.raw.audio_pack is only ever looked up dynamically
+            //   (context.resources.getIdentifier("audio_pack", "raw", ...)),
+            //   which the resource shrinker cannot see as a "use"; without
+            //   res/raw/keep.xml explicitly protecting it, shrinkResources
+            //   would delete the entire bundled audio pack from the APK.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -38,6 +76,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -53,10 +92,8 @@ dependencies {
     // engine relies on Dispatchers.Main and coroutine timers.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     // Saving and resuming a match: reflection-based JSON over the existing
-    // data classes, so the logic layer needed no annotations (see
-    // persistence/MatchSaveStore.kt). NOTE: if release minification is ever
-    // turned on, keep the com.cricketsim.logic classes from being renamed
-    // or stripped, or saved matches will not read back.
+    // data classes (see persistence/MatchSaveStore.kt). Kept safe under
+    // minification by proguard-rules.pro's keep rules.
     implementation("com.google.code.gson:gson:2.11.0")
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")

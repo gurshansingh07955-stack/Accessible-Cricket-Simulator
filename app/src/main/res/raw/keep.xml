@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Protects the bundled, encrypted audio pack from Android's resource
+  shrinker (enabled for release builds — see app/build.gradle.kts).
+
+  R.raw.audio_pack is never referenced in code as a static R.raw.audio_pack
+  symbol: AudioPack.kt finds it dynamically, via
+  context.resources.getIdentifier("audio_pack", "raw", ...), because it
+  has to work whether or not the fetch workflow has run yet. The resource
+  shrinker cannot see a dynamic lookup like that as a "use" of the
+  resource, so without this file it would treat audio_pack.bin as unused
+  and remove it from the APK — silently deleting all 167 bundled sounds
+  from a release build while everything still compiled and ran (with every
+  sound falling back to a synthesized stand-in, so nothing would even
+  crash — this would be very easy to ship by accident).
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/audio_pack" />

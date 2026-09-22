@@ -1,9 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Downloading the web app's audio recordings and streaming the AI
-         commentary clips (see AudioAssets.kt). Everything still works
-         without a connection: recordings fall back to synthesized sounds
-         and commentary clips are simply skipped. -->
+    <!-- Streaming the 30 AI commentary clips that aren't bundled (see
+         audio/AudioPack.kt) and, as a last resort, downloading a sound
+         effect if the bundled copy is ever missing. Everything else works
+         without a connection: all 167 bundled sounds play from the
+         encrypted pack, and anything that truly can't be reached falls
+         back to a synthesized sound. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Wicket and boundary buzzes (the timing rhythm uses Compose's own haptics). -->
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -16,7 +18,7 @@
     </queries>
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">

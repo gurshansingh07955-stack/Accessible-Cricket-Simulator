@@ -20,6 +20,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.math.max
 
 /**
@@ -54,13 +55,13 @@ import kotlin.math.max
  * - COMMENTARY. The AI voice duo clips, queued so a wicket's comment, an
  *   over-complete comment and an innings-break comment play as one
  *   conversation rather than over each other; the crowd ducks for the
- *   whole sequence. Each clip is played from the copy BUNDLED in
- *   assets/commentary/ when there is one (instant, offline; put there by
- *   tools/fetch_audio.sh) and otherwise STREAMED from the web app's host.
- *   A clip that can't be played either way is skipped. There is no
- *   text-to-speech fallback for these on purpose: the same line is
- *   already on screen and spoken by TalkBack, and a second synthetic voice
- *   would just talk over it.
+ *   whole sequence. Each clip plays from the bundled, encrypted audio pack
+ *   (AudioPack.kt) when it contains that clip — instant, offline, straight
+ *   from memory via a custom MediaDataSource, no temp file — and otherwise
+ *   STREAMS from the web app's host. A clip that can't be played either
+ *   way is skipped. There is no text-to-speech fallback for these on
+ *   purpose: the same line is already on screen and spoken by TalkBack,
+ *   and a second synthetic voice would just talk over it.
  *
  * INPUT LATENCY. Android audio output has latency the web doesn't (tens
  * of milliseconds, device-dependent). The timing score is measured against
@@ -223,8 +224,28 @@ class SoundEngine(context: Context) {
         val id = when (source) {
             is AssetSource.Raw -> soundPool.load(appContext, source.resId, 1)
             is AssetSource.Local -> soundPool.load(source.file.absolutePath, 1)
+            is AssetSource.Bytes -> loadBytesIntoSoundPool(source.bytes)
         }
         soundIds[asset] = id
+    }
+
+    /**
+     * SoundPool only loads from a path or file descriptor, never from a
+     * plain byte array, so the decrypted bytes are written to a short-lived
+     * temp file, loaded, then removed — SoundPool copies the audio into its
+     * own buffers once loaded, so the temp file is only needed for that
+     * brief window, and this is the only place a plaintext copy of any
+     * bundled sound ever touches disk.
+     */
+    private suspend fun loadBytesIntoSoundPool(bytes: ByteArray): Int = withContext(Dispatchers.IO) {
+        val temp = File.createTempFile("sfx_", ".mp3", appContext.cacheDir)
+        temp.writeBytes(bytes)
+        val id = soundPool.load(temp.absolutePath, 1)
+        scope.launch {
+            delay(5_000)
+            runCatching { temp.delete() }
+        }
+        id
     }
 
     /** Plays a recording if it has loaded. Returns false if it isn't ready (so the caller can use a stand-in). */
@@ -391,6 +412,7 @@ class SoundEngine(context: Context) {
                     player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                 }
                 is AssetSource.Local -> player.setDataSource(source.file.absolutePath)
+                is AssetSource.Bytes -> player.setDataSource(ByteArrayMediaDataSource(source.bytes))
             }
             player.isLooping = true
             player.setVolume(0f, 0f)
@@ -604,15 +626,6 @@ class SoundEngine(context: Context) {
     private var commentaryToken = 0
 
     /**
-     * The file names of the clips bundled into the APK under
-     * assets/commentary/ (empty until tools/fetch_audio.sh has put them
-     * there). Looked up once.
-     */
-    private val bundledCommentary: Set<String> by lazy {
-        runCatching { appContext.assets.list("commentary")?.toSet() }.getOrNull() ?: emptySet()
-    }
-
-    /**
      * Queues the duo banter for an event, respecting the commentary mode,
      * and starts playing if nothing is. Both voices play in order (excited
      * lead, then calm co-commentator) unless a single-voice mode is set.
@@ -663,13 +676,12 @@ class SoundEngine(context: Context) {
         commentaryPlayer = player
         try {
             player.setAudioAttributes(speechAttributes)
-            if (fileName in bundledCommentary) {
-                // The copy inside the APK: instant and offline.
-                appContext.assets.openFd("commentary/$fileName").use { afd ->
-                    player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                }
+            val bundledBytes = AudioPack.bytesFor(appContext, fileName)
+            if (bundledBytes != null) {
+                // The copy inside the encrypted pack: instant and offline.
+                player.setDataSource(ByteArrayMediaDataSource(bundledBytes))
             } else {
-                // Not bundled: stream it from the web app's host.
+                // Not bundled (one of the 30 clips never generated on the web app): stream it.
                 player.setDataSource(AudioAssets.absoluteUrl(path))
             }
             player.setVolume(COMMENTARY_VOLUME, COMMENTARY_VOLUME)

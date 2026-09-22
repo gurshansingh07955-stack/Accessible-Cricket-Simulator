@@ -11,12 +11,11 @@ import java.net.URL
  * The real recordings the web app uses. On Android each is looked for in
  * this order:
  *
- *   1. `res/raw/<rawName>` in the APK. This is where they SHOULD end up:
- *      it works offline and doesn't depend on the web app staying up. The
- *      repo's `Fetch audio into the app` workflow (tools/fetch_audio.sh)
- *      downloads all of them from the web app and commits them there, so
- *      there is nothing to copy by hand. Names are the lowercase
- *      `rawName`s below, with an .mp3 extension.
+ *   1. Decrypted from the bundled R.raw.audio_pack (see AudioPack.kt) —
+ *      instant, offline, and the only copy of it that ships in the APK
+ *      (no individually-named, directly playable file sitting in the app;
+ *      see AudioPack.kt's doc comment for exactly what that does and does
+ *      not protect against).
  *   2. A copy previously downloaded into the app's private storage.
  *   3. Downloaded now from the web app's host (BASE_URL + path), then kept
  *      for next time. Needs the INTERNET permission.
@@ -29,16 +28,16 @@ import java.net.URL
  * helpers/audioManager.tsx.
  *
  * LICENCE: the crowd recording's file name suggests a third-party stock
- * source, and bundling it puts it in this repo and in every APK. Check its
- * licence before distributing.
+ * source, and it is bundled (inside the encrypted pack) in every APK.
+ * Check its licence before distributing.
  *
- * The AI commentary clips (`/_cdn/commentary/<id>.mp3`) are handled by
- * SoundEngine, not here: it plays the copy bundled in
- * `assets/commentary/` when there is one (the same workflow puts them
- * there) and otherwise streams the clip from BASE_URL. Of the 190 clips the
- * library references, 160 exist on the web app; the other 30 (partnership
- * 150/200, bowler 3/5/10-wicket hauls, every hat-trick line) were never
- * generated there, so they are skipped, as on the web, until they are.
+ * The AI commentary clips (`/_cdn/commentary/<id>.mp3`) follow the same
+ * order, handled by SoundEngine rather than here: the bundled copy from
+ * AudioPack when there is one, else streamed from BASE_URL. Of the 190
+ * clips the library references, 160 exist on the web app and are bundled;
+ * the other 30 (partnership 150/200, bowler 3/5/10-wicket hauls, every
+ * hat-trick line) were never generated there, so they are skipped, as on
+ * the web, until they are.
  */
 enum class RecordedAsset(val fileName: String, val path: String, val rawName: String) {
     CROWD_BED(
@@ -61,6 +60,9 @@ enum class RecordedAsset(val fileName: String, val path: String, val rawName: St
 sealed interface AssetSource {
     data class Raw(val resId: Int) : AssetSource
     data class Local(val file: File) : AssetSource
+
+    /** Decrypted straight from the bundled pack, held in memory only — see AudioPack.kt. */
+    data class Bytes(val bytes: ByteArray) : AssetSource
 }
 
 object AudioAssets {
@@ -71,6 +73,10 @@ object AudioAssets {
 
     /** A copy that is available right now (bundled or already downloaded), or null. Never touches the network. */
     fun find(context: Context, asset: RecordedAsset): AssetSource? {
+        AudioPack.bytesFor(context, asset.fileName)?.let { return AssetSource.Bytes(it) }
+        // Legacy fallback: an older build's loose named resource, if one
+        // somehow still exists. Harmless dead code once the pack is in use
+        // (nothing is ever shipped there any more — see tools/fetch_audio.sh).
         val resId = context.resources.getIdentifier(asset.rawName, "raw", context.packageName)
         if (resId != 0) return AssetSource.Raw(resId)
         val file = cacheFile(context, asset)
