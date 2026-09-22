@@ -2,7 +2,8 @@ Audio fetch report
 Source: https://5764.floot.app
 Sound recordings expected: 7
 Commentary clips referenced by CommentaryLibrary.kt: 190
-Files present after this run: 167
+Files packed into app/src/main/res/raw/audio_pack.bin this run: 167
+Packed file size: 10844640 bytes
 Not available on the web app (skipped): 30
   bowler10wkts_1_calm.mp3
   bowler10wkts_1_excited.mp3
