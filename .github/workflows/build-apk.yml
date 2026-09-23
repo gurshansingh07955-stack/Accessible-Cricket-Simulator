@@ -40,7 +40,6 @@ jobs:
         id: build
         continue-on-error: true
         run: |
-          gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/build_full.log
 
       - name: Write build report
         run: |
