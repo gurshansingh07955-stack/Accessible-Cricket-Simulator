@@ -1,5 +1,6 @@
 package com.cricketsim.ui.match
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -94,6 +95,17 @@ import com.cricketsim.ui.settings.SettingsScreen
  * chase figures, the run rates and (in a chase) the win probability. The
  * whole screen scrolls (a plain scrolling Column) so nothing can be
  * pushed off a small screen.
+ *
+ * SYSTEM BACK BUTTON. Every sub-view below (a gesture surface, the field
+ * screen, the scorecard, the settings overlay, the leave confirmation)
+ * carries its own BackHandler that does exactly what that sub-view's own
+ * on-screen back affordance already does — so system back is never a
+ * different behavior from the button, and it can never fall through to
+ * the default "close the app" behavior. On the ordinary match screen
+ * itself, with no sub-view open, back opens the leave confirmation, same
+ * as tapping the Leave match button — a live match is never discarded by
+ * an unconfirmed back press, even though it would be safe to (it's
+ * autosaved) — for the same reason the button itself asks first.
  *
  * `onBack` leaves the match (MainActivity sends you to the first screen,
  * where the autosave is offered as Resume) and is only reachable through
@@ -252,16 +264,21 @@ fun MatchScreen(
     }
 
     if (confirmingLeave) {
+        // Back here cancels, same as the Stay button — it never silently
+        // discards a live match.
+        BackHandler(onBack = { confirmingLeave = false })
         ConfirmLeaveScreen(onStay = { confirmingLeave = false }, onLeave = onBack)
         return
     }
 
     if (showSettings) {
+        BackHandler(onBack = { showSettings = false })
         SettingsScreen(onBack = { showSettings = false })
         return
     }
 
     if (showScorecard) {
+        BackHandler(onBack = { showScorecard = false })
         ScorecardScreen(
             state = matchState,
             startOnFirstInnings = showInningsBreak && !matchOver,
@@ -271,6 +288,11 @@ fun MatchScreen(
     }
 
     if (matchOver) {
+        // No BackHandler here on purpose: the match is finished and
+        // already cleared from autosave, so back falls through to
+        // whatever the platform normally does, same as the Return to
+        // home button's destination is reached through the button, not
+        // by intercepting back into a redundant path.
         MatchResultScreen(
             resultText = resultText ?: "Match complete.",
             summaryLines = MatchLines.resultSummaryLines(matchState),
@@ -311,7 +333,10 @@ fun MatchScreen(
     }
 
     // Picks the user's own side owes. These replace the whole screen,
-    // like the gesture surfaces do.
+    // like the gesture surfaces do. No BackHandler: a pending pick isn't
+    // optional (the match cannot proceed without it), so there's nothing
+    // for back to do here that isn't already handled by the match's own
+    // top-level leave confirmation once this pick is resolved.
     if (matchState.needsOpenerSelection) {
         OpenerSelectionScreen(
             players = matchState.battingTeam.players,
@@ -350,6 +375,7 @@ fun MatchScreen(
     }
 
     if (showPitchingScreen) {
+        BackHandler(onBack = { showPitchingScreen = false })
         PitchingScreen(
             bowler = matchState.currentBowler,
             onDeliveryResolved = { decision ->
@@ -362,6 +388,7 @@ fun MatchScreen(
     }
 
     if (showBattingScreen) {
+        BackHandler(onBack = { showBattingScreen = false })
         BattingScreen(
             batsman = matchState.currentBatsmen.first,
             // Called once, after the footwork commit: the AI captain reads
@@ -387,6 +414,7 @@ fun MatchScreen(
     val isUserBowling = matchState.bowlingTeam.id == userTeam.id
 
     if (showFieldScreen) {
+        BackHandler(onBack = { showFieldScreen = false })
         FieldingScreen(
             teamName = matchState.bowlingTeam.name,
             players = matchState.bowlingTeam.players,
@@ -402,6 +430,12 @@ fun MatchScreen(
         )
         return
     }
+
+    // The ordinary match screen: no sub-view open. Back here opens the
+    // leave confirmation, exactly like tapping the Leave match button —
+    // see the doc comment above for why this asks first rather than
+    // leaving straight away.
+    BackHandler(onBack = { confirmingLeave = true })
 
     val userFieldReason = if (isUserBowling) {
         FieldingSystem.getIllegalFieldReason(matchState.fieldPlacements, isPowerplayNow)
