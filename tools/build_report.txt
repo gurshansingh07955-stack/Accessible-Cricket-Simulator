@@ -1,6 +1,6 @@
-Build run: 35824181122 (attempt 1)
-Commit: 997ef1ece0b234e133ba0c9b0b7028a9fb2ac665
-Timestamp (UTC): 2026-09-23T05:53:37Z
+Build run: 35848443982 (attempt 1)
+Commit: abca5d8b992ae514c9217b554fb65ae3f6ce9916
+Timestamp (UTC): 2026-09-23T10:24:10Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -21,12 +21,12 @@ Daemon will be stopped at the end of the build
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
-> Task :app:processDebugManifestForPackage
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
 > Task :app:mergeDebugStartupProfile
@@ -54,7 +54,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790142744175.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790158988180.json
 
-BUILD SUCCESSFUL in 1m 18s
+BUILD SUCCESSFUL in 1m 6s
 37 actionable tasks: 37 executed
