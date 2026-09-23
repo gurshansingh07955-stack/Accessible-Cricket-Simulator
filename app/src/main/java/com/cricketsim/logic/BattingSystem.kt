@@ -93,9 +93,15 @@ data class ShotDirection(
     val isAerial: Boolean
 )
 
-private data class WeightedItem<T>(val value: T, val weight: Double)
-
 object BattingSystem {
+
+    // Kept nested (not top-level) so it doesn't collide with
+    // BowlingSystem's own private WeightedItem — two top-level private
+    // declarations sharing a name still clash at the JVM level even
+    // though "private" here only means file-visible, since both would
+    // otherwise generate a class with the identical fully-qualified
+    // name in the same package.
+    private data class WeightedItem<T>(val value: T, val weight: Double)
 
     // --- Named shots ---
 
