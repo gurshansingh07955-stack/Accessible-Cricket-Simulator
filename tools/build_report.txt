@@ -1,6 +1,6 @@
-Build run: 35848443982 (attempt 1)
-Commit: abca5d8b992ae514c9217b554fb65ae3f6ce9916
-Timestamp (UTC): 2026-09-23T10:24:10Z
+Build run: 35849922112 (attempt 1)
+Commit: b09baf06e6cadb3e96826ee4ada6c0804a033a02
+Timestamp (UTC): 2026-09-23T10:39:09Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -21,7 +21,6 @@ Daemon will be stopped at the end of the build
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
-> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
@@ -29,17 +28,19 @@ Daemon will be stopped at the end of the build
 > Task :app:mergeDebugAssets
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
+> Task :app:processDebugManifestForPackage
+> Task :app:checkDebugDuplicateClasses
 > Task :app:mergeDebugStartupProfile
 > Task :app:mergeDebugJniLibFolders
-> Task :app:checkDebugDuplicateClasses
+> Task :app:mergeLibDexDebug
 > Task :app:mergeDebugNativeLibs NO-SOURCE
 > Task :app:stripDebugDebugSymbols NO-SOURCE
-> Task :app:mergeLibDexDebug
 > Task :app:processDebugResources
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
 > Task :app:writeDebugSigningConfigVersions
 > Task :app:mergeExtDexDebug
+
 > Task :app:compileDebugKotlin
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/audio/SoundEngine.kt:721:75 'VIBRATOR_SERVICE: String' is deprecated. Deprecated in Java
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/logic/MatchEngine.kt:96:96 Parameter 'difficulty' is never used
@@ -54,7 +55,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790158988180.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790159912612.json
 
-BUILD SUCCESSFUL in 1m 6s
+BUILD SUCCESSFUL in 40s
 37 actionable tasks: 37 executed
