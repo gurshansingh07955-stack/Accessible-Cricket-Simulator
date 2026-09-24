@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -11,8 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,7 +24,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -52,23 +55,60 @@ import kotlin.math.roundToInt
 
 /**
  * The first of the three custom gesture surfaces (pitching/batting/
- * fielding — see UI_NOTES.md). This is a FRESH design for TalkBack, not
- * a port of the web app's continuous press-and-drag PitcherScreen — a
- * fine-grained analog drag has no reliable non-visual equivalent, so
- * every dimension a real bowler chooses (angle, line, variation, target
- * length, speed) is instead a discrete, single-swipe list pick, same
- * pattern as the rest of this app's screens. See UI_NOTES.md's
- * accessibility principles for why this is preferred over inventing new
- * custom semantics.
+ * fielding — see UI_NOTES.md). Redesigned around a TWO-FINGER gesture
+ * vocabulary (see GESTURE_REDESIGN.md, section 2) rather than the
+ * original discrete list-pick-per-axis design: TalkBack intercepts
+ * single-finger touch for its own explore/double-tap model, but largely
+ * leaves two-finger gestures untouched, so this screen's AimStep reads
+ * every one of angle, line and variation as a distinct two-finger swipe
+ * direction, and length as a genuine continuous two-finger drag with
+ * live TONE feedback — the closest a screen-reader-first redesign can
+ * get to the web app's original continuous press-and-drag PitcherScreen,
+ * while staying entirely usable with TalkBack running. Speed keeps its
+ * existing slider-style list pick unchanged (already TalkBack-safe as a
+ * single-finger adjustable control), and RELEASE keeps the existing
+ * haptic-pulse timing minigame unchanged FOR NOW — see the KNOWN
+ * SIMPLIFICATIONS below for the open question the redesign plan flags
+ * about what RELEASE should mean once aim is set by swipe rather than by
+ * timing.
  *
- * The one dimension that can't be a discrete list pick without losing
- * all sense of "skill" is EXECUTION — how well the delivery actually
- * came out, which BowlingSystem.computeBowlingQuality expects as a
- * continuous `verticalFraction` (where the release actually landed
- * along the pitch, 0 = bowler's end, 1 = batsman's end) plus a
- * `maxVerticalFractionReached` for overshoot detection. Rather than a
- * drag, this screen uses a REPEATING HAPTIC PULSE the player releases
- * on: a fixed sequence of vibration pulses plays, timed by
+ * AIM STEP GESTURE VOCABULARY (angle/line/variation/length all live on
+ * ONE screen at once, each assigned its own compass direction, exactly
+ * because a real bowler sets all four before ever releasing the ball):
+ * - Two-finger swipe LEFT cycles ANGLE forward through its (short, 2-item)
+ *   list, wrapping around.
+ * - Two-finger swipe RIGHT cycles LINE forward through its list, wrapping.
+ * - Two-finger swipe UP cycles VARIATION forward through this bowler's
+ *   pace-or-spin variation list, wrapping.
+ * - Two-finger swipe DOWN is the one CONTINUOUS axis: once net downward
+ *   movement is recognized as the dominant direction, the gesture locks
+ *   into a drag that maps live vertical position to a length band, with
+ *   a continuously pitch-shifted tone (SoundEngine.startAimTone /
+ *   updateAimTone — see its own doc comment) tracking position while the
+ *   fingers move, and a SPOKEN announcement only when the drag crosses
+ *   into a new length band (debounced by construction: it only fires
+ *   when the classified band actually changes, never on every move
+ *   event) — never a continuous spoken readout, which would overrun
+ *   TalkBack's speech queue. Lifting the fingers commits whatever band
+ *   the drag last landed in.
+ * Angle/line/variation each fire repeatedly while the same swipe
+ * continues (each firing resets the gesture's reference point), so
+ * holding two fingers and continuing to drag left, say, cycles through
+ * angle options one at a time rather than needing a fresh swipe per
+ * step — same "keep pushing to keep stepping" feel as a hardware
+ * volume rocker. detectAimGesture below is the shared low-level
+ * two-finger tracker both this discrete-cycling behavior and the
+ * continuous length drag are built on; batting's shot-selection/intent
+ * gestures (GESTURE_REDESIGN.md section 3, not yet built) will need
+ * something structurally similar.
+ *
+ * The one dimension that isn't set on the AimStep is EXECUTION — how
+ * well the delivery actually came out — which BowlingSystem.
+ * computeBowlingQuality expects as a continuous `verticalFraction`
+ * (where the release actually landed along the pitch) plus a
+ * `maxVerticalFractionReached` for overshoot detection. This screen
+ * still uses a REPEATING HAPTIC PULSE the player releases on: a fixed
+ * sequence of vibration pulses plays, timed by
  * BattingSystem.computeTimingIntervalMs(speedKmh) — deliberately
  * reusing the exact same speed-to-interval mapping the batting timing
  * minigame uses, so "faster deliveries are harder to time" feels
@@ -77,29 +117,27 @@ import kotlin.math.roundToInt
  * target length band; releasing early or late pushes the release point
  * away from center in proportion to the timing error (early -> shorter,
  * late -> fuller), potentially drifting into a neighboring band on a
- * bad enough miss — BowlingSystem.computeLengthPrecision (called
- * inside computeBowlingQuality) then scores whatever band the release
- * ACTUALLY lands in, exactly as it would for any other verticalFraction
- * source. This is a genuine skill mechanic, not a fixed-outcome
- * animation, and produces a real, inspectable QualityBreakdown.
+ * bad enough miss.
  *
- * RELEASE STEP (rewritten to match BattingScreen's timing step — see
- * its doc comment for the full reasoning): the whole step is ONE
- * full-screen `clickable` node and the only focusable element on it, so
- * TalkBack focus lands there and a double-tap anywhere releases. The
- * error is measured in real milliseconds with
- * SystemClock.elapsedRealtime() against a fixed schedule (lead-in + 3
- * intervals = the final pulse), and pulses are scheduled against the
- * start time rather than chained. The previous version estimated
- * elapsed time as `pulsesFired * intervalMs`, which only changed when a
- * pulse fired: any tap between pulse 3 and 4 was scored as maximally
- * early and any tap after pulse 4 (up to the grace timeout) as exactly
- * perfect, so late releases were never penalised. It was also
- * effectively unplayable with TalkBack, because the Release button sat
- * several swipes away from the first focus stop while the whole rhythm
- * (and its auto-miss timeout) finished in about two seconds.
- * There is deliberately no Back on the release step — once the rhythm
- * starts the delivery is committed, same as BattingScreen's timing.
+ * KNOWN OPEN QUESTION (GESTURE_REDESIGN.md section 2.1, not yet
+ * resolved): now that length is a deliberate swipe-set aim rather than
+ * something to "aim for" via timing, RELEASE's original role no longer
+ * quite makes sense as-is. The redesign plan's default assumption is to
+ * repurpose it as an EXECUTION-QUALITY layer independent of aim (timing
+ * quality affecting pace variance, swing/seam control, and a small
+ * chance of drifting off the intended line/length on a bad release)
+ * rather than the aim mechanic it currently still is below — that
+ * rework is intentionally NOT part of this pass; RELEASE/ResultStep
+ * below are unchanged from before the gesture redesign.
+ *
+ * RELEASE STEP (unchanged): the whole step is ONE full-screen `clickable`
+ * node and the only focusable element on it, so TalkBack focus lands
+ * there and a double-tap anywhere releases. The error is measured in
+ * real milliseconds with SystemClock.elapsedRealtime() against a fixed
+ * schedule (lead-in + 3 intervals = the final pulse), and pulses are
+ * scheduled against the start time rather than chained. There is
+ * deliberately no Back on the release step — once the rhythm starts the
+ * delivery is committed, same as BattingScreen's timing.
  *
  * EVERY PULSE is a buzz (Compose's LongPress haptic, if vibration is on in
  * Settings) AND an audible tick from the sound engine, with the FINAL
@@ -112,22 +150,19 @@ import kotlin.math.roundToInt
  *   `verticalFraction` (the release point only ever moves toward its
  *   final value here, never overshoots and corrects), so the
  *   smoothness penalty is always 0 for a user-bowled delivery in this
- *   version. A future iteration could introduce genuine overshoot risk
- *   (e.g. a brief "hold too long and it drifts past" mechanic) if that
- *   proves worth the added complexity.
- * - Swing is not player-controlled yet (always SwingType.NONE) — the
- *   web app's swing came from the horizontal curve of its drag path,
- *   which this discrete redesign doesn't have an equivalent axis for.
- *   A future iteration could add a dedicated swing-direction list step
- *   if that's judged worth the extra complexity for stock deliveries.
- * - PITCH_INPUT_LATENCY_COMPENSATION_MS is 0 — touch-to-click latency
- *   under TalkBack, and audio output latency for the tick, are both
- *   unmeasured; calibrate on a real device.
- * - The timing logic here duplicates BattingScreen's BatTimingStep. If
- *   a third timing surface ever appears, extract a shared composable.
+ *   version.
+ * - Swing is not player-controlled yet (always SwingType.NONE).
+ * - PITCH_INPUT_LATENCY_COMPENSATION_MS is 0, and the AimStep's own
+ *   DISCRETE_SWIPE_THRESHOLD_PX / LENGTH_DRAG_ENTRY_THRESHOLD_PX /
+ *   LENGTH_DRAG_FULL_RANGE_PX are all unmeasured guesses — every one of
+ *   these needs a real-device calibration pass (GESTURE_REDESIGN.md
+ *   section 5.1 flags the same requirement for the timing windows).
+ * - The timing logic in ReleaseStep duplicates BattingScreen's
+ *   BatTimingStep. If a third timing surface ever appears, extract a
+ *   shared composable.
  */
 
-private enum class PitchStep { ANGLE, LINE, VARIATION, LENGTH, SPEED, RELEASE, RESULT }
+private enum class PitchStep { AIM, SPEED, RELEASE, RESULT }
 
 // Number of haptic pulses in the release rhythm; the player releases on
 // the LAST one. Kept small and fixed — a short rhythm is easier to
@@ -157,10 +192,29 @@ private const val PITCH_NO_RELEASE_GRACE_INTERVALS = 2.0
 // Subtracted from the measured tap time. Zero until measured on a device.
 private const val PITCH_INPUT_LATENCY_COMPENSATION_MS = 0.0
 
+// --- AimStep gesture tuning (all unmeasured on a real device — see the
+// class doc comment's KNOWN V1 SIMPLIFICATIONS) ---
+
+// How far the two-finger centroid must move, in raw pixels, before a
+// left/right/up swipe counts as one discrete "cycle to the next option"
+// step. Deliberately re-fireable: each firing resets the reference point
+// (see detectAimGesture), so continuing to hold and move keeps stepping.
+private const val DISCRETE_SWIPE_THRESHOLD_PX = 56f
+
+// How far net DOWNWARD movement (from the gesture's start point) must
+// reach, while still the dominant axis, before the gesture locks into
+// continuous length-drag mode for the rest of this touch.
+private const val LENGTH_DRAG_ENTRY_THRESHOLD_PX = 24f
+
+// Downward distance from the gesture's start point that maps to a full
+// 0..1 sweep across the whole pitch length. A guess pending real-device
+// testing across different screen sizes/densities.
+private const val LENGTH_DRAG_FULL_RANGE_PX = 700f
+
 @Composable
 fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision) -> Unit, onBack: () -> Unit) {
-    var step by remember { mutableStateOf(PitchStep.ANGLE) }
-    var angle by remember { mutableStateOf<BowlingAngle?>(null) }
+    var step by remember { mutableStateOf(PitchStep.AIM) }
+    var angle by remember { mutableStateOf(BowlingSystem.ANGLE_OPTIONS.first().value) }
     var line by remember { mutableStateOf(BowlingSystem.LINE_OPTIONS.first().value) }
     var variation by remember { mutableStateOf(BowlingVariation.STOCK) }
     var targetLength by remember { mutableStateOf(BowlingLength.GOOD_LENGTH) }
@@ -168,28 +222,24 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
     var decision by remember { mutableStateOf<ResolvedBowlingDecision?>(null) }
 
     when (step) {
-        PitchStep.ANGLE -> AngleStep(
-            onSelected = { chosen -> angle = chosen; step = PitchStep.LINE },
-            onBack = onBack
-        )
-        PitchStep.LINE -> LineStep(
-            onSelected = { chosen -> line = chosen; step = PitchStep.VARIATION },
-            onBack = { step = PitchStep.ANGLE }
-        )
-        PitchStep.VARIATION -> VariationStep(
+        PitchStep.AIM -> AimStep(
             bowler = bowler,
-            onSelected = { chosen -> variation = chosen; step = PitchStep.LENGTH },
-            onBack = { step = PitchStep.LINE }
-        )
-        PitchStep.LENGTH -> LengthStep(
-            onSelected = { chosen -> targetLength = chosen; step = PitchStep.SPEED },
-            onBack = { step = PitchStep.VARIATION }
+            angle = angle,
+            line = line,
+            variation = variation,
+            targetLength = targetLength,
+            onAngleChanged = { angle = it },
+            onLineChanged = { line = it },
+            onVariationChanged = { variation = it },
+            onLengthChanged = { targetLength = it },
+            onContinue = { step = PitchStep.SPEED },
+            onBack = onBack
         )
         PitchStep.SPEED -> SpeedStep(
             bowler = bowler,
             variation = variation,
             onSelected = { chosen -> speedKmh = chosen; step = PitchStep.RELEASE },
-            onBack = { step = PitchStep.LENGTH }
+            onBack = { step = PitchStep.AIM }
         )
         PitchStep.RELEASE -> ReleaseStep(
             speedKmh = speedKmh,
@@ -205,7 +255,7 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
                 )
                 val resolvedLength = BowlingSystem.resolveActualLength(targetLength, quality.tier)
                 decision = ResolvedBowlingDecision(
-                    angle = requireNotNull(angle) { "angle must be set before the release step" },
+                    angle = angle,
                     line = line,
                     variation = variation,
                     bowlingStyle = bowler.bowlingStyle,
@@ -230,123 +280,200 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
     }
 }
 
-@Composable
-private fun AngleStep(onSelected: (BowlingAngle) -> Unit, onBack: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text(
-            text = "Choose your angle",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() }
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        BowlingSystem.ANGLE_OPTIONS.forEach { option ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        onClickLabel = "Select ${option.label}",
-                        role = Role.Button,
-                        onClick = { onSelected(option.value) }
-                    )
-                    .padding(vertical = 14.dp, horizontal = 8.dp)
-            ) {
-                Text(option.label, style = MaterialTheme.typography.titleMedium)
-                Text(option.description, style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-        }
-        Spacer(modifier = Modifier.weight(1f))
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
-    }
-}
+private enum class AimDiscreteDirection { LEFT, RIGHT, UP }
 
-@Composable
-private fun LineStep(onSelected: (BowlingLine) -> Unit, onBack: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text(
-            text = "Choose your line",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() }
+/**
+ * The shared low-level two-finger tracker AimStep's gesture area is built
+ * on — see the class doc comment's "AIM STEP GESTURE VOCABULARY" section
+ * for the full behavior this implements. Never engages until at least two
+ * fingers are down, so single-finger TalkBack touch exploration is always
+ * left completely untouched.
+ */
+private suspend fun PointerInputScope.detectAimGesture(
+    onDiscrete: (AimDiscreteDirection) -> Unit,
+    onLengthDragStart: () -> Unit,
+    onLengthDrag: (fraction: Float) -> Unit,
+    onLengthDragEnd: (fraction: Float) -> Unit
+) {
+    fun centroidOf(event: PointerEvent): Offset {
+        val points = event.changes.filter { it.pressed }.take(2).map { it.position }
+        if (points.isEmpty()) return Offset.Zero
+        return Offset(
+            points.sumOf { it.x.toDouble() }.toFloat() / points.size,
+            points.sumOf { it.y.toDouble() }.toFloat() / points.size
         )
-        Spacer(modifier = Modifier.height(16.dp))
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(BowlingSystem.LINE_OPTIONS) { option ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            onClickLabel = "Select ${option.label}",
-                            role = Role.Button,
-                            onClick = { onSelected(option.value) }
-                        )
-                        .padding(vertical = 14.dp, horizontal = 8.dp)
-                ) {
-                    Text(option.label, style = MaterialTheme.typography.titleMedium)
-                    Text(option.description, style = MaterialTheme.typography.bodySmall)
+    }
+
+    awaitEachGesture {
+        // Wait for at least two fingers down before tracking anything.
+        var event = awaitPointerEvent()
+        while (event.changes.count { it.pressed } < 2) {
+            if (event.changes.none { it.pressed }) return@awaitEachGesture
+            event = awaitPointerEvent()
+        }
+
+        val gestureStart = centroidOf(event)
+        var referencePoint = gestureStart
+        var lengthDragActive = false
+        var lastFraction = 0f
+
+        while (true) {
+            event.changes.forEach { if (it.pressed) it.consume() }
+            event = awaitPointerEvent()
+            if (event.changes.count { it.pressed } < 2) {
+                if (lengthDragActive) onLengthDragEnd(lastFraction)
+                return@awaitEachGesture
+            }
+            val centroid = centroidOf(event)
+
+            if (lengthDragActive) {
+                val netDown = centroid.y - gestureStart.y
+                lastFraction = (netDown / LENGTH_DRAG_FULL_RANGE_PX).coerceIn(0f, 1f)
+                onLengthDrag(lastFraction)
+                continue
+            }
+
+            val netDownFromStart = centroid.y - gestureStart.y
+            val netRightFromStart = centroid.x - gestureStart.x
+            // Downward movement locks into continuous length mode for the
+            // rest of this touch — it never reverts to discrete swiping.
+            if (netDownFromStart > LENGTH_DRAG_ENTRY_THRESHOLD_PX && netDownFromStart > abs(netRightFromStart)) {
+                lengthDragActive = true
+                onLengthDragStart()
+                lastFraction = (netDownFromStart / LENGTH_DRAG_FULL_RANGE_PX).coerceIn(0f, 1f)
+                onLengthDrag(lastFraction)
+                continue
+            }
+
+            val dx = centroid.x - referencePoint.x
+            val dy = centroid.y - referencePoint.y
+            if (abs(dx) >= abs(dy)) {
+                if (abs(dx) >= DISCRETE_SWIPE_THRESHOLD_PX) {
+                    onDiscrete(if (dx < 0) AimDiscreteDirection.LEFT else AimDiscreteDirection.RIGHT)
+                    referencePoint = centroid
                 }
+            } else if (dy < 0 && abs(dy) >= DISCRETE_SWIPE_THRESHOLD_PX) {
+                // Upward only — downward is claimed by the length-drag check above.
+                onDiscrete(AimDiscreteDirection.UP)
+                referencePoint = centroid
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
     }
 }
 
 @Composable
-private fun VariationStep(bowler: Player, onSelected: (BowlingVariation) -> Unit, onBack: () -> Unit) {
-    val options = remember(bowler.bowlingStyle) { BowlingSystem.getVariationOptions(bowler.bowlingStyle) }
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text(
-            text = "Choose your delivery",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() }
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(options) { option ->
-                Text(
-                    text = "${option.label} (${option.speedRangeKmh.min}-${option.speedRangeKmh.max} km/h)",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            onClickLabel = "Select ${option.label}",
-                            role = Role.Button,
-                            onClick = { onSelected(option.value) }
-                        )
-                        .padding(vertical = 14.dp, horizontal = 8.dp)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
-    }
-}
+private fun AimStep(
+    bowler: Player,
+    angle: BowlingAngle,
+    line: BowlingLine,
+    variation: BowlingVariation,
+    targetLength: BowlingLength,
+    onAngleChanged: (BowlingAngle) -> Unit,
+    onLineChanged: (BowlingLine) -> Unit,
+    onVariationChanged: (BowlingVariation) -> Unit,
+    onLengthChanged: (BowlingLength) -> Unit,
+    onContinue: () -> Unit,
+    onBack: () -> Unit
+) {
+    val services = LocalGameServices.current
+    val variationOptions = remember(bowler.bowlingStyle) { BowlingSystem.getVariationOptions(bowler.bowlingStyle) }
+    // Tracks the live drag position while dragging; committed back into
+    // targetLength (via onLengthChanged) only once the fingers lift.
+    var liveLength by remember(targetLength) { mutableStateOf(targetLength) }
 
-@Composable
-private fun LengthStep(onSelected: (BowlingLength) -> Unit, onBack: () -> Unit) {
+    fun cycleAngle() {
+        val options = BowlingSystem.ANGLE_OPTIONS.map { it.value }
+        val next = options[(options.indexOf(angle) + 1) % options.size]
+        onAngleChanged(next)
+        services?.announceSpoken(BowlingSystem.angleLabel(next))
+    }
+    fun cycleLine() {
+        val options = BowlingSystem.LINE_OPTIONS
+        val next = options[(options.indexOfFirst { it.value == line } + 1) % options.size]
+        onLineChanged(next.value)
+        services?.announceSpoken(next.label)
+    }
+    fun cycleVariation() {
+        val next = variationOptions[(variationOptions.indexOfFirst { it.value == variation } + 1) % variationOptions.size]
+        onVariationChanged(next.value)
+        services?.announceSpoken(next.label)
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Text(
-            text = "Choose your target length",
+            text = "Aim your delivery",
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Two-finger swipe left for angle, right for line, up for variation. " +
+                "Two-finger swipe down and hold to set length by ear, then lift your fingers to set it.",
+            style = MaterialTheme.typography.bodySmall
+        )
         Spacer(modifier = Modifier.height(16.dp))
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(BowlingSystem.LENGTH_BANDS) { band ->
-                Text(
-                    text = band.label,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            onClickLabel = "Select ${band.label}",
-                            role = Role.Button,
-                            onClick = { onSelected(band.value) }
-                        )
-                        .padding(vertical = 14.dp, horizontal = 8.dp)
-                )
-            }
-        }
+
+        Text(
+            text = "Angle: ${BowlingSystem.angleLabel(angle)}",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        Text(
+            text = "Line: ${BowlingSystem.LINE_OPTIONS.first { it.value == line }.label}",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        Text(
+            text = "Variation: ${variationOptions.first { it.value == variation }.label}",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        Text(
+            text = "Length: ${BowlingSystem.lengthLabel(liveLength)}",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .pointerInput(bowler.bowlingStyle) {
+                    detectAimGesture(
+                        onDiscrete = { direction ->
+                            when (direction) {
+                                AimDiscreteDirection.LEFT -> cycleAngle()
+                                AimDiscreteDirection.RIGHT -> cycleLine()
+                                AimDiscreteDirection.UP -> cycleVariation()
+                            }
+                        },
+                        onLengthDragStart = { services?.sound?.startAimTone() },
+                        onLengthDrag = { fraction ->
+                            services?.sound?.updateAimTone(fraction)
+                            val band = BowlingSystem.classifyLength(fraction.toDouble())
+                            if (band != liveLength) {
+                                liveLength = band
+                                services?.announceSpoken(BowlingSystem.lengthLabel(band))
+                            }
+                        },
+                        onLengthDragEnd = { fraction ->
+                            services?.sound?.stopAimTone()
+                            val band = BowlingSystem.classifyLength(fraction.toDouble())
+                            liveLength = band
+                            onLengthChanged(band)
+                            services?.announceSpoken("Length set: ${BowlingSystem.lengthLabel(band)}")
+                        }
+                    )
+                }
+                .semantics {
+                    contentDescription = "Aim gesture area. Two-finger swipe left, right, up, or down."
+                }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("Continue to speed") }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
     }
