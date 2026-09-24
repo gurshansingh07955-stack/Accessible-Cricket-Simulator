@@ -42,6 +42,27 @@ android {
         )
     }
 
+    signingConfigs {
+        // Overrides AGP's implicit debug signingConfig, which otherwise
+        // auto-generates a NEW keystore per machine (e.g. every fresh CI
+        // runner) — meaning every build previously had a DIFFERENT
+        // signing key, so installing a new build over an old one failed
+        // with "App not installed" (a signature mismatch) unless the old
+        // one was uninstalled first. This debug keystore is checked in
+        // as base64 (tools/debug-keystore.b64, decoded by the CI
+        // workflow before the build) precisely so every build — local or
+        // CI — shares the same key and can update in place. It carries
+        // none of the risk a real signing key would: it is a debug-only
+        // key with the standard well-known Android debug credentials,
+        // never used for a release build.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isDebuggable = false
