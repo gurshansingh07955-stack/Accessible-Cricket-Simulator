@@ -287,4 +287,30 @@ internal object Synth {
         }
         return toPcm(normalize(makeLoopable(raw, fade), 0.9f))
     }
+
+    // --- Continuous aim-drag feedback (pitching/batting two-finger gestures) ---
+
+    /**
+     * A short, cleanly loopable pure sine tone at a fixed reference pitch.
+     * Played through SoundEngine's looping channel machinery (the same
+     * SynthLoop/AudioTrack.setPlaybackRate path the crowd bed's tension
+     * creep already uses) and pitch-shifted LIVE as a two-finger drag
+     * moves, giving continuous, non-speech feedback that tracks a value
+     * by ear — see SoundEngine.updateAimTone. A few whole cycles at the
+     * reference pitch, THEN crossfaded, so there is no seam even before
+     * the crossfade blends it.
+     */
+    fun aimTone(): ShortArray {
+        val fade = frames(0.02)
+        val raw = FloatArray(frames(0.25) + fade)
+        for (i in raw.indices) {
+            val t = i.toDouble() / SAMPLE_RATE
+            raw[i] = (0.5 * sin(2.0 * PI * AIM_TONE_REFERENCE_HZ * t)).toFloat()
+        }
+        return toPcm(makeLoopable(raw, fade))
+    }
+
+    // A4. Arbitrary but clearly audible and comfortably centered in
+    // SoundEngine's AIM_TONE_MIN_RATE..AIM_TONE_MAX_RATE sweep range.
+    private const val AIM_TONE_REFERENCE_HZ = 440.0
 }
