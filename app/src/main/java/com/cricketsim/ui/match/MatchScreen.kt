@@ -88,13 +88,19 @@ import com.cricketsim.ui.settings.SettingsScreen
  * Rain outranks a pending pick because play has stopped; the pick simply
  * appears the moment play resumes.
  *
- * Reading order on the ordinary screen follows the web's match screen,
- * which was tuned with a real screen-reader user: striker, non-striker
- * and bowler lines with their live figures, then the action buttons,
- * then the last ball (with ball quality, shot and timing), the score, the
- * chase figures, the run rates and (in a chase) the win probability. The
- * whole screen scrolls (a plain scrolling Column) so nothing can be
- * pushed off a small screen.
+ * Reading order on the ordinary screen (tuned against real on-device
+ * TalkBack testing, which is why this no longer matches the web's own
+ * order): heading, then Leave match, Settings and Scorecard — the three
+ * navigation actions — reachable immediately without swiping through the
+ * live match state first. Then, while BOWLING: Set field (a pre-delivery
+ * decision, so it comes before the delivery itself), the striker/
+ * non-striker/bowler lines, then Bowl. While BATTING: Face next ball,
+ * the same three player lines, then Hear the field (read-only field
+ * info — secondary to the actual action). Everything else — status
+ * messages, the last ball, the score, the chase figures, the run rates,
+ * the win probability and the earlier-innings list — comes after that
+ * primary action button. The whole screen scrolls (a plain scrolling
+ * Column) so nothing can be pushed off a small screen.
  *
  * SYSTEM BACK BUTTON. Every sub-view below (a gesture surface, the field
  * screen, the scorecard, the settings overlay, the leave confirmation)
@@ -455,61 +461,84 @@ fun MatchScreen(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(MatchLines.strikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
-        Text(MatchLines.nonStrikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
-        Text(MatchLines.bowlerLine(matchState), style = MaterialTheme.typography.bodyLarge)
-
-        if (playNotice.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = playNotice,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-            )
-        }
-        if (fieldMessage.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = fieldMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-            )
-        }
-        if (userFieldReason != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Your field is illegal. $userFieldReason Every delivery will be a no-ball until it is fixed.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (isUserBowling) {
-            Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Bowl")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Set field")
-            }
-        } else {
-            Button(onClick = { showBattingScreen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Face next ball")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Hear the field")
-            }
+        // Leave match / Settings / Scorecard: the three navigation
+        // actions, reachable right after the heading without swiping
+        // through any live match state first.
+        Button(onClick = { confirmingLeave = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Leave match")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        // Sound, vibration, commentary and difficulty, changeable mid-match.
+        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Settings")
         }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = { showScorecard = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Scorecard")
         }
-
         Spacer(modifier = Modifier.height(16.dp))
+
+        if (isUserBowling) {
+            // Set the field BEFORE bowling — it's a pre-delivery decision.
+            Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Set field")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(MatchLines.strikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Text(MatchLines.nonStrikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Text(MatchLines.bowlerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Bowl")
+            }
+        } else {
+            Button(onClick = { showBattingScreen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Face next ball")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(MatchLines.strikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Text(MatchLines.nonStrikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Text(MatchLines.bowlerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Read-only field info — secondary to the actual action, so
+            // it comes after it.
+            Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Hear the field")
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Everything from here down comes after the primary action
+        // button, for both roles.
+        if (playNotice.isNotEmpty()) {
+            Text(
+                text = playNotice,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        if (fieldMessage.isNotEmpty()) {
+            Text(
+                text = fieldMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        if (userFieldReason != null) {
+            Text(
+                text = "Your field is illegal. $userFieldReason Every delivery will be a no-ball until it is fixed.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // The outcome of the ball just played and the new score are the two
         // things that change every delivery, so both are polite live
@@ -546,18 +575,6 @@ fun MatchScreen(
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
             }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        // Sound, vibration, commentary and difficulty, changeable mid-match.
-        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Settings")
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        // The match is autosaved, so this is safe; it asks first because it
-        // takes you out to the first screen.
-        Button(onClick = { confirmingLeave = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Leave match")
         }
     }
 }
