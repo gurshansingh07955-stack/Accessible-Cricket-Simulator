@@ -41,6 +41,14 @@ import kotlin.math.max
  *   rewinding it, so the pulse fires as close to instantly as Android
  *   allows. The accented final pulse is what lets you find the beat by
  *   ear. See INPUT LATENCY below.
+ * - AIM TONE. A continuous, non-speech tone used by the pitching/batting
+ *   two-finger drag gestures (see PitchingScreen's AimStep) — a short
+ *   looping sine (Synth.aimTone) whose PLAYBACK RATE is set live as the
+ *   drag moves, exactly the same AudioTrack.setPlaybackRate mechanism the
+ *   crowd bed's tension creep already uses, just swept across a much
+ *   wider range so the pitch change is obvious rather than subtle. It
+ *   never speaks during the drag itself — see updateAimTone's doc
+ *   comment for why.
  * - CROWD AMBIENCE. A looping bed whose volume is the product of four
  *   things, recomputed together so they never fight: tension (the crowd's
  *   mood, from match closeness), ducking (a dip under commentary and
@@ -85,7 +93,7 @@ class SoundEngine(context: Context) {
 
     // --- Synthesized buffers ---
 
-    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD }
+    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE }
 
     private val synthCache = HashMap<Fx, ShortArray>()
 
@@ -104,6 +112,7 @@ class SoundEngine(context: Context) {
                 Fx.THUNDER -> Synth.thunder()
                 Fx.RAIN -> Synth.rainLoop()
                 Fx.CROWD -> Synth.crowdBed()
+                Fx.AIM_TONE -> Synth.aimTone()
             }
         }
     }
@@ -149,6 +158,7 @@ class SoundEngine(context: Context) {
         if (old.soundEffects && !new.soundEffects) {
             stopCrowdAmbience()
             stopRainAmbience()
+            stopAimTone()
         }
         if (old.aiCommentaryMode != AiCommentaryMode.OFF && new.aiCommentaryMode == AiCommentaryMode.OFF) {
             stopCommentary()
@@ -190,6 +200,8 @@ class SoundEngine(context: Context) {
         crowdChannel = null
         rainChannel?.stop()
         rainChannel = null
+        aimToneChannel?.stop()
+        aimToneChannel = null
         runCatching { tickTrack?.release() }
         runCatching { accentTickTrack?.release() }
         runCatching { soundPool.release() }
@@ -343,7 +355,7 @@ class SoundEngine(context: Context) {
         if (!playRecorded(RecordedAsset.THUNDER, 0.75f * MASTER)) playPcm(Fx.THUNDER, 0.75f * MASTER)
     }
 
-    // --- Looping channels (crowd, rain) ---
+    // --- Looping channels (crowd, rain, aim tone) ---
 
     private interface LoopChannel {
         fun start()
@@ -615,6 +627,51 @@ class SoundEngine(context: Context) {
         }
     }
 
+    // --- Aim tone (pitching/batting two-finger gesture feedback) ---
+
+    private var aimToneChannel: LoopChannel? = null
+
+    /**
+     * Starts the continuous aim-drag tone, silent until the first
+     * updateAimTone call. Ducks the crowd for as long as it plays, same as
+     * any other effect — the point of a drag gesture is to hear the tone
+     * clearly, not the ambience under it. Safe to call again while already
+     * running (a no-op).
+     */
+    fun startAimTone() {
+        if (!settings.soundEffects || aimToneChannel != null) return
+        val channel = synthLoop(Fx.AIM_TONE) ?: return
+        aimToneChannel = channel
+        duckStart()
+        channel.setVolume(0f)
+        if (!paused) channel.start()
+    }
+
+    /**
+     * Sets the tone's pitch live from a 0..1 drag position, linearly across
+     * AIM_TONE_MIN_RATE..AIM_TONE_MAX_RATE. Called continuously as a
+     * two-finger drag moves — deliberately the ONLY feedback during the
+     * drag itself (see the gesture redesign plan's core principle: a
+     * continuous tone during the drag, a spoken announcement only when the
+     * screen's own zone-crossing logic decides one is warranted — never
+     * speech driven directly off every touch-move event, which would
+     * overrun TalkBack's speech queue and stutter). A no-op if
+     * startAimTone was never called or has already been stopped.
+     */
+    fun updateAimTone(fraction: Float) {
+        val channel = aimToneChannel ?: return
+        val clamped = fraction.coerceIn(0f, 1f)
+        channel.setRate(AIM_TONE_MIN_RATE + (AIM_TONE_MAX_RATE - AIM_TONE_MIN_RATE) * clamped)
+        channel.setVolume(AIM_TONE_GAIN * MASTER)
+    }
+
+    fun stopAimTone() {
+        val channel = aimToneChannel ?: return
+        aimToneChannel = null
+        channel.stop()
+        duckEnd()
+    }
+
     // --- AI voice commentary ---
 
     // Root-relative paths as stored in the commentary library, e.g.
@@ -748,6 +805,15 @@ class SoundEngine(context: Context) {
         const val RAIN_GAIN = 0.45f
         const val COMMENTARY_VOLUME = 0.85f
         const val COMMENTARY_START_TIMEOUT_MS = 8_000L
+
+        // The aim tone's playback-rate sweep — a wide range so the pitch
+        // change across a drag is obvious, not subtle. Unmeasured on a real
+        // device yet; if a drag feels like it needs finer resolution at one
+        // end, narrow the range or make the mapping non-linear rather than
+        // widening it further.
+        const val AIM_TONE_MIN_RATE = 0.6f
+        const val AIM_TONE_MAX_RATE = 2.4f
+        const val AIM_TONE_GAIN = 0.55f
 
         val ONE_SHOT_ASSETS = listOf(
             RecordedAsset.BAT_HIT,
