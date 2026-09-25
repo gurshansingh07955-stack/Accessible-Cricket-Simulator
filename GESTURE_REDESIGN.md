@@ -1,9 +1,9 @@
 # GESTURE REDESIGN PLAN — Accessible Cricket Simulator (Android)
 
 > **STATUS (see `HANDOFF.md` section 7 for the full current picture):**
-> Section 2 (bowling) is **implemented**, with three deviations from the
+> Section 2 (bowling) is **implemented**, with four deviations from the
 > plan as originally written below, all made after real on-device
-> TalkBack testing:
+> TalkBack testing (and one later bug-fix pass):
 > 1. The gesture detector tracks a **single active pointer**, not two
 >    simultaneous ones — TalkBack's touch-exploration passthrough never
 >    delivers two simultaneously-pressed pointers to the app; see
@@ -12,7 +12,10 @@
 > 2. **Speed is a real Compose `Slider`**, not a three-tier list pick —
 >    this was always what "the web version" meant by a speed control, and
 >    `Slider` carries first-class TalkBack support with no custom gesture
->    code needed.
+>    code needed. It also now lives on the **same screen** as the rest of
+>    the aim controls (angle/line/variation/length) rather than a
+>    separate step, and its `steps` parameter makes it snap to whole
+>    km/h exactly like the web version.
 > 3. **Section 2.1's timing mechanic has been dropped entirely** (the
 >    "drop it" side of the fork it deliberately left open) — bowling
 >    quality is now computed directly from the length drag's own
@@ -20,6 +23,25 @@
 >    `BowlingSystem.computeBowlingQuality`, exactly matching how the web
 >    app itself computes it. There is no release/timing step at all
 >    anymore.
+> 4. **Swing is implemented via the length drag's own curve** (see
+>    `BowlingSystem.classifySwing`), matching how the web app derives it
+>    from the horizontal curve of its drag path — curving the swipe left
+>    reads as IN_SWING, curving it right reads as OUT_SWING. It is no
+>    longer a "known v1 simplification"; there is no separate swing
+>    gesture.
+>
+> A gesture-detection bug was also fixed on this pass: the discrete
+> left/right/up swipes (angle/line/variation) used to change their value
+> exactly once and then silently stop responding to further swipes, because
+> the gesture-detection coroutine is launched once for the life of the
+> screen and its callbacks had captured `angle`/`line`/`variation` by
+> value from the first composition rather than reading them live. See
+> `PitchingScreen.kt`'s "WHY DISCRETE SWIPES USED TO STOP WORKING AFTER
+> ONE FIRING" doc comment for the full explanation. The length-drag's
+> full sweep range was also switched from a fixed, unmeasured pixel guess
+> to one that scales to the gesture area's actual measured size, and all
+> swipe thresholds now use density-independent (dp) units instead of raw
+> pixels.
 >
 > Section 3 (batting) and section 4 (fielding) are **not started**.
 > Section 5's bundled fixes are **not started**. The rest of this document
@@ -71,7 +93,8 @@ technique changed.)**
 | Line | Two-finger swipe **right** |
 | Variation | Two-finger swipe **up** |
 | Length | Two-finger swipe **down**, continuous drag — tone feedback live, spoken announcement only at zone crossings (yorker → full → good → short → bouncer) |
-| Speed | Existing slider control (already TalkBack-safe as a single-finger adjustable control — no change needed) |
+| Swing | The length drag's own left/right curve — see status banner above and `BowlingSystem.classifySwing` |
+| Speed | Existing slider control (already TalkBack-safe as a single-finger adjustable control — no change needed), now on the same screen as the rest of the aim controls |
 
 ### 2.1 — Release / timing mechanic: repurpose, don't discard
 
@@ -178,6 +201,7 @@ This needs investigation, not just a code tweak, since it's device-specific:
 5. Crowd-ambience-at-toss trigger change (small, independent of the gesture work — can be done anytime). **NOT STARTED.**
 6. Vibration investigation on multiple physical devices (independent workstream, can run in parallel with the above). **NOT STARTED.**
 7. Fielding's drag-and-drop framework work (separate, larger effort — sequence last, per the earlier plan). **NOT STARTED.**
+8. Swing-via-curve for bowling (section 2's swing row) + speed merged onto the aim screen + fix for the discrete-swipe "changes once then stops" bug. **DONE.**
 
 ---
 
