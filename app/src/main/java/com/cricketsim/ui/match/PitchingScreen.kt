@@ -17,8 +17,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -36,38 +38,49 @@ import com.cricketsim.logic.Player
 import com.cricketsim.logic.ResolvedBowlingDecision
 import com.cricketsim.logic.SwingType
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
  * The first of the three custom gesture surfaces (pitching/batting/
  * fielding — see UI_NOTES.md). Built around a TWO-FINGER gesture
- * vocabulary (see GESTURE_REDESIGN.md, section 2), and — as of this
- * revision — quality is computed the same way the web app computes it:
- * directly from how precisely and smoothly the length drag itself was
- * performed, via the already-ported BowlingSystem.computeBowlingQuality.
- * There is no separate timing mechanic. See "WHY THE TIMING MECHANIC IS
- * GONE" and "WHY THIS ISN'T LITERALLY TWO SIMULTANEOUS POINTERS" below
- * for the two things that changed after the first on-device pass.
+ * vocabulary (see GESTURE_REDESIGN.md, section 2). Quality is computed
+ * the same way the web app computes it: directly from how precisely and
+ * smoothly the length drag itself was performed, via the already-ported
+ * BowlingSystem.computeBowlingQuality. There is no separate timing
+ * mechanic. See "WHY THE TIMING MECHANIC IS GONE" and "WHY THIS ISN'T
+ * LITERALLY TWO SIMULTANEOUS POINTERS" below for the two things that
+ * changed after the first on-device pass, and "WHY DISCRETE SWIPES USED
+ * TO STOP WORKING AFTER ONE FIRING" for a bug fixed in this revision.
  *
  * AIM STEP GESTURE VOCABULARY (angle/line/variation/length all live on
  * ONE screen at once, each assigned its own compass direction, exactly
- * because a real bowler sets all four before ever releasing the ball):
+ * because a real bowler sets all four before ever releasing the ball.
+ * Speed lives on this same screen too, as a real Slider, matching the
+ * web app's single continuous bowling-setup surface):
  * - Two-finger swipe LEFT cycles ANGLE forward through its (short, 2-item)
  *   list, wrapping around.
  * - Two-finger swipe RIGHT cycles LINE forward through its list, wrapping.
  * - Two-finger swipe UP cycles VARIATION forward through this bowler's
  *   pace-or-spin variation list, wrapping.
- * - Two-finger swipe DOWN is the one CONTINUOUS axis, and now the ONLY
- *   thing that determines both the intended length AND the delivery's
- *   quality (see below): once net downward movement is recognized as
- *   the dominant direction, the gesture locks into a drag that maps
- *   live vertical position to a length band, with a continuously
- *   pitch-shifted tone (SoundEngine.startAimTone/updateAimTone)
- *   tracking position while the fingers move, and a SPOKEN announcement
- *   only when the drag crosses into a new length band — never a
- *   continuous spoken readout, which would overrun TalkBack's speech
- *   queue. Lifting the fingers commits whatever band the drag last
- *   landed in.
+ * - Two-finger swipe DOWN is the one CONTINUOUS axis, and determines
+ *   both the intended length AND the delivery's quality (see below):
+ *   once net downward movement is recognized as the dominant direction,
+ *   the gesture locks into a drag that maps live vertical position to a
+ *   length band, with a continuously pitch-shifted tone
+ *   (SoundEngine.startAimTone/updateAimTone) tracking position while the
+ *   fingers move, and a SPOKEN announcement only when the drag crosses
+ *   into a new length band — never a continuous spoken readout, which
+ *   would overrun TalkBack's speech queue. Lifting the fingers commits
+ *   whatever band the drag last landed in.
+ * - SWING is read from the SHAPE of that same down-drag, not a separate
+ *   gesture: if the path bows away from the straight line between where
+ *   the drag started and where it ended, that peak sideways bow (as a
+ *   fraction of the gesture area's width) is fed into the already-ported
+ *   BowlingSystem.classifySwing — curving toward the left is IN_SWING,
+ *   curving toward the right is OUT_SWING, matching the web app's own
+ *   drag-curve-based swing mechanic exactly (see computeCurveFraction
+ *   and BowlingSystem.classifySwing's own doc comment).
  * Angle/line/variation each fire repeatedly while the same swipe
  * continues (each firing resets the gesture's reference point), so
  * holding and continuing to drag left, say, cycles through angle
@@ -116,41 +129,76 @@ import kotlin.math.roundToInt
  * below for how the drag's live-tracked verticalFraction/
  * maxVerticalFractionReached feed it.
  *
+ * WHY DISCRETE SWIPES USED TO STOP WORKING AFTER ONE FIRING. AimStep's
+ * pointerInput block is keyed ONLY on bowler.bowlingStyle, so the
+ * detectAimGesture coroutine is launched exactly once for the whole
+ * life of this screen and never restarts on recomposition — and since
+ * awaitEachGesture loops forever internally, the lambdas passed into it
+ * (onDiscrete's cycleAngle/cycleLine/cycleVariation) were captured
+ * exactly once too. Each of those functions used to read the AimStep
+ * composable's `angle`/`line`/`variation` PARAMETERS directly, which are
+ * plain values frozen at whatever they were on that first composition —
+ * so every subsequent swipe kept recomputing "the option after the
+ * ORIGINAL value" instead of "the option after the CURRENT value,"
+ * silently reproducing the same result forever after the first real
+ * change (which is also why the spoken announcement appeared to fire
+ * only once: the value never actually changed again, so there was
+ * nothing new to announce). Fixed by reading through rememberUpdatedState
+ * handles (currentAngle/currentLine/currentVariation/currentServices)
+ * instead — a State object whose IDENTITY stays stable across
+ * recompositions (so the once-captured closure keeps a valid reference
+ * to it) but whose VALUE is refreshed every recomposition, so a read
+ * through it always returns the latest value even from a long-frozen
+ * closure.
+ *
  * SPEED is a real Slider (Compose's Slider has first-class TalkBack
  * support out of the box — no custom gesture code needed), matching the
- * web's own continuous speed control, rather than the three-tier list
- * pick this screen used before.
+ * web's own continuous, one-km/h-at-a-time speed control. It now lives
+ * on the same screen as the rest of the aim controls, set via the
+ * Slider's `steps` parameter so it snaps to whole km/h exactly like the
+ * web version (e.g. 132, 131, ...) rather than a separate step of its
+ * own.
  *
- * KNOWN V1 SIMPLIFICATIONS (not permanent design decisions):
- * - Swing is not player-controlled yet (always SwingType.NONE) — the
- *   web app's swing came from the horizontal curve of its drag path,
- *   which this discrete-direction gesture vocabulary doesn't have an
- *   equivalent axis for yet.
- * - DISCRETE_SWIPE_THRESHOLD_PX / LENGTH_DRAG_ENTRY_THRESHOLD_PX /
- *   LENGTH_DRAG_FULL_RANGE_PX are all unmeasured guesses pending a
- *   real-device calibration pass.
+ * GESTURE-AREA SIZING. LENGTH_DRAG_RANGE_FRACTION_OF_HEIGHT scales the
+ * length drag's full 0..1 sweep to the ACTUAL measured height of the
+ * gesture Box (via PointerInputScope.size) rather than a fixed guessed
+ * pixel count, so every device gets close to the full available area to
+ * bowl in, and DISCRETE_SWIPE_THRESHOLD_DP / AXIS_LOCK_THRESHOLD_DP are
+ * both real dp values converted to px at gesture-detection time (not
+ * raw, density-dependent pixel guesses), so swipe sensitivity is
+ * consistent across devices with different screen densities.
  */
 
-private enum class PitchStep { AIM, SPEED, RESULT }
+private enum class PitchStep { AIM, RESULT }
 
-// --- AimStep gesture tuning (all unmeasured on a real device — see the
-// class doc comment's KNOWN V1 SIMPLIFICATIONS) ---
+// --- AimStep gesture tuning ---
 
-// How far the active pointer must move, in raw pixels, before a
-// left/right/up swipe counts as one discrete "cycle to the next option"
-// step. Deliberately re-fireable: each firing resets the reference point
-// (see detectAimGesture), so continuing to hold and move keeps stepping.
-private const val DISCRETE_SWIPE_THRESHOLD_PX = 56f
+// How far the active pointer must move (in dp, converted to px at
+// gesture-detection time) before a left/right/up swipe counts as one
+// discrete "cycle to the next option" step. Deliberately re-fireable:
+// each firing resets the reference point (see detectAimGesture), so
+// continuing to hold and move keeps stepping.
+private val DISCRETE_SWIPE_THRESHOLD_DP = 40.dp
 
-// How far net DOWNWARD movement (from the gesture's start point) must
-// reach, while still the dominant axis, before the gesture locks into
-// continuous length-drag mode for the rest of this touch.
-private const val LENGTH_DRAG_ENTRY_THRESHOLD_PX = 24f
+// Total distance (in dp) the pointer must travel from the gesture's
+// start before the gesture COMMITS to being either a discrete
+// left/right/up swipe or a continuous length drag. Below this distance
+// the direction is still ambiguous (jitter/hand-pivot noise), so no
+// decision is made yet. Once committed, the gesture never reinterprets
+// itself as the other kind for the rest of this touch.
+private val AXIS_LOCK_THRESHOLD_DP = 28.dp
 
-// Downward distance from the gesture's start point that maps to a full
-// 0..1 sweep across the whole pitch length. A guess pending real-device
-// testing across different screen sizes/densities.
-private const val LENGTH_DRAG_FULL_RANGE_PX = 700f
+// How much more dominant the downward component must be than the
+// horizontal one, at the moment of the axis-lock decision, to commit to
+// a length drag rather than a discrete swipe. Requiring real dominance
+// (not just "greater than") avoids misclassifying a near-diagonal swipe
+// start from hand-pivot noise.
+private const val AXIS_DOMINANCE_RATIO = 1.3f
+
+// Fraction of the gesture Box's actual measured height used as the
+// length drag's full 0..1 sweep range, so every ball gets close to the
+// whole available screen area rather than a fixed, unmeasured guess.
+private const val LENGTH_DRAG_RANGE_FRACTION_OF_HEIGHT = 0.92f
 
 // GOOD_LENGTH's band center (see BowlingSystem.LENGTH_BANDS) — the
 // sensible default verticalFraction if the length drag is never
@@ -170,7 +218,9 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
     // stored separately.
     var finalLengthFraction by remember { mutableStateOf(DEFAULT_LENGTH_FRACTION) }
     var maxLengthFractionReached by remember { mutableStateOf(DEFAULT_LENGTH_FRACTION) }
-    var speedKmh by remember { mutableStateOf(0) }
+    // Read from the same down-drag's curvature — see the class doc
+    // comment's swing paragraph and computeCurveFraction below.
+    var swingType by remember { mutableStateOf(SwingType.NONE) }
     var decision by remember { mutableStateOf<ResolvedBowlingDecision?>(null) }
 
     when (step) {
@@ -183,19 +233,12 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
             onAngleChanged = { angle = it },
             onLineChanged = { line = it },
             onVariationChanged = { variation = it },
-            onLengthDragCommitted = { finalFraction, maxFraction ->
+            onLengthDragCommitted = { finalFraction, maxFraction, swing ->
                 finalLengthFraction = finalFraction
                 maxLengthFractionReached = maxFraction
+                swingType = swing
             },
-            onContinue = { step = PitchStep.SPEED },
-            onBack = onBack
-        )
-        PitchStep.SPEED -> SpeedStep(
-            bowler = bowler,
-            variation = variation,
-            initialSpeedKmh = speedKmh,
             onBowl = { chosenSpeed ->
-                speedKmh = chosenSpeed
                 val speedRange = BowlingSystem.getSpeedRangeForVariation(bowler.bowlingStyle, variation)
                 // Exactly the web's own quality rubric, fed by the length
                 // drag's own live-tracked precision/smoothness — see the
@@ -217,7 +260,7 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
                     speedKmh = chosenSpeed,
                     intendedLength = targetLength,
                     actualLength = resolvedLength.actualLength,
-                    swingType = SwingType.NONE, // See KNOWN V1 SIMPLIFICATIONS above.
+                    swingType = swingType,
                     qualityScore = quality.finalScore,
                     qualityTier = quality.tier,
                     quality = quality,
@@ -225,7 +268,7 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
                 )
                 step = PitchStep.RESULT
             },
-            onBack = { step = PitchStep.AIM }
+            onBack = onBack
         )
         PitchStep.RESULT -> {
             val finalDecision = decision
@@ -238,70 +281,133 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
 
 private enum class AimDiscreteDirection { LEFT, RIGHT, UP }
 
+private enum class GestureMode { UNDECIDED, DISCRETE, LENGTH_DRAG }
+
+/**
+ * Peak horizontal deviation of `path` from the straight line between its
+ * first and last points, as a fraction of `widthPx` — feeds directly
+ * into BowlingSystem.classifySwing (positive = curved right = OUT_SWING,
+ * negative = curved left = IN_SWING). Only meaningful for a
+ * predominantly-vertical path, which a committed length drag always is
+ * by construction (see detectAimGesture's axis-lock check).
+ */
+private fun computeCurveFraction(path: List<Offset>, widthPx: Float): Double {
+    if (path.size < 3 || widthPx <= 0f) return 0.0
+    val start = path.first()
+    val end = path.last()
+    val totalDy = end.y - start.y
+    if (abs(totalDy) < 1f) return 0.0
+    var peakDeviation = 0f
+    for (point in path) {
+        val t = ((point.y - start.y) / totalDy).coerceIn(0f, 1f)
+        val straightLineX = start.x + (end.x - start.x) * t
+        val deviation = point.x - straightLineX
+        if (abs(deviation) > abs(peakDeviation)) peakDeviation = deviation
+    }
+    return (peakDeviation / widthPx).toDouble()
+}
+
 /**
  * The shared low-level gesture tracker AimStep's gesture area is built
  * on — see the class doc comment's "WHY THIS ISN'T LITERALLY TWO
  * SIMULTANEOUS POINTERS" for why this tracks a single active pointer
  * rather than requiring two at once, and "AIM STEP GESTURE VOCABULARY"
  * for the full direction/mode behavior this implements.
+ *
+ * Direction is decided ONCE per touch, after the pointer has moved at
+ * least AXIS_LOCK_THRESHOLD_DP from its start point and only once one
+ * axis clearly dominates (see AXIS_DOMINANCE_RATIO) — this avoids the
+ * early jitter/hand-pivot noise of a real swipe's first few pixels
+ * flipping the gesture into the wrong mode. Once decided, the gesture
+ * NEVER reinterprets itself as the other kind for the rest of this
+ * touch: a discrete swipe that later curves downward stays a discrete
+ * swipe, and a length drag that wanders horizontally stays a length
+ * drag (its horizontal wander is exactly what feeds swing — see
+ * computeCurveFraction).
  */
 private suspend fun PointerInputScope.detectAimGesture(
     onDiscrete: (AimDiscreteDirection) -> Unit,
     onLengthDragStart: () -> Unit,
     onLengthDrag: (fraction: Float, maxFractionReached: Float) -> Unit,
-    onLengthDragEnd: (fraction: Float, maxFractionReached: Float) -> Unit
+    onLengthDragEnd: (fraction: Float, maxFractionReached: Float, swing: SwingType) -> Unit
 ) {
+    val discreteThresholdPx = DISCRETE_SWIPE_THRESHOLD_DP.toPx()
+    val axisLockThresholdPx = AXIS_LOCK_THRESHOLD_DP.toPx()
+    val gestureWidthPx = size.width.toFloat()
+    val lengthDragRangePx = size.height.toFloat() * LENGTH_DRAG_RANGE_FRACTION_OF_HEIGHT
+
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         down.consume()
         val gestureStart = down.position
+        var mode = GestureMode.UNDECIDED
         var referencePoint = gestureStart
-        var lengthDragActive = false
+        var lengthDragOrigin = gestureStart
         var lastFraction = 0f
         var maxFractionReached = 0f
+        val lengthPath = mutableListOf<Offset>()
+
+        fun handleDiscretePoint(position: Offset) {
+            val dx = position.x - referencePoint.x
+            val dy = position.y - referencePoint.y
+            if (abs(dx) >= abs(dy)) {
+                if (abs(dx) >= discreteThresholdPx) {
+                    onDiscrete(if (dx < 0) AimDiscreteDirection.LEFT else AimDiscreteDirection.RIGHT)
+                    referencePoint = position
+                }
+            } else if (dy < 0 && abs(dy) >= discreteThresholdPx) {
+                // Upward only — downward is claimed by the length-drag branch.
+                onDiscrete(AimDiscreteDirection.UP)
+                referencePoint = position
+            }
+        }
 
         while (true) {
             val event = awaitPointerEvent()
             val active = event.changes.firstOrNull { it.pressed }
             if (active == null) {
-                if (lengthDragActive) onLengthDragEnd(lastFraction, maxFractionReached)
+                if (mode == GestureMode.LENGTH_DRAG) {
+                    val curveFraction = computeCurveFraction(lengthPath, gestureWidthPx)
+                    onLengthDragEnd(lastFraction, maxFractionReached, BowlingSystem.classifySwing(curveFraction))
+                }
                 return@awaitEachGesture
             }
             active.consume()
             val position = active.position
 
-            if (lengthDragActive) {
-                val netDown = position.y - gestureStart.y
-                lastFraction = (netDown / LENGTH_DRAG_FULL_RANGE_PX).coerceIn(0f, 1f)
-                maxFractionReached = maxOf(maxFractionReached, lastFraction)
-                onLengthDrag(lastFraction, maxFractionReached)
-                continue
-            }
-
-            val netDownFromStart = position.y - gestureStart.y
-            val netRightFromStart = position.x - gestureStart.x
-            // Downward movement locks into continuous length mode for the
-            // rest of this touch — it never reverts to discrete swiping.
-            if (netDownFromStart > LENGTH_DRAG_ENTRY_THRESHOLD_PX && netDownFromStart > abs(netRightFromStart)) {
-                lengthDragActive = true
-                onLengthDragStart()
-                lastFraction = (netDownFromStart / LENGTH_DRAG_FULL_RANGE_PX).coerceIn(0f, 1f)
-                maxFractionReached = lastFraction
-                onLengthDrag(lastFraction, maxFractionReached)
-                continue
-            }
-
-            val dx = position.x - referencePoint.x
-            val dy = position.y - referencePoint.y
-            if (abs(dx) >= abs(dy)) {
-                if (abs(dx) >= DISCRETE_SWIPE_THRESHOLD_PX) {
-                    onDiscrete(if (dx < 0) AimDiscreteDirection.LEFT else AimDiscreteDirection.RIGHT)
-                    referencePoint = position
+            when (mode) {
+                GestureMode.LENGTH_DRAG -> {
+                    lengthPath.add(position)
+                    val netDown = position.y - lengthDragOrigin.y
+                    lastFraction = (netDown / lengthDragRangePx).coerceIn(0f, 1f)
+                    maxFractionReached = maxOf(maxFractionReached, lastFraction)
+                    onLengthDrag(lastFraction, maxFractionReached)
                 }
-            } else if (dy < 0 && abs(dy) >= DISCRETE_SWIPE_THRESHOLD_PX) {
-                // Upward only — downward is claimed by the length-drag check above.
-                onDiscrete(AimDiscreteDirection.UP)
-                referencePoint = position
+                GestureMode.DISCRETE -> handleDiscretePoint(position)
+                GestureMode.UNDECIDED -> {
+                    val dxTotal = position.x - gestureStart.x
+                    val dyTotal = position.y - gestureStart.y
+                    if (hypot(dxTotal, dyTotal) >= axisLockThresholdPx) {
+                        val isDominantlyDown = dyTotal > 0 && dyTotal > abs(dxTotal) * AXIS_DOMINANCE_RATIO
+                        if (isDominantlyDown) {
+                            mode = GestureMode.LENGTH_DRAG
+                            // Fresh origin at the lock-in point (not the
+                            // original touch-down) so the full configured
+                            // range is available from here, rather than
+                            // losing part of it to the ambiguity phase.
+                            lengthDragOrigin = position
+                            lengthPath.add(position)
+                            onLengthDragStart()
+                            lastFraction = 0f
+                            maxFractionReached = 0f
+                            onLengthDrag(0f, 0f)
+                        } else {
+                            mode = GestureMode.DISCRETE
+                            referencePoint = gestureStart
+                            handleDiscretePoint(position)
+                        }
+                    }
+                }
             }
         }
     }
@@ -317,12 +423,24 @@ private fun AimStep(
     onAngleChanged: (BowlingAngle) -> Unit,
     onLineChanged: (BowlingLine) -> Unit,
     onVariationChanged: (BowlingVariation) -> Unit,
-    onLengthDragCommitted: (finalFraction: Float, maxFractionReached: Float) -> Unit,
-    onContinue: () -> Unit,
+    onLengthDragCommitted: (finalFraction: Float, maxFractionReached: Float, swing: SwingType) -> Unit,
+    onBowl: (speedKmh: Int) -> Unit,
     onBack: () -> Unit
 ) {
     val services = LocalGameServices.current
     val variationOptions = remember(bowler.bowlingStyle) { BowlingSystem.getVariationOptions(bowler.bowlingStyle) }
+
+    // See the file's "WHY DISCRETE SWIPES USED TO STOP WORKING AFTER ONE
+    // FIRING" doc comment: detectAimGesture's coroutine is captured once
+    // and never restarts, so cycleAngle/cycleLine/cycleVariation must
+    // read through a stable-identity, freshly-valued handle rather than
+    // the raw parameter, or they keep recomputing "next" from a frozen
+    // first-composition value forever.
+    val currentAngle by rememberUpdatedState(angle)
+    val currentLine by rememberUpdatedState(line)
+    val currentVariation by rememberUpdatedState(variation)
+    val currentServices by rememberUpdatedState(services)
+
     // Tracks the live drag position while dragging; committed back up
     // (via onLengthDragCommitted) only once the fingers lift.
     var liveLengthFraction by remember(finalLengthFraction) { mutableStateOf(finalLengthFraction) }
@@ -334,21 +452,30 @@ private fun AimStep(
 
     fun cycleAngle() {
         val options = BowlingSystem.ANGLE_OPTIONS.map { it.value }
-        val next = options[(options.indexOf(angle) + 1) % options.size]
+        val next = options[(options.indexOf(currentAngle) + 1) % options.size]
         onAngleChanged(next)
-        services?.announceSpoken(BowlingSystem.angleLabel(next))
+        currentServices?.announceSpoken(BowlingSystem.angleLabel(next))
     }
     fun cycleLine() {
         val options = BowlingSystem.LINE_OPTIONS
-        val next = options[(options.indexOfFirst { it.value == line } + 1) % options.size]
+        val next = options[(options.indexOfFirst { it.value == currentLine } + 1) % options.size]
         onLineChanged(next.value)
-        services?.announceSpoken(next.label)
+        currentServices?.announceSpoken(next.label)
     }
     fun cycleVariation() {
-        val next = variationOptions[(variationOptions.indexOfFirst { it.value == variation } + 1) % variationOptions.size]
+        val next = variationOptions[(variationOptions.indexOfFirst { it.value == currentVariation } + 1) % variationOptions.size]
         onVariationChanged(next.value)
-        services?.announceSpoken(next.label)
+        currentServices?.announceSpoken(next.label)
     }
+
+    // Speed now lives on this same screen (see class doc comment) rather
+    // than a separate step. Range is keyed on the variation so it snaps
+    // to a sensible mid-range value whenever the swipe-up gesture cycles
+    // to a variation with a different speed range.
+    val speedRange = remember(bowler.bowlingStyle, variation) {
+        BowlingSystem.getSpeedRangeForVariation(bowler.bowlingStyle, variation)
+    }
+    var speedKmh by remember(speedRange) { mutableStateOf((speedRange.min + speedRange.max) / 2) }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Text(
@@ -359,7 +486,8 @@ private fun AimStep(
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "Two-finger swipe left for angle, right for line, up for variation. " +
-                "Two-finger swipe down and hold to set length by ear, then lift your fingers to set it.",
+                "Swipe down and hold to set length by ear, curving left for inswing or " +
+                "right for outswing, then lift your fingers to set it.",
             style = MaterialTheme.typography.bodySmall
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -400,22 +528,27 @@ private fun AimStep(
                                 AimDiscreteDirection.UP -> cycleVariation()
                             }
                         },
-                        onLengthDragStart = { services?.sound?.startAimTone() },
+                        onLengthDragStart = { currentServices?.sound?.startAimTone() },
                         onLengthDrag = { fraction, _ ->
-                            services?.sound?.updateAimTone(fraction)
+                            currentServices?.sound?.updateAimTone(fraction)
                             liveLengthFraction = fraction
                             val band = BowlingSystem.classifyLength(fraction.toDouble())
                             if (band != lastAnnouncedLength) {
                                 lastAnnouncedLength = band
-                                services?.announceSpoken(BowlingSystem.lengthLabel(band))
+                                currentServices?.announceSpoken(BowlingSystem.lengthLabel(band))
                             }
                         },
-                        onLengthDragEnd = { fraction, maxFraction ->
-                            services?.sound?.stopAimTone()
+                        onLengthDragEnd = { fraction, maxFraction, swing ->
+                            currentServices?.sound?.stopAimTone()
                             liveLengthFraction = fraction
-                            onLengthDragCommitted(fraction, maxFraction)
-                            services?.announceSpoken(
-                                "Length set: ${BowlingSystem.lengthLabel(BowlingSystem.classifyLength(fraction.toDouble()))}"
+                            onLengthDragCommitted(fraction, maxFraction, swing)
+                            val swingSuffix = when (swing) {
+                                SwingType.IN_SWING -> ", inswing"
+                                SwingType.OUT_SWING -> ", outswing"
+                                SwingType.NONE -> ""
+                            }
+                            currentServices?.announceSpoken(
+                                "Length set: ${BowlingSystem.lengthLabel(BowlingSystem.classifyLength(fraction.toDouble()))}$swingSuffix"
                             )
                         }
                     )
@@ -426,58 +559,28 @@ private fun AimStep(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("Continue to speed") }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
-    }
-}
-
-@Composable
-private fun SpeedStep(
-    bowler: Player,
-    variation: BowlingVariation,
-    initialSpeedKmh: Int,
-    onBowl: (Int) -> Unit,
-    onBack: () -> Unit
-) {
-    val range = remember(variation) { BowlingSystem.getSpeedRangeForVariation(bowler.bowlingStyle, variation) }
-    var speedKmh by remember(range) {
-        mutableStateOf(initialSpeedKmh.takeIf { it in range.min..range.max } ?: ((range.min + range.max) / 2))
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text(
-            text = "Choose your speed",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() }
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "Faster is riskier \u2014 it's harder to control near your top pace.",
-            style = MaterialTheme.typography.bodySmall
-        )
-        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "$speedKmh km/h",
-            style = MaterialTheme.typography.headlineMedium,
+            text = "Speed: $speedKmh km/h",
+            style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         // Compose's Slider carries first-class TalkBack support (it's
         // announced as adjustable, with swipe up/down or the standard
-        // increment/decrement actions) — no custom gesture code needed,
-        // unlike the discrete axes above.
+        // increment/decrement actions). `steps` makes it snap to whole
+        // km/h, matching the web version's 132, 131, ... behavior.
         Slider(
             value = speedKmh.toFloat(),
             onValueChange = { speedKmh = it.roundToInt() },
-            valueRange = range.min.toFloat()..range.max.toFloat(),
+            valueRange = speedRange.min.toFloat()..speedRange.max.toFloat(),
+            steps = (speedRange.max - speedRange.min - 1).coerceAtLeast(0),
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics { contentDescription = "Speed: $speedKmh kilometers per hour" }
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = { onBowl(speedKmh) }, modifier = Modifier.fillMaxWidth()) { Text("Bowl") }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
@@ -488,6 +591,11 @@ private fun SpeedStep(
 private fun ResultStep(decision: ResolvedBowlingDecision, onContinue: () -> Unit) {
     val lengthName = BowlingSystem.lengthLabel(decision.actualLength)
     val tierLabel = BowlingSystem.qualityTierLabel(decision.qualityTier)
+    val swingLabel = when (decision.swingType) {
+        SwingType.IN_SWING -> "Inswing"
+        SwingType.OUT_SWING -> "Outswing"
+        SwingType.NONE -> null
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Text(
@@ -500,6 +608,10 @@ private fun ResultStep(decision: ResolvedBowlingDecision, onContinue: () -> Unit
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text("Actual length: $lengthName")
+        if (swingLabel != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Swing: $swingLabel")
+        }
         if (decision.forcedNoBall) {
             Spacer(modifier = Modifier.height(8.dp))
             Text("That's a beamer \u2014 automatic no ball.")
