@@ -38,8 +38,8 @@ import com.cricketsim.logic.Player
 import com.cricketsim.logic.ResolvedBowlingDecision
 import com.cricketsim.logic.SwingType
 import kotlin.math.abs
-import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * The first of the three custom gesture surfaces (pitching/batting/
@@ -387,7 +387,11 @@ private suspend fun PointerInputScope.detectAimGesture(
                 GestureMode.UNDECIDED -> {
                     val dxTotal = position.x - gestureStart.x
                     val dyTotal = position.y - gestureStart.y
-                    if (hypot(dxTotal, dyTotal) >= axisLockThresholdPx) {
+                    // kotlin.math.hypot only has a Double overload; staying in
+                    // Float here avoids a conversion and matches
+                    // axisLockThresholdPx's type directly.
+                    val totalDistance = sqrt(dxTotal * dxTotal + dyTotal * dyTotal)
+                    if (totalDistance >= axisLockThresholdPx) {
                         val isDominantlyDown = dyTotal > 0 && dyTotal > abs(dxTotal) * AXIS_DOMINANCE_RATIO
                         if (isDominantlyDown) {
                             mode = GestureMode.LENGTH_DRAG
