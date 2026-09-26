@@ -25,9 +25,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -105,17 +103,24 @@ import kotlinx.coroutines.delay
  *   cleared so it never becomes a second focus stop or a live region
  *   talking over the rhythm.
  *
- * EVERY PULSE is a buzz (Compose's LongPress haptic, if vibration is on in
- * Settings) AND an audible tick from the sound engine, with the FINAL
- * pulse accented (higher and louder) so the beat to swing on can be found
- * by ear — the web does the same. The buzzes themselves are all identical.
+ * EVERY PULSE is a buzz AND an audible tick from the sound engine, with
+ * the FINAL pulse accented (higher and louder) so the beat to swing on
+ * can be found by ear — the web does the same. The buzzes themselves
+ * are all identical. The buzz is SoundEngine.vibratePulse() — a direct
+ * VibrationEffect call, not Compose's
+ * HapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress),
+ * which an earlier version of this screen used. See vibratePulse's own
+ * doc comment for why: HapticFeedbackType.LongPress dispatches to a
+ * per-OEM SEMANTIC "a long press was recognized" system haptic rather
+ * than a raw timed buzz, which lines up with reports of the rhythm
+ * feeling laggy and inconsistent specifically on some cheaper-motor
+ * devices — exactly the kind of device where a rhythm-timing cue is
+ * most sensitive to any extra, unpredictable latency.
  *
  * KNOWN V1 SIMPLIFICATIONS (not permanent design decisions):
  * - BAT_INPUT_LATENCY_COMPENSATION_MS is 0 — touch-to-click latency
  *   under TalkBack, and audio output latency for the tick, are both
- *   unmeasured. The Perfect window is only 16% of the interval either
- *   side (~30-60ms), so a consistent offset of a few tens of ms matters;
- *   calibrate on a real device.
+ *   unmeasured. Calibrate on a real device once measured.
  */
 
 private enum class BatStep { FOOTWORK, SHOT, INTENT, TIMING, RESULT }
@@ -407,7 +412,6 @@ private fun BatIntentStep(shotName: String, onSelected: (IntentDirection) -> Uni
 
 @Composable
 private fun BatTimingStep(speedKmh: Int, onSwung: (BatSwing) -> Unit) {
-    val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val services = LocalGameServices.current
     val currentOnSwung by rememberUpdatedState(onSwung)
@@ -443,9 +447,12 @@ private fun BatTimingStep(speedKmh: Int, onSwung: (BatSwing) -> Unit) {
             if (wait > 0) delay(wait)
             if (resolved) return@LaunchedEffect
             pulsesFired = i + 1
-            // Vibration is a setting; the tick is gated by Sound effects in
-            // the engine. The final pulse's tick is the accented one.
-            if (services?.settings?.vibration != false) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            // A direct, low-latency buzz rather than Compose's semantic
+            // HapticFeedbackType.LongPress -- see the class doc comment's
+            // paragraph on EVERY PULSE for why. vibratePulse() checks the
+            // vibration setting itself. The tick is gated by Sound
+            // effects in the engine. The final pulse's tick is accented.
+            services?.sound?.vibratePulse()
             services?.sound?.playTimingTick(accent = i == BAT_PULSE_COUNT - 1)
         }
         // Never swung: wait a grace window, then score it as a clear miss
