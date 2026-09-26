@@ -50,8 +50,10 @@ import kotlin.math.sqrt
  * BowlingSystem.computeBowlingQuality. There is no separate timing
  * mechanic. See "WHY THE TIMING MECHANIC IS GONE" and "WHY THIS ISN'T
  * LITERALLY TWO SIMULTANEOUS POINTERS" below for the two things that
- * changed after the first on-device pass, and "WHY DISCRETE SWIPES USED
- * TO STOP WORKING AFTER ONE FIRING" for a bug fixed in this revision.
+ * changed after the first on-device pass, "WHY DISCRETE SWIPES USED
+ * TO STOP WORKING AFTER ONE FIRING" for a bug fixed in an earlier
+ * revision, and "WHY THE BOWLING SETUP CARRIES BETWEEN BALLS" for how
+ * angle/line/variation/speed persist within an over.
  *
  * AIM STEP GESTURE VOCABULARY (angle/line/variation/length all live on
  * ONE screen at once, each assigned its own compass direction, exactly
@@ -166,10 +168,50 @@ import kotlin.math.sqrt
  * bowl in, and DISCRETE_SWIPE_THRESHOLD_DP / AXIS_LOCK_THRESHOLD_DP are
  * both real dp values converted to px at gesture-detection time (not
  * raw, density-dependent pixel guesses), so swipe sensitivity is
- * consistent across devices with different screen densities.
+ * consistent across devices with different screen densities. AimStep's
+ * own layout also deliberately keeps every OTHER element on this screen
+ * as compact as it reasonably can (smaller text styles, tighter
+ * spacers, a single combined angle/line/variation line instead of
+ * three separate ones) specifically so the gesture Box's weight(1f) has
+ * as much leftover vertical space as possible to claim — the Box only
+ * ever gets whatever the Column's OTHER, non-weighted children don't
+ * use, so shrinking them is what actually grows the bowling area, not
+ * a further increase to LENGTH_DRAG_RANGE_FRACTION_OF_HEIGHT itself
+ * (already close to the Box's own full height).
+ *
+ * WHY THE BOWLING SETUP CARRIES BETWEEN BALLS. A real bowler doesn't
+ * re-decide their angle, line, variation and pace from scratch before
+ * every single ball of an over — they bowl a plan across the six balls
+ * and adjust it. MatchScreen.kt now remembers the LAST bowling setup
+ * actually used (a BowlingSetupMemory, captured at the moment "Bowl" is
+ * tapped) and passes it back in as this screen's initialSetup for the
+ * next ball, so angle/line/variation/speed all start from where the
+ * previous ball left them rather than resetting to defaults every time
+ * — but only within the SAME over: MatchScreen clears that memory the
+ * moment matchState.score.overs changes, so a new over always starts
+ * fresh. Line and angle are free to be changed for any given ball
+ * without that change disturbing speed or variation — they're
+ * independent pieces of state here, and always have been; the only
+ * place speed and variation are actually coupled to each other is
+ * variation's own speed RANGE (a slower variation simply can't be
+ * bowled at pace speeds), which is a physical constraint, not
+ * incidental state coupling.
  */
 
 private enum class PitchStep { AIM, RESULT }
+
+/**
+ * The bowling setup actually used for one delivery — captured when
+ * "Bowl" is tapped (see AimStep's onBowl) and handed back in as the
+ * next ball's starting point within the same over. See the class doc
+ * comment's "WHY THE BOWLING SETUP CARRIES BETWEEN BALLS".
+ */
+data class BowlingSetupMemory(
+    val angle: BowlingAngle,
+    val line: BowlingLine,
+    val variation: BowlingVariation,
+    val speedKmh: Int
+)
 
 // --- AimStep gesture tuning ---
 
@@ -198,7 +240,9 @@ private const val AXIS_DOMINANCE_RATIO = 1.3f
 // Fraction of the gesture Box's actual measured height used as the
 // length drag's full 0..1 sweep range, so every ball gets close to the
 // whole available screen area rather than a fixed, unmeasured guess.
-private const val LENGTH_DRAG_RANGE_FRACTION_OF_HEIGHT = 0.92f
+// See the class doc comment's "GESTURE-AREA SIZING" — the Box's own
+// actual height is the real lever here, not this fraction.
+private const val LENGTH_DRAG_RANGE_FRACTION_OF_HEIGHT = 0.95f
 
 // GOOD_LENGTH's band center (see BowlingSystem.LENGTH_BANDS) — the
 // sensible default verticalFraction if the length drag is never
@@ -206,16 +250,28 @@ private const val LENGTH_DRAG_RANGE_FRACTION_OF_HEIGHT = 0.92f
 private const val DEFAULT_LENGTH_FRACTION = 0.5f
 
 @Composable
-fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision) -> Unit, onBack: () -> Unit) {
+fun PitchingScreen(
+    bowler: Player,
+    onDeliveryResolved: (ResolvedBowlingDecision) -> Unit,
+    onBack: () -> Unit,
+    // See the class doc comment's "WHY THE BOWLING SETUP CARRIES BETWEEN
+    // BALLS". Both default so any other call site keeps compiling as a
+    // single-ball setup with no memory.
+    initialSetup: BowlingSetupMemory? = null,
+    onSetupChanged: (BowlingSetupMemory) -> Unit = {}
+) {
     var step by remember { mutableStateOf(PitchStep.AIM) }
-    var angle by remember { mutableStateOf(BowlingSystem.ANGLE_OPTIONS.first().value) }
-    var line by remember { mutableStateOf(BowlingSystem.LINE_OPTIONS.first().value) }
-    var variation by remember { mutableStateOf(BowlingVariation.STOCK) }
+    var angle by remember { mutableStateOf(initialSetup?.angle ?: BowlingSystem.ANGLE_OPTIONS.first().value) }
+    var line by remember { mutableStateOf(initialSetup?.line ?: BowlingSystem.LINE_OPTIONS.first().value) }
+    var variation by remember { mutableStateOf(initialSetup?.variation ?: BowlingVariation.STOCK) }
     // The length drag IS both the intended length and its own execution
     // precision (see the class doc comment) — these two floats are the
     // only length-related state; the intended BowlingLength is derived
     // from finalLengthFraction via BowlingSystem.classifyLength, never
-    // stored separately.
+    // stored separately. Deliberately NOT carried over between balls
+    // even within the same over — length is the one thing a bowler
+    // genuinely re-aims fresh delivery to delivery, unlike the other
+    // three, more strategy-level choices.
     var finalLengthFraction by remember { mutableStateOf(DEFAULT_LENGTH_FRACTION) }
     var maxLengthFractionReached by remember { mutableStateOf(DEFAULT_LENGTH_FRACTION) }
     // Read from the same down-drag's curvature — see the class doc
@@ -230,6 +286,7 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
             line = line,
             variation = variation,
             finalLengthFraction = finalLengthFraction,
+            initialSpeedKmh = initialSetup?.speedKmh,
             onAngleChanged = { angle = it },
             onLineChanged = { line = it },
             onVariationChanged = { variation = it },
@@ -239,6 +296,10 @@ fun PitchingScreen(bowler: Player, onDeliveryResolved: (ResolvedBowlingDecision)
                 swingType = swing
             },
             onBowl = { chosenSpeed ->
+                // Captured here, at the moment this delivery's setup is
+                // actually finalized — see the class doc comment's "WHY
+                // THE BOWLING SETUP CARRIES BETWEEN BALLS".
+                onSetupChanged(BowlingSetupMemory(angle, line, variation, chosenSpeed))
                 val speedRange = BowlingSystem.getSpeedRangeForVariation(bowler.bowlingStyle, variation)
                 // Exactly the web's own quality rubric, fed by the length
                 // drag's own live-tracked precision/smoothness — see the
@@ -424,6 +485,10 @@ private fun AimStep(
     line: BowlingLine,
     variation: BowlingVariation,
     finalLengthFraction: Float,
+    // Seeds this ball's speed from the previous ball's setup within the
+    // same over — see the class doc comment's "WHY THE BOWLING SETUP
+    // CARRIES BETWEEN BALLS". Null for the first ball of an over.
+    initialSpeedKmh: Int?,
     onAngleChanged: (BowlingAngle) -> Unit,
     onLineChanged: (BowlingLine) -> Unit,
     onVariationChanged: (BowlingVariation) -> Unit,
@@ -475,49 +540,55 @@ private fun AimStep(
     // Speed now lives on this same screen (see class doc comment) rather
     // than a separate step. Range is keyed on the variation so it snaps
     // to a sensible mid-range value whenever the swipe-up gesture cycles
-    // to a variation with a different speed range.
+    // to a variation with a different speed range. initialSpeedKmh (the
+    // previous ball's speed within this same over) seeds it instead of
+    // the range's midpoint whenever it's present AND still fits the
+    // current range — see the class doc comment's "WHY THE BOWLING SETUP
+    // CARRIES BETWEEN BALLS".
     val speedRange = remember(bowler.bowlingStyle, variation) {
         BowlingSystem.getSpeedRangeForVariation(bowler.bowlingStyle, variation)
     }
-    var speedKmh by remember(speedRange) { mutableStateOf((speedRange.min + speedRange.max) / 2) }
+    var speedKmh by remember(speedRange) {
+        val seeded = initialSpeedKmh?.takeIf { it in speedRange.min..speedRange.max }
+        mutableStateOf(seeded ?: (speedRange.min + speedRange.max) / 2)
+    }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
             text = "Aim your delivery",
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+        // Kept to one short line (see the class doc comment's
+        // "GESTURE-AREA SIZING") — the full gesture vocabulary is
+        // documented on first use elsewhere; a returning player doesn't
+        // need three sentences of instructions eating into the gesture
+        // area on every single delivery.
         Text(
-            "Two-finger swipe left for angle, right for line, up for variation. " +
-                "Swipe down and hold to set length by ear, curving left for inswing or " +
-                "right for outswing, then lift your fingers to set it.",
-            style = MaterialTheme.typography.bodySmall
+            "Swipe: left = angle, right = line, up = variation, down+hold = length (curve for swing).",
+            style = MaterialTheme.typography.labelSmall
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
+        // Angle/line/variation combined into ONE line (was three
+        // separate bodyLarge lines) — see the class doc comment's
+        // "GESTURE-AREA SIZING" for why: every line reclaimed here is a
+        // line handed straight to the gesture Box below.
         Text(
-            text = "Angle: ${BowlingSystem.angleLabel(angle)}",
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-        )
-        Text(
-            text = "Line: ${BowlingSystem.LINE_OPTIONS.first { it.value == line }.label}",
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-        )
-        Text(
-            text = "Variation: ${variationOptions.first { it.value == variation }.label}",
-            style = MaterialTheme.typography.bodyLarge,
+            text = "${BowlingSystem.angleLabel(angle)} \u00b7 " +
+                "${BowlingSystem.LINE_OPTIONS.first { it.value == line }.label} \u00b7 " +
+                variationOptions.first { it.value == variation }.label,
+            style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
         Text(
             text = "Length: ${BowlingSystem.lengthLabel(BowlingSystem.classifyLength(liveLengthFraction.toDouble()))}",
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         Box(
             modifier = Modifier
@@ -562,14 +633,14 @@ private fun AimStep(
                 }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text(
             text = "Speed: $speedKmh km/h",
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         // Compose's Slider carries first-class TalkBack support (it's
         // announced as adjustable, with swipe up/down or the standard
         // increment/decrement actions). `steps` makes it snap to whole
@@ -584,9 +655,9 @@ private fun AimStep(
                 .semantics { contentDescription = "Speed: $speedKmh kilometers per hour" }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { onBowl(speedKmh) }, modifier = Modifier.fillMaxWidth()) { Text("Bowl") }
         Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = { onBowl(speedKmh) }, modifier = Modifier.fillMaxWidth()) { Text("Bowl") }
+        Spacer(modifier = Modifier.height(6.dp))
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
     }
 }
