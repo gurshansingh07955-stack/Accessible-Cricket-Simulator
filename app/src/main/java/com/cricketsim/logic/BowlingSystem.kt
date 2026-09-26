@@ -30,7 +30,9 @@ import kotlin.reflect.KMutableProperty1
  *
  * All numeric constants (speed ranges, quality-tier thresholds, penalty
  * caps, probability multipliers, mis-execution chances) are exact
- * matches to the web source.
+ * matches to the web source, except the wide/no-ball multipliers in
+ * applyLine and applyQualityTier below — see their own comments for
+ * that rebalance.
  */
 
 // --- Types ---
@@ -735,10 +737,17 @@ object BowlingSystem {
                 multiplyKey(probs, OutcomeProbs::four, 1.15)
                 multiplyKey(probs, OutcomeProbs::six, 1.05)
                 multiplyKey(probs, OutcomeProbs::wicket, 0.85)
-                multiplyKey(probs, OutcomeProbs::wide, 1.3)
+                // Softened from 1.3 -- see applyQualityTier's own
+                // comment on the wide/no-ball rebalance.
+                multiplyKey(probs, OutcomeProbs::wide, 1.2)
             }
             BowlingLine.OUTSIDE_LEG -> {
-                multiplyKey(probs, OutcomeProbs::wide, 3.0)
+                // Softened from 3.0 -- still clearly the highest-wide-risk
+                // line by a wide margin (pun intended), just not so
+                // punishing that aiming here felt like an automatic
+                // extra. See applyQualityTier's own comment for the
+                // matching base-rate reduction this pairs with.
+                multiplyKey(probs, OutcomeProbs::wide, 2.0)
                 multiplyKey(probs, OutcomeProbs::four, 1.2)
                 multiplyKey(probs, OutcomeProbs::wicket, 0.6)
             }
@@ -905,18 +914,33 @@ object BowlingSystem {
             }
             BowlingQualityTier.GOOD -> {}
             BowlingQualityTier.BAD -> {
+                // wide/noBall softened from 1.8/2.5 -- see the doc
+                // comment below on VERY_BAD's matching reduction for
+                // the full reasoning (this pairs with MatchEngine.kt's
+                // getOutcomeProbabilities base rate also being lowered).
                 multiplyKey(probs, OutcomeProbs::wicket, 0.8)
                 multiplyKey(probs, OutcomeProbs::four, 1.2)
                 multiplyKey(probs, OutcomeProbs::six, 1.15)
-                multiplyKey(probs, OutcomeProbs::wide, 1.8)
-                multiplyKey(probs, OutcomeProbs::noBall, 2.5)
+                multiplyKey(probs, OutcomeProbs::wide, 1.5)
+                multiplyKey(probs, OutcomeProbs::noBall, 1.8)
             }
             BowlingQualityTier.VERY_BAD -> {
+                // wide/noBall softened from 2.5/4.5 -- these two
+                // multipliers, stacked on top of applyLine's own
+                // OUTSIDE_LEG/LEG_STUMP wide bumps and this same
+                // function's BAD tier above, could make wides and
+                // no-balls feel like they showed up far too often,
+                // for the AI as much as the user (this whole
+                // probability pipeline is shared identically by both).
+                // Reduced here, at the line's own multipliers, AND at
+                // MatchEngine.kt's base rate together, rather than in
+                // just one place, since compounding across all three
+                // was what made the old rate feel excessive.
                 multiplyKey(probs, OutcomeProbs::wicket, 0.6)
                 multiplyKey(probs, OutcomeProbs::four, 1.4)
                 multiplyKey(probs, OutcomeProbs::six, 1.3)
-                multiplyKey(probs, OutcomeProbs::wide, 2.5)
-                multiplyKey(probs, OutcomeProbs::noBall, 4.5)
+                multiplyKey(probs, OutcomeProbs::wide, 1.8)
+                multiplyKey(probs, OutcomeProbs::noBall, 2.5)
             }
         }
     }
