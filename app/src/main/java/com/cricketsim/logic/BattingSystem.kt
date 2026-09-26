@@ -16,11 +16,10 @@ import kotlin.reflect.KMutableProperty1
  * below) rather than redefining an equivalent union.
  *
  * All numeric constants (compatibility-tier multipliers, timing
- * thresholds 0.16/0.30/0.48/0.68, aggression-chance base rates per
- * bowling-quality tier, timing-score formula coefficients) are exact
- * matches to the web source, including its rebalance history — see the
- * inline comments carried over from the original, which explain WHY
- * specific constants were tuned to their current values.
+ * thresholds, aggression-chance base rates per bowling-quality tier,
+ * timing-score formula coefficients) are exact matches to the web
+ * source's ORIGINAL values, except the timing thresholds themselves —
+ * see computeTimingTier's doc comment for that rebalance's own history.
  */
 
 // --- Types ---
@@ -368,26 +367,37 @@ object BattingSystem {
      * Calibrated for real touchscreen input on a mobile game, not a
      * precision rhythm-game benchmark: touch event dispatch alone
      * typically adds 10-30ms of jitter on top of genuine human
-     * motor-timing variance. An earlier, tighter version of these
-     * thresholds made Perfect/Ideal close to unhittable in practice —
-     * these are deliberately generous so a reasonably-timed tap lands
-     * in Good or better most of the time, and only a genuinely mistimed
-     * tap lands in Bad/Very Bad.
+     * motor-timing variance.
      *
-     *   Perfect  |delta|/interval <= 0.16
-     *   Ideal    |delta|/interval <= 0.30
-     *   Good     |delta|/interval <= 0.48
-     *   Bad      |delta|/interval <= 0.68
+     * WIDENED AGAIN after further feedback that Perfect/Ideal still
+     * felt very small and hard to land even after an earlier widening
+     * pass (thresholds of roughly 0.16/0.30/0.48/0.68). The core
+     * problem with a narrow window compounds: a batter who can't
+     * reliably reach Perfect/Ideal never sees the favorable multipliers
+     * in applyTimingTier below, which makes batting feel unresponsive
+     * to real skill regardless of shot choice or footwork. These
+     * thresholds are deliberately generous — Perfect now covers
+     * essentially "hit it anywhere near the beat," Ideal covers a good
+     * chunk of "reasonably close" — while Bad/Very Bad still require a
+     * genuinely mistimed tap (well off the beat, not just a few pixels
+     * of touch jitter) to reach. Good is now a comfortable middle band,
+     * not the "everything that isn't quite Perfect" bucket it used to
+     * be.
+     *
+     *   Perfect  |delta|/interval <= 0.28
+     *   Ideal    |delta|/interval <= 0.45
+     *   Good     |delta|/interval <= 0.62
+     *   Bad      |delta|/interval <= 0.80
      *   Very Bad anything past that
      */
     fun computeTimingTier(actualTapTimeMs: Double, expectedFifthPulseTimeMs: Double, intervalMs: Double): TimingResult {
         val delta = abs(actualTapTimeMs - expectedFifthPulseTimeMs)
         val deltaFraction = if (intervalMs > 0) delta / intervalMs else 1.0
         val tier = when {
-            deltaFraction <= 0.16 -> BowlingQualityTier.PERFECT
-            deltaFraction <= 0.3 -> BowlingQualityTier.IDEAL
-            deltaFraction <= 0.48 -> BowlingQualityTier.GOOD
-            deltaFraction <= 0.68 -> BowlingQualityTier.BAD
+            deltaFraction <= 0.28 -> BowlingQualityTier.PERFECT
+            deltaFraction <= 0.45 -> BowlingQualityTier.IDEAL
+            deltaFraction <= 0.62 -> BowlingQualityTier.GOOD
+            deltaFraction <= 0.80 -> BowlingQualityTier.BAD
             else -> BowlingQualityTier.VERY_BAD
         }
         return TimingResult(tier, deltaFraction)
@@ -401,22 +411,22 @@ object BattingSystem {
     // batting has no separate probability model, just more layers on
     // top of the same one.
     //
-    // ⚠️ REBALANCED after playtesting found that a well-bowled delivery
+    // REBALANCED after playtesting found that a well-bowled delivery
     // (Perfect/Ideal bowling quality tier, which already suppresses
     // four/six and boosts wicket — see BowlingSystem.applyQualityTier)
     // combined multiplicatively with a blind-guess footwork mismatch
     // could completely swamp even a Perfect batting timing tier: e.g. a
-    // Perfect bowling ball's four×0.7 stacked with a footwork
-    // mismatch's wicket×1.8 could leave a batsman worse off DESPITE
-    // perfect timing, since footwork is committed blind before the ball
-    // is even revealed. The multipliers below were increased (batting
-    // side) and the mismatch penalty reduced, specifically so that
-    // correct execution across footwork+shot+timing reliably produces a
-    // net boundary/safety swing in the batter's favor even against good
-    // bowling — while a genuinely mismatched shot choice (the "Bad"
-    // tier) remains deliberately catastrophic, unchanged, per the
-    // original design intent. This is a tuning pass based on one round
-    // of feedback, not a solved equation — keep iterating on these
+    // Perfect bowling ball's four times 0.7 stacked with a footwork
+    // mismatch's wicket times 1.8 could leave a batsman worse off
+    // DESPITE perfect timing, since footwork is committed blind before
+    // the ball is even revealed. The multipliers below were increased
+    // (batting side) and the mismatch penalty reduced, specifically so
+    // that correct execution across footwork+shot+timing reliably
+    // produces a net boundary/safety swing in the batter's favor even
+    // against good bowling — while a genuinely mismatched shot choice
+    // (the "Bad" tier) remains deliberately catastrophic, unchanged, per
+    // the original design intent. This is a tuning pass based on
+    // feedback, not a solved equation — keep iterating on these
     // constants if the balance still feels off in either direction.
     // ============================================================
 
@@ -841,8 +851,8 @@ object BattingSystem {
         }
 
         // --- Timing: simulated the same way AI bowling quality is simulated ---
-        // ⚠️ REBALANCED AGAIN after further feedback: the previous
-        // recalibration (baseline 25+rating*0.45, spread ±48) fixed the
+        // REBALANCED AGAIN after further feedback: the previous
+        // recalibration (baseline 25+rating*0.45, spread +/-48) fixed the
         // original "AI never bowls/times badly" problem, but
         // overcorrected — it gave even a 90-rated batsman roughly a
         // 1-in-3 chance of Bad/Very Bad timing on every single ball,
