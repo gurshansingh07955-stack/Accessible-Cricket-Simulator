@@ -776,6 +776,9 @@ class SoundEngine(context: Context) {
     // --- Vibration ---
 
     private val vibrator: Vibrator? = appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    private val hasAmplitudeControl: Boolean by lazy {
+        Build.VERSION.SDK_INT >= 26 && vibrator?.hasAmplitudeControl() == true
+    }
 
     /** A pattern in milliseconds, on-off-on-... as the web's navigator.vibrate takes it. */
     @Suppress("DEPRECATION")
@@ -786,9 +789,69 @@ class SoundEngine(context: Context) {
         val timings = longArrayOf(0L) + pattern
         runCatching {
             if (Build.VERSION.SDK_INT >= 26) {
-                device.vibrate(VibrationEffect.createWaveform(timings, -1))
+                if (hasAmplitudeControl) {
+                    // Explicit full amplitude on every "on" segment (odd
+                    // indices, since index 0 is the leading silent delay)
+                    // rather than the device's own default -- see
+                    // vibratePulse's doc comment for why: a weak/cheap
+                    // vibration motor has the best chance of being felt
+                    // at all when it's always driven at full strength.
+                    val amplitudes = IntArray(timings.size) { i -> if (i % 2 == 1) 255 else 0 }
+                    device.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
+                } else {
+                    device.vibrate(VibrationEffect.createWaveform(timings, -1))
+                }
             } else {
                 device.vibrate(timings, -1)
+            }
+        }
+    }
+
+    /**
+     * A single short buzz for time-critical rhythm cues (the batting
+     * timing minigame's per-pulse buzz), where both low latency and a
+     * duration long enough to actually be felt matter.
+     *
+     * Deliberately NOT routed through Compose's
+     * HapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+     * (as BattingScreen's rhythm pulse previously did) -- that API
+     * dispatches to a per-OEM SEMANTIC "a long press was recognized"
+     * system haptic, not a raw timed buzz: its whole contract is
+     * "signal that a long press occurred," not "vibrate for exactly N
+     * ms right now," so different Android skins are free to implement
+     * it with their own duration, strength, and even an added
+     * recognition delay before it fires. That lines up with reports of
+     * it feeling laggy and inconsistent specifically on cheaper-motor
+     * devices: a weak ERM (eccentric rotating mass) vibration motor
+     * already has real spin-up lag of its own (commonly 30-80ms before
+     * it reaches useful amplitude) before the buzz is even felt, and
+     * stacking an OEM's own unpredictable haptic-constant handling on
+     * top of that compounds it further. Calling VibrationEffect
+     * directly here, exactly like vibrate() above already does for
+     * every other buzz in the app (wicket/boundary effects), removes
+     * that OEM-defined semantic layer entirely -- what's left is
+     * genuine motor hardware variance, which durationMs and full
+     * amplitude below are chosen to give the best realistic chance
+     * against, but can't eliminate outright on a device with a
+     * genuinely weak motor.
+     *
+     * durationMs defaults to 60ms: long enough to clear a cheap ERM
+     * motor's typical rise time while still comfortably shorter than
+     * the fastest interval the batting rhythm ever uses
+     * (BattingSystem.FASTEST_INTERVAL_MS, 185ms), so consecutive pulses
+     * never run into each other.
+     */
+    fun vibratePulse(durationMs: Long = 60L) {
+        if (!settings.vibration) return
+        val device = vibrator ?: return
+        if (!device.hasVibrator()) return
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 26) {
+                val amplitude = if (hasAmplitudeControl) 255 else VibrationEffect.DEFAULT_AMPLITUDE
+                device.vibrate(VibrationEffect.createOneShot(durationMs, amplitude))
+            } else {
+                @Suppress("DEPRECATION")
+                device.vibrate(durationMs)
             }
         }
     }
