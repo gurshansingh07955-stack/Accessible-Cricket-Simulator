@@ -96,9 +96,15 @@ object MatchEngine {
     private fun getOutcomeProbabilities(batsman: Player, bowler: Player, pitchType: PitchType, difficulty: Difficulty): OutcomeProbs {
         // Base probabilities (sum to 1.0)
         // 0, 1, 2, 3, 4, 6, W, WD, NB
+        // wide/noBall lowered from 0.04/0.04 -- see BowlingSystem.kt's
+        // applyLine/applyQualityTier doc comments for the matching
+        // reduction to their multipliers, which stack multiplicatively
+        // on top of this base rate. This is the single shared base
+        // table both the user's and the AI's bowling run through, so
+        // the reduction applies identically to both sides.
         val probs = OutcomeProbs(
             dot = 0.35, one = 0.25, two = 0.1, three = 0.02, four = 0.1,
-            six = 0.05, wicket = 0.05, wide = 0.04, noBall = 0.04
+            six = 0.05, wicket = 0.05, wide = 0.02, noBall = 0.018
         )
 
         // Adjust based on ratings
