@@ -118,6 +118,13 @@ import com.cricketsim.ui.settings.SettingsScreen
  * the leave confirmation; `onMatchFinished` is the finished match's Return
  * to home.
  *
+ * BOWLING SETUP MEMORY. `bowlingSetupMemory` remembers the last
+ * PitchingScreen setup (angle/line/variation/speed) actually bowled with
+ * — see PitchingScreen.kt's own "WHY THE BOWLING SETUP CARRIES BETWEEN
+ * BALLS" doc comment for the full reasoning. It's cleared the moment
+ * matchState.score.overs changes, so it only ever carries across balls
+ * WITHIN the same over, never into the next one.
+ *
  * A future session builds the real match screen. See UI_NOTES.md's "Not
  * started" section for the full list — treat this file as scaffolding
  * to build on top of, not a screen to extend piecemeal into the real
@@ -170,6 +177,8 @@ fun MatchScreen(
     var fieldMessage by remember { mutableStateOf("") }
     // "Play resumes." / the revised target, announced after a rain delay.
     var playNotice by remember { mutableStateOf("") }
+    // See the class doc comment's "BOWLING SETUP MEMORY".
+    var bowlingSetupMemory by remember { mutableStateOf<BowlingSetupMemory?>(null) }
 
     // The crowd bed runs while the match is live and sound effects are on;
     // it stops when the match ends, sound is turned off, or this screen is
@@ -181,6 +190,13 @@ fun MatchScreen(
         if (director != null) {
             if (settings.soundEffects && !matchOver) director.startAmbience(matchState) else director.stopAmbience()
         }
+    }
+
+    // A new over always starts with a fresh bowling plan — see the class
+    // doc comment's "BOWLING SETUP MEMORY" and PitchingScreen.kt's "WHY
+    // THE BOWLING SETUP CARRIES BETWEEN BALLS".
+    LaunchedEffect(matchState.score.overs) {
+        bowlingSetupMemory = null
     }
 
     // Autosave. Re-runs (cancelling any earlier run) whenever anything that
@@ -384,6 +400,8 @@ fun MatchScreen(
         BackHandler(onBack = { showPitchingScreen = false })
         PitchingScreen(
             bowler = matchState.currentBowler,
+            initialSetup = bowlingSetupMemory,
+            onSetupChanged = { bowlingSetupMemory = it },
             onDeliveryResolved = { decision ->
                 showPitchingScreen = false
                 advanceOneBall(presetBowlingDecision = decision)
