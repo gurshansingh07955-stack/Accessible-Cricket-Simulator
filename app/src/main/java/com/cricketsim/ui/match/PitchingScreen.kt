@@ -52,9 +52,11 @@ import kotlin.math.sqrt
  * LITERALLY TWO SIMULTANEOUS POINTERS" below for the two things that
  * changed after the first on-device pass, "WHY THE BOWLING SETUP
  * CARRIES BETWEEN BALLS" for how angle/line/variation/speed persist
- * within an over, and "WHY GESTURES USED TO BE INCONSISTENT, AND WHY
+ * within an over, "WHY GESTURES USED TO BE INCONSISTENT, AND WHY
  * LENGTH USED TO SILENTLY DEFAULT TO A PERFECT GOOD-LENGTH BALL" for
- * two bugs fixed in this revision.
+ * two bugs fixed in an earlier revision, and "WHY GESTURES WERE STILL
+ * INCONSISTENT AFTER THE FIRST FIX" for a further, deeper bug (in how
+ * the release event itself was handled) fixed in this one.
  *
  * AIM STEP GESTURE VOCABULARY (angle/line/variation/length all live on
  * ONE screen at once, each assigned its own compass direction, exactly
@@ -176,6 +178,32 @@ import kotlin.math.sqrt
  * unrecognized or skipped swipe now visibly blocks bowling (with a
  * stated reason) instead of quietly submitting an invented Perfect
  * Good-Length ball. See AimStep's committedLengthFraction/canBowl below.
+ *
+ * WHY GESTURES WERE STILL INCONSISTENT AFTER THE FIRST FIX. The one-shot
+ * decision above only ran from inside the "still pressed" branch of the
+ * loop, which reads a pointer's change by filtering `{ it.pressed }` —
+ * but the RELEASE event's own change for that same pointer reports
+ * pressed=false, so that filter discarded it completely, INCLUDING its
+ * position. For a slow, deliberate drag this never mattered, because
+ * enough move samples arrive before release for the decision to already
+ * have been made. For a fast FLICK-style swipe — an entirely natural way
+ * to swipe, not an edge case — Android/TalkBack can deliver only one or
+ * two move samples before the finger lifts; if the threshold hadn't been
+ * crossed by the last move sample the app actually saw, the gesture was
+ * silently dropped the instant the finger lifted, even though the total
+ * distance from touch-down to the finger's true final position clearly
+ * exceeded it. This is exactly a "sometimes works, sometimes doesn't"
+ * bug: whether it fires depended on swipe SPEED (and how many samples
+ * the system happened to deliver for that particular flick), not on
+ * what the player actually did. Fixed by looking up the SAME pointer id
+ * on every event regardless of its pressed state, so the release event's
+ * true final position is always available, and by running the same
+ * resolveUndecided() decision at release time too if the touch is still
+ * UNDECIDED when it ends — a down-dominant result at release resolves as
+ * a single-shot length pick (no live path exists to curve-detect swing
+ * from, so it defaults to SwingType.NONE, and there's nothing to measure
+ * smoothness against, so it's treated as perfectly smooth) rather than
+ * being silently dropped.
  *
  * SPEED is a real Slider (Compose's Slider has first-class TalkBack
  * support out of the box — no custom gesture code needed), matching the
@@ -401,7 +429,7 @@ private fun computeCurveFraction(path: List<Offset>, widthPx: Float): Double {
  * SIMULTANEOUS POINTERS" for why this tracks a single active pointer
  * rather than requiring two at once, "AIM STEP GESTURE VOCABULARY" for
  * the full direction/mode behavior this implements, and "WHY GESTURES
- * USED TO BE INCONSISTENT" for the bug this fixes.
+ * WERE STILL INCONSISTENT AFTER THE FIRST FIX" for the bug fixed here.
  *
  * ONE decision is made per touch: while still UNDECIDED, dxTotal/dyTotal
  * (both measured from the SAME fixed gestureStart) are re-evaluated on
@@ -415,6 +443,11 @@ private fun computeCurveFraction(path: List<Offset>, widthPx: Float): Double {
  * DISCRETE_DONE, where further movement before lift is simply ignored.
  * There is no second, separately-thresholded check anywhere that could
  * disagree with this one.
+ *
+ * Critically, that same decision is ALSO made at the RELEASE event
+ * itself if the touch is still UNDECIDED by then — see "WHY GESTURES
+ * WERE STILL INCONSISTENT AFTER THE FIRST FIX" below for why a fast
+ * flick-style swipe needs this to register at all.
  */
 private suspend fun PointerInputScope.detectAimGesture(
     onDiscrete: (AimDiscreteDirection) -> Unit,
@@ -435,6 +468,7 @@ private suspend fun PointerInputScope.detectAimGesture(
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         down.consume()
+        val pointerId = down.id
         val gestureStart = down.position
         var mode = GestureMode.UNDECIDED
         var lengthDragOrigin = gestureStart
@@ -443,27 +477,98 @@ private suspend fun PointerInputScope.detectAimGesture(
         var isOutside = false
         val lengthPath = mutableListOf<Offset>()
 
+        // The one axis/direction decision, shared between the normal
+        // continuous UNDECIDED check below AND the release-time
+        // fallback -- see "WHY GESTURES WERE STILL INCONSISTENT AFTER
+        // THE FIRST FIX". atRelease is true only for the fallback: a
+        // down-dominant result there can't start a genuinely continuous
+        // drag (there's no more live movement left to track), so it's
+        // resolved as a single-shot length pick instead.
+        fun resolveUndecided(position: Offset, atRelease: Boolean) {
+            val dxTotal = position.x - gestureStart.x
+            val dyTotal = position.y - gestureStart.y
+            val isDominantlyDown = dyTotal > 0 && dyTotal > abs(dxTotal) * AXIS_DOMINANCE_RATIO
+            if (isDominantlyDown) {
+                if (atRelease) {
+                    // No live path was tracked (the gesture only crossed
+                    // the threshold at the very moment it ended), so
+                    // there's nothing to curve-detect for swing and no
+                    // smoothness to measure -- a straight single-shot
+                    // pick using the full gestureStart-to-release
+                    // distance, same range mapping the live drag uses.
+                    val fraction = (dyTotal / lengthDragRangePx).coerceIn(0f, 1f)
+                    onLengthDragStart()
+                    onLengthDrag(fraction, fraction)
+                    onLengthDragEnd(fraction, fraction, SwingType.NONE)
+                    mode = GestureMode.LENGTH_DRAG // for bookkeeping only; touch is over
+                } else {
+                    mode = GestureMode.LENGTH_DRAG
+                    // Fresh origin at the lock-in point (not the
+                    // original touch-down) so the full configured range
+                    // is available from here, rather than losing part
+                    // of it to the ambiguity phase.
+                    lengthDragOrigin = position
+                    lengthPath.add(position)
+                    onLengthDragStart()
+                    lastFraction = 0f
+                    maxFractionReached = 0f
+                    onLengthDrag(0f, 0f)
+                }
+            } else {
+                // Larger of the two axes wins, once, for this whole
+                // touch -- see the class doc comment's "WHY GESTURES
+                // USED TO BE INCONSISTENT".
+                if (abs(dxTotal) >= abs(dyTotal)) {
+                    onDiscrete(if (dxTotal < 0) AimDiscreteDirection.LEFT else AimDiscreteDirection.RIGHT)
+                } else {
+                    onDiscrete(AimDiscreteDirection.UP)
+                }
+                mode = GestureMode.DISCRETE_DONE
+            }
+        }
+
         while (true) {
             val event = awaitPointerEvent()
-            val active = event.changes.firstOrNull { it.pressed }
-            if (active == null) {
-                if (isOutside) {
-                    isOutside = false
-                    onBoundsChanged(false)
-                }
-                if (mode == GestureMode.LENGTH_DRAG) {
-                    val curveFraction = computeCurveFraction(lengthPath, gestureWidthPx)
-                    onLengthDragEnd(lastFraction, maxFractionReached, BowlingSystem.classifySwing(curveFraction))
-                }
-                return@awaitEachGesture
-            }
-            active.consume()
-            val position = active.position
+            // Looked up by the ORIGINAL pointer's id, not filtered by
+            // `.pressed` -- see "WHY GESTURES WERE STILL INCONSISTENT
+            // AFTER THE FIRST FIX": the release event's own change has
+            // pressed=false, but it still carries the finger's true
+            // final position, which a `{ it.pressed }` filter discards
+            // entirely.
+            val change = event.changes.firstOrNull { it.id == pointerId } ?: event.changes.firstOrNull()
+            if (change == null) return@awaitEachGesture
+            change.consume()
+            val position = change.position
 
             val nowOutside = position.x < 0f || position.x > gestureWidthPx || position.y < 0f || position.y > gestureHeightPx
             if (nowOutside != isOutside) {
                 isOutside = nowOutside
                 onBoundsChanged(isOutside)
+            }
+
+            if (!change.pressed) {
+                // The finger just lifted. If no decision was ever made
+                // (a fast flick that crossed the threshold only in the
+                // gap between the last move sample and this release —
+                // see "WHY GESTURES WERE STILL INCONSISTENT AFTER THE
+                // FIRST FIX"), decide NOW using this final position
+                // rather than silently dropping the whole gesture.
+                if (mode == GestureMode.UNDECIDED) {
+                    val dxTotal = position.x - gestureStart.x
+                    val dyTotal = position.y - gestureStart.y
+                    // kotlin.math.hypot only has a Double overload; staying in
+                    // Float here avoids a conversion and matches
+                    // axisLockThresholdPx's type directly.
+                    val totalDistance = sqrt(dxTotal * dxTotal + dyTotal * dyTotal)
+                    if (totalDistance >= axisLockThresholdPx) {
+                        resolveUndecided(position, atRelease = true)
+                    }
+                } else if (mode == GestureMode.LENGTH_DRAG) {
+                    val curveFraction = computeCurveFraction(lengthPath, gestureWidthPx)
+                    onLengthDragEnd(lastFraction, maxFractionReached, BowlingSystem.classifySwing(curveFraction))
+                }
+                if (isOutside) onBoundsChanged(false)
+                return@awaitEachGesture
             }
 
             when (mode) {
@@ -478,35 +583,9 @@ private suspend fun PointerInputScope.detectAimGesture(
                 GestureMode.UNDECIDED -> {
                     val dxTotal = position.x - gestureStart.x
                     val dyTotal = position.y - gestureStart.y
-                    // kotlin.math.hypot only has a Double overload; staying in
-                    // Float here avoids a conversion and matches
-                    // axisLockThresholdPx's type directly.
                     val totalDistance = sqrt(dxTotal * dxTotal + dyTotal * dyTotal)
                     if (totalDistance >= axisLockThresholdPx) {
-                        val isDominantlyDown = dyTotal > 0 && dyTotal > abs(dxTotal) * AXIS_DOMINANCE_RATIO
-                        if (isDominantlyDown) {
-                            mode = GestureMode.LENGTH_DRAG
-                            // Fresh origin at the lock-in point (not the
-                            // original touch-down) so the full configured
-                            // range is available from here, rather than
-                            // losing part of it to the ambiguity phase.
-                            lengthDragOrigin = position
-                            lengthPath.add(position)
-                            onLengthDragStart()
-                            lastFraction = 0f
-                            maxFractionReached = 0f
-                            onLengthDrag(0f, 0f)
-                        } else {
-                            // Larger of the two axes wins, once, for this
-                            // whole touch -- see the class doc comment's
-                            // "WHY GESTURES USED TO BE INCONSISTENT".
-                            if (abs(dxTotal) >= abs(dyTotal)) {
-                                onDiscrete(if (dxTotal < 0) AimDiscreteDirection.LEFT else AimDiscreteDirection.RIGHT)
-                            } else {
-                                onDiscrete(AimDiscreteDirection.UP)
-                            }
-                            mode = GestureMode.DISCRETE_DONE
-                        }
+                        resolveUndecided(position, atRelease = false)
                     }
                 }
             }
