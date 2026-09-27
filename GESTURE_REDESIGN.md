@@ -43,10 +43,19 @@
 > swipe thresholds now use density-independent (dp) units instead of raw
 > pixels.
 >
-> Section 3 (batting) and section 4 (fielding) are **not started**.
-> Section 5's bundled fixes are **not started**. The rest of this document
-> is the plan exactly as originally written, kept as the historical
-> record — read `HANDOFF.md` first for what's actually true today.
+> **Section 3 (batting) is now implemented** for footwork, shot
+> selection and intent — see `BattingScreen.kt`'s own doc comment
+> ("GESTURE IMPLEMENTATION") for the exact mechanics, and the updated
+> section 3 below for what changed from the plan as originally written.
+> Batting's timing-window widening (section 5.1) is **deliberately still
+> not done** — it needs a real on-device latency measurement first, per
+> that section's own caution, not a guessed number.
+>
+> Section 4 (fielding) is **not started**. Section 5's remaining bundled
+> fixes (5.2 crowd-at-toss, 5.3 vibration investigation) are **not
+> started**. The rest of this document is the plan largely as originally
+> discussed, with section 3 updated to match what actually shipped —
+> read `HANDOFF.md` first for what's actually true today.
 
 **Paste this into your working chat to continue implementation.** This
 document replaces the previous TalkBack list-pick-based gesture system
@@ -128,6 +137,34 @@ Since length (and every other aim axis) is now set directly by swipe, the *origi
 
 ## 3. Batting
 
+> **STATUS: footwork, shot selection and intent are IMPLEMENTED** in
+> `BattingScreen.kt` — see that file's own "GESTURE IMPLEMENTATION" doc
+> comment for the exact mechanics and for why each one deviates slightly
+> from the plan as originally written below:
+> - **Footwork** uses Compose's built-in `combinedClickable` (tap vs
+>   long-press on a single "Next ball" control) rather than a hand-rolled
+>   two-finger gesture — TalkBack already exposes click and long-click as
+>   distinct, natively-supported actions, so no custom timing detection
+>   was needed here the way the pitching/shot/intent surfaces need it.
+> - **Shot selection** is a continuous two-finger vertical swipe over the
+>   already-ported `BattingSystem.classifyShot` (15 equal-height bands,
+>   same mechanic as bowling's length classification), with the same
+>   tone-tracks-live / speech-only-at-zone-crossings feedback pitching's
+>   length drag uses, committed by lifting and then confirmed with an
+>   explicit "Play Shot" tap (mirrors pitching's Bowl button gating).
+> - **Intent** is a single four-way discrete swipe, structurally
+>   identical to pitching's discrete angle/line/variation swipes
+>   (one decision per touch, resolved at release if needed), driven by
+>   the already-ported `BattingSystem.classifyIntentDirection`. Unlike
+>   shot selection it fires and advances immediately — it's a single
+>   mutually-exclusive pick, not a browsable range.
+>
+> **Timing is NOT changed by this pass** — the existing tap-on-the-beat
+> mechanic (section 3's original "Timing/release" row below) is
+> unchanged, and the widened-window fix (section 5.1) remains **not
+> done**, deliberately: it needs a real on-device latency measurement
+> first, per that section's own caution.
+
 **Footwork (blind commit, mirrors web app's system):**
 - Single tap "Next ball" → front foot
 - Double-tap-and-hold "Next ball" → back foot
@@ -154,7 +191,11 @@ Note: shot-selection's up/down and intent's up/down are the **same physical gest
 > rather than fixed (see section 2.1's resolution above) — whether that
 > same reasoning should extend to batting's timing tap (it has no
 > separate "aim" gesture to fall back on the way bowling's length drag
-> does) is an open question for whoever picks this section up.
+> does) was left as an open question for whoever picked this section up.
+> **Resolved when the batting gestures above were implemented: NO** —
+> batting's timing tap is kept as-is (it has no separate aim gesture to
+> fall back on, unlike bowling's length drag), so it still needs the
+> widened-window fix from section 5.1, which remains not done.
 
 ---
 
@@ -173,8 +214,11 @@ The existing two-phase pick (fielder, then position) maps well onto Android's **
 - Get a real device timing-latency measurement pass before picking a final number — don't guess a value and ship it blind, given how sensitive the earlier release-timing bug already was to exactly this kind of estimation error.
 - Applies to both the bowling execution tap (section 2.1) and the existing batting timing tap.
 
-> **PARTIALLY MOOT for bowling** (no timing tap left to widen — see
-> section 2.1). **Still applies to batting**, not started.
+> **MOOT for bowling** (no timing tap left to widen — see section 2.1).
+> **Still applies to batting — NOT done.** Batting's footwork/shot/intent
+> gestures were implemented without touching the timing step at all (see
+> section 3's status note above); this still needs a real-device
+> latency measurement pass before a new tolerance value is picked.
 
 ### 5.2 — Crowd ambience should start at the toss, not later
 - Currently the crowd bed presumably starts once the match screen itself is active (or later); change the trigger point so ambient crowd sound begins as soon as the **Toss screen** appears, so the experience feels alive from the very first screen of a live match, not just once play starts.
@@ -196,8 +240,8 @@ This needs investigation, not just a code tweak, since it's device-specific:
 
 1. Bowling's four two-finger swipe gestures (angle/line/variation/length) + speed slider — simplest surface, proves the gesture pattern. **DONE.**
 2. Decide and implement the bowling timing resolution (section 2.1: repurpose as execution quality, or drop entirely) + widen the Perfect window using real device timing measurements. **DONE — dropped entirely; no widening needed since nothing was kept.**
-3. Batting: footwork tap/hold → shot selection swipe → intent four-way swipe, reusing the same tone-feedback pattern built for bowling. **NOT STARTED.**
-4. Apply the same widened timing window fix to batting's existing timing tap. **NOT STARTED.**
+3. Batting: footwork tap/hold → shot selection swipe → intent four-way swipe, reusing the same tone-feedback pattern built for bowling. **DONE — see `BattingScreen.kt`'s "GESTURE IMPLEMENTATION" doc comment. Untested on a real device with TalkBack, like every other gesture surface in this project.**
+4. Apply the same widened timing window fix to batting's existing timing tap. **NOT STARTED — needs a real-device latency measurement pass first (section 5.1).**
 5. Crowd-ambience-at-toss trigger change (small, independent of the gesture work — can be done anytime). **NOT STARTED.**
 6. Vibration investigation on multiple physical devices (independent workstream, can run in parallel with the above). **NOT STARTED.**
 7. Fielding's drag-and-drop framework work (separate, larger effort — sequence last, per the earlier plan). **NOT STARTED.**
@@ -205,6 +249,7 @@ This needs investigation, not just a code tweak, since it's device-specific:
 
 ---
 
-**This document is the plan as originally discussed. See the status
-banner at the top and `HANDOFF.md` section 7 for what has actually
-shipped and what changed along the way.**
+**This document is the plan as originally discussed, updated in place as
+each section ships. See the status banners above section 2 and section 3,
+and `HANDOFF.md`, for what has actually shipped and what changed along
+the way.**
