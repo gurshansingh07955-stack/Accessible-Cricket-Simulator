@@ -3,7 +3,11 @@ package com.cricketsim.ui.match
 import android.content.Context
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityManager
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -11,8 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,6 +27,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -44,6 +48,7 @@ import com.cricketsim.logic.IntentDirection
 import com.cricketsim.logic.NamedShot
 import com.cricketsim.logic.Player
 import com.cricketsim.logic.ResolvedBowlingDecision
+import kotlin.math.sqrt
 import kotlinx.coroutines.delay
 
 /**
@@ -53,23 +58,36 @@ import kotlinx.coroutines.delay
  * BattingShotScreen (whose continuous press-and-drag shot/intent
  * gestures have no reliable non-visual equivalent on Android).
  *
+ * STATUS (see GESTURE_REDESIGN.md section 3): footwork, shot selection
+ * and intent now use the two-finger gesture vocabulary from that
+ * section, implemented directly on top of the same
+ * BattingSystem.classifyShot / classifyIntentDirection functions the
+ * logic layer already ported for exactly this purpose — see "GESTURE
+ * IMPLEMENTATION" below. The timing step (unchanged from before this
+ * pass) still uses its original tap-on-the-beat mechanic; the widened
+ * Perfect-window fix planned in section 5.1 is DELIBERATELY NOT done
+ * here, for the same reason the plan itself gives: it needs a real
+ * on-device latency measurement first, not a guessed number.
+ *
  * FLOW — mirrors the web app's ORDER of decisions, which matters
  * mechanically, not just for feel:
  *   1. FOOTWORK — front foot or back foot, committed BLIND. The ball
  *      hasn't been revealed yet; `generateDelivery` is only called once
- *      this choice is made. (Web: a tap or a hold on "Play Ball".)
+ *      this choice is made. (Web: a tap or a hold on "Play Ball"; here,
+ *      tap vs press-and-hold on a single "Next ball" control — see
+ *      "GESTURE IMPLEMENTATION" below.)
  *   2. SHOT — the delivery is revealed (ACTUAL length after any
  *      bowling mis-execution, line, variation, angle, speed — same set
  *      the web's summary line reveals; never the bowler's quality tier
  *      or intended length), AND any changes the AI captain has just made
  *      to its field for this delivery ("Kohli moved from Mid-On to
- *      Long-On."), then one of the 15 named shots is picked from a plain
- *      single-swipe list. The field matters: it is part of what the
- *      shot is chosen against, so a batter who can't see it must be TOLD
- *      it, as the web does.
+ *      Long-On."), then one of the 15 named shots is picked via a
+ *      continuous two-finger vertical swipe, confirmed with a tap. The
+ *      field matters: it is part of what the shot is chosen against, so
+ *      a batter who can't see it must be TOLD it, as the web does.
  *   3. INTENT — aggressive aerial / aggressive grounded / step out /
- *      defensive. Skipped for the two defensive shots, exactly like
- *      the web.
+ *      defensive, picked with a single four-way two-finger swipe.
+ *      Skipped for the two defensive shots, exactly like the web.
  *   4. TIMING — the same rhythm minigame as the web: 5 pulses spaced by
  *      BattingSystem.computeTimingIntervalMs(speedKmh), one tap aimed
  *      at the 5th, scored by BattingSystem.computeTimingTier against the
@@ -86,7 +104,57 @@ import kotlinx.coroutines.delay
  * back to re-pick footwork with knowledge of the ball would defeat the
  * whole point of a blind commit.
  *
- * TALKBACK SPECIFICS (all UNTESTED on a device — see UI_NOTES.md):
+ * GESTURE IMPLEMENTATION (see GESTURE_REDESIGN.md section 3 and section
+ * 1's shared vocabulary — single-finger tap commits, two-finger swipe
+ * sets/cycles a value):
+ * - FOOTWORK reuses Compose's own built-in click/long-click distinction
+ *   (`Modifier.combinedClickable`) rather than a hand-rolled two-finger
+ *   gesture: a single "Next ball" control fires onSelected(FRONT_FOOT)
+ *   on an ordinary tap/click and onSelected(BACK_FOOT) on a long
+ *   press. This is a legitimate translation of the web plan's "single
+ *   tap vs double-tap-and-hold" — TalkBack already exposes both a
+ *   "click" and a distinct "long click" action (its own "double-tap and
+ *   hold" gesture activates long-click) for any element built this way,
+ *   so no custom timing detection is needed, unlike PitchingScreen's
+ *   two-finger surfaces which genuinely need raw pointer data.
+ * - SHOT SELECTION mirrors PitchingScreen's length-drag exactly: a
+ *   single active pointer (see that file's "WHY THIS ISN'T LITERALLY
+ *   TWO SIMULTANEOUS POINTERS" for the full TalkBack-passthrough
+ *   reasoning, which applies identically here) is tracked via
+ *   detectVerticalDragGesture below, mapping net vertical movement
+ *   across the gesture Box's own measured height to a 0..1 fraction fed
+ *   straight into BattingSystem.classifyShot (the already-ported,
+ *   15-equal-band function this exact gesture was designed for). A
+ *   continuous tone tracks the live position; a spoken announcement
+ *   fires only when the drag crosses into a new shot's band — never on
+ *   every move event. Unlike PitchingScreen's length drag (which is one
+ *   axis among several sharing one screen), THIS Box has only one
+ *   gesture role, so there's no axis-lock decision to make: any
+ *   vertical movement is tracked from touch-down immediately. Lifting
+ *   commits the hovered shot; a separate "Play Shot" tap (disabled
+ *   until a shot is committed) is still required to actually advance —
+ *   same swipe-sets/tap-commits split PitchingScreen's Bowl button
+ *   uses, so a player can browse freely before committing.
+ * - INTENT is a single four-way discrete swipe, structurally identical
+ *   to PitchingScreen's discrete angle/line/variation swipes: ONE
+ *   decision per touch (detectFourWayGesture below), re-evaluated on
+ *   every event until AXIS_LOCK_THRESHOLD_DP is cleared, with the same
+ *   decision re-run at the release event if the touch is still
+ *   undecided by then, so a fast flick is never silently dropped — see
+ *   PitchingScreen's "WHY GESTURES WERE STILL INCONSISTENT AFTER THE
+ *   FIRST FIX" for why that release-time fallback matters.
+ *   BattingSystem.classifyIntentDirection (already ported, sharing its
+ *   sign convention with this gesture's raw dx/dy) is the single source
+ *   of truth for which of the four directions a given swipe resolves
+ *   to. Unlike shot selection, intent is a single mutually-exclusive
+ *   pick, not a browsable range — the swipe itself both sets AND
+ *   commits, firing onSelected and advancing the step immediately, the
+ *   same way the original tap-to-select list this replaces used to.
+ *
+ * TALKBACK SPECIFICS (all UNTESTED on a device — see UI_NOTES.md,
+ * whose "Known issues / needs a real device" section this inherits
+ * for the shot/intent gesture areas exactly as it already applies to
+ * PitchingScreen's):
  * - The timing surface is a single full-screen node that is the ONLY
  *   focusable element on that step, so TalkBack's focus lands on it and
  *   a double-tap anywhere on screen activates it. Raw touch events
@@ -102,6 +170,10 @@ import kotlinx.coroutines.delay
  * - The visible "Buzz n of 5" text is decorative: its semantics are
  *   cleared so it never becomes a second focus stop or a live region
  *   talking over the rhythm.
+ * - The footwork control's long-press threshold is whatever Android's
+ *   ViewConfiguration/TalkBack itself uses for long-click — not a
+ *   custom timing value this codebase controls, unlike the timing
+ *   step's own pulse schedule.
  *
  * EVERY PULSE is a buzz AND an audible tick from the sound engine, with
  * the FINAL pulse accented (higher and louder) so the beat to swing on
@@ -120,7 +192,14 @@ import kotlinx.coroutines.delay
  * KNOWN V1 SIMPLIFICATIONS (not permanent design decisions):
  * - BAT_INPUT_LATENCY_COMPENSATION_MS is 0 — touch-to-click latency
  *   under TalkBack, and audio output latency for the tick, are both
- *   unmeasured. Calibrate on a real device once measured.
+ *   unmeasured. Calibrate on a real device once measured. Also covers
+ *   the still-not-widened Perfect timing window (section 5.1) — see the
+ *   STATUS paragraph above.
+ * - The shot/intent gesture areas are written to the best of the
+ *   writer's understanding of TalkBack's raw-pointer passthrough
+ *   behavior (same mechanism PitchingScreen relies on, already reasoned
+ *   through there) but have not themselves been heard by an actual
+ *   screen reader on an actual device yet.
  */
 
 private enum class BatStep { FOOTWORK, SHOT, INTENT, TIMING, RESULT }
@@ -142,6 +221,14 @@ private const val BAT_NO_SWING_GRACE_INTERVALS = 2.0
 // device — see the doc comment above.
 private const val BAT_INPUT_LATENCY_COMPENSATION_MS = 0.0
 
+// Total distance (in dp, converted to px at gesture-detection time) the
+// intent gesture's pointer must travel from touch-down before ONE
+// decision is made for the whole touch — see detectFourWayGesture and
+// the class doc comment's "GESTURE IMPLEMENTATION". Matches
+// PitchingScreen's own AXIS_LOCK_THRESHOLD_DP value for a consistent
+// swipe feel across both gesture surfaces.
+private val AXIS_LOCK_THRESHOLD_DP = 24.dp
+
 /**
  * What the batter is shown when the ball is revealed: the delivery itself
  * and a sentence on how the AI captain re-set its field for it (empty if
@@ -155,16 +242,6 @@ private data class BatSwing(
     // Negative = early, positive = late, in ms relative to the 5th pulse.
     val signedErrorMs: Double,
     val missed: Boolean
-)
-
-private data class BatIntentChoice(val value: IntentDirection, val description: String)
-
-// Order: the two aggressive options, the step-out, then defensive.
-private val BAT_INTENT_CHOICES = listOf(
-    BatIntentChoice(IntentDirection.UP, "Hit in the air."),
-    BatIntentChoice(IntentDirection.LEFT, "Hit along the ground."),
-    BatIntentChoice(IntentDirection.RIGHT, "Advance down the pitch."),
-    BatIntentChoice(IntentDirection.DOWN, "Play safe and rotate the strike.")
 )
 
 private fun footworkLabel(footwork: FootworkType): String =
@@ -293,11 +370,115 @@ fun BattingScreen(
     }
 }
 
+/**
+ * Continuous single-axis (vertical) drag tracker used by the shot-
+ * selection gesture area — see the class doc comment's "GESTURE
+ * IMPLEMENTATION". Deliberately simpler than PitchingScreen's
+ * detectAimGesture: this Box has only ONE gesture role (there's no
+ * discrete left/right/up meaning on this screen), so there's no
+ * axis-lock decision to make — every touch immediately begins tracking
+ * net vertical movement from wherever it started, clamped to the
+ * gesture Box's own measured height.
+ *
+ * Tracks a SINGLE ACTIVE POINTER, not two simultaneous ones, for the
+ * same reason PitchingScreen's detectAimGesture does — see that file's
+ * "WHY THIS ISN'T LITERALLY TWO SIMULTANEOUS POINTERS" doc comment for
+ * the full TalkBack-passthrough explanation, which applies identically
+ * here. The active pointer is looked up by id regardless of `pressed`,
+ * so the release event's true final position always reaches onDragEnd
+ * rather than being silently dropped.
+ */
+private suspend fun PointerInputScope.detectVerticalDragGesture(
+    onDragStart: () -> Unit,
+    onDrag: (fraction: Float) -> Unit,
+    onDragEnd: (fraction: Float) -> Unit
+) {
+    val gestureHeightPx = size.height.toFloat()
+    if (gestureHeightPx <= 0f) return
+
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        down.consume()
+        val pointerId = down.id
+        val originY = down.position.y
+        onDragStart()
+
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == pointerId } ?: event.changes.firstOrNull()
+            if (change == null) return@awaitEachGesture
+            change.consume()
+            val fraction = ((change.position.y - originY) / gestureHeightPx).coerceIn(0f, 1f)
+            if (!change.pressed) {
+                onDragEnd(fraction)
+                return@awaitEachGesture
+            }
+            onDrag(fraction)
+        }
+    }
+}
+
+/**
+ * Discrete four-way swipe tracker used by the intent gesture area — see
+ * the class doc comment's "GESTURE IMPLEMENTATION" and
+ * GESTURE_REDESIGN.md section 3's intent table. Structurally the same
+ * one-decision-per-touch approach as PitchingScreen's detectAimGesture:
+ * total displacement from the touch's start is re-checked on every
+ * event until AXIS_LOCK_THRESHOLD_DP is cleared, and that SAME decision
+ * runs again at the release event if the touch is still undecided by
+ * then, so a fast flick that only crosses the threshold in the gap
+ * before lift isn't silently dropped — see PitchingScreen's "WHY
+ * GESTURES WERE STILL INCONSISTENT AFTER THE FIRST FIX" for the full
+ * reasoning behind that fallback.
+ *
+ * BattingSystem.classifyIntentDirection is the single source of truth
+ * for which of the four directions a given dx/dy resolves to, so the
+ * sign convention here (screen coordinates: dy negative = up) is never
+ * duplicated or re-decided locally.
+ */
+private suspend fun PointerInputScope.detectFourWayGesture(
+    onDirection: (IntentDirection) -> Unit
+) {
+    val axisLockThresholdPx = AXIS_LOCK_THRESHOLD_DP.toPx()
+
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        down.consume()
+        val pointerId = down.id
+        val gestureStart = down.position
+        var decided = false
+
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == pointerId } ?: event.changes.firstOrNull()
+            if (change == null) return@awaitEachGesture
+            change.consume()
+            val position = change.position
+            val dxTotal = (position.x - gestureStart.x).toDouble()
+            val dyTotal = (position.y - gestureStart.y).toDouble()
+            val totalDistance = sqrt(dxTotal * dxTotal + dyTotal * dyTotal)
+
+            if (!change.pressed) {
+                if (!decided && totalDistance >= axisLockThresholdPx) {
+                    onDirection(BattingSystem.classifyIntentDirection(dxTotal, dyTotal))
+                }
+                return@awaitEachGesture
+            }
+
+            if (!decided && totalDistance >= axisLockThresholdPx) {
+                decided = true
+                onDirection(BattingSystem.classifyIntentDirection(dxTotal, dyTotal))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BatFootworkStep(batsmanName: String, onSelected: (FootworkType) -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Text(
-            text = "Choose your footwork",
+            text = "Get ready",
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
@@ -306,25 +487,30 @@ private fun BatFootworkStep(batsmanName: String, onSelected: (FootworkType) -> U
             "$batsmanName is on strike. You commit before you see the ball, and you can't take it back.",
             style = MaterialTheme.typography.bodyMedium
         )
-        Spacer(modifier = Modifier.height(16.dp))
-        listOf(
-            FootworkType.FRONT_FOOT to "Move forward, toward the ball.",
-            FootworkType.BACK_FOOT to "Move back, into the crease."
-        ).forEach { (option, description) ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        onClickLabel = "Select ${footworkLabel(option)}",
-                        role = Role.Button,
-                        onClick = { onSelected(option) }
-                    )
-                    .padding(vertical = 14.dp, horizontal = 8.dp)
-            ) {
-                Text(footworkLabel(option), style = MaterialTheme.typography.titleMedium)
-                Text(description, style = MaterialTheme.typography.bodySmall)
-            }
+        Spacer(modifier = Modifier.height(24.dp))
+        // ONE control, two actions — see the class doc comment's
+        // "GESTURE IMPLEMENTATION". Compose's own click/long-click
+        // distinction is TalkBack-native (a double-tap activates click;
+        // a double-tap-and-hold activates long-click), so this needs no
+        // custom gesture code, unlike the shot/intent surfaces below.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClickLabel = "Front foot",
+                    onLongClickLabel = "Back foot",
+                    role = Role.Button,
+                    onClick = { onSelected(FootworkType.FRONT_FOOT) },
+                    onLongClick = { onSelected(FootworkType.BACK_FOOT) }
+                )
+                .padding(vertical = 20.dp, horizontal = 8.dp)
+        ) {
+            Text("Next ball", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Tap for front foot. Press and hold for back foot.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
         Spacer(modifier = Modifier.weight(1f))
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
@@ -333,6 +519,18 @@ private fun BatFootworkStep(batsmanName: String, onSelected: (FootworkType) -> U
 
 @Composable
 private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: (NamedShot) -> Unit) {
+    val services = LocalGameServices.current
+    val currentServices by rememberUpdatedState(services)
+
+    // Committed only once the fingers lift — see the class doc
+    // comment's "GESTURE IMPLEMENTATION". Null blocks "Play Shot",
+    // same pattern as PitchingScreen's committedLengthFraction gating
+    // its Bowl button.
+    var committedShot by remember { mutableStateOf<NamedShot?>(null) }
+    // Only used to detect a genuine zone CROSSING while dragging, so the
+    // spoken announcement never fires on every touch-move event.
+    var lastAnnouncedShot by remember { mutableStateOf<NamedShot?>(null) }
+
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         // The delivery is the single most important thing on this step, so
         // it is the heading (read first) AND a polite live region in case
@@ -356,29 +554,74 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Choose your shot", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(BattingSystem.SHOT_OPTIONS) { option ->
-                Text(
-                    text = option.label,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            onClickLabel = "Play ${option.label}",
-                            role = Role.Button,
-                            onClick = { onSelected(option.value) }
-                        )
-                        .padding(vertical = 14.dp, horizontal = 8.dp)
-                )
-            }
+        Text(
+            text = "Choose your shot",
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.semantics { heading() }
+        )
+        Text(
+            "Two-finger swipe up or down to browse shots, then Play Shot to commit.",
+            style = MaterialTheme.typography.labelSmall
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = committedShot?.let { "Shot: ${BattingSystem.shotLabel(it)}" }
+                ?: "Shot: not set \u2014 swipe to choose",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectVerticalDragGesture(
+                        onDragStart = { currentServices?.sound?.startAimTone() },
+                        onDrag = { fraction ->
+                            currentServices?.sound?.updateAimTone(fraction)
+                            val hovered = BattingSystem.classifyShot(fraction.toDouble())
+                            if (hovered != lastAnnouncedShot) {
+                                lastAnnouncedShot = hovered
+                                currentServices?.announceSpoken(BattingSystem.shotLabel(hovered))
+                            }
+                        },
+                        onDragEnd = { fraction ->
+                            currentServices?.sound?.stopAimTone()
+                            val chosen = BattingSystem.classifyShot(fraction.toDouble())
+                            committedShot = chosen
+                            currentServices?.announceSpoken("Shot set: ${BattingSystem.shotLabel(chosen)}")
+                        }
+                    )
+                }
+                .semantics {
+                    contentDescription = "Shot selection gesture area. Two-finger swipe up or down."
+                }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = { committedShot?.let(onSelected) },
+            enabled = committedShot != null,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (committedShot != null) "Play Shot" else "Play Shot (swipe to choose first)")
         }
     }
 }
 
 @Composable
 private fun BatIntentStep(shotName: String, onSelected: (IntentDirection) -> Unit, onBack: () -> Unit) {
+    val services = LocalGameServices.current
+    val currentServices by rememberUpdatedState(services)
+    val currentOnSelected by rememberUpdatedState(onSelected)
+    // Guards against a stray extra event after the direction has
+    // already resolved (e.g. the tail of the same gesture) firing a
+    // second time and double-advancing the step.
+    var fired by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Text(
             text = "Choose your intent",
@@ -387,25 +630,33 @@ private fun BatIntentStep(shotName: String, onSelected: (IntentDirection) -> Uni
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text("Shot: $shotName", style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Two-finger swipe: up = aggressive (aerial), down = defensive, " +
+                "left = aggressive (grounded), right = step out.",
+            style = MaterialTheme.typography.labelSmall
+        )
         Spacer(modifier = Modifier.height(16.dp))
-        BAT_INTENT_CHOICES.forEach { choice ->
-            val label = BattingSystem.intentLabel(choice.value)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        onClickLabel = "Select $label",
-                        role = Role.Button,
-                        onClick = { onSelected(choice.value) }
-                    )
-                    .padding(vertical = 14.dp, horizontal = 8.dp)
-            ) {
-                Text(label, style = MaterialTheme.typography.titleMedium)
-                Text(choice.description, style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-        }
-        Spacer(modifier = Modifier.weight(1f))
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectFourWayGesture { direction ->
+                        if (!fired) {
+                            fired = true
+                            currentServices?.announceSpoken(BattingSystem.intentLabel(direction))
+                            currentOnSelected(direction)
+                        }
+                    }
+                }
+                .semantics {
+                    contentDescription = "Intent gesture area. Two-finger swipe up, down, left, or right."
+                }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
     }
 }
