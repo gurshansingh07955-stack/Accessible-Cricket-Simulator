@@ -1,6 +1,8 @@
 package com.cricketsim.ui.match
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -19,8 +23,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -30,6 +36,7 @@ import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.audio.MatchAudioDirector
 import com.cricketsim.logic.BattingDecision
 import com.cricketsim.logic.FieldingSystem
+import com.cricketsim.logic.FootworkType
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchStateMachine
 import com.cricketsim.logic.ResolvedBowlingDecision
@@ -94,13 +101,14 @@ import com.cricketsim.ui.settings.SettingsScreen
  * navigation actions — reachable immediately without swiping through the
  * live match state first. Then, while BOWLING: Set field (a pre-delivery
  * decision, so it comes before the delivery itself), the striker/
- * non-striker/bowler lines, then Bowl. While BATTING: Face next ball,
- * the same three player lines, then Hear the field (read-only field
- * info — secondary to the actual action). Everything else — status
- * messages, the last ball, the score, the chase figures, the run rates,
- * the win probability and the earlier-innings list — comes after that
- * primary action button. The whole screen scrolls (a plain scrolling
- * Column) so nothing can be pushed off a small screen.
+ * non-striker/bowler lines, then Bowl. While BATTING: Face next ball
+ * (also where footwork is chosen — see FaceNextBallControl below), the
+ * same three player lines, then Hear the field (read-only field info —
+ * secondary to the actual action). Everything else — status messages,
+ * the last ball, the score, the chase figures, the run rates, the win
+ * probability and the earlier-innings list — comes after that primary
+ * action button. The whole screen scrolls (a plain scrolling Column) so
+ * nothing can be pushed off a small screen.
  *
  * SYSTEM BACK BUTTON. Every sub-view below (a gesture surface, the field
  * screen, the scorecard, the settings overlay, the leave confirmation)
@@ -111,7 +119,11 @@ import com.cricketsim.ui.settings.SettingsScreen
  * itself, with no sub-view open, back opens the leave confirmation, same
  * as tapping the Leave match button — a live match is never discarded by
  * an unconfirmed back press, even though it would be safe to (it's
- * autosaved) — for the same reason the button itself asks first.
+ * autosaved) — for the same reason the button itself asks first. Note
+ * that BattingScreen itself no longer takes an onBack — see
+ * FaceNextBallControl's doc comment for why leaving a ball in progress
+ * is entirely this screen's own job now, via the BackHandler wrapping
+ * showBattingScreen below, same as every other sub-view.
  *
  * `onBack` leaves the match (MainActivity sends you to the first screen,
  * where the autosave is offered as Resume) and is only reachable through
@@ -164,6 +176,9 @@ fun MatchScreen(
     var resultText by remember { mutableStateOf<String?>(null) }
     var showPitchingScreen by remember { mutableStateOf(false) }
     var showBattingScreen by remember { mutableStateOf(false) }
+    // Set the instant "Face next ball" is tapped/held — see
+    // FaceNextBallControl. Read once, when BattingScreen mounts.
+    var pendingFootwork by remember { mutableStateOf(FootworkType.FRONT_FOOT) }
     var showFieldScreen by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
     var showInningsBreak by remember { mutableStateOf(resume?.showInningsBreak ?: false) }
@@ -412,9 +427,16 @@ fun MatchScreen(
     }
 
     if (showBattingScreen) {
+        // BattingScreen itself takes no onBack — footwork (and so the
+        // delivery reveal) is already committed by the time it's shown,
+        // so there is nothing left inside it to safely back out of. This
+        // BackHandler is what leaving a ball in progress actually means:
+        // it discards this attempt and returns to the ordinary screen,
+        // same as every other sub-view here.
         BackHandler(onBack = { showBattingScreen = false })
         BattingScreen(
             batsman = matchState.currentBatsmen.first,
+            footwork = pendingFootwork,
             // Called once, after the footwork commit: the AI captain reads
             // the situation, decides the delivery and sets its field for it
             // (all before the batter picks a shot), and the batter is told
@@ -428,8 +450,7 @@ fun MatchScreen(
             onBallPlayed = { delivery, decision ->
                 showBattingScreen = false
                 advanceOneBall(presetBowlingDecision = delivery, presetBattingDecision = decision)
-            },
-            onBack = { showBattingScreen = false }
+            }
         )
         return
     }
@@ -514,9 +535,12 @@ fun MatchScreen(
                 Text("Bowl")
             }
         } else {
-            Button(onClick = { showBattingScreen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Face next ball")
-            }
+            FaceNextBallControl(
+                onSelected = { footwork ->
+                    pendingFootwork = footwork
+                    showBattingScreen = true
+                }
+            )
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(MatchLines.strikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
@@ -593,6 +617,63 @@ fun MatchScreen(
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * The single control that both starts the next ball AND commits
+ * footwork in one gesture — the web plan's "single tap 'Next ball' /
+ * double-tap-and-hold 'Next ball'" (see GESTURE_REDESIGN.md section 3),
+ * folded into the SAME control that already read "Face next ball",
+ * rather than a separate footwork step shown after it. An earlier pass
+ * put footwork as BattingScreen's own first step with its own "Next
+ * ball" control, which meant tapping this button and then immediately
+ * being shown a second, near-identical "Next ball" control to tap or
+ * hold. Folding the two together here means BattingScreen itself is
+ * only ever shown once footwork (and, via `generateDelivery`, the ball
+ * itself) is already decided, so it has no footwork step of its own and
+ * no way to back out of one — see that file's "NO BACK ONCE THIS SCREEN
+ * IS SHOWING".
+ *
+ * Built the same way as BattingScreen's other custom TalkBack-native
+ * tap/press-and-hold controls: Compose's own `combinedClickable`
+ * (TalkBack exposes click and long-click as distinct, natively
+ * supported actions, so no custom gesture-detection code is needed here
+ * the way the shot/intent swipe surfaces need it). Styled as a `Surface`
+ * rather than a `Button`: `Button`'s own internal click handling would
+ * intercept a tap before a `combinedClickable` layered on top of it
+ * ever saw a chance to distinguish a long-press from it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FaceNextBallControl(onSelected: (FootworkType) -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClickLabel = "Front foot",
+                onLongClickLabel = "Back foot",
+                role = Role.Button,
+                onClick = { onSelected(FootworkType.FRONT_FOOT) },
+                onLongClick = { onSelected(FootworkType.BACK_FOOT) }
+            ),
+        shape = ButtonDefaults.shape,
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Face next ball", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                "Tap for front foot. Press and hold for back foot.",
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }
