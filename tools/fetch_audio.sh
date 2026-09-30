@@ -18,6 +18,16 @@
 #
 # The list of commentary clips is read from CommentaryLibrary.kt's
 # audioUrl values, so it can't drift from the code.
+#
+# The six drs_* sound recordings (and, on the commentary side, the 30
+# clips that used to be listed as "pending generation" plus the 16 new
+# REVIEW_* lines — see CommentaryLibrary.kt's doc comment) were generated
+# via ElevenLabs' sound-generation and text-to-speech endpoints
+# (endpoints/sfx_generate_POST.ts and commentary_tts_generate_POST.ts on
+# the Floot side) and uploaded to the same $BASE_URL host as everything
+# else here — see DRS_NOTES.md for exactly what was generated and why.
+# They need no special handling below: they fetch and pack exactly like
+# every other recording and clip.
 
 set -u
 
@@ -68,6 +78,12 @@ coin_flip|/_cdn/sfx/coin_flip.mp3
 bat_hit|/_cdn/static/90a609ea-4f7c-42a2-aa68-e04a150e343c-NoiseFree_1788362501831.mp3
 rain_ambience|/_cdn/sfx/rain_ambience.mp3
 thunder_crack|/_cdn/sfx/thunder_crack.mp3
+drs_third_umpire_check|/_cdn/sfx/drs_third_umpire_check.mp3
+drs_heartbeat|/_cdn/sfx/drs_heartbeat.mp3
+drs_bgm|/_cdn/sfx/drs_bgm.mp3
+drs_firecracker|/_cdn/sfx/drs_firecracker.mp3
+drs_lose|/_cdn/sfx/drs_lose.mp3
+drs_umpires_call_against|/_cdn/sfx/drs_umpires_call_against.mp3
 EOF
 
 echo
@@ -125,7 +141,7 @@ rm -rf "$OLD_CLIP_DIR"
 {
   echo "Audio fetch report"
   echo "Source: $BASE_URL"
-  echo "Sound recordings expected: 7"
+  echo "Sound recordings expected: 13"
   echo "Commentary clips referenced by CommentaryLibrary.kt: $clip_count"
   echo "Files packed into $OUT_FILE this run: $fetched_files"
   echo "Packed file size: $(wc -c < "$OUT_FILE") bytes"

@@ -48,18 +48,26 @@ import kotlin.random.Random
  * scope for this pure-logic pass (see PORTING_NOTES.md's "Audio"
  * entry). The ids and text are what actually matter for this file.
  *
- * PENDING GENERATION as of the web source's last note (regenerate via
- * its endpoints/commentary_tts_generate_POST.ts once the ElevenLabs
- * quota resets — not relevant to this Kotlin port, but kept here for
- * parity in case it's ever relevant to Android audio asset generation
- * too): partnership150_2, partnership200_1, partnership200_2,
- * bowler3wkts_1, bowler3wkts_2, bowler5wkts_1, bowler5wkts_2,
- * bowler10wkts_1, bowler10wkts_2, hattrick_1, hattrick_2,
- * onhattrick_1, onhattrick_2, doublehattrick_1, doublehattrick_2
- * (each as both _excited and _calm).
+ * The 30 clips this file's own doc comment used to list as "pending
+ * generation" (partnership150/200, bowler 3/5/10-wicket hauls, every
+ * hat-trick line) were generated in the DRS audio pass alongside the
+ * new REVIEW_* categories below — see tools/fetch_audio.sh and
+ * DRS_NOTES.md. All 206 clips this library references now exist.
+ *
+ * The four REVIEW_* categories (REVIEW_REQUESTED / REVIEW_OVERTURNED /
+ * REVIEW_UMPIRES_CALL / REVIEW_STANDS) have NO web-app equivalent — the
+ * Decision Review System is Android-only (see DrsSystem.kt). They
+ * follow the exact same category/pair/audioUrl shape as every other
+ * category here so DrsScreens.kt can drive them through
+ * SoundEngine.enqueueCommentary exactly like any ball-outcome category,
+ * and were generated the same way (ElevenLabs, uploaded to the same
+ * Floot storage the rest of this library already points at) rather
+ * than through a genuinely separate pipeline. Between them, this
+ * library now references 206 clips in total (190 + these 16).
  *
  * Every category, every line's id/text/audioUrl, and all
- * milestone/hat-trick thresholds are exact matches to the web source.
+ * milestone/hat-trick thresholds are exact matches to the web source,
+ * except the four REVIEW_* categories, which are new.
  */
 
 enum class CommentaryCategory {
@@ -72,7 +80,9 @@ enum class CommentaryCategory {
     PARTNERSHIP_50, PARTNERSHIP_100, PARTNERSHIP_150, PARTNERSHIP_200,
     BOWLER_3_WICKETS, BOWLER_5_WICKETS, BOWLER_10_WICKETS,
     HAT_TRICK, ON_HAT_TRICK, DOUBLE_HAT_TRICK,
-    TOSS_BAT, TOSS_BOWL, FIELDING_CHANGE, RAIN_START, RAIN_STOP, DLS_REVISED
+    TOSS_BAT, TOSS_BOWL, FIELDING_CHANGE, RAIN_START, RAIN_STOP, DLS_REVISED,
+    // Decision Review System (Android-only — see this file's doc comment).
+    REVIEW_REQUESTED, REVIEW_OVERTURNED, REVIEW_UMPIRES_CALL, REVIEW_STANDS
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -555,6 +565,49 @@ object CommentaryLibrary {
             CommentaryPair(
                 CommentaryLine("dlsrevised_2_excited", "The par score has been recalculated, and the target has changed!", "/_cdn/commentary/dlsrevised_2_excited.mp3"),
                 CommentaryLine("dlsrevised_2_calm", "Everyone will need to recheck the numbers before the next ball.", "/_cdn/commentary/dlsrevised_2_calm.mp3")
+            )
+        ),
+
+        // --- Decision Review System (Android-only — see this file's doc comment) ---
+
+        CommentaryCategory.REVIEW_REQUESTED to listOf(
+            CommentaryPair(
+                CommentaryLine("review_requested_1_excited", "They've sent it upstairs! The players are looking to the big screen for a review!", "/_cdn/commentary/review_requested_1_excited.mp3"),
+                CommentaryLine("review_requested_1_calm", "A big call to make here, let's see what the third umpire makes of it.", "/_cdn/commentary/review_requested_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("review_requested_2_excited", "A review is under way! The whole ground holds its breath waiting on this one!", "/_cdn/commentary/review_requested_2_excited.mp3"),
+                CommentaryLine("review_requested_2_calm", "Every angle will be checked now before we get a final answer.", "/_cdn/commentary/review_requested_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.REVIEW_OVERTURNED to listOf(
+            CommentaryPair(
+                CommentaryLine("review_overturned_1_excited", "Not out! The decision is overturned, and what a turnaround that is!", "/_cdn/commentary/review_overturned_1_excited.mp3"),
+                CommentaryLine("review_overturned_1_calm", "The technology has come to the rescue there, a huge reprieve.", "/_cdn/commentary/review_overturned_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("review_overturned_2_excited", "Overturned! The third umpire has seen something completely different!", "/_cdn/commentary/review_overturned_2_excited.mp3"),
+                CommentaryLine("review_overturned_2_calm", "Credit to the review system, that decision needed a second look.", "/_cdn/commentary/review_overturned_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.REVIEW_UMPIRES_CALL to listOf(
+            CommentaryPair(
+                CommentaryLine("review_umpires_call_1_excited", "Umpire's call! It stays as it was, the tiniest of margins there!", "/_cdn/commentary/review_umpires_call_1_excited.mp3"),
+                CommentaryLine("review_umpires_call_1_calm", "As close as it gets, the on-field call simply could not be overturned.", "/_cdn/commentary/review_umpires_call_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("review_umpires_call_2_excited", "Umpire's call! So agonizingly close, but the on-field decision stands!", "/_cdn/commentary/review_umpires_call_2_excited.mp3"),
+                CommentaryLine("review_umpires_call_2_calm", "Right on the margins there, that is why the on-field call carries the benefit of the doubt.", "/_cdn/commentary/review_umpires_call_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.REVIEW_STANDS to listOf(
+            CommentaryPair(
+                CommentaryLine("review_stands_1_excited", "Review is unsuccessful! The original decision stands, and that review is gone!", "/_cdn/commentary/review_stands_1_excited.mp3"),
+                CommentaryLine("review_stands_1_calm", "No change there, the on-field umpire had it right all along.", "/_cdn/commentary/review_stands_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("review_stands_2_excited", "Not enough to overturn it! The soft signal stays as given!", "/_cdn/commentary/review_stands_2_excited.mp3"),
+                CommentaryLine("review_stands_2_calm", "That was always going to be a tough ask, the evidence backed up the umpire.", "/_cdn/commentary/review_stands_2_calm.mp3")
             )
         )
     )
