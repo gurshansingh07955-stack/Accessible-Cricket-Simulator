@@ -70,6 +70,17 @@ import kotlin.math.max
  *   way is skipped. There is no text-to-speech fallback for these on
  *   purpose: the same line is already on screen and spoken by TalkBack,
  *   and a second synthetic voice would just talk over it.
+ * - DECISION REVIEW SYSTEM (see DrsSystem.kt / DrsScreens.kt — Android
+ *   only, no web-app equivalent). Three new one-shot recordings
+ *   (RecordedAsset.DRS_THIRD_UMPIRE_CHECK / DRS_FIRECRACKER / DRS_LOSE /
+ *   DRS_UMPIRES_CALL_AGAINST, all four via the same SoundPool path as
+ *   THUNDER etc.) plus two longer ones played as plain, non-looping
+ *   MediaPlayer instances sized to the review's own fixed 10-second
+ *   length (DRS_HEARTBEAT, DRS_BGM — see startDrsReviewAudio). The crowd
+ *   ducks for as long as the heartbeat/bgm play, same convention as every
+ *   other effect. The music bed is deliberately quiet (DRS_BGM_GAIN) —
+ *   it adds tension under the heartbeat and the spoken tracking steps,
+ *   not over them.
  *
  * INPUT LATENCY. Android audio output has latency the web doesn't (tens
  * of milliseconds, device-dependent). The timing score is measured against
@@ -159,6 +170,7 @@ class SoundEngine(context: Context) {
             stopCrowdAmbience()
             stopRainAmbience()
             stopAimTone()
+            stopDrsReviewAudio()
         }
         if (old.aiCommentaryMode != AiCommentaryMode.OFF && new.aiCommentaryMode == AiCommentaryMode.OFF) {
             stopCommentary()
@@ -202,6 +214,7 @@ class SoundEngine(context: Context) {
         rainChannel = null
         aimToneChannel?.stop()
         aimToneChannel = null
+        stopDrsReviewAudio()
         runCatching { tickTrack?.release() }
         runCatching { accentTickTrack?.release() }
         runCatching { soundPool.release() }
@@ -353,6 +366,95 @@ class SoundEngine(context: Context) {
 
     private fun playThunder() {
         if (!playRecorded(RecordedAsset.THUNDER, 0.75f * MASTER)) playPcm(Fx.THUNDER, 0.75f * MASTER)
+    }
+
+    // --- Decision Review System (see DrsSystem.kt / DrsScreens.kt) ---
+
+    private var drsHeartbeatPlayer: MediaPlayer? = null
+    private var drsBgmPlayer: MediaPlayer? = null
+
+    /** The third umpire's checking tone, once, right as a review begins. */
+    fun playDrsReviewCheck() {
+        if (!settings.soundEffects) return
+        if (!playRecorded(RecordedAsset.DRS_THIRD_UMPIRE_CHECK, 0.8f * MASTER)) playPcm(Fx.WHOOSH, 0.4f * MASTER)
+    }
+
+    /**
+     * Starts the review's heartbeat and background music bed and ducks the
+     * crowd for as long as they play — every duck needs a matching
+     * duckEnd(), which stopDrsReviewAudio provides. Both are plain,
+     * non-looping recordings generated to the review's own fixed length
+     * (DrsSystem.REVIEW_DURATION_MS) rather than a shorter clip looped, and
+     * are explicitly stopped by stopDrsReviewAudio when the process stage
+     * ends, in case that is ever sooner. The music bed is deliberately
+     * quiet (DRS_BGM_GAIN) — it adds tension under the heartbeat and the
+     * spoken tracking steps, not over them.
+     */
+    fun startDrsReviewAudio() {
+        if (!settings.soundEffects) return
+        duckStart()
+        drsHeartbeatPlayer = playOneShotMedia(RecordedAsset.DRS_HEARTBEAT, DRS_HEARTBEAT_GAIN * MASTER)
+        drsBgmPlayer = playOneShotMedia(RecordedAsset.DRS_BGM, DRS_BGM_GAIN * MASTER)
+    }
+
+    /** Safe to call even if startDrsReviewAudio was never called, or has already been stopped. */
+    fun stopDrsReviewAudio() {
+        val wasRunning = drsHeartbeatPlayer != null || drsBgmPlayer != null
+        drsHeartbeatPlayer?.let { runCatching { it.stop() }; runCatching { it.release() } }
+        drsHeartbeatPlayer = null
+        drsBgmPlayer?.let { runCatching { it.stop() }; runCatching { it.release() } }
+        drsBgmPlayer = null
+        if (wasRunning) duckEnd()
+    }
+
+    /** The review favored the listener: a firecracker. See DrsScreens.kt's DrsResultStage for when each of these three plays. */
+    fun playDrsFirecracker() {
+        if (!settings.soundEffects) return
+        if (!playRecorded(RecordedAsset.DRS_FIRECRACKER, 0.85f * MASTER)) playPcm(Fx.CHEER_BIG, MASTER)
+    }
+
+    /** The review went against the listener outright (a decision stands, review lost — or an opponent's overturn). */
+    fun playDrsLose() {
+        if (!settings.soundEffects) return
+        playRecorded(RecordedAsset.DRS_LOSE, 0.8f * MASTER)
+    }
+
+    /** An Umpire's Call that went against the listener — distinct from playDrsLose, on request. */
+    fun playDrsUmpiresCallAgainst() {
+        if (!settings.soundEffects) return
+        playRecorded(RecordedAsset.DRS_UMPIRES_CALL_AGAINST, 0.8f * MASTER)
+    }
+
+    /**
+     * A plain, non-looping MediaPlayer for a recording found via
+     * AudioAssets — the same bundled-pack-then-stream lookup every other
+     * recording uses, but without SoundPool's whole-file-into-memory
+     * preload, so it suits DRS_HEARTBEAT/DRS_BGM's longer (~10s) length
+     * better than the SoundPool path the short one-shots above use.
+     * Returns null (and plays nothing) if the asset can't be found at all;
+     * the caller decides whether that's worth a fallback.
+     */
+    private fun playOneShotMedia(asset: RecordedAsset, volume: Float): MediaPlayer? {
+        val source = AudioAssets.find(appContext, asset) ?: return null
+        return try {
+            val player = MediaPlayer()
+            player.setAudioAttributes(effectAttributes)
+            when (source) {
+                is AssetSource.Raw -> appContext.resources.openRawResourceFd(source.resId).use { afd ->
+                    player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                }
+                is AssetSource.Local -> player.setDataSource(source.file.absolutePath)
+                is AssetSource.Bytes -> player.setDataSource(ByteArrayMediaDataSource(source.bytes))
+            }
+            player.setVolume(volume, volume)
+            player.setOnPreparedListener { if (!paused) it.start() }
+            player.setOnCompletionListener { runCatching { it.release() } }
+            player.setOnErrorListener { _, _, _ -> true }
+            player.prepareAsync()
+            player
+        } catch (e: Exception) {
+            null
+        }
     }
 
     // --- Looping channels (crowd, rain, aim tone) ---
@@ -878,12 +980,24 @@ class SoundEngine(context: Context) {
         const val AIM_TONE_MAX_RATE = 2.4f
         const val AIM_TONE_GAIN = 0.55f
 
+        // DRS heartbeat/bgm gains, applied on top of MASTER like every
+        // other effect. The user explicitly asked for the music bed to
+        // stay quiet, so DRS_BGM_GAIN sits well under DRS_HEARTBEAT_GAIN —
+        // the heartbeat should read as the main tension cue, the music as
+        // a bed underneath it and the spoken tracking steps.
+        const val DRS_HEARTBEAT_GAIN = 0.55f
+        const val DRS_BGM_GAIN = 0.18f
+
         val ONE_SHOT_ASSETS = listOf(
             RecordedAsset.BAT_HIT,
             RecordedAsset.SMALL_CHEER,
             RecordedAsset.BIG_ROAR,
             RecordedAsset.COIN_FLIP,
-            RecordedAsset.THUNDER
+            RecordedAsset.THUNDER,
+            RecordedAsset.DRS_THIRD_UMPIRE_CHECK,
+            RecordedAsset.DRS_FIRECRACKER,
+            RecordedAsset.DRS_LOSE,
+            RecordedAsset.DRS_UMPIRES_CALL_AGAINST
         )
     }
 }
