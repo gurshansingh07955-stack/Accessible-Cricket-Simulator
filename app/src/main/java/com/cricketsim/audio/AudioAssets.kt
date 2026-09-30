@@ -25,7 +25,10 @@ import java.net.URL
  *
  * VERIFIED: every path below answers HTTP 200 (audio/mpeg) on the web
  * app's public host, and the paths are copied verbatim from
- * helpers/audioManager.tsx.
+ * helpers/audioManager.tsx — except the six DRS_* entries, which have no
+ * web-app equivalent (Decision Review System is Android-only; see
+ * DrsSystem.kt) and were generated straight onto that same host by
+ * tools/fetch_audio.sh's ElevenLabs generation pass instead.
  *
  * LICENCE: the crowd recording's file name suggests a third-party stock
  * source, and it is bundled (inside the encrypted pack) in every APK.
@@ -33,11 +36,7 @@ import java.net.URL
  *
  * The AI commentary clips (`/_cdn/commentary/<id>.mp3`) follow the same
  * order, handled by SoundEngine rather than here: the bundled copy from
- * AudioPack when there is one, else streamed from BASE_URL. Of the 190
- * clips the library references, 160 exist on the web app and are bundled;
- * the other 30 (partnership 150/200, bowler 3/5/10-wicket hauls, every
- * hat-trick line) were never generated there, so they are skipped, as on
- * the web, until they are.
+ * AudioPack when there is one, else streamed from BASE_URL.
  */
 enum class RecordedAsset(val fileName: String, val path: String, val rawName: String) {
     CROWD_BED(
@@ -54,7 +53,19 @@ enum class RecordedAsset(val fileName: String, val path: String, val rawName: St
         "bat_hit"
     ),
     RAIN("rain_ambience.mp3", "/_cdn/sfx/rain_ambience.mp3", "rain_ambience"),
-    THUNDER("thunder_crack.mp3", "/_cdn/sfx/thunder_crack.mp3", "thunder_crack")
+    THUNDER("thunder_crack.mp3", "/_cdn/sfx/thunder_crack.mp3", "thunder_crack"),
+
+    // --- Decision Review System (see DrsSystem.kt / DrsScreens.kt) ---
+    // Generated via ElevenLabs' sound-generation endpoint, not recorded —
+    // "Recorded" here just means "a real audio file", the same as THUNDER
+    // and the crowd/rain beds above, all of which SoundEngine treats
+    // identically regardless of how they were produced.
+    DRS_THIRD_UMPIRE_CHECK("drs_third_umpire_check.mp3", "/_cdn/sfx/drs_third_umpire_check.mp3", "drs_third_umpire_check"),
+    DRS_HEARTBEAT("drs_heartbeat.mp3", "/_cdn/sfx/drs_heartbeat.mp3", "drs_heartbeat"),
+    DRS_BGM("drs_bgm.mp3", "/_cdn/sfx/drs_bgm.mp3", "drs_bgm"),
+    DRS_FIRECRACKER("drs_firecracker.mp3", "/_cdn/sfx/drs_firecracker.mp3", "drs_firecracker"),
+    DRS_LOSE("drs_lose.mp3", "/_cdn/sfx/drs_lose.mp3", "drs_lose"),
+    DRS_UMPIRES_CALL_AGAINST("drs_umpires_call_against.mp3", "/_cdn/sfx/drs_umpires_call_against.mp3", "drs_umpires_call_against")
 }
 
 sealed interface AssetSource {
