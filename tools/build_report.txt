@@ -1,6 +1,6 @@
-Build run: 36651391444 (attempt 1)
-Commit: f8b45d05efe1940d923c2312cb0fdebf5cb676d8
-Timestamp (UTC): 2026-09-30T00:40:39Z
+Build run: 36674084614 (attempt 1)
+Commit: 15f83a3f12e28152f1eb4676b0f8e7cc16a41006
+Timestamp (UTC): 2026-09-30T05:36:02Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -15,18 +15,18 @@ Daemon will be stopped at the end of the build
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
 > Task :app:packageDebugResources
-> Task :app:mergeDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
+> Task :app:mergeDebugResources
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
+> Task :app:processDebugManifestForPackage
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
-> Task :app:processDebugManifestForPackage
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
 > Task :app:mergeDebugStartupProfile
@@ -55,7 +55,7 @@ e: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 e: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/DrsScreens.kt:406:88 Unresolved reference: playDrsFirecracker
 e: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/DrsScreens.kt:407:68 Unresolved reference: playDrsUmpiresCallAgainst
 e: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/DrsScreens.kt:407:108 Unresolved reference: playDrsFirecracker
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790728799013.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790746533489.json
 
 FAILURE: Build failed with an exception.
 
@@ -264,5 +264,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 44s
+BUILD FAILED in 32s
 29 actionable tasks: 29 executed
