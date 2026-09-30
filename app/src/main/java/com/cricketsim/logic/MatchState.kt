@@ -133,7 +133,20 @@ data class MatchState(
     // True once target reflects a DLS revision rather than a plain
     // "first innings score + 1" — surfaced in the UI so a revised target
     // is never presented as if it were the original one.
-    val dlsRevised: Boolean
+    val dlsRevised: Boolean,
+
+    // --- Decision Review System (see DrsSystem.kt) ---
+
+    // How many of the BATTING side's reviews have been LOST this innings.
+    // Only a decision that stands outright costs one; an overturned
+    // decision and an Umpire's Call are both kept (see DrsSystem). Reset to
+    // 0 by switchInnings, so each innings starts with a full allowance
+    // (DrsSystem.reviewsPerInnings). Counting what is USED rather than
+    // what is LEFT is deliberate: a saved match written before DRS existed
+    // is read back with this at 0 (Gson leaves a missing Int at 0), which
+    // is exactly "nothing used yet" — so older saves stay valid and
+    // MatchSaveStore.CURRENT_VERSION did not need to change.
+    val drsReviewsUsed: Int = 0
 )
 
 object MatchStateMachine {
@@ -587,7 +600,10 @@ object MatchStateMachine {
             deferredOverEnd = false,
             fieldPlacements = fieldPlacements,
             dlsRevised = dlsRevised,
-            activeRainDelay = null
+            activeRainDelay = null,
+            // A fresh innings, a fresh allowance of reviews for the new
+            // batting side (see drsReviewsUsed above).
+            drsReviewsUsed = 0
         )
     }
 

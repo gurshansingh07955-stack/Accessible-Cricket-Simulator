@@ -22,9 +22,18 @@ import com.cricketsim.logic.WeatherSystem
  * One delivery, fully resolved: the new match state, what happened, and
  * the batting decision it was played against (the user's own, or the
  * AI's). The batting decision is returned because the last-ball line
- * reports the shot and timing for BOTH sides, as the web does.
+ * reports the shot and timing for BOTH sides, as the web does. The
+ * bowling decision (the delivery itself) is returned for the Decision
+ * Review System, whose ball-tracking details describe the delivery, and
+ * which needs it to replay the same ball as a not-out (see
+ * MatchSimulation.overturnDismissal).
  */
-data class BallResult(val state: MatchState, val outcome: BallOutcome, val battingDecision: BattingDecision)
+data class BallResult(
+    val state: MatchState,
+    val outcome: BallOutcome,
+    val battingDecision: BattingDecision,
+    val bowlingDecision: ResolvedBowlingDecision
+)
 
 /**
  * The AI's next delivery, prepared for a user who is batting: the match
@@ -107,6 +116,16 @@ data class AiDelivery(val state: MatchState, val bowling: ResolvedBowlingDecisio
  * over whose last ball was a wicket for the user's side (deferred until
  * the replacement is picked) never rolled; here that over-end rolls too,
  * because it is the same over-end, just later.
+ *
+ * DECISION REVIEWS (see DrsSystem.kt). simulateOneBall always resolves a
+ * ball exactly as it always did, wicket included. MatchScreen then holds
+ * that result back, uncommitted, when the dismissal is reviewable and
+ * plays the review. If the review OVERTURNS it, `overturnDismissal`
+ * replays the SAME ball, with the SAME delivery and batting decision, as
+ * a not-out by handing simulateOneBall the not-out outcome to use
+ * (`outcomeOverride`), so everything downstream — the ball counted, strike
+ * rotation, an over ending, the bowler change, rain — runs through the one
+ * existing path instead of a second copy of it.
  */
 object MatchSimulation {
 
@@ -258,13 +277,19 @@ object MatchSimulation {
      * `presetBattingDecision`: the user's own batting decision from
      * BattingScreen. Null (the default) generates an AI decision here,
      * shaped by the batting side's situational bias.
+     *
+     * `outcomeOverride`: an already-decided ball outcome to apply INSTEAD
+     * of simulating one. Used only by `overturnDismissal`, to replay a
+     * ball as a not-out after a successful review; leave it null for a
+     * normal ball.
      */
     fun simulateOneBall(
         state: MatchState,
         stadium: Stadium,
         difficulty: Difficulty,
         presetBowlingDecision: ResolvedBowlingDecision? = null,
-        presetBattingDecision: BattingDecision? = null
+        presetBattingDecision: BattingDecision? = null,
+        outcomeOverride: BallOutcome? = null
     ): BallResult {
         val striker = state.currentBatsmen.first
 
@@ -283,7 +308,7 @@ object MatchSimulation {
         val isSecondInningsUnderLights = state.currentInnings == 2 && state.weather.isDayNight
         val stadiumEffects = WeatherSystem.getStadiumMatchEffects(stadium, isSecondInningsUnderLights)
 
-        val outcome = MatchEngine.simulateBall(
+        val outcome = outcomeOverride ?: MatchEngine.simulateBall(
             matchState = state,
             difficulty = difficulty,
             pitchType = state.pitchType,
@@ -341,7 +366,43 @@ object MatchSimulation {
             newState = endOfOver(newState, stadium)
         }
 
-        return BallResult(newState, outcome, battingDecision)
+        return BallResult(newState, outcome, battingDecision, bowlingDecision)
+    }
+
+    /**
+     * Replays a ball whose dismissal was OVERTURNED on review, as a
+     * not-out, from the state BEFORE that ball. `original` is the result
+     * that was held back while the review played: its outcome, with the
+     * wicket taken off, is what gets applied, and its own delivery and
+     * batting decision are passed back in so the replay is the same ball,
+     * not a fresh roll.
+     *
+     * The ball still counts (as it does in real cricket: a reviewed-not-out
+     * ball is a delivery faced), the batter stays, and any runs stay too —
+     * which only matters once run outs can be reviewed, since an LBW
+     * carries none. Runs, a strike change, the end of an over and the rain
+     * roll are all handled by simulateOneBall exactly as for any other
+     * not-out ball.
+     *
+     * `commentary` replaces the dismissal's commentary line, which
+     * described the wicket.
+     */
+    fun overturnDismissal(
+        before: MatchState,
+        original: BallResult,
+        stadium: Stadium,
+        difficulty: Difficulty,
+        commentary: String
+    ): BallResult {
+        val notOut = original.outcome.copy(isWicket = false, dismissalType = null, commentary = commentary)
+        return simulateOneBall(
+            state = before,
+            stadium = stadium,
+            difficulty = difficulty,
+            presetBowlingDecision = original.bowlingDecision,
+            presetBattingDecision = original.battingDecision,
+            outcomeOverride = notOut
+        )
     }
 
     /** True once the current innings should end: all out, or the overs limit is used up. */
