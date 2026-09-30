@@ -35,9 +35,13 @@ import com.cricketsim.audio.GameSettings
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.audio.MatchAudioDirector
 import com.cricketsim.logic.BattingDecision
+import com.cricketsim.logic.DrsCase
+import com.cricketsim.logic.DrsSystem
+import com.cricketsim.logic.DrsVerdict
 import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.FootworkType
 import com.cricketsim.logic.MatchFormat
+import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.MatchStateMachine
 import com.cricketsim.logic.ResolvedBowlingDecision
 import com.cricketsim.logic.Stadium
@@ -86,6 +90,8 @@ import com.cricketsim.ui.settings.SettingsScreen
  *      the live match with it),
  *   2. the scorecard (only ever opened from a screen that can go back
  *      to where it came from),
+ *   2b. a Decision Review in progress (a reviewable dismissal held back
+ *      from the match until the review settles it — see below),
  *   3. the match result,
  *   4. a rain delay,
  *   5. the innings break,
@@ -129,6 +135,20 @@ import com.cricketsim.ui.settings.SettingsScreen
  * where the autosave is offered as Resume) and is only reachable through
  * the leave confirmation; `onMatchFinished` is the finished match's Return
  * to home.
+ *
+ * DECISION REVIEWS (DRS — see DrsSystem.kt and DRS_NOTES.md). A ball is
+ * always SIMULATED first, wicket and all, but when its dismissal is
+ * reviewable and the batting side has a review left, advanceOneBall
+ * holds the result in `pendingReview` instead of applying it, and
+ * DrsReviewScreen plays the review. When it finishes, the held ball is
+ * committed one of three ways: as simulated (no review asked for, or the
+ * decision stood), with `drsReviewsUsed` raised by one (it stood
+ * outright: the review is lost), or REPLAYED from the state before the
+ * ball as a not-out (overturned; MatchSimulation.overturnDismissal).
+ * Holding the ball back, rather than applying it and undoing it, is what
+ * keeps an overturn from having to unpick a wicket, a replacement
+ * batsman and an over change. Nothing about a review in progress is
+ * saved: a resumed match replays the ball from before it.
  *
  * BOWLING SETUP MEMORY. `bowlingSetupMemory` remembers the last
  * PitchingScreen setup (angle/line/variation/speed) actually bowled with
@@ -179,6 +199,11 @@ fun MatchScreen(
     // Set the instant "Face next ball" is tapped/held — see
     // FaceNextBallControl. Read once, when BattingScreen mounts.
     var pendingFootwork by remember { mutableStateOf(FootworkType.FRONT_FOOT) }
+    // A reviewable dismissal that has been simulated but NOT yet applied to
+    // the match, while the Decision Review System decides what happens to
+    // it — see the class doc comment's "DECISION REVIEWS". Deliberately not
+    // saved: a resumed match replays the ball from the state before it.
+    var pendingReview by remember { mutableStateOf<PendingReview?>(null) }
     var showFieldScreen by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
     var showInningsBreak by remember { mutableStateOf(resume?.showInningsBreak ?: false) }
@@ -238,22 +263,12 @@ fun MatchScreen(
         }
     }
 
-    fun advanceOneBall(
-        presetBowlingDecision: ResolvedBowlingDecision? = null,
-        presetBattingDecision: BattingDecision? = null
-    ) {
-        if (matchOver) return
-        fieldMessage = ""
-        playNotice = ""
-        val before = matchState
-        director?.onDelivery()
-        val result = MatchSimulation.simulateOneBall(
-            before,
-            stadium,
-            settings.difficulty,
-            presetBowlingDecision,
-            presetBattingDecision
-        )
+    // Everything that happens once a ball's FINAL result is known: put it
+    // in the match, record and announce it, and handle an innings or the
+    // match ending. Split out of advanceOneBall so a ball held back for a
+    // Decision Review can be committed later, either as it was simulated
+    // or replayed as a not-out. `before` is the state the ball started from.
+    fun commitBall(before: MatchState, result: BallResult) {
         val nextState = result.state
         val summary = MatchLines.ballSummary(result.outcome, result.battingDecision)
         matchState = nextState
@@ -300,6 +315,57 @@ fun MatchScreen(
         }
     }
 
+    fun advanceOneBall(
+        presetBowlingDecision: ResolvedBowlingDecision? = null,
+        presetBattingDecision: BattingDecision? = null
+    ) {
+        if (matchOver) return
+        fieldMessage = ""
+        playNotice = ""
+        val before = matchState
+        director?.onDelivery()
+        val result = MatchSimulation.simulateOneBall(
+            before,
+            stadium,
+            settings.difficulty,
+            presetBowlingDecision,
+            presetBattingDecision
+        )
+
+        // A dismissal that can be reviewed (LBW today; run out and stumped
+        // as soon as the game has them) is HELD BACK rather than applied:
+        // the Decision Review System decides whether it stands. Nothing is
+        // committed until it does, so an overturned ball never has to be
+        // undone. With no reviews left the dismissal simply goes ahead.
+        val dismissal = result.outcome.dismissalType
+        if (result.outcome.isWicket && dismissal != null && DrsSystem.isReviewable(dismissal)) {
+            val reviewsLeft = DrsSystem.reviewsRemaining(before)
+            val userBatting = before.battingTeam.id == before.userTeam.id
+            if (reviewsLeft > 0) {
+                pendingReview = PendingReview(
+                    before = before,
+                    result = result,
+                    drsCase = DrsCase(
+                        reviewingTeamName = before.battingTeam.name,
+                        batterName = before.currentBatsmen.first.name,
+                        bowlerName = before.currentBowler.name,
+                        dismissalType = dismissal,
+                        delivery = result.bowlingDecision,
+                        // The BATTER's timing on the shot — the only thing
+                        // that decides the odds (see DrsSystem.survivalChance).
+                        timingTier = result.battingDecision.timingTier
+                    ),
+                    userReviewing = userBatting,
+                    reviewsRemaining = reviewsLeft,
+                    nextBatsmanNeeded = !MatchSimulation.isInningsOver(result.state)
+                )
+                return
+            }
+            if (userBatting) services?.announceSpoken("You have no reviews left.")
+        }
+        commitBall(before, result)
+    }
+
     if (confirmingLeave) {
         // Back here cancels, same as the Stay button — it never silently
         // discards a live match.
@@ -320,6 +386,51 @@ fun MatchScreen(
             state = matchState,
             startOnFirstInnings = showInningsBreak && !matchOver,
             onBack = { showScorecard = false }
+        )
+        return
+    }
+
+    // A dismissal is being reviewed (see the class doc comment's
+    // "DECISION REVIEWS"). The screen swallows the system back button itself.
+    val review = pendingReview
+    if (review != null) {
+        DrsReviewScreen(
+            drsCase = review.drsCase,
+            userIsReviewing = review.userReviewing,
+            reviewsRemaining = review.reviewsRemaining,
+            nextBatsmanNeeded = review.nextBatsmanNeeded,
+            onFinished = { outcome ->
+                pendingReview = null
+                val finalResult = when (outcome) {
+                    is DrsOutcome.Reviewed -> when (outcome.verdict) {
+                        // Not out: replay the same ball without the wicket.
+                        // The review is kept, so the count is untouched.
+                        DrsVerdict.OVERTURNED -> MatchSimulation.overturnDismissal(
+                            before = review.before,
+                            original = review.result,
+                            stadium = stadium,
+                            difficulty = settings.difficulty,
+                            commentary = DrsSystem.overturnedCommentary(
+                                review.drsCase.dismissalType,
+                                review.drsCase.batterName
+                            )
+                        )
+                        // Out stays, but only because it was marginal: the
+                        // review is kept.
+                        DrsVerdict.UMPIRES_CALL -> review.result
+                        // Out stays outright: the review is lost.
+                        DrsVerdict.STANDS -> review.result.copy(
+                            state = review.result.state.copy(
+                                drsReviewsUsed = review.result.state.drsReviewsUsed + 1
+                            )
+                        )
+                    }
+                    // No review asked for (declined, timed out, or the AI
+                    // chose not to): the dismissal goes ahead, review kept.
+                    DrsOutcome.NotRequested -> review.result
+                }
+                commitBall(review.before, finalResult)
+            }
         )
         return
     }
@@ -620,6 +731,22 @@ fun MatchScreen(
         }
     }
 }
+
+/**
+ * A reviewable dismissal held back while the Decision Review System
+ * decides it. `before` is the match state the ball started from (what an
+ * overturned ball is replayed from) and `result` is the ball as it was
+ * simulated, wicket and all (what goes ahead if the dismissal stands).
+ * See MatchScreen's "DECISION REVIEWS" doc paragraph.
+ */
+private class PendingReview(
+    val before: MatchState,
+    val result: BallResult,
+    val drsCase: DrsCase,
+    val userReviewing: Boolean,
+    val reviewsRemaining: Int,
+    val nextBatsmanNeeded: Boolean
+)
 
 /**
  * The single control that both starts the next ball AND commits
