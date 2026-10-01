@@ -100,9 +100,15 @@ import kotlinx.coroutines.delay
  *      THEORETICAL schedule (not each pulse's actual fire time — see
  *      the web's BattingShotScreen for why a fixed target beats a
  *      drift-corrected one).
- *   4. RESULT — timing tier plus early/late feedback, then Continue.
- *      Feedback is deliberate: without it a player can't learn the
- *      rhythm. (No web equivalent — the web shows the outcome directly.)
+ *   4. HAND-OFF — there is deliberately NO result/Continue step after
+ *      the swing. The moment the swing is scored, onBallPlayed is
+ *      called with the delivery, the batter's decision and a short
+ *      early/late note (see swingFeedback). The caller simulates the
+ *      ball and the note becomes part of the last-ball summary
+ *      (MatchLines.ballSummary), which already carries the shot played
+ *      and the timing tier. The early/late note is the one thing a
+ *      player can't get anywhere else, and without it a player can't
+ *      learn the rhythm — so it is kept, just moved there.
  *
  * NO BACK ONCE THIS SCREEN IS SHOWING. By the time BattingScreen
  * appears, footwork is already committed and the ball already revealed
@@ -206,7 +212,7 @@ import kotlinx.coroutines.delay
  *   screen reader on an actual device yet.
  */
 
-private enum class BatStep { SHOT, INTENT, TIMING, RESULT }
+private enum class BatStep { SHOT, INTENT, TIMING }
 
 // Five pulses, tap on the fifth — same as the web.
 private const val BAT_PULSE_COUNT = 5
@@ -248,9 +254,6 @@ private data class BatSwing(
     val missed: Boolean
 )
 
-private fun footworkLabel(footwork: FootworkType): String =
-    if (footwork == FootworkType.FRONT_FOOT) "Front foot" else "Back foot"
-
 /** One spoken line describing the revealed delivery — the same facts the web's summary line gives. */
 private fun deliverySummary(delivery: ResolvedBowlingDecision): String {
     val length = BowlingSystem.lengthLabel(delivery.actualLength)
@@ -260,9 +263,14 @@ private fun deliverySummary(delivery: ResolvedBowlingDecision): String {
     return listOfNotNull(length, line, variation, angle, "${delivery.speedKmh} km/h").joinToString(", ")
 }
 
-private fun swingFeedback(swing: BatSwing): String = when {
+/**
+ * The early/late note that goes into the last-ball summary, or null when
+ * there is nothing to add (a Perfect swing — the summary's own
+ * "Timing: Perfect" already says so).
+ */
+private fun swingFeedback(swing: BatSwing): String? = when {
     swing.missed -> "You didn't swing in time."
-    swing.tier == BowlingQualityTier.PERFECT -> "Right on the beat."
+    swing.tier == BowlingQualityTier.PERFECT -> null
     swing.signedErrorMs < 0 -> "You swung early."
     else -> "You swung late."
 }
@@ -278,16 +286,18 @@ private fun swingFeedback(swing: BatSwing): String = when {
  *   batter then faces and the field the AI set for it
  *   (MatchSimulation.prepareAiDelivery today). The caller owns how, and
  *   is responsible for putting that field into the match state.
- * @param onBallPlayed the delivery that was revealed plus the batter's
- *   fully-resolved decision, ready to pass straight into
- *   MatchSimulation.simulateOneBall as its preset decisions.
+ * @param onBallPlayed called the moment the swing is scored, with the
+ *   delivery that was revealed, the batter's fully-resolved decision
+ *   (ready to pass straight into MatchSimulation.simulateOneBall as its
+ *   preset decisions) and the early/late note to add to the last-ball
+ *   summary (null when there is nothing to add).
  */
 @Composable
 fun BattingScreen(
     batsman: Player,
     footwork: FootworkType,
     generateDelivery: () -> DeliveryReveal,
-    onBallPlayed: (ResolvedBowlingDecision, BattingDecision) -> Unit
+    onBallPlayed: (ResolvedBowlingDecision, BattingDecision, String?) -> Unit
 ) {
     val services = LocalGameServices.current
     var step by remember { mutableStateOf(BatStep.SHOT) }
@@ -299,7 +309,6 @@ fun BattingScreen(
     val delivery = reveal.bowling
     var shot by remember { mutableStateOf(NamedShot.FORWARD_DEFENSE) }
     var intent by remember { mutableStateOf<IntentDirection?>(null) }
-    var swing by remember { mutableStateOf<BatSwing?>(null) }
 
     // A side effect (speaking aloud) belongs in an effect, not in the
     // `remember` calculation above which runs during composition itself.
@@ -332,33 +341,19 @@ fun BattingScreen(
         BatStep.TIMING -> BatTimingStep(
             speedKmh = delivery.speedKmh,
             onSwung = { result ->
-                swing = result
-                step = BatStep.RESULT
-            }
-        )
-        BatStep.RESULT -> {
-            val finalSwing = swing
-            if (finalSwing != null) {
-                BatResultStep(
-                    footwork = footwork,
-                    shot = shot,
-                    intent = intent,
-                    swing = finalSwing,
-                    onContinue = {
-                        onBallPlayed(
-                            delivery,
-                            BattingDecision(
-                                footwork = footwork,
-                                shot = shot,
-                                intent = intent,
-                                timingTier = finalSwing.tier,
-                                timingDeltaFraction = finalSwing.deltaFraction
-                            )
-                        )
-                    }
+                onBallPlayed(
+                    delivery,
+                    BattingDecision(
+                        footwork = footwork,
+                        shot = shot,
+                        intent = intent,
+                        timingTier = result.tier,
+                        timingDeltaFraction = result.deltaFraction
+                    ),
+                    swingFeedback(result)
                 )
             }
-        }
+        )
     }
 }
 
@@ -715,45 +710,6 @@ private fun BatTimingStep(speedKmh: Int, onSwung: (BatSwing) -> Unit) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text("Tap anywhere to swing", style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-@Composable
-private fun BatResultStep(
-    footwork: FootworkType,
-    shot: NamedShot,
-    intent: IntentDirection?,
-    swing: BatSwing,
-    onContinue: () -> Unit
-) {
-    val tierLabel = BowlingSystem.qualityTierLabel(swing.tier)
-    val played = buildString {
-        append(footworkLabel(footwork))
-        append(", ")
-        append(BattingSystem.shotLabel(shot))
-        if (intent != null) {
-            append(", ")
-            append(BattingSystem.intentLabel(intent))
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text(
-            text = "$tierLabel timing",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics {
-                heading()
-                liveRegion = LiveRegionMode.Polite
-            }
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(swingFeedback(swing))
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(played, style = MaterialTheme.typography.bodyMedium)
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
-            Text("Continue")
         }
     }
 }

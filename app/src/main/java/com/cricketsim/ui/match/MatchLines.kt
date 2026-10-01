@@ -121,8 +121,15 @@ object MatchLines {
      * commentary, how good the bowling was, and — for either side's
      * batting — the shot played and how well it was timed. The last two
      * are what let a batter learn from a ball.
+     *
+     * [swingNote] is the early/late feedback on the user's own swing
+     * ("You swung early."), which used to be shown on a separate result
+     * screen after the timing step and now lives here instead. It is
+     * only ever supplied for the user's own batting, and is appended
+     * right after the timing tier it explains. Null (an AI batter, or a
+     * Perfect swing) adds nothing.
      */
-    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?): String {
+    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null): String {
         val base = when {
             outcome.isWicket -> "WICKET. ${outcome.commentary}"
             outcome.isWide -> "Wide, 1 run. ${outcome.commentary}"
@@ -131,7 +138,8 @@ object MatchLines {
         }
         val quality = outcome.bowlingQualityTier?.let { " Ball quality: ${BowlingSystem.qualityTierLabel(it)}." } ?: ""
         val shot = decision?.let {
-            " Shot played: ${BattingSystem.shotLabel(it.shot)}. Timing: ${BowlingSystem.qualityTierLabel(it.timingTier)}."
+            " Shot played: ${BattingSystem.shotLabel(it.shot)}. Timing: ${BowlingSystem.qualityTierLabel(it.timingTier)}." +
+                (swingNote?.let { note -> " $note" } ?: "")
         } ?: ""
         return base + quality + shot
     }
