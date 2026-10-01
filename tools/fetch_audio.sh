@@ -29,9 +29,13 @@
 # They need no special handling below: they fetch and pack exactly like
 # every other recording and clip.
 #
-# Re-run manually on 2026-09-30 after this workflow's commit step lost a
-# push race against the build workflow's own report commit; no code
-# changed, just re-triggering with nothing else running concurrently.
+# FIX (this pass): this was the first time fetch-audio.yml had ever
+# actually run end to end. Its commit step does an unconditional
+# `git add .../commentary`, and this script used to `rm -rf` that whole
+# directory — a missing pathspec fails git add outright, and GitHub
+# Actions' default `bash -e` turns that into an instant, silent failure
+# of the whole step before it even checks whether there's anything to
+# commit. Fixed below by emptying the directory instead of removing it.
 
 set -u
 
@@ -140,7 +144,14 @@ rm -rf "$SCRATCH_DIR"
 # Superseded by the single pack above: removing these here is what makes
 # the workflow's next commit actually delete them from the repository.
 find app/src/main/res/raw -maxdepth 1 -name '*.mp3' -delete 2>/dev/null || true
-rm -rf "$OLD_CLIP_DIR"
+# Superseded by the single pack above: emptied here (not removed outright)
+# because the workflow's own commit step does `git add .../commentary`
+# unconditionally -- a missing directory makes that pathspec fail under
+# bash's default -e, aborting the whole step before it even gets to
+# checking whether there's anything to commit. An existing, empty
+# directory lets that git add succeed (adding nothing) either way.
+mkdir -p "$OLD_CLIP_DIR"
+find "$OLD_CLIP_DIR" -mindepth 1 -delete
 
 {
   echo "Audio fetch report"
