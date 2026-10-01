@@ -82,13 +82,14 @@ import kotlinx.coroutines.delay
  *      the web's summary line reveals; never the bowler's quality tier
  *      or intended length), AND any changes the AI captain has just made
  *      to its field for this delivery ("Kohli moved from Mid-On to
- *      Long-On."), then one of the 15 named shots is picked via a
- *      continuous two-finger vertical swipe. Releasing the swipe both
- *      COMMITS the shot and advances the step immediately — see
- *      "GESTURE IMPLEMENTATION" below for why this differs from
- *      PitchingScreen's length drag. The field matters: it is part of
- *      what the shot is chosen against, so a batter who can't see it
- *      must be TOLD it, as the web does.
+ *      Long-On."), then one of the 15 named shots is picked by the
+ *      HEIGHT of a two-finger touch on a full-screen gesture area (the
+ *      touch-down point already selects a shot; sliding up or down
+ *      changes it). Releasing both COMMITS the shot and advances the
+ *      step immediately — see "GESTURE IMPLEMENTATION" below for why
+ *      this differs from PitchingScreen's length drag. The field
+ *      matters: it is part of what the shot is chosen against, so a
+ *      batter who can't see it must be TOLD it, as the web does.
  *   2. INTENT — aggressive aerial / aggressive grounded / step out /
  *      defensive, picked with a single four-way two-finger swipe, which
  *      also commits and advances immediately. Skipped for the two
@@ -123,21 +124,27 @@ import kotlinx.coroutines.delay
  *   footwork" into the single control the web plan called "Next ball"
  *   (tap vs double-tap-and-hold) instead of this screen showing its own
  *   separate footwork step first, as an earlier pass did.
- * - SHOT SELECTION mirrors PitchingScreen's length-drag mechanically —
- *   a single active pointer (see that file's "WHY THIS ISN'T LITERALLY
- *   TWO SIMULTANEOUS POINTERS" for the full TalkBack-passthrough
- *   reasoning, which applies identically here) tracked via
- *   detectVerticalDragGesture below, mapping net vertical movement
- *   across the gesture Box's own measured height to a 0..1 fraction fed
- *   straight into BattingSystem.classifyShot (the already-ported,
- *   15-equal-band function this exact gesture was designed for). A
- *   continuous tone tracks the live position; a spoken announcement
- *   fires only when the drag crosses into a new shot's band — never on
- *   every move event. Unlike PitchingScreen's length drag (which is one
- *   axis among several still waiting on a single shared Bowl tap), THIS
- *   Box has only one gesture role and nothing else to set on this step,
- *   so lifting the fingers both COMMITS the hovered shot AND advances
- *   the step immediately — there is no separate confirm tap here.
+ * - SHOT SELECTION uses an ABSOLUTE vertical position, not movement
+ *   relative to where the touch began. The gesture area fills the whole
+ *   screen (the heading and instruction text are drawn over it and take
+ *   no touches), and the finger's height as a 0..1 fraction of that area
+ *   is fed straight into BattingSystem.classifyShot (the already-ported,
+ *   15-equal-band function this exact gesture was designed for). So a
+ *   touch that LANDS in the Cover Drive band is already Cover Drive; the
+ *   player no longer has to start at the top and travel down through
+ *   every earlier shot. Sliding up or down from there moves to the
+ *   neighbouring shots, in either direction. It tracks a single active
+ *   pointer (see PitchingScreen's "WHY THIS ISN'T LITERALLY TWO
+ *   SIMULTANEOUS POINTERS" for the full TalkBack-passthrough reasoning,
+ *   which applies identically here). A continuous tone tracks the live
+ *   position; a spoken announcement fires when the touch lands (always,
+ *   so the starting shot is heard) and whenever it crosses into a new
+ *   shot's band — never on every move event. Unlike PitchingScreen's
+ *   length drag (which is one axis among several still waiting on a
+ *   single shared Bowl tap), THIS area has only one gesture role and
+ *   nothing else to set on this step, so lifting the fingers both
+ *   COMMITS the hovered shot AND advances the step immediately — there
+ *   is no separate confirm tap here.
  * - INTENT is a single four-way discrete swipe, structurally identical
  *   to PitchingScreen's discrete angle/line/variation swipes: ONE
  *   decision per touch (detectFourWayGesture below), re-evaluated on
@@ -356,14 +363,23 @@ fun BattingScreen(
 }
 
 /**
- * Continuous single-axis (vertical) drag tracker used by the shot-
- * selection gesture area — see the class doc comment's "GESTURE
- * IMPLEMENTATION". Deliberately simpler than PitchingScreen's
- * detectAimGesture: this Box has only ONE gesture role (there's no
- * discrete left/right/up meaning on this screen), so there's no
- * axis-lock decision to make — every touch immediately begins tracking
- * net vertical movement from wherever it started, clamped to the
- * gesture Box's own measured height.
+ * Continuous single-axis (vertical) tracker used by the shot-selection
+ * gesture area — see the class doc comment's "GESTURE IMPLEMENTATION".
+ * Deliberately simpler than PitchingScreen's detectAimGesture: this area
+ * has only ONE gesture role (there's no discrete left/right/up meaning
+ * on this screen), so there's no axis-lock decision to make.
+ *
+ * The reported fraction is the finger's ABSOLUTE height within the
+ * gesture area (0 = top edge, 1 = bottom edge), NOT how far it has moved
+ * since touch-down. That is what lets a touch which lands in the middle
+ * of the shot list start on that shot immediately, instead of always
+ * starting at the first one. [onDragStart] therefore receives the
+ * touch-down fraction too, so the caller can announce the starting shot.
+ * Sliding up reports smaller fractions, sliding down larger ones.
+ *
+ * The area's height is read per gesture (not once when the pointer-input
+ * block starts), so a size change such as a rotation can't leave a stale
+ * height behind, and a not-yet-measured area is simply ignored.
  *
  * Tracks a SINGLE ACTIVE POINTER, not two simultaneous ones, for the
  * same reason PitchingScreen's detectAimGesture does — see that file's
@@ -374,26 +390,27 @@ fun BattingScreen(
  * rather than being silently dropped.
  */
 private suspend fun PointerInputScope.detectVerticalDragGesture(
-    onDragStart: () -> Unit,
+    onDragStart: (fraction: Float) -> Unit,
     onDrag: (fraction: Float) -> Unit,
     onDragEnd: (fraction: Float) -> Unit
 ) {
-    val gestureHeightPx = size.height.toFloat()
-    if (gestureHeightPx <= 0f) return
-
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         down.consume()
+        val gestureHeightPx = size.height.toFloat()
+        if (gestureHeightPx <= 0f) return@awaitEachGesture
         val pointerId = down.id
-        val originY = down.position.y
-        onDragStart()
+
+        fun fractionOf(y: Float): Float = (y / gestureHeightPx).coerceIn(0f, 1f)
+
+        onDragStart(fractionOf(down.position.y))
 
         while (true) {
             val event = awaitPointerEvent()
             val change = event.changes.firstOrNull { it.id == pointerId } ?: event.changes.firstOrNull()
             if (change == null) return@awaitEachGesture
             change.consume()
-            val fraction = ((change.position.y - originY) / gestureHeightPx).coerceIn(0f, 1f)
+            val fraction = fractionOf(change.position.y)
             if (!change.pressed) {
                 onDragEnd(fraction)
                 return@awaitEachGesture
@@ -477,63 +494,77 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
     // committed and the step has started to advance away from this one.
     var committed by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        // The delivery is the single most important thing on this step, so
-        // it is the heading (read first) AND a polite live region in case
-        // TalkBack doesn't move focus to it when the step appears.
-        Text(
-            text = "Delivery: $deliverySummary",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics {
-                heading()
-                liveRegion = LiveRegionMode.Polite
+    // Shared by touch-down and every move: updates the tone and the live
+    // text, and speaks the shot only when it differs from the last one
+    // spoken. (Touch-down clears lastAnnouncedShot first, so the shot the
+    // finger LANDS on is always heard.)
+    val reportHover: (Float) -> Unit = { fraction ->
+        currentServices?.sound?.updateAimTone(fraction)
+        val hovered = BattingSystem.classifyShot(fraction.toDouble())
+        liveShot = hovered
+        if (hovered != lastAnnouncedShot) {
+            lastAnnouncedShot = hovered
+            currentServices?.announceSpoken(BattingSystem.shotLabel(hovered))
+        }
+    }
+
+    // The gesture area is the WHOLE screen: the texts below are drawn
+    // over it and take no touches, so touches anywhere reach the gesture
+    // surface declared last in this Box. It is declared after the Column
+    // so TalkBack still reads the heading and instructions first.
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            // The delivery is the single most important thing on this step, so
+            // it is the heading (read first) AND a polite live region in case
+            // TalkBack doesn't move focus to it when the step appears.
+            Text(
+                text = "Delivery: $deliverySummary",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics {
+                    heading()
+                    liveRegion = LiveRegionMode.Polite
+                }
+            )
+            if (fieldNote.isNotEmpty()) {
+                // How the AI captain just re-set its field for this ball. Empty
+                // (and so absent) when nobody moved.
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Field changes: $fieldNote",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                )
             }
-        )
-        if (fieldNote.isNotEmpty()) {
-            // How the AI captain just re-set its field for this ball. Empty
-            // (and so absent) when nobody moved.
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Field changes: $fieldNote",
+                text = "Choose your shot",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.semantics { heading() }
+            )
+            Text(
+                "Two-finger touch: where you touch picks the shot, from Forward Defense at the top " +
+                    "to Scoop Shot at the bottom. Slide up or down to change it. Releasing picks the shot.",
+                style = MaterialTheme.typography.labelSmall
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = liveShot?.let { "Shot: ${BattingSystem.shotLabel(it)}" } ?: "Shot: touch to choose",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Choose your shot",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() }
-        )
-        Text(
-            "Two-finger swipe up or down. Releasing picks the shot.",
-            style = MaterialTheme.typography.labelSmall
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = liveShot?.let { "Shot: ${BattingSystem.shotLabel(it)}" } ?: "Shot: swipe to choose",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
                 .pointerInput(Unit) {
                     detectVerticalDragGesture(
-                        onDragStart = { currentServices?.sound?.startAimTone() },
-                        onDrag = { fraction ->
-                            currentServices?.sound?.updateAimTone(fraction)
-                            val hovered = BattingSystem.classifyShot(fraction.toDouble())
-                            liveShot = hovered
-                            if (hovered != lastAnnouncedShot) {
-                                lastAnnouncedShot = hovered
-                                currentServices?.announceSpoken(BattingSystem.shotLabel(hovered))
-                            }
+                        onDragStart = { fraction ->
+                            lastAnnouncedShot = null
+                            currentServices?.sound?.startAimTone()
+                            reportHover(fraction)
                         },
+                        onDrag = { fraction -> reportHover(fraction) },
                         onDragEnd = { fraction ->
                             currentServices?.sound?.stopAimTone()
                             val chosen = BattingSystem.classifyShot(fraction.toDouble())
@@ -547,7 +578,9 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
                     )
                 }
                 .semantics {
-                    contentDescription = "Shot selection gesture area. Two-finger swipe up or down."
+                    contentDescription =
+                        "Shot selection gesture area, the whole screen. Where you touch picks the shot. " +
+                            "Slide up or down, release to play."
                 }
         )
     }
