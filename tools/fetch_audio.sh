@@ -28,6 +28,10 @@
 # else here — see DRS_NOTES.md for exactly what was generated and why.
 # They need no special handling below: they fetch and pack exactly like
 # every other recording and clip.
+#
+# Re-run manually on 2026-09-30 after this workflow's commit step lost a
+# push race against the build workflow's own report commit; no code
+# changed, just re-triggering with nothing else running concurrently.
 
 set -u
 
