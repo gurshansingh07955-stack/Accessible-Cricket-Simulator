@@ -157,6 +157,13 @@ import com.cricketsim.ui.settings.SettingsScreen
  * matchState.score.overs changes, so it only ever carries across balls
  * WITHIN the same over, never into the next one.
  *
+ * SWING NOTE. When the user bats, BattingScreen hands back an early/late
+ * note for their swing ("You swung early.") along with the ball. It is
+ * kept in `pendingSwingNote` until the ball is committed — which can be
+ * later than the swing if the ball is held for a Decision Review — and
+ * then folded into the last-ball summary by commitBall. There is no
+ * separate result screen after the swing any more.
+ *
  * A future session builds the real match screen. See UI_NOTES.md's "Not
  * started" section for the full list — treat this file as scaffolding
  * to build on top of, not a screen to extend piecemeal into the real
@@ -199,6 +206,10 @@ fun MatchScreen(
     // Set the instant "Face next ball" is tapped/held — see
     // FaceNextBallControl. Read once, when BattingScreen mounts.
     var pendingFootwork by remember { mutableStateOf(FootworkType.FRONT_FOOT) }
+    // The early/late note on the user's own swing, waiting to be folded
+    // into the last-ball summary when the ball is committed — see the
+    // class doc comment's "SWING NOTE". Null when there is nothing to add.
+    var pendingSwingNote by remember { mutableStateOf<String?>(null) }
     // A reviewable dismissal that has been simulated but NOT yet applied to
     // the match, while the Decision Review System decides what happens to
     // it — see the class doc comment's "DECISION REVIEWS". Deliberately not
@@ -270,7 +281,12 @@ fun MatchScreen(
     // or replayed as a not-out. `before` is the state the ball started from.
     fun commitBall(before: MatchState, result: BallResult) {
         val nextState = result.state
-        val summary = MatchLines.ballSummary(result.outcome, result.battingDecision)
+        // The user's early/late swing note (if any) belongs to exactly this
+        // ball, so it is taken here and cleared — it can never leak onto a
+        // later ball, including one the AI bats.
+        val swingNote = pendingSwingNote
+        pendingSwingNote = null
+        val summary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote)
         matchState = nextState
         recentCommentary = (recentCommentary + summary).takeLast(6)
 
@@ -558,8 +574,12 @@ fun MatchScreen(
                 director?.onFieldChanges(prepared.fieldChanges)
                 DeliveryReveal(prepared.bowling, prepared.fieldChanges.joinToString(" "))
             },
-            onBallPlayed = { delivery, decision ->
+            // The swing is scored and the ball is played in one step — no
+            // result screen in between. The early/late note rides along
+            // into the last-ball summary (see "SWING NOTE" above).
+            onBallPlayed = { delivery, decision, swingNote ->
                 showBattingScreen = false
+                pendingSwingNote = swingNote
                 advanceOneBall(presetBowlingDecision = delivery, presetBattingDecision = decision)
             }
         )
