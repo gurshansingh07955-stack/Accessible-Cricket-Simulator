@@ -124,6 +124,20 @@ private fun autoPickOpponentXI(opponentTeam: Team): Team {
  * showing, which in practice does not happen while a match is mounted
  * (the ordinary screen's own BackHandler always wins first); it exists
  * only as a defensive fallback.
+ *
+ * THE CROWD STARTS AT THE TOSS. The stadium crowd bed begins on the toss
+ * screen and carries straight on into the match, so the atmosphere is
+ * there from the walk out. It is started here, keyed on whether the
+ * toss-or-match part of the flow is showing, rather than inside either
+ * screen: the toss screen is disposed the instant the match screen
+ * appears, so a start/stop tied to the toss screen alone would cut the
+ * crowd and restart it on every toss-to-match change. Here the key stays
+ * true across that change, so the bed simply keeps playing; the match
+ * screen's own audio director then takes over the mood (tension) and its
+ * own start request is a no-op because the bed is already running. Going
+ * back out of the toss, or leaving the match, makes the key false and the
+ * bed fades out (stopping it is safe to repeat — the match screen also
+ * stops it as it leaves).
  */
 @Composable
 fun CricketSimApp() {
@@ -137,6 +151,18 @@ fun CricketSimApp() {
     val onHome = screen is Screen.Home
     LaunchedEffect(onHome) {
         if (onHome) savedMatch = services?.saves?.load()
+    }
+
+    // See "THE CROWD STARTS AT THE TOSS" in the doc comment above.
+    val crowdWanted = screen is Screen.TossSelection || screen is Screen.Match
+    val soundEffectsOn = services?.settings?.soundEffects ?: false
+    LaunchedEffect(crowdWanted, soundEffectsOn) {
+        val sound = services?.sound ?: return@LaunchedEffect
+        if (!crowdWanted) {
+            sound.stopCrowdAmbience()
+        } else if (soundEffectsOn) {
+            sound.startCrowdAmbience()
+        }
     }
 
     when (val current = screen) {
