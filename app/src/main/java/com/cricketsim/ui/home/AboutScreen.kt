@@ -149,7 +149,7 @@ private val ABOUT_SECTIONS = listOf(
     ),
     AboutSection(
         title = "Your match",
-        body = "Choose a format: T20, One Day or Test. Pick one of 101 real grounds, each with its own pitch, " +
+        body = "Choose a format: One Over, Five Overs, T10, T20, One Day or Test. Pick one of 101 real grounds, each with its own pitch, " +
             "weather and character, then choose your side from eighteen nations. Select your eleven, name your " +
             "captain and wicketkeeper, and call the toss."
     ),

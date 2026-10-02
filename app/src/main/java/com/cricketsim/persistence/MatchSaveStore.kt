@@ -163,6 +163,9 @@ fun MatchSnapshot.summary(): String {
     val formatName = when (state.format) {
         MatchFormat.T20 -> "T20"
         MatchFormat.ODI -> "One Day International"
+        MatchFormat.T10 -> "T10"
+        MatchFormat.FIVE_OVERS -> "Five-over match"
+        MatchFormat.ONE_OVER -> "One-over match"
         MatchFormat.TEST -> "Test match"
     }
     val innings = if (state.currentInnings == 1) "first innings" else "second innings"

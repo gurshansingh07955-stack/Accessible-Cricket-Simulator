@@ -97,7 +97,7 @@ fun RainDelayScreen(
                 "The heavens have opened and the covers are on mid-chase. The ground staff expect this innings to be shortened."
             }
         )
-        val cutNote = if (format == MatchFormat.T20 || format == MatchFormat.ODI) " (down from the original limit)." else "."
+        val cutNote = if (format != MatchFormat.TEST) " (down from the original limit)." else "."
         add("When play resumes, this innings will be capped at ${countOf(newOversLimit, "over")}$cutNote")
         if (dlsRevised && revisedTarget != null) {
             add("Under the Duckworth-Lewis-Stern method, the revised target is now ${countOf(revisedTarget, "run")} to win.")

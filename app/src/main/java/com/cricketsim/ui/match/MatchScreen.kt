@@ -586,7 +586,7 @@ fun MatchScreen(
         return
     }
 
-    val isPowerplayNow = FieldingSystem.isPowerplayOver(matchState.format, matchState.score.overs)
+    val isPowerplayNow = FieldingSystem.isPowerplayBall(matchState.format, matchState.score.overs * 6 + matchState.score.balls)
     val isUserBowling = matchState.bowlingTeam.id == userTeam.id
 
     if (showFieldScreen) {

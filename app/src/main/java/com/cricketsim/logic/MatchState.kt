@@ -284,6 +284,9 @@ object MatchStateMachine {
     fun getMaxOversPerBowler(format: MatchFormat): Int = when (format) {
         MatchFormat.T20 -> 4
         MatchFormat.ODI -> 10
+        MatchFormat.T10 -> 2
+        MatchFormat.FIVE_OVERS -> 1
+        MatchFormat.ONE_OVER -> 1
         MatchFormat.TEST -> Int.MAX_VALUE
     }
 

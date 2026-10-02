@@ -149,7 +149,7 @@ object MatchSimulation {
     fun prepareAiDelivery(state: MatchState): AiDelivery {
         val bias = AiSituation.bowlingBias(state)
         val bowling = BowlingSystem.generateAiBowlingDecision(state.currentBowler, bias)
-        val isPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)
+        val isPowerplay = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)
         val placements = FieldingSystem.generateAiFieldPlacements(
             fieldingPlayers = FieldingSystem.getFieldingPlayers(state.bowlingTeam, state.currentBowler.id),
             isPowerplay = isPowerplay,
@@ -302,7 +302,7 @@ object MatchSimulation {
             situationalAggressionBias = AiSituation.battingBias(state, AiSituation.recentOverRuns(state))
         )
 
-        val isPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)
+        val isPowerplay = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)
         val illegalField = !FieldingSystem.isFieldLegal(state.fieldPlacements, isPowerplay)
 
         val isSecondInningsUnderLights = state.currentInnings == 2 && state.weather.isDayNight

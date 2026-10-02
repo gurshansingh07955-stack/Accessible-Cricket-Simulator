@@ -150,6 +150,8 @@ object WeatherSystem {
     ): Boolean {
         if (alreadyUsedThisMatch) return false
         if (format == MatchFormat.TEST) return false
+        // Too short to cut: a 5-over or 1-over innings has no overs to spare.
+        if (format == MatchFormat.FIVE_OVERS || format == MatchFormat.ONE_OVER) return false
         if (oversBowledThisInnings < 1) return false
         val oversRemaining = oversLimit - oversBowledThisInnings
         if (oversRemaining <= 2) return false
@@ -161,8 +163,9 @@ object WeatherSystem {
 
     /** How many overs the interruption costs this innings. */
     fun pickOversLost(oversRemaining: Int, format: MatchFormat): Int {
-        val minLost = if (format == MatchFormat.T20) 2 else 4
-        val maxLost = if (format == MatchFormat.T20) minOf(8, oversRemaining - 1) else minOf(20, oversRemaining - 1)
+        val shortFormat = format == MatchFormat.T20 || format == MatchFormat.T10
+        val minLost = if (shortFormat) 2 else 4
+        val maxLost = if (shortFormat) minOf(8, oversRemaining - 1) else minOf(20, oversRemaining - 1)
         val safeMax = maxOf(minLost, maxLost)
         return (minLost + Random.nextDouble() * (safeMax - minLost)).roundToInt()
     }
@@ -209,6 +212,9 @@ object WeatherSystem {
         val g50 = when (format) {
             MatchFormat.T20 -> 160.0
             MatchFormat.ODI -> 245.0
+            MatchFormat.T10 -> 95.0
+            MatchFormat.FIVE_OVERS -> 55.0
+            MatchFormat.ONE_OVER -> 12.0
             MatchFormat.TEST -> team1Score.toDouble()
         }
         val safeR1 = if (r1 <= 0) 1.0 else r1

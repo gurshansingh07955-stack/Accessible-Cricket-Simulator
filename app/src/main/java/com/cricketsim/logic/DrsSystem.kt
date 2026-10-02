@@ -139,6 +139,9 @@ object DrsSystem {
     fun reviewsPerInnings(format: MatchFormat): Int = when (format) {
         MatchFormat.T20 -> 2
         MatchFormat.ODI -> 2
+        MatchFormat.T10 -> 1
+        MatchFormat.FIVE_OVERS -> 1
+        MatchFormat.ONE_OVER -> 1
         MatchFormat.TEST -> 3
     }
 

@@ -432,11 +432,29 @@ object FieldingSystem {
     // --- Legality ---
 
     /** T20 and ODI powerplays restrict how many fielders can stand outside the 30-yard circle (i.e. in the "deep"); Test cricket has no such restriction at any stage. */
-    fun isPowerplayOver(format: MatchFormat, oversCompleted: Int): Boolean = when (format) {
-        MatchFormat.T20 -> oversCompleted < 6
-        MatchFormat.ODI -> oversCompleted < 10
-        MatchFormat.TEST -> false
+    fun powerplayBalls(format: MatchFormat): Int = when (format) {
+        MatchFormat.T20 -> 36 // 6 overs
+        MatchFormat.ODI -> 60 // 10 overs
+        MatchFormat.T10 -> 18 // 3 overs
+        MatchFormat.FIVE_OVERS -> 9 // 1.5 overs: ends part-way through the second over
+        MatchFormat.ONE_OVER -> 2 // about 30% of the 6 balls, like the other short formats
+        MatchFormat.TEST -> 0
     }
+
+    /**
+     * Whether the NEXT ball to be bowled is still inside the powerplay, given how many balls
+     * of the innings have already been bowled (overs * 6 + balls in the current over). Use this
+     * wherever a single delivery is being set up or judged: a powerplay can end part-way
+     * through an over (the 5-over format's lasts nine balls), so a per-over answer is not enough.
+     */
+    fun isPowerplayBall(format: MatchFormat, ballsBowled: Int): Boolean = ballsBowled < powerplayBalls(format)
+
+    /**
+     * Whether an over that STARTS now (overs completed so far) begins inside the powerplay. Only
+     * right for decisions made once per over, at its start; for a particular delivery use
+     * isPowerplayBall.
+     */
+    fun isPowerplayOver(format: MatchFormat, oversCompleted: Int): Boolean = isPowerplayBall(format, oversCompleted * 6)
 
     fun countDeepFielders(placements: List<FieldPlacement>): Int = placements.count { it.depth == FieldingDepth.DEEP }
 

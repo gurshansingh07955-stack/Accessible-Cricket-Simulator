@@ -112,7 +112,10 @@ private data class FormatOption(val format: MatchFormat, val label: String, val 
 // Order and wording matches the format choice as presented in the web
 // app's pre-match setup flow.
 private val FORMAT_OPTIONS = listOf(
-    FormatOption(MatchFormat.T20, "T20", "20 overs per side. The shortest, fastest format."),
+    FormatOption(MatchFormat.ONE_OVER, "One Over", "One over per side. Six balls each, one bowler, and a two-ball powerplay."),
+    FormatOption(MatchFormat.FIVE_OVERS, "Five Overs", "5 overs per side. A nine-ball powerplay, and one over per bowler."),
+    FormatOption(MatchFormat.T10, "T10", "10 overs per side. A three-over powerplay, and up to two overs per bowler."),
+    FormatOption(MatchFormat.T20, "T20", "20 overs per side. A six-over powerplay, and up to four overs per bowler."),
     FormatOption(MatchFormat.ODI, "One Day International", "50 overs per side. A full day of cricket."),
     FormatOption(MatchFormat.TEST, "Test Match", "No over limit per innings. The longest format.")
 )

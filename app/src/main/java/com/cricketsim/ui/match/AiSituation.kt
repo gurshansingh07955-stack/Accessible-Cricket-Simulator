@@ -74,7 +74,7 @@ object AiSituation {
         val oversDone = state.score.overs + state.score.balls / 6.0
         val wicketsDown = state.score.wickets
         val progress = if (totalOvers > 0) oversDone / totalOvers else 0.0
-        val isPowerplayNow = FieldingSystem.isPowerplayOver(state.format, state.score.overs)
+        val isPowerplayNow = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)
         val isDeathOversNow = state.format != MatchFormat.TEST && totalOvers > 0 && progress >= 0.8
         // Used for BOTH the death overs and the "middle build has stalled"
         // break-out, so breaking out attacks exactly as hard as the death

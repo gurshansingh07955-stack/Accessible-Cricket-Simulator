@@ -44,7 +44,10 @@ object MatchEngine {
     private val FORMAT_OVERS: Map<MatchFormat, Int> = mapOf(
         MatchFormat.TEST to 90, // Per day/innings usually, but simplified for simulation
         MatchFormat.ODI to 50,
-        MatchFormat.T20 to 20
+        MatchFormat.T20 to 20,
+        MatchFormat.T10 to 10,
+        MatchFormat.FIVE_OVERS to 5,
+        MatchFormat.ONE_OVER to 1
     )
 
     /**
