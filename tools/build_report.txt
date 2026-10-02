@@ -1,6 +1,6 @@
-Build run: 36947317457 (attempt 1)
-Commit: 1c3471cdace6a45b76a5887f071961e06ad0e7f8
-Timestamp (UTC): 2026-10-02T00:43:44Z
+Build run: 36970828768 (attempt 1)
+Commit: 9ca2235f277f96fcfba6e8665ee8cc41a94d812d
+Timestamp (UTC): 2026-10-02T05:53:04Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -44,7 +44,7 @@ Daemon will be stopped at the end of the build
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/audio/SoundEngine.kt:947:75 'VIBRATOR_SERVICE: String' is deprecated. Deprecated in Java
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/logic/MatchEngine.kt:96:96 Parameter 'difficulty' is never used
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt:187:13 'when' is exhaustive so 'else' is redundant here
-w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt:297:5 Parameter 'batsman' is never used
+w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt:251:5 Parameter 'batsman' is never used
 
 > Task :app:compileDebugJavaWithJavac
 > Task :app:dexBuilderDebug
@@ -55,7 +55,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790901761199.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790920325097.json
 
-BUILD SUCCESSFUL in 1m 6s
+BUILD SUCCESSFUL in 1m 3s
 37 actionable tasks: 37 executed
