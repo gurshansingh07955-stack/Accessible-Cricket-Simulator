@@ -1,0 +1,115 @@
+{
+  "name": "Add T10, five-over and one-over match formats",
+  "message": "Add T10, 5-over and one-over match formats (ball-level powerplay)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/MatchFormat.kt",
+    "contains": "FIVE_OVERS"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchFormat.kt",
+      "find": "enum class MatchFormat { TEST, T20, ODI }",
+      "replace": "// T10, FIVE_OVERS and ONE_OVER are Android-only additions; the web app\n// has only TEST, T20 and ODI. New entries go at the END so nothing that\n// depends on the older ones' order changes.\nenum class MatchFormat { TEST, T20, ODI, T10, FIVE_OVERS, ONE_OVER }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        MatchFormat.ODI to 50,\n        MatchFormat.T20 to 20\n",
+      "replace": "        MatchFormat.ODI to 50,\n        MatchFormat.T20 to 20,\n        MatchFormat.T10 to 10,\n        MatchFormat.FIVE_OVERS to 5,\n        MatchFormat.ONE_OVER to 1\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/FieldingSystem.kt",
+      "find": "    fun isPowerplayOver(format: MatchFormat, oversCompleted: Int): Boolean = when (format) {\n        MatchFormat.T20 -> oversCompleted < 6\n        MatchFormat.ODI -> oversCompleted < 10\n        MatchFormat.TEST -> false\n    }\n",
+      "replace": "    fun powerplayBalls(format: MatchFormat): Int = when (format) {\n        MatchFormat.T20 -> 36 // 6 overs\n        MatchFormat.ODI -> 60 // 10 overs\n        MatchFormat.T10 -> 18 // 3 overs\n        MatchFormat.FIVE_OVERS -> 9 // 1.5 overs: ends part-way through the second over\n        MatchFormat.ONE_OVER -> 2 // about 30% of the 6 balls, like the other short formats\n        MatchFormat.TEST -> 0\n    }\n\n    /**\n     * Whether the NEXT ball to be bowled is still inside the powerplay, given how many balls\n     * of the innings have already been bowled (overs * 6 + balls in the current over). Use this\n     * wherever a single delivery is being set up or judged: a powerplay can end part-way\n     * through an over (the 5-over format's lasts nine balls), so a per-over answer is not enough.\n     */\n    fun isPowerplayBall(format: MatchFormat, ballsBowled: Int): Boolean = ballsBowled < powerplayBalls(format)\n\n    /**\n     * Whether an over that STARTS now (overs completed so far) begins inside the powerplay. Only\n     * right for decisions made once per over, at its start; for a particular delivery use\n     * isPowerplayBall.\n     */\n    fun isPowerplayOver(format: MatchFormat, oversCompleted: Int): Boolean = isPowerplayBall(format, oversCompleted * 6)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        MatchFormat.T20 -> 4\n        MatchFormat.ODI -> 10\n        MatchFormat.TEST -> Int.MAX_VALUE\n",
+      "replace": "        MatchFormat.T20 -> 4\n        MatchFormat.ODI -> 10\n        MatchFormat.T10 -> 2\n        MatchFormat.FIVE_OVERS -> 1\n        MatchFormat.ONE_OVER -> 1\n        MatchFormat.TEST -> Int.MAX_VALUE\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DrsSystem.kt",
+      "find": "        MatchFormat.T20 -> 2\n        MatchFormat.ODI -> 2\n        MatchFormat.TEST -> 3\n",
+      "replace": "        MatchFormat.T20 -> 2\n        MatchFormat.ODI -> 2\n        MatchFormat.T10 -> 1\n        MatchFormat.FIVE_OVERS -> 1\n        MatchFormat.ONE_OVER -> 1\n        MatchFormat.TEST -> 3\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/WeatherSystem.kt",
+      "find": "            MatchFormat.ODI -> 245.0\n            MatchFormat.TEST -> team1Score.toDouble()\n",
+      "replace": "            MatchFormat.ODI -> 245.0\n            MatchFormat.T10 -> 95.0\n            MatchFormat.FIVE_OVERS -> 55.0\n            MatchFormat.ONE_OVER -> 12.0\n            MatchFormat.TEST -> team1Score.toDouble()\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/WeatherSystem.kt",
+      "find": "        if (format == MatchFormat.TEST) return false\n        if (oversBowledThisInnings < 1) return false\n",
+      "replace": "        if (format == MatchFormat.TEST) return false\n        // Too short to cut: a 5-over or 1-over innings has no overs to spare.\n        if (format == MatchFormat.FIVE_OVERS || format == MatchFormat.ONE_OVER) return false\n        if (oversBowledThisInnings < 1) return false\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/WeatherSystem.kt",
+      "find": "        val minLost = if (format == MatchFormat.T20) 2 else 4\n        val maxLost = if (format == MatchFormat.T20) minOf(8, oversRemaining - 1) else minOf(20, oversRemaining - 1)\n",
+      "replace": "        val shortFormat = format == MatchFormat.T20 || format == MatchFormat.T10\n        val minLost = if (shortFormat) 2 else 4\n        val maxLost = if (shortFormat) minOf(8, oversRemaining - 1) else minOf(20, oversRemaining - 1)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "val isPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)",
+      "replace": "val isPowerplay = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AiSituation.kt",
+      "find": "val isPowerplayNow = FieldingSystem.isPowerplayOver(state.format, state.score.overs)",
+      "replace": "val isPowerplayNow = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "val isPowerplayNow = FieldingSystem.isPowerplayOver(matchState.format, matchState.score.overs)",
+      "replace": "val isPowerplayNow = FieldingSystem.isPowerplayBall(matchState.format, matchState.score.overs * 6 + matchState.score.balls)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchFlowScreens.kt",
+      "find": "if (format == MatchFormat.T20 || format == MatchFormat.ODI) \" (down from the original limit).\" else \".\"",
+      "replace": "if (format != MatchFormat.TEST) \" (down from the original limit).\" else \".\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/FormatSelectionScreen.kt",
+      "find": "    FormatOption(MatchFormat.T20, \"T20\", \"20 overs per side. The shortest, fastest format.\"),\n    FormatOption(MatchFormat.ODI, \"One Day International\", \"50 overs per side. A full day of cricket.\"),\n    FormatOption(MatchFormat.TEST, \"Test Match\", \"No over limit per innings. The longest format.\")\n",
+      "replace": "    FormatOption(MatchFormat.ONE_OVER, \"One Over\", \"One over per side. Six balls each, one bowler, and a two-ball powerplay.\"),\n    FormatOption(MatchFormat.FIVE_OVERS, \"Five Overs\", \"5 overs per side. A nine-ball powerplay, and one over per bowler.\"),\n    FormatOption(MatchFormat.T10, \"T10\", \"10 overs per side. A three-over powerplay, and up to two overs per bowler.\"),\n    FormatOption(MatchFormat.T20, \"T20\", \"20 overs per side. A six-over powerplay, and up to four overs per bowler.\"),\n    FormatOption(MatchFormat.ODI, \"One Day International\", \"50 overs per side. A full day of cricket.\"),\n    FormatOption(MatchFormat.TEST, \"Test Match\", \"No over limit per innings. The longest format.\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "        MatchFormat.T20 -> \"T20\"\n        MatchFormat.ODI -> \"One Day International\"\n        MatchFormat.TEST -> \"Test match\"\n",
+      "replace": "        MatchFormat.T20 -> \"T20\"\n        MatchFormat.ODI -> \"One Day International\"\n        MatchFormat.T10 -> \"T10\"\n        MatchFormat.FIVE_OVERS -> \"Five-over match\"\n        MatchFormat.ONE_OVER -> \"One-over match\"\n        MatchFormat.TEST -> \"Test match\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/home/AboutScreen.kt",
+      "find": "Choose a format: T20, One Day or Test.",
+      "replace": "Choose a format: One Over, Five Overs, T10, T20, One Day or Test.",
+      "count": 1
+    }
+  ]
+}
