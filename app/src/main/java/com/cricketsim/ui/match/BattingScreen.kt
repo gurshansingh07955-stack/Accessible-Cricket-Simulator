@@ -103,11 +103,12 @@ import kotlinx.coroutines.launch
  *   straight into BattingSystem.classifyShot (15 equal bands). So a touch
  *   that LANDS in the Cover Drive band is already Cover Drive. Sliding up
  *   or down moves to the neighbouring shots, in either direction. A
- *   continuous tone tracks the live position; the shot the touch landed
- *   on is spoken shortly after landing (SHOT_LANDING_ANNOUNCE_DELAY_MS,
- *   so it isn't lost under the screen reader reading the surface), and a
- *   new shot is spoken whenever the touch crosses into its band — never
- *   on every move event. A quick tap that is ignored as a stray still
+ *   continuous tone tracks the live position; the shot the finger is on
+ *   is spoken SHOT_LANDING_ANNOUNCE_DELAY_MS after the touch lands (the
+ *   screen reader interrupts speech at the start of a touch, so anything
+ *   spoken in that first instant is lost -- moves are silent until then),
+ *   and after that a new shot is spoken whenever the touch crosses into
+ *   its band — never on every move event. A quick tap that is ignored as a stray still
  *   says which shot it touched.
  * - WHAT COUNTS AS A SELECTION (see detectVerticalDragGesture): the shot
  *   is committed only when ALL fingers are up, at the height the touch
@@ -206,6 +207,15 @@ private const val SHOT_MIN_HOLD_MS = 150L
 // settle, so a touch that goes straight to a shot still hears its name. A
 // touch that slides on before the delay hears the new shot at once instead.
 private const val SHOT_LANDING_ANNOUNCE_DELAY_MS = 250L
+
+// When every finger seems to have lifted, how long to wait for one to come
+// straight back down before treating the touch as really over. Under a
+// screen reader, the system re-organises a two-finger touch part-way
+// through (for example when the fingers drift slightly apart) by ending
+// the touch it was passing on and immediately starting another. Without
+// this wait that moment looked like a release and played a shot the player
+// never chose.
+private const val SHOT_RELEASE_GRACE_MS = 150L
 
 /**
  * What the batter is shown when the ball is revealed: the delivery itself
@@ -339,6 +349,11 @@ fun BattingScreen(
  *   lifted but another is still down, the other one takes over, so a
  *   two-finger slide whose fingers don't lift at the same instant is not
  *   cut short by the first one.
+ * - A release is not final until SHOT_RELEASE_GRACE_MS has passed with no
+ *   finger coming back down. The screen reader's two-finger handling can
+ *   end the touch it is passing on and start another in the same instant
+ *   (that is how a shot used to be played mid-slide); a finger returning
+ *   inside the grace period just continues the same touch.
  * - The height committed is the last one reached while a finger was
  *   still down (not the lift event's own position, which can jitter).
  * - A touch that never slid [SHOT_TAP_SLOP_DP] and was held less than
@@ -391,9 +406,23 @@ private suspend fun PointerInputScope.detectVerticalDragGesture(
             val pressed = event.changes.filter { it.pressed }
 
             if (pressed.isEmpty()) {
-                // Every finger is up: the touch is over.
+                // Every finger is up -- or the system briefly ended the touch
+                // while re-organising a two-finger gesture. Give a finger a
+                // moment to come straight back down: if one does, this is the
+                // same touch carrying on, not a release.
                 val release = event.changes.firstOrNull { it.id == activeId } ?: event.changes.first()
                 val heldMs = release.uptimeMillis - startTimeMs
+                val resumed = withTimeoutOrNull(SHOT_RELEASE_GRACE_MS) {
+                    awaitFirstDown(requireUnconsumed = false)
+                }
+                if (resumed != null) {
+                    resumed.consume()
+                    activeId = resumed.id
+                    lastFraction = fractionOf(resumed.position.y)
+                    if (!moved && abs(resumed.position.y - startY) >= slopPx) moved = true
+                    onDrag(lastFraction)
+                    continue
+                }
                 if (moved || heldMs >= SHOT_MIN_HOLD_MS) onDragEnd(lastFraction) else onDragCancel()
                 return@awaitEachGesture
             }
@@ -488,6 +517,13 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
     // The pending "you landed on ..." announcement, see
     // SHOT_LANDING_ANNOUNCE_DELAY_MS.
     var landingJob by remember { mutableStateOf<Job?>(null) }
+    // False for the first moments of every touch. Until the landing
+    // announcement has been made, moving between shots stays silent: the
+    // screen reader interrupts speech at the start of a touch, so anything
+    // spoken in that first instant (including by the first move event) was
+    // lost -- which is why the shot you went straight to was never heard
+    // until you slid away and came back.
+    var landingSettled by remember { mutableStateOf(false) }
 
     // Shared by touch-down and every move: updates the tone and the live
     // text, and (when speakNow) speaks the shot only if it differs from the
@@ -499,7 +535,7 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
         currentServices?.sound?.updateAimTone(fraction)
         val hovered = BattingSystem.classifyShot(fraction.toDouble())
         liveShot = hovered
-        if (speakNow && hovered != lastAnnouncedShot) {
+        if (speakNow && landingSettled && hovered != lastAnnouncedShot) {
             lastAnnouncedShot = hovered
             landingJob?.cancel()
             currentServices?.announceSpoken(BattingSystem.shotLabel(hovered))
@@ -548,17 +584,19 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
                         onDragStart = { fraction ->
                             lastAnnouncedShot = null
                             landingJob?.cancel()
+                            landingSettled = false
                             currentServices?.sound?.startAimTone()
                             reportHover(fraction, speakNow = false)
-                            // Speak the shot the touch landed on, shortly
-                            // after landing -- unless a slide has already
-                            // spoken a shot by then.
+                            // Speak the shot the finger is on shortly after
+                            // landing (wherever it has got to by then), and
+                            // only then start announcing crossings.
                             landingJob = scope.launch {
                                 delay(SHOT_LANDING_ANNOUNCE_DELAY_MS)
-                                val landed = liveShot
-                                if (landed != null && lastAnnouncedShot == null) {
-                                    lastAnnouncedShot = landed
-                                    currentServices?.announceSpoken(BattingSystem.shotLabel(landed))
+                                landingSettled = true
+                                val here = liveShot
+                                if (here != null && here != lastAnnouncedShot) {
+                                    lastAnnouncedShot = here
+                                    currentServices?.announceSpoken(BattingSystem.shotLabel(here))
                                 }
                             }
                         },
@@ -587,6 +625,7 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
                             }
                             liveShot = null
                             lastAnnouncedShot = null
+                            landingSettled = false
                         }
                     )
                 }
