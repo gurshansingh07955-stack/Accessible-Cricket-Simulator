@@ -48,7 +48,10 @@ import kotlin.math.max
  *   crowd bed's tension creep already uses, just swept across a much
  *   wider range so the pitch change is obvious rather than subtle. It
  *   never speaks during the drag itself — see updateAimTone's doc
- *   comment for why.
+ *   comment for why. It can never outlive its gesture: besides the
+ *   screens stopping it on release, cancel and disposal, the app going to
+ *   the background stops it and a watchdog cuts it off if nothing has
+ *   touched it for AIM_TONE_WATCHDOG_MS (see startAimTone).
  * - CROWD AMBIENCE. A looping bed whose volume is the product of four
  *   things, recomputed together so they never fight: tension (the crowd's
  *   mood, from match closeness), ducking (a dip under commentary and
@@ -60,6 +63,14 @@ import kotlin.math.max
  *   middle of a commentary sequence.
  * - RAIN. A looping rain bed plus a thunder crack, ducking the crowd for
  *   as long as it runs.
+ * - FADING-OUT LOOPS. Stopping the crowd or rain fades it out over about a
+ *   second and only then really stops the player. During that second the
+ *   channel is no longer the crowd's or rain's own, so it is tracked in
+ *   `retiringChannels`: pausing for the background pauses it too, and
+ *   release() stops it on the spot. Without that, closing the app inside
+ *   the fade (which is exactly what happens when the match screen leaves
+ *   composition as the activity is destroyed) cancelled the delayed stop
+ *   and left the bed playing with nothing holding it.
  * - COMMENTARY. The AI voice duo clips, queued so a wicket's comment, an
  *   over-complete comment and an innings-break comment play as one
  *   conversation rather than over each other; the crowd ducks for the
@@ -193,10 +204,20 @@ class SoundEngine(context: Context) {
         }
     }
 
+    /**
+     * The app left the foreground: nothing may keep making noise behind
+     * another app. The crowd and rain are paused (and come back on
+     * foregrounding); anything fading out is paused too; the aim tone, the
+     * review's heartbeat/music and commentary are simply stopped, since
+     * resuming them mid-gesture/mid-clip would be meaningless.
+     */
     fun onAppBackgrounded() {
         paused = true
         crowdChannel?.pause()
         rainChannel?.pause()
+        retiringChannels.toList().forEach { it.pause() }
+        stopAimTone()
+        stopDrsReviewAudio()
         stopCommentary()
     }
 
@@ -208,10 +229,20 @@ class SoundEngine(context: Context) {
 
     fun release() {
         stopCommentary()
+        crowdRamp?.cancel()
+        crowdRamp = null
+        rainRamp?.cancel()
+        rainRamp = null
         crowdChannel?.stop()
         crowdChannel = null
         rainChannel?.stop()
         rainChannel = null
+        // Anything still fading out has a delayed stop that cancelling the
+        // scope below would drop — stop it now instead.
+        retiringChannels.toList().forEach { it.stop() }
+        retiringChannels.clear()
+        aimWatchdog?.cancel()
+        aimWatchdog = null
         aimToneChannel?.stop()
         aimToneChannel = null
         stopDrsReviewAudio()
@@ -544,6 +575,23 @@ class SoundEngine(context: Context) {
         }
     }
 
+    /**
+     * Channels that have been detached from the crowd/rain slot and are
+     * fading out, each with a delayed stop pending. Tracked so that
+     * pausing for the background and release() can reach them — see the
+     * class comment's FADING-OUT LOOPS.
+     */
+    private val retiringChannels = HashSet<LoopChannel>()
+
+    /** Lets `channel` fade for `fadeMs`, then really stops it — unless release() or a second stop gets there first. */
+    private fun retire(channel: LoopChannel, fadeMs: Long) {
+        retiringChannels.add(channel)
+        scope.launch {
+            delay(fadeMs)
+            if (retiringChannels.remove(channel)) channel.stop()
+        }
+    }
+
     /** Ramps a value to a target over a duration on the main thread; a new ramp replaces the old one. */
     private class Ramper(private val scope: CoroutineScope, private val apply: (Float) -> Unit) {
         var current = 0f
@@ -645,10 +693,7 @@ class SoundEngine(context: Context) {
         swellJob?.cancel()
         swellUntilMs = 0L
         ramp?.rampTo(0f, 1f)
-        scope.launch {
-            delay(1100)
-            channel.stop()
-        }
+        retire(channel, 1100)
     }
 
     /** 0 = a decided, one-sided match; 1 = a nail-biter. Ramped slowly, like a crowd's mood. */
@@ -723,30 +768,48 @@ class SoundEngine(context: Context) {
         rainChannel = null
         rainRamp = null
         ramp?.rampTo(0f, 1f)
-        scope.launch {
-            delay(1100)
-            channel.stop()
-        }
+        retire(channel, 1100)
     }
 
     // --- Aim tone (pitching/batting two-finger gesture feedback) ---
 
     private var aimToneChannel: LoopChannel? = null
+    private var aimWatchdog: Job? = null
+    private var aimLastActivityMs = 0L
 
     /**
      * Starts the continuous aim-drag tone, silent until the first
      * updateAimTone call. Ducks the crowd for as long as it plays, same as
      * any other effect — the point of a drag gesture is to hear the tone
      * clearly, not the ambience under it. Safe to call again while already
-     * running (a no-op).
+     * running (it only counts as activity).
+     *
+     * A watchdog stops the tone if nothing has started or updated it for
+     * AIM_TONE_WATCHDOG_MS. The screens stop it on release, cancel and
+     * disposal, so this should never fire — it exists so that a missed
+     * stop (an odd gesture ending, a screen torn down mid-touch) can never
+     * leave a tone droning on, which is exactly the failure that was
+     * reported.
      */
     fun startAimTone() {
-        if (!settings.soundEffects || aimToneChannel != null) return
+        if (!settings.soundEffects) return
+        aimLastActivityMs = SystemClock.elapsedRealtime()
+        if (aimToneChannel != null) return
         val channel = synthLoop(Fx.AIM_TONE) ?: return
         aimToneChannel = channel
         duckStart()
         channel.setVolume(0f)
         if (!paused) channel.start()
+        aimWatchdog?.cancel()
+        aimWatchdog = scope.launch {
+            while (true) {
+                delay(AIM_TONE_WATCHDOG_MS / 4)
+                if (SystemClock.elapsedRealtime() - aimLastActivityMs > AIM_TONE_WATCHDOG_MS) {
+                    stopAimTone()
+                    break
+                }
+            }
+        }
     }
 
     /**
@@ -762,12 +825,16 @@ class SoundEngine(context: Context) {
      */
     fun updateAimTone(fraction: Float) {
         val channel = aimToneChannel ?: return
+        aimLastActivityMs = SystemClock.elapsedRealtime()
         val clamped = fraction.coerceIn(0f, 1f)
         channel.setRate(AIM_TONE_MIN_RATE + (AIM_TONE_MAX_RATE - AIM_TONE_MIN_RATE) * clamped)
         channel.setVolume(AIM_TONE_GAIN * MASTER)
     }
 
+    /** Safe to call any number of times, from anywhere; a no-op when no tone is playing. */
     fun stopAimTone() {
+        aimWatchdog?.cancel()
+        aimWatchdog = null
         val channel = aimToneChannel ?: return
         aimToneChannel = null
         channel.stop()
@@ -979,6 +1046,12 @@ class SoundEngine(context: Context) {
         const val AIM_TONE_MIN_RATE = 0.6f
         const val AIM_TONE_MAX_RATE = 2.4f
         const val AIM_TONE_GAIN = 0.55f
+
+        // How long the aim tone may run with no start/update before the
+        // watchdog cuts it off. Generous on purpose: a finger held still
+        // while deciding sends no updates, and that must not silence the
+        // tone. It only has to be finite.
+        const val AIM_TONE_WATCHDOG_MS = 8_000L
 
         // DRS heartbeat/bgm gains, applied on top of MASTER like every
         // other effect. The user explicitly asked for the music bed to
