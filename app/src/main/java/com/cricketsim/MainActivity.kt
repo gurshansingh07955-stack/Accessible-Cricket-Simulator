@@ -47,7 +47,11 @@ import com.cricketsim.ui.theme.CricketTheme
  * the saved match), created once here and handed to every screen through
  * LocalGameServices. The sound engine is paused when the app leaves the
  * foreground (so the crowd doesn't keep playing behind another app) and
- * released when the activity is really finishing.
+ * released whenever the activity is destroyed — for ANY reason, not just
+ * when it is finishing. GameServices is created fresh in every onCreate,
+ * so an activity that is destroyed and recreated (a rotation, a system
+ * kill of a backgrounded activity) would otherwise leave the old
+ * instance's sound engine alive and playing with nothing left to stop it.
  */
 class MainActivity : ComponentActivity() {
 
@@ -80,7 +84,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (isFinishing) services?.release()
+        services?.release()
+        services = null
     }
 }
 
