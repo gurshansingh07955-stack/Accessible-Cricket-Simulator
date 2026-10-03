@@ -1,0 +1,227 @@
+{
+  "name": "No-balls are playable; free hit after a no-ball; no-ball siren",
+  "message": "No-ball is playable with a free hit next ball and a siren",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+    "contains": "val freeHit: Boolean"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BowlingSystem.kt",
+      "find": "    val forcedNoBall: Boolean\n)",
+      "replace": "    val forcedNoBall: Boolean,\n    // True when the umpire calls this delivery a no-ball for ANY reason: a beamer\n    // (forcedNoBall above) or the bowler overstepping (BowlingSystem.rollOverstep).\n    // Decided once, when the delivery is made, so the batter can be told before\n    // playing it. The MatchEngine plays a no-ball like any other ball, plus one\n    // extra, with no way to be dismissed, and the next ball is a free hit.\n    val calledNoBall: Boolean = false\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BowlingSystem.kt",
+      "find": "            quality = quality,\n            forcedNoBall = forcedNoBall\n        )\n",
+      "replace": "            quality = quality,\n            forcedNoBall = forcedNoBall,\n            calledNoBall = forcedNoBall || rollOverstep(tier)\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BowlingSystem.kt",
+      "find": "    // --- Probability shaping ---\n",
+      "replace": "    /**\n     * Chance that a delivery of this execution quality is an overstep no-ball. About the\n     * same overall rate as the old random no-ball outcome (roughly one ball in fifty-five),\n     * shaped the same way by how well the ball was bowled.\n     */\n    fun overstepChance(tier: BowlingQualityTier): Double = when (tier) {\n        BowlingQualityTier.PERFECT -> 0.004\n        BowlingQualityTier.IDEAL -> 0.006\n        BowlingQualityTier.GOOD -> 0.018\n        BowlingQualityTier.BAD -> 0.032\n        BowlingQualityTier.VERY_BAD -> 0.045\n    }\n\n    /**\n     * Rolled ONCE per delivery, at the moment the delivery is made (never when the shot is\n     * resolved), so a batter can be told \"no ball\" before choosing a shot.\n     */\n    fun rollOverstep(tier: BowlingQualityTier): Boolean = Random.nextDouble() < overstepChance(tier)\n\n    // --- Probability shaping ---\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/PitchingScreen.kt",
+      "find": "                    forcedNoBall = resolvedLength.forcedNoBall\n                )",
+      "replace": "                    forcedNoBall = resolvedLength.forcedNoBall,\n                    // Overstepping is rolled here, once, as the delivery is made.\n                    calledNoBall = resolvedLength.forcedNoBall || BowlingSystem.rollOverstep(quality.tier)\n                )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/PitchingScreen.kt",
+      "find": "        if (decision.forcedNoBall) {\n            Spacer(modifier = Modifier.height(8.dp))\n            Text(\"That's a beamer \\u2014 automatic no ball.\")\n        }\n",
+      "replace": "        if (decision.forcedNoBall) {\n            Spacer(modifier = Modifier.height(8.dp))\n            Text(\"That's a beamer \\u2014 automatic no ball.\")\n        } else if (decision.calledNoBall) {\n            Spacer(modifier = Modifier.height(8.dp))\n            Text(\"No ball! You overstepped the crease. The batter gets a free hit next ball.\")\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    val drsReviewsUsed: Int = 0\n)",
+      "replace": "    val drsReviewsUsed: Int = 0,\n\n    // True when the NEXT delivery is a free hit: the previous delivery was a no-ball. On a\n    // free hit the batter cannot be dismissed. A wide leaves it standing (a wide is not a\n    // legal delivery); the next legal delivery ends it; a further no-ball starts a new one.\n    // Like drsReviewsUsed, an older saved match is read back with this false, which is\n    // exactly right, so MatchSaveStore.CURRENT_VERSION did not need to change.\n    val freeHit: Boolean = false\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        return state.copy(score = newScore, ballByBall = ballByBall, lastSixBalls = lastSixBalls, currentInningsData = currentInningsData)\n",
+      "replace": "        // FREE HIT: a no-ball makes the NEXT delivery a free hit. A wide leaves it standing,\n        // and the next legal delivery (or a further no-ball, which starts a new one) settles it.\n        val nextFreeHit = when {\n            outcome.isNoBall -> true\n            outcome.isWide -> state.freeHit\n            else -> false\n        }\n\n        return state.copy(\n            score = newScore,\n            ballByBall = ballByBall,\n            lastSixBalls = lastSixBalls,\n            currentInningsData = currentInningsData,\n            freeHit = nextFreeHit\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "            // batting side (see drsReviewsUsed above).\n            drsReviewsUsed = 0\n",
+      "replace": "            // batting side (see drsReviewsUsed above).\n            drsReviewsUsed = 0,\n            // A free hit never carries into a new innings.\n            freeHit = false\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        if (illegalField) {\n            return BallOutcome(\n                runs = 0, isWicket = false, isWide = false, isNoBall = true, extraRuns = 1,\n                batsmanId = batsman.id, bowlerId = bowler.id,\n                commentary = \"No ball! The umpire has spotted too many fielders in the deep — illegal field.\",\n                bowlingQualityTier = bowlingDecision.qualityTier,\n                bowlingActualLength = bowlingDecision.actualLength\n            )\n        }\n\n        // A badly missed yorker that balloons into a beamer is an\n        // automatic no-ball under the laws of cricket — not a\n        // probability roll, so it short-circuits the normal outcome\n        // sampling entirely.\n        if (bowlingDecision.forcedNoBall) {\n            return BallOutcome(\n                runs = 0, isWicket = false, isWide = false, isNoBall = true, extraRuns = 1,\n                batsmanId = batsman.id, bowlerId = bowler.id,\n                commentary = \"No ball! That's a beamer, way too full and dangerously high from ${bowler.name}.\",\n                bowlingQualityTier = bowlingDecision.qualityTier,\n                bowlingActualLength = bowlingDecision.actualLength\n            )\n        }\n",
+      "replace": "        // A no-ball is decided BEFORE the ball is played -- an illegal field, a beamer, or an\n        // overstep rolled when the delivery was made (BowlingSystem.rollOverstep) -- and the\n        // batter still PLAYS it: whatever he hits is scored in addition to the one extra, and\n        // the delivery cannot get him out (this game has no run outs). Further down, a\n        // no-ball is therefore never also a wide and never a wicket.\n        val noBallCalled = illegalField || bowlingDecision.forcedNoBall || bowlingDecision.calledNoBall\n        val noBallText: String? = when {\n            illegalField -> \"No ball! The umpire has spotted too many fielders in the deep — illegal field.\"\n            bowlingDecision.forcedNoBall -> \"No ball! That's a beamer, way too full and dangerously high from ${bowler.name}.\"\n            bowlingDecision.calledNoBall -> \"No ball! ${bowler.name} oversteps.\"\n            else -> null\n        }\n        // The previous delivery was a no-ball: this one is a FREE HIT, with the same protection.\n        val freeHit = matchState.freeHit\n        val protectedFromDismissal = noBallCalled || freeHit\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        // Normalize again and sample. LinkedHashMap preserves this\n",
+      "replace": "        // The no-ball itself was decided up front, so it is not an outcome to sample; a\n        // delivery already called a no-ball cannot also be a wide; and a ball that cannot\n        // get the batter out (a no-ball, or a free hit) has no wicket chance at all. Knowing\n        // that, the batter swings: free hits are hit harder.\n        probs.noBall = 0.0\n        if (noBallCalled) probs.wide = 0.0\n        if (protectedFromDismissal) probs.wicket = 0.0\n        if (freeHit) {\n            probs.four *= 1.5\n            probs.six *= 1.8\n            probs.dot *= 0.7\n        }\n\n        // Normalize again and sample. LinkedHashMap preserves this\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "            \"wide\" to probs.wide, \"noBall\" to probs.noBall\n",
+      "replace": "            \"wide\" to probs.wide\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        val result = BallOutcome(\n            runs = runs, isWicket = isWicket, isWide = isWide, isNoBall = isNoBall, extraRuns = extraRuns,\n",
+      "replace": "        if (noBallCalled) {\n            isNoBall = true\n            extraRuns = 1\n        }\n\n        val result = BallOutcome(\n            runs = runs, isWicket = isWicket, isWide = isWide, isNoBall = isNoBall, extraRuns = extraRuns,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        return result.copy(commentary = generateCommentary(result, batsman.name, bowler.name))\n",
+      "replace": "        val playText = generateCommentary(result, batsman.name, bowler.name)\n        // A no-ball is announced first; if the batter also hit it, what he did follows.\n        val commentary = if (noBallText == null) playText else if (runs == 0) noBallText else \"$noBallText $playText\"\n        return result.copy(commentary = commentary)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "        val isBoundary4 = outcome.runs == 4 && !outcome.isWide && !outcome.isNoBall\n",
+      "replace": "        // Runs hit off a no-ball count for the batter, boundaries included.\n        val isBoundary4 = outcome.runs == 4 && !outcome.isWide\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "        updated = updateBatsmanStats(updated, strikerId, outcome.runs, isBoundary4, isBoundary6, isLegalDelivery)\n",
+      "replace": "        // A no-ball is a ball faced by the batter (a wide is not).\n        updated = updateBatsmanStats(updated, strikerId, outcome.runs, isBoundary4, isBoundary6, isLegalDelivery || outcome.isNoBall)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "        } else if (isLegal && outcome.runs % 2 == 1) {\n",
+      "replace": "        } else if (!outcome.isWide && outcome.runs % 2 == 1) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "outcome.isNoBall -> \"No ball, ${countOf(outcome.extraRuns, \"run\")}. ${outcome.commentary}\"",
+      "replace": "outcome.isNoBall -> {\n                // The batter plays a no-ball: what he hit counts, plus the one extra.\n                val total = outcome.runs + outcome.extraRuns\n                val split = if (outcome.runs > 0) \" (${outcome.runs} off the bat, 1 extra)\" else \"\"\n                \"No ball, ${countOf(total, \"run\")}$split. ${outcome.commentary} Free hit next ball.\"\n            }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/Synth.kt",
+      "find": "    /** A dramatic descending sawtooth. */\n",
+      "replace": "    /**\n     * The no-ball siren: an emergency-style wail that sweeps up and down twice over about\n     * 1.6 seconds, a sawtooth layered over a sine so it is loud and hard to miss.\n     */\n    fun siren(): ShortArray {\n        val duration = 1.6\n        val out = FloatArray(frames(duration))\n        // Two full up-and-down sweeps between 650 and 1250 Hz.\n        val pitch = { t: Double -> 950.0 + 300.0 * sin(2.0 * PI * t / 0.8 - PI / 2.0) }\n        val level = { t: Double ->\n            if (t < 0.03) linRamp(0.0, 1.0, t, 0.03)\n            else if (t > duration - 0.15) linRamp(1.0, 0.0, t - (duration - 0.15), 0.15)\n            else 1.0\n        }\n        addTone(out, 0.0, duration, Wave.SAWTOOTH, pitch) { t -> 0.22 * level(t) }\n        addTone(out, 0.0, duration, Wave.SINE, pitch) { t -> 0.35 * level(t) }\n        return toPcm(normalize(out, 0.7f))\n    }\n\n    /** A dramatic descending sawtooth. */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE }",
+      "replace": "    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "                Fx.AIM_TONE -> Synth.aimTone()\n",
+      "replace": "                Fx.AIM_TONE -> Synth.aimTone()\n                Fx.SIREN -> Synth.siren()\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    fun playBallDelivery() {\n        if (!settings.soundEffects) return\n        playPcm(Fx.WHOOSH, MASTER)\n    }\n",
+      "replace": "    fun playBallDelivery() {\n        if (!settings.soundEffects) return\n        playPcm(Fx.WHOOSH, MASTER)\n    }\n\n    // True from the moment the no-ball siren sounds until the ball it was for has been\n    // resolved, so the same no-ball is never given two sirens (see takeSirenSounded).\n    private var sirenSounded = false\n\n    /**\n     * The no-ball siren. Ducks the crowd so it cuts through, and buzzes. When the user is\n     * batting it sounds the moment the delivery is revealed (BattingScreen), before the shot\n     * is chosen; when the user is bowling it sounds as the ball is resolved\n     * (MatchAudioDirector.onBallResolved).\n     */\n    fun playNoBallSiren() {\n        if (!settings.soundEffects) return\n        sirenSounded = true\n        playPcm(Fx.SIREN, MASTER * 1.4f)\n        duckFor(1700)\n        vibrate(120, 80, 120)\n    }\n\n    /**\n     * True (once) if the siren already sounded for the ball now being resolved; the caller\n     * then does not sound it again. Always clears the flag.\n     */\n    fun takeSirenSounded(): Boolean {\n        val was = sirenSounded\n        sirenSounded = false\n        return was\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/MatchAudioDirector.kt",
+      "find": "    fun onBallResolved(before: MatchState, after: MatchState, outcome: BallOutcome) {\n",
+      "replace": "    fun onBallResolved(before: MatchState, after: MatchState, outcome: BallOutcome) {\n        // A no-ball is announced by the siren. When the batter was the user, the siren already\n        // sounded as the delivery was revealed (BattingScreen) and is not repeated. The flag is\n        // taken for EVERY ball so one left over from a ball abandoned part-way can never\n        // silence a later siren.\n        val sirenAlreadySounded = sound.takeSirenSounded()\n        if (outcome.isNoBall && !sirenAlreadySounded) sound.playNoBallSiren()\n        // Playing it marked it sounded; clear that again so it only ever covers this one ball.\n        sound.takeSirenSounded()\n\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/MatchAudioDirector.kt",
+      "find": "        sound.schedule(400) {\n",
+      "replace": "        // The outcome sound and voice commentary wait for the siren to finish on a no-ball.\n        sound.schedule(if (outcome.isNoBall) 1500L else 400L) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "data class DeliveryReveal(val bowling: ResolvedBowlingDecision, val fieldNote: String)",
+      "replace": "data class DeliveryReveal(val bowling: ResolvedBowlingDecision, val fieldNote: String, val freeHit: Boolean = false)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "    LaunchedEffect(reveal) {\n        services?.announceSpoken(\"Delivery: ${deliverySummary(reveal.bowling)}. ${reveal.fieldNote}\")\n    }\n",
+      "replace": "    // What the umpire has already called, said before the delivery itself: a no-ball (with\n    // the siren, so the batter can play it knowing it cannot get him out) and/or a free hit.\n    val noBallCalled = reveal.bowling.calledNoBall || reveal.bowling.forcedNoBall\n    val callout = (if (noBallCalled) \"No ball! \" else \"\") + (if (reveal.freeHit) \"Free hit! \" else \"\")\n\n    LaunchedEffect(reveal) {\n        if (noBallCalled) services?.sound?.playNoBallSiren()\n        services?.announceSpoken(callout + \"Delivery: ${deliverySummary(reveal.bowling)}. ${reveal.fieldNote}\")\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "            deliverySummary = deliverySummary(delivery),\n            fieldNote = reveal.fieldNote,\n",
+      "replace": "            deliverySummary = deliverySummary(delivery),\n            fieldNote = reveal.fieldNote,\n            callout = callout,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: (NamedShot) -> Unit) {",
+      "replace": "private fun BatShotStep(deliverySummary: String, fieldNote: String, callout: String, onSelected: (NamedShot) -> Unit) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "        Column(modifier = Modifier.padding(24.dp).clearAndSetSemantics { }) {\n            Text(\n                text = \"Delivery: $deliverySummary\",\n",
+      "replace": "        Column(modifier = Modifier.padding(24.dp).clearAndSetSemantics { }) {\n            if (callout.isNotEmpty()) {\n                Text(text = callout.trim(), style = MaterialTheme.typography.headlineSmall)\n                Spacer(modifier = Modifier.height(8.dp))\n            }\n            Text(\n                text = \"Delivery: $deliverySummary\",\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "                    contentDescription = buildString {\n                        append(\"Delivery: \")\n",
+      "replace": "                    contentDescription = buildString {\n                        append(callout)\n                        append(\"Delivery: \")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "DeliveryReveal(prepared.bowling, prepared.fieldChanges.joinToString(\" \"))",
+      "replace": "DeliveryReveal(prepared.bowling, prepared.fieldChanges.joinToString(\" \"), freeHit = prepared.state.freeHit)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        if (isUserBowling) {\n            // Set the field BEFORE bowling",
+      "replace": "        // A no-ball makes the NEXT ball a free hit. Said here, before the player acts, for\n        // both roles (the batter also hears it as the delivery is revealed).\n        if (matchState.freeHit) {\n            Text(\n                text = \"Free hit! The batter cannot be out on the next ball.\",\n                style = MaterialTheme.typography.titleMedium\n            )\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n\n        if (isUserBowling) {\n            // Set the field BEFORE bowling",
+      "count": 1
+    }
+  ]
+}
