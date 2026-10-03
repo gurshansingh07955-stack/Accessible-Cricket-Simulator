@@ -97,6 +97,15 @@ class MatchAudioDirector(private val services: GameServices) {
      * web, standing in for the ball's travel time.
      */
     fun onBallResolved(before: MatchState, after: MatchState, outcome: BallOutcome) {
+        // A no-ball is announced by the siren. When the batter was the user, the siren already
+        // sounded as the delivery was revealed (BattingScreen) and is not repeated. The flag is
+        // taken for EVERY ball so one left over from a ball abandoned part-way can never
+        // silence a later siren.
+        val sirenAlreadySounded = sound.takeSirenSounded()
+        if (outcome.isNoBall && !sirenAlreadySounded) sound.playNoBallSiren()
+        // Playing it marked it sounded; clear that again so it only ever covers this one ball.
+        sound.takeSirenSounded()
+
         val strikerId = before.currentBatsmen.first.id
         val strikerRunsBefore = before.currentInningsData.batsmanStats.firstOrNull { it.playerId == strikerId }?.runs ?: 0
         val strikerRunsAfter = after.currentInningsData.batsmanStats.firstOrNull { it.playerId == strikerId }?.runs ?: strikerRunsBefore
@@ -159,7 +168,8 @@ class MatchAudioDirector(private val services: GameServices) {
         }
 
         val category = CommentaryLibrary.categorizeBallOutcome(outcome)
-        sound.schedule(400) {
+        // The outcome sound and voice commentary wait for the siren to finish on a no-ball.
+        sound.schedule(if (outcome.isNoBall) 1500L else 400L) {
             sound.playOutcomeSounds(outcome.isWicket, outcome.runs)
             if (outcome.isWicket) sound.vibrate(200, 100, 200) else if (outcome.runs >= 4) sound.vibrate(100)
 

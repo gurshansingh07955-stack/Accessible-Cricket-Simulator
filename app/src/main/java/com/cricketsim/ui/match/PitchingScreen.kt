@@ -376,7 +376,9 @@ fun PitchingScreen(
                     qualityScore = quality.finalScore,
                     qualityTier = quality.tier,
                     quality = quality,
-                    forcedNoBall = resolvedLength.forcedNoBall
+                    forcedNoBall = resolvedLength.forcedNoBall,
+                    // Overstepping is rolled here, once, as the delivery is made.
+                    calledNoBall = resolvedLength.forcedNoBall || BowlingSystem.rollOverstep(quality.tier)
                 )
                 step = PitchStep.RESULT
             },
@@ -824,6 +826,9 @@ private fun ResultStep(decision: ResolvedBowlingDecision, onContinue: () -> Unit
         if (decision.forcedNoBall) {
             Spacer(modifier = Modifier.height(8.dp))
             Text("That's a beamer \u2014 automatic no ball.")
+        } else if (decision.calledNoBall) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("No ball! You overstepped the crease. The batter gets a free hit next ball.")
         }
         Spacer(modifier = Modifier.height(24.dp))
         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {

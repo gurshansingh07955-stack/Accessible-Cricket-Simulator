@@ -115,7 +115,7 @@ class SoundEngine(context: Context) {
 
     // --- Synthesized buffers ---
 
-    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE }
+    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN }
 
     private val synthCache = HashMap<Fx, ShortArray>()
 
@@ -135,6 +135,7 @@ class SoundEngine(context: Context) {
                 Fx.RAIN -> Synth.rainLoop()
                 Fx.CROWD -> Synth.crowdBed()
                 Fx.AIM_TONE -> Synth.aimTone()
+                Fx.SIREN -> Synth.siren()
             }
         }
     }
@@ -352,6 +353,34 @@ class SoundEngine(context: Context) {
     fun playBallDelivery() {
         if (!settings.soundEffects) return
         playPcm(Fx.WHOOSH, MASTER)
+    }
+
+    // True from the moment the no-ball siren sounds until the ball it was for has been
+    // resolved, so the same no-ball is never given two sirens (see takeSirenSounded).
+    private var sirenSounded = false
+
+    /**
+     * The no-ball siren. Ducks the crowd so it cuts through, and buzzes. When the user is
+     * batting it sounds the moment the delivery is revealed (BattingScreen), before the shot
+     * is chosen; when the user is bowling it sounds as the ball is resolved
+     * (MatchAudioDirector.onBallResolved).
+     */
+    fun playNoBallSiren() {
+        if (!settings.soundEffects) return
+        sirenSounded = true
+        playPcm(Fx.SIREN, MASTER * 1.4f)
+        duckFor(1700)
+        vibrate(120, 80, 120)
+    }
+
+    /**
+     * True (once) if the siren already sounded for the ball now being resolved; the caller
+     * then does not sound it again. Always clears the flag.
+     */
+    fun takeSirenSounded(): Boolean {
+        val was = sirenSounded
+        sirenSounded = false
+        return was
     }
 
     /** The sound of what just happened on the ball, with the crowd's reaction. Web mapping, see the class comment. */

@@ -133,7 +133,12 @@ object MatchLines {
         val base = when {
             outcome.isWicket -> "WICKET. ${outcome.commentary}"
             outcome.isWide -> "Wide, 1 run. ${outcome.commentary}"
-            outcome.isNoBall -> "No ball, ${countOf(outcome.extraRuns, "run")}. ${outcome.commentary}"
+            outcome.isNoBall -> {
+                // The batter plays a no-ball: what he hit counts, plus the one extra.
+                val total = outcome.runs + outcome.extraRuns
+                val split = if (outcome.runs > 0) " (${outcome.runs} off the bat, 1 extra)" else ""
+                "No ball, ${countOf(total, "run")}$split. ${outcome.commentary} Free hit next ball."
+            }
             else -> "${countOf(outcome.runs, "run")}. ${outcome.commentary}"
         }
         val quality = outcome.bowlingQualityTier?.let { " Ball quality: ${BowlingSystem.qualityTierLabel(it)}." } ?: ""

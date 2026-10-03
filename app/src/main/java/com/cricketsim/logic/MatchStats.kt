@@ -404,9 +404,11 @@ object MatchStats {
         var updated = inningsData
 
         // Update batsman stats
-        val isBoundary4 = outcome.runs == 4 && !outcome.isWide && !outcome.isNoBall
+        // Runs hit off a no-ball count for the batter, boundaries included.
+        val isBoundary4 = outcome.runs == 4 && !outcome.isWide
         val isBoundary6 = outcome.runs == 6
-        updated = updateBatsmanStats(updated, strikerId, outcome.runs, isBoundary4, isBoundary6, isLegalDelivery)
+        // A no-ball is a ball faced by the batter (a wide is not).
+        updated = updateBatsmanStats(updated, strikerId, outcome.runs, isBoundary4, isBoundary6, isLegalDelivery || outcome.isNoBall)
 
         // Maiden detection (not in the web source — see the file header):
         // this delivery completes the over when it's legal and it's the

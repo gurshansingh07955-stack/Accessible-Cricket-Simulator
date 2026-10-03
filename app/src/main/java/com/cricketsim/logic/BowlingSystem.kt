@@ -99,7 +99,13 @@ data class ResolvedBowlingDecision(
     val quality: QualityBreakdown,
     // True only for a badly missed yorker that balloons into a beamer —
     // an automatic no-ball under the laws of cricket, not a probability.
-    val forcedNoBall: Boolean
+    val forcedNoBall: Boolean,
+    // True when the umpire calls this delivery a no-ball for ANY reason: a beamer
+    // (forcedNoBall above) or the bowler overstepping (BowlingSystem.rollOverstep).
+    // Decided once, when the delivery is made, so the batter can be told before
+    // playing it. The MatchEngine plays a no-ball like any other ball, plus one
+    // extra, with no way to be dismissed, and the next ball is a free hit.
+    val calledNoBall: Boolean = false
 )
 
 data class AngleOption(val value: BowlingAngle, val label: String, val description: String)
@@ -687,9 +693,29 @@ object BowlingSystem {
             qualityScore = simulatedScore,
             qualityTier = tier,
             quality = quality,
-            forcedNoBall = forcedNoBall
+            forcedNoBall = forcedNoBall,
+            calledNoBall = forcedNoBall || rollOverstep(tier)
         )
     }
+
+    /**
+     * Chance that a delivery of this execution quality is an overstep no-ball. About the
+     * same overall rate as the old random no-ball outcome (roughly one ball in fifty-five),
+     * shaped the same way by how well the ball was bowled.
+     */
+    fun overstepChance(tier: BowlingQualityTier): Double = when (tier) {
+        BowlingQualityTier.PERFECT -> 0.004
+        BowlingQualityTier.IDEAL -> 0.006
+        BowlingQualityTier.GOOD -> 0.018
+        BowlingQualityTier.BAD -> 0.032
+        BowlingQualityTier.VERY_BAD -> 0.045
+    }
+
+    /**
+     * Rolled ONCE per delivery, at the moment the delivery is made (never when the shot is
+     * resolved), so a batter can be told "no ball" before choosing a shot.
+     */
+    fun rollOverstep(tier: BowlingQualityTier): Boolean = Random.nextDouble() < overstepChance(tier)
 
     // --- Probability shaping ---
 

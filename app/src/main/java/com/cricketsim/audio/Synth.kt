@@ -171,6 +171,25 @@ internal object Synth {
         return toPcm(out)
     }
 
+    /**
+     * The no-ball siren: an emergency-style wail that sweeps up and down twice over about
+     * 1.6 seconds, a sawtooth layered over a sine so it is loud and hard to miss.
+     */
+    fun siren(): ShortArray {
+        val duration = 1.6
+        val out = FloatArray(frames(duration))
+        // Two full up-and-down sweeps between 650 and 1250 Hz.
+        val pitch = { t: Double -> 950.0 + 300.0 * sin(2.0 * PI * t / 0.8 - PI / 2.0) }
+        val level = { t: Double ->
+            if (t < 0.03) linRamp(0.0, 1.0, t, 0.03)
+            else if (t > duration - 0.15) linRamp(1.0, 0.0, t - (duration - 0.15), 0.15)
+            else 1.0
+        }
+        addTone(out, 0.0, duration, Wave.SAWTOOTH, pitch) { t -> 0.22 * level(t) }
+        addTone(out, 0.0, duration, Wave.SINE, pitch) { t -> 0.35 * level(t) }
+        return toPcm(normalize(out, 0.7f))
+    }
+
     /** A dramatic descending sawtooth. */
     fun wicket(): ShortArray {
         val out = FloatArray(frames(0.9))

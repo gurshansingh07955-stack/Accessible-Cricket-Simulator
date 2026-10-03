@@ -146,7 +146,14 @@ data class MatchState(
     // is read back with this at 0 (Gson leaves a missing Int at 0), which
     // is exactly "nothing used yet" — so older saves stay valid and
     // MatchSaveStore.CURRENT_VERSION did not need to change.
-    val drsReviewsUsed: Int = 0
+    val drsReviewsUsed: Int = 0,
+
+    // True when the NEXT delivery is a free hit: the previous delivery was a no-ball. On a
+    // free hit the batter cannot be dismissed. A wide leaves it standing (a wide is not a
+    // legal delivery); the next legal delivery ends it; a further no-ball starts a new one.
+    // Like drsReviewsUsed, an older saved match is read back with this false, which is
+    // exactly right, so MatchSaveStore.CURRENT_VERSION did not need to change.
+    val freeHit: Boolean = false
 )
 
 object MatchStateMachine {
@@ -525,7 +532,21 @@ object MatchStateMachine {
         // is called separately when outcome.isWicket is true.
         // Incrementing it here as well would double-count every wicket.
 
-        return state.copy(score = newScore, ballByBall = ballByBall, lastSixBalls = lastSixBalls, currentInningsData = currentInningsData)
+        // FREE HIT: a no-ball makes the NEXT delivery a free hit. A wide leaves it standing,
+        // and the next legal delivery (or a further no-ball, which starts a new one) settles it.
+        val nextFreeHit = when {
+            outcome.isNoBall -> true
+            outcome.isWide -> state.freeHit
+            else -> false
+        }
+
+        return state.copy(
+            score = newScore,
+            ballByBall = ballByBall,
+            lastSixBalls = lastSixBalls,
+            currentInningsData = currentInningsData,
+            freeHit = nextFreeHit
+        )
     }
 
     /**
@@ -606,7 +627,9 @@ object MatchStateMachine {
             activeRainDelay = null,
             // A fresh innings, a fresh allowance of reviews for the new
             // batting side (see drsReviewsUsed above).
-            drsReviewsUsed = 0
+            drsReviewsUsed = 0,
+            // A free hit never carries into a new innings.
+            freeHit = false
         )
     }
 

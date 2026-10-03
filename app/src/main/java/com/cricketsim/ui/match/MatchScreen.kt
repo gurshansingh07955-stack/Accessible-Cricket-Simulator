@@ -572,7 +572,7 @@ fun MatchScreen(
                 val prepared = MatchSimulation.prepareAiDelivery(matchState)
                 matchState = prepared.state
                 director?.onFieldChanges(prepared.fieldChanges)
-                DeliveryReveal(prepared.bowling, prepared.fieldChanges.joinToString(" "))
+                DeliveryReveal(prepared.bowling, prepared.fieldChanges.joinToString(" "), freeHit = prepared.state.freeHit)
             },
             // The swing is scored and the ball is played in one step — no
             // result screen in between. The early/late note rides along
@@ -649,6 +649,16 @@ fun MatchScreen(
             Text("Scorecard")
         }
         Spacer(modifier = Modifier.height(16.dp))
+
+        // A no-ball makes the NEXT ball a free hit. Said here, before the player acts, for
+        // both roles (the batter also hears it as the delivery is revealed).
+        if (matchState.freeHit) {
+            Text(
+                text = "Free hit! The batter cannot be out on the next ball.",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         if (isUserBowling) {
             // Set the field BEFORE bowling — it's a pre-delivery decision.

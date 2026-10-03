@@ -358,7 +358,7 @@ object MatchSimulation {
                     }
                 }
             }
-        } else if (isLegal && outcome.runs % 2 == 1) {
+        } else if (!outcome.isWide && outcome.runs % 2 == 1) {
             newState = MatchStateMachine.rotateStrike(newState)
         }
 

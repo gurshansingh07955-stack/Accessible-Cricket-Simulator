@@ -222,7 +222,7 @@ private const val SHOT_RELEASE_GRACE_MS = 150L
  * and a sentence on how the AI captain re-set its field for it (empty if
  * nobody moved).
  */
-data class DeliveryReveal(val bowling: ResolvedBowlingDecision, val fieldNote: String)
+data class DeliveryReveal(val bowling: ResolvedBowlingDecision, val fieldNote: String, val freeHit: Boolean = false)
 
 private data class BatSwing(
     val tier: BowlingQualityTier,
@@ -287,14 +287,21 @@ fun BattingScreen(
 
     // A side effect (speaking aloud) belongs in an effect, not in the
     // `remember` calculation above which runs during composition itself.
+    // What the umpire has already called, said before the delivery itself: a no-ball (with
+    // the siren, so the batter can play it knowing it cannot get him out) and/or a free hit.
+    val noBallCalled = reveal.bowling.calledNoBall || reveal.bowling.forcedNoBall
+    val callout = (if (noBallCalled) "No ball! " else "") + (if (reveal.freeHit) "Free hit! " else "")
+
     LaunchedEffect(reveal) {
-        services?.announceSpoken("Delivery: ${deliverySummary(reveal.bowling)}. ${reveal.fieldNote}")
+        if (noBallCalled) services?.sound?.playNoBallSiren()
+        services?.announceSpoken(callout + "Delivery: ${deliverySummary(reveal.bowling)}. ${reveal.fieldNote}")
     }
 
     when (step) {
         BatStep.SHOT -> BatShotStep(
             deliverySummary = deliverySummary(delivery),
             fieldNote = reveal.fieldNote,
+            callout = callout,
             onSelected = { chosen ->
                 shot = chosen
                 if (BattingSystem.isDefensiveShot(chosen)) {
@@ -489,7 +496,7 @@ private suspend fun PointerInputScope.detectFourWayGesture(
 }
 
 @Composable
-private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: (NamedShot) -> Unit) {
+private fun BatShotStep(deliverySummary: String, fieldNote: String, callout: String, onSelected: (NamedShot) -> Unit) {
     val services = LocalGameServices.current
     val currentServices by rememberUpdatedState(services)
     val currentOnSelected by rememberUpdatedState(onSelected)
@@ -551,6 +558,10 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
         // (see its description), so these texts are cleared from the
         // accessibility tree rather than being read a second time.
         Column(modifier = Modifier.padding(24.dp).clearAndSetSemantics { }) {
+            if (callout.isNotEmpty()) {
+                Text(text = callout.trim(), style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             Text(
                 text = "Delivery: $deliverySummary",
                 style = MaterialTheme.typography.titleMedium
@@ -631,6 +642,7 @@ private fun BatShotStep(deliverySummary: String, fieldNote: String, onSelected: 
                 }
                 .semantics {
                     contentDescription = buildString {
+                        append(callout)
                         append("Delivery: ")
                         append(deliverySummary)
                         append(".")

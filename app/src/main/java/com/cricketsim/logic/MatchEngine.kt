@@ -283,29 +283,21 @@ object MatchEngine {
         val batsman = matchState.currentBatsmen.first // Striker
         val bowler = matchState.currentBowler
 
-        if (illegalField) {
-            return BallOutcome(
-                runs = 0, isWicket = false, isWide = false, isNoBall = true, extraRuns = 1,
-                batsmanId = batsman.id, bowlerId = bowler.id,
-                commentary = "No ball! The umpire has spotted too many fielders in the deep — illegal field.",
-                bowlingQualityTier = bowlingDecision.qualityTier,
-                bowlingActualLength = bowlingDecision.actualLength
-            )
+        // A no-ball is decided BEFORE the ball is played -- an illegal field, a beamer, or an
+        // overstep rolled when the delivery was made (BowlingSystem.rollOverstep) -- and the
+        // batter still PLAYS it: whatever he hits is scored in addition to the one extra, and
+        // the delivery cannot get him out (this game has no run outs). Further down, a
+        // no-ball is therefore never also a wide and never a wicket.
+        val noBallCalled = illegalField || bowlingDecision.forcedNoBall || bowlingDecision.calledNoBall
+        val noBallText: String? = when {
+            illegalField -> "No ball! The umpire has spotted too many fielders in the deep — illegal field."
+            bowlingDecision.forcedNoBall -> "No ball! That's a beamer, way too full and dangerously high from ${bowler.name}."
+            bowlingDecision.calledNoBall -> "No ball! ${bowler.name} oversteps."
+            else -> null
         }
-
-        // A badly missed yorker that balloons into a beamer is an
-        // automatic no-ball under the laws of cricket — not a
-        // probability roll, so it short-circuits the normal outcome
-        // sampling entirely.
-        if (bowlingDecision.forcedNoBall) {
-            return BallOutcome(
-                runs = 0, isWicket = false, isWide = false, isNoBall = true, extraRuns = 1,
-                batsmanId = batsman.id, bowlerId = bowler.id,
-                commentary = "No ball! That's a beamer, way too full and dangerously high from ${bowler.name}.",
-                bowlingQualityTier = bowlingDecision.qualityTier,
-                bowlingActualLength = bowlingDecision.actualLength
-            )
-        }
+        // The previous delivery was a no-ball: this one is a FREE HIT, with the same protection.
+        val freeHit = matchState.freeHit
+        val protectedFromDismissal = noBallCalled || freeHit
 
         // Determine if user is batting or bowling to apply difficulty correctly
         val isUserBatting = matchState.battingTeam.id == matchState.userTeam.id
@@ -373,6 +365,19 @@ object MatchEngine {
             )
         }
 
+        // The no-ball itself was decided up front, so it is not an outcome to sample; a
+        // delivery already called a no-ball cannot also be a wide; and a ball that cannot
+        // get the batter out (a no-ball, or a free hit) has no wicket chance at all. Knowing
+        // that, the batter swings: free hits are hit harder.
+        probs.noBall = 0.0
+        if (noBallCalled) probs.wide = 0.0
+        if (protectedFromDismissal) probs.wicket = 0.0
+        if (freeHit) {
+            probs.four *= 1.5
+            probs.six *= 1.8
+            probs.dot *= 0.7
+        }
+
         // Normalize again and sample. LinkedHashMap preserves this
         // exact insertion order, matching the web source's
         // Object.entries(probs) iteration order (dot, one, two, three,
@@ -381,7 +386,7 @@ object MatchEngine {
         val probsByKey = linkedMapOf(
             "dot" to probs.dot, "one" to probs.one, "two" to probs.two, "three" to probs.three,
             "four" to probs.four, "six" to probs.six, "wicket" to probs.wicket,
-            "wide" to probs.wide, "noBall" to probs.noBall
+            "wide" to probs.wide
         )
         val totalProb = probsByKey.values.sum()
         val rand = Random.nextDouble() * totalProb
@@ -474,13 +479,21 @@ object MatchEngine {
             else -> runs = 0 // dot
         }
 
+        if (noBallCalled) {
+            isNoBall = true
+            extraRuns = 1
+        }
+
         val result = BallOutcome(
             runs = runs, isWicket = isWicket, isWide = isWide, isNoBall = isNoBall, extraRuns = extraRuns,
             batsmanId = batsman.id, bowlerId = bowler.id, commentary = "",
             dismissalType = dismissalType, isEdge = isEdge,
             bowlingQualityTier = bowlingDecision.qualityTier, bowlingActualLength = bowlingDecision.actualLength
         )
-        return result.copy(commentary = generateCommentary(result, batsman.name, bowler.name))
+        val playText = generateCommentary(result, batsman.name, bowler.name)
+        // A no-ball is announced first; if the batter also hit it, what he did follows.
+        val commentary = if (noBallText == null) playText else if (runs == 0) noBallText else "$noBallText $playText"
+        return result.copy(commentary = commentary)
     }
 
     private fun randomIndex(size: Int): Int = (Random.nextDouble() * size).toInt().coerceAtMost(size - 1)
