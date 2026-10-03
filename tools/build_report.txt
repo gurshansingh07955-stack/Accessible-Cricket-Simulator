@@ -1,6 +1,6 @@
-Build run: 37002508652 (attempt 1)
-Commit: c6bf61d14e7405122fb51254901a40a6658a375a
-Timestamp (UTC): 2026-10-02T11:44:13Z
+Build run: 37100300712 (attempt 1)
+Commit: fe22b0e636bdafb355113282d21b02e01dd1a694
+Timestamp (UTC): 2026-10-03T05:36:48Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -31,8 +31,8 @@ Daemon will be stopped at the end of the build
 > Task :app:mergeDebugStartupProfile
 > Task :app:mergeDebugJniLibFolders
 > Task :app:mergeDebugNativeLibs NO-SOURCE
-> Task :app:processDebugManifestForPackage
 > Task :app:checkDebugDuplicateClasses
+> Task :app:processDebugManifestForPackage
 > Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
@@ -41,7 +41,7 @@ Daemon will be stopped at the end of the build
 > Task :app:processDebugResources
 > Task :app:mergeExtDexDebug
 > Task :app:compileDebugKotlin
-w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/audio/SoundEngine.kt:947:75 'VIBRATOR_SERVICE: String' is deprecated. Deprecated in Java
+w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/audio/SoundEngine.kt:976:75 'VIBRATOR_SERVICE: String' is deprecated. Deprecated in Java
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/logic/MatchEngine.kt:99:96 Parameter 'difficulty' is never used
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt:190:13 'when' is exhaustive so 'else' is redundant here
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt:274:5 Parameter 'batsman' is never used
@@ -55,7 +55,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1790941395438.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1791005741296.json
 
-BUILD SUCCESSFUL in 1m 2s
+BUILD SUCCESSFUL in 1m 11s
 37 actionable tasks: 37 executed
