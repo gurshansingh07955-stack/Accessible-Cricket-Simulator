@@ -230,7 +230,7 @@ object MatchStateMachine {
         // user before the first ball if they control that discipline).
         val striker = battingTeam.players[0]
         val nonStriker = battingTeam.players[1]
-        val bowler = bowlingTeam.players.sortedByDescending { it.bowlingRating }[0]
+        val bowler = Lineup.openingBowler(bowlingTeam)
 
         val currentInningsData = MatchStats.createEmptyInningsData(battingTeam, bowlingTeam, Pair(striker, nonStriker), bowler)
 
@@ -447,7 +447,10 @@ object MatchStateMachine {
             // A little random jitter so the rotation doesn't feel
             // robotically deterministic when two bowlers' scores are
             // close.
-            p to (p.bowlingRating - oversBowledBy(state, p.id) * rotationPenaltyPerOver + (Random.nextDouble() * 6 - 3))
+            // phaseBonus: pace with the new ball and at the death, spin through the middle
+            // overs, and whatever the pitch favours (see Lineup.phaseBonus).
+            p to (p.bowlingRating - oversBowledBy(state, p.id) * rotationPenaltyPerOver +
+                Lineup.phaseBonus(state, p) + (Random.nextDouble() * 6 - 3))
         }
         val nextBowler = scored.sortedByDescending { it.second }[0].first
 
@@ -598,7 +601,7 @@ object MatchStateMachine {
         // that discipline).
         val striker = battingTeam.players[0]
         val nonStriker = battingTeam.players[1]
-        val bowler = bowlingTeam.players.sortedByDescending { it.bowlingRating }[0]
+        val bowler = Lineup.openingBowler(bowlingTeam)
 
         val currentInningsData = MatchStats.createEmptyInningsData(battingTeam, bowlingTeam, Pair(striker, nonStriker), bowler)
 

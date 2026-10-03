@@ -178,6 +178,16 @@ object AiSituation {
      * batsman; otherwise it follows the fixed squad order, like a real
      * side's established lineup.
      */
-    fun selectNextBatsman(available: List<Player>, situationalBias: Double): Player? =
-        if (abs(situationalBias) >= 0.3) available.maxByOrNull { it.battingRating } else available.firstOrNull()
+    fun selectNextBatsman(available: List<Player>, situationalBias: Double): Player? {
+        // `available` is in batting order (an XI is always kept in batting order), so the
+        // default is simply the next man in. Under real pressure the AI promotes its best
+        // remaining BATSMAN -- a specialist bowler is never "the best batsman" while any
+        // other batter is still to come.
+        if (abs(situationalBias) >= 0.3) {
+            val specialists = available.filter { it.role != com.cricketsim.logic.PlayerRole.BOWLER }
+            val best = specialists.ifEmpty { available }.maxByOrNull { it.battingRating }
+            if (best != null) return best
+        }
+        return available.firstOrNull()
+    }
 }

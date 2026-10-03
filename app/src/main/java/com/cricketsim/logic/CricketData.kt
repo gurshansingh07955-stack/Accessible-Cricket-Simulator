@@ -707,7 +707,9 @@ object CricketData {
         wicketkeeperId: String
     ): Team {
         val playerById = fullTeam.players.associateBy { it.id }
-        val players = selectedPlayerIds.mapNotNull { playerById[it] }
+        // Whoever picked the XI (the AI, or the user tapping players in any order), it takes the
+        // field in batting order: batsmen and the keeper, then all-rounders, then the bowlers.
+        val players = Lineup.battingOrder(selectedPlayerIds.mapNotNull { playerById[it] }, fullTeam.players)
         return fullTeam.copy(
             players = players,
             captainId = captainId,
@@ -724,39 +726,68 @@ object CricketData {
     )
 
     /**
-     * Auto-picks a reasonable playing XI for an AI-controlled team.
-     * Takes the 11 highest-value players by a simple batting/bowling/
-     * fielding blend, then makes sure at least one specialist
-     * wicketkeeper (if the squad has one at all) ends up in the XI,
-     * swapping out the weakest of the initial 11 if necessary rather
-     * than leaving the side without a keeper.
+     * Auto-picks the playing XI for an AI-controlled team, in its batting order.
+     *
+     * Each roster is written with that side's usual XI FIRST, in batting order, and the
+     * reserves after, so the XI is those first eleven -- NOT the eleven highest-rated
+     * players, which is what used to put the best fast bowlers at the top and send them
+     * in to open the batting. Then:
+     *  - the side must have a wicketkeeper: if the usual XI has none, the best keeper in
+     *    the squad takes the place of its weakest non-opening batsman; and
+     *  - the side must have at least five bowling options (bowlers and all-rounders),
+     *    or a spare bowler replaces a non-opening batsman.
+     * The XI comes back in batting order (Lineup.battingOrder). The captain and vice-captain
+     * are the two most valuable players in it.
      */
     fun autoSelectPlayingXI(team: Team): AutoXIResult {
-        fun overallValue(p: Player): Double = maxOf(p.battingRating, p.bowlingRating) + p.fieldingRating * 0.1
+        val roster = team.players
+        val xi = roster.take(11).toMutableList()
+        val bench = roster.drop(11)
 
-        val sortedByValue = team.players.sortedByDescending { overallValue(it) }
-        val xi = sortedByValue.take(11).toMutableList()
+        fun isBowlingOption(p: Player) = p.role == PlayerRole.BOWLER || p.role == PlayerRole.ALL_ROUNDER
 
-        val wicketkeeperId: String
-        val keeperAlreadyInXi = xi.find { it.role == PlayerRole.WICKETKEEPER }
-        if (keeperAlreadyInXi != null) {
-            wicketkeeperId = keeperAlreadyInXi.id
-        } else {
-            val bestKeeperInSquad = sortedByValue.find { it.role == PlayerRole.WICKETKEEPER }
-            if (bestKeeperInSquad != null) {
-                xi[xi.size - 1] = bestKeeperInSquad
-                wicketkeeperId = bestKeeperInSquad.id
-            } else {
-                // No specialist keeper anywhere in the squad — shouldn't
-                // happen (every team above has at least one) — fall back
-                // to the top pick.
-                wicketkeeperId = xi[0].id
+        var keeper: Player? = xi.filter { it.role == PlayerRole.WICKETKEEPER }.maxByOrNull { it.battingRating }
+        if (keeper == null) {
+            val spare = bench.filter { it.role == PlayerRole.WICKETKEEPER }.maxByOrNull { it.battingRating }
+            val slot = weakestBatterToDrop(xi)
+            if (spare != null && slot >= 0) {
+                xi[slot] = spare
+                keeper = spare
             }
         }
 
-        val captainId = xi[0].id
-        val viceCaptainId = (xi.find { it.id != captainId } ?: xi[0]).id
+        while (xi.count { isBowlingOption(it) } < 5) {
+            val spare = bench.filter { isBowlingOption(it) && it !in xi }.maxByOrNull { it.bowlingRating } ?: break
+            val slot = weakestBatterToDrop(xi, keeper?.id, allowAllRounder = false)
+            if (slot < 0) break
+            xi[slot] = spare
+        }
 
-        return AutoXIResult(xi, captainId, viceCaptainId, wicketkeeperId)
+        val ordered = Lineup.battingOrder(xi, roster)
+        val wicketkeeper = keeper ?: ordered.first()
+
+        fun overallValue(p: Player): Double = maxOf(p.battingRating, p.bowlingRating) + p.fieldingRating * 0.1
+        val byValue = ordered.sortedByDescending { overallValue(it) }
+        val captain = byValue.first()
+        val viceCaptain = byValue.firstOrNull { it.id != captain.id } ?: captain
+
+        return AutoXIResult(ordered, captain.id, viceCaptain.id, wicketkeeper.id)
+    }
+
+    /**
+     * Index (in the XI as listed) of the weakest batsman that can be swapped out, or -1.
+     * The two openers' places are never touched, nor the keeper; all-rounders are only
+     * dropped (when allowed) if there is no specialist batsman to drop instead.
+     */
+    private fun weakestBatterToDrop(xi: List<Player>, keeperId: String? = null, allowAllRounder: Boolean = true): Int {
+        val candidates = xi.withIndex().filter {
+            it.index >= 2 && it.value.id != keeperId &&
+                it.value.role != PlayerRole.BOWLER && it.value.role != PlayerRole.WICKETKEEPER
+        }
+        val batsmen = candidates.filter { it.value.role == PlayerRole.BATSMAN }
+        val pool = if (batsmen.isNotEmpty()) batsmen else if (allowAllRounder) candidates else emptyList()
+        return pool.minByOrNull {
+            it.value.battingRating + (if (it.value.role == PlayerRole.ALL_ROUNDER) it.value.bowlingRating else 0)
+        }?.index ?: -1
     }
 }
