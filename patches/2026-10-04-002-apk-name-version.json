@@ -1,0 +1,31 @@
+{
+  "name": "apk-name-and-version",
+  "message": "Name the APK and set version 0.1.1 (versionCode 2)",
+  "alreadyAppliedIf": {
+    "file": "app/build.gradle.kts",
+    "contains": "appVersionName"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/build.gradle.kts",
+      "find": "android {\n    namespace = \"com.cricketsim\"\n",
+      "replace": "// The ONE place to change the version. versionName is what people see (Settings > Apps),\n// versionCode must go up by 1 with every release so Android treats it as an update.\n// The version is also put in the APK file name below, so builds are easy to tell apart.\nval appVersionName = \"0.1.1\"\nval appVersionCode = 2\n\nbase {\n    archivesName.set(\"Accessible-Cricket-Simulator-v$appVersionName\")\n}\n\nandroid {\n    namespace = \"com.cricketsim\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/build.gradle.kts",
+      "find": "versionCode = 1\n",
+      "replace": "versionCode = appVersionCode\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/build.gradle.kts",
+      "find": "versionName = \"0.1.0-logic-port\"\n",
+      "replace": "versionName = appVersionName\n",
+      "count": 1
+    }
+  ]
+}
