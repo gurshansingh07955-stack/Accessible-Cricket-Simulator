@@ -1,0 +1,45 @@
+{
+  "name": "vibration-alarm-usage",
+  "message": "Fix batting vibration not firing on realme/ColorOS: send buzzes with ALARM usage, use VibratorManager",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+    "contains": "WHY ALARM USAGE"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "import android.os.VibrationEffect\nimport android.os.Vibrator\n",
+      "replace": "import android.os.VibrationEffect\nimport android.os.Vibrator\nimport android.os.VibratorManager\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    private val vibrator: Vibrator? = appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator\n",
+      "replace": "    // Android 12+ hands out vibrators through VibratorManager; asking for the\n    // old VIBRATOR_SERVICE still works but some OEM skins (realme UI / ColorOS)\n    // route it differently, so use the manager's default vibrator when we can.\n    @Suppress(\"DEPRECATION\")\n    private val vibrator: Vibrator? =\n        if (Build.VERSION.SDK_INT >= 31) {\n            (appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator\n                ?: (appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)\n        } else {\n            appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator\n        }\n\n    // WHY ALARM USAGE: a vibration sent with no attributes is classed by Android 13+\n    // as \"unknown/media\" haptics, which the user can switch off in system settings\n    // (and several skins, realme UI among them, ship with it low or off, or tie it to\n    // the touch-feedback switch). The batting rhythm then silently never buzzes\n    // although the VIBRATE permission is fine. The rhythm buzz is the player's only\n    // cue they can feel, so it is sent as an ALARM-usage vibration, which follows the\n    // alarm vibration setting and is not blocked by the media/touch switches.\n    private val vibrationAttributes: AudioAttributes = AudioAttributes.Builder()\n        .setUsage(AudioAttributes.USAGE_ALARM)\n        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)\n        .build()\n\n    /** Plays an effect with the attributes above; if the device rejects that, plays it plainly rather than not at all. */\n    @Suppress(\"DEPRECATION\")\n    private fun fire(device: Vibrator, effect: VibrationEffect) {\n        try {\n            device.vibrate(effect, vibrationAttributes)\n        } catch (e: Exception) {\n            runCatching { device.vibrate(effect) }\n        }\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "device.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))",
+      "replace": "fire(device, VibrationEffect.createWaveform(timings, amplitudes, -1))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "device.vibrate(VibrationEffect.createWaveform(timings, -1))",
+      "replace": "fire(device, VibrationEffect.createWaveform(timings, -1))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "device.vibrate(VibrationEffect.createOneShot(durationMs, amplitude))",
+      "replace": "fire(device, VibrationEffect.createOneShot(durationMs, amplitude))",
+      "count": 1
+    }
+  ]
+}
