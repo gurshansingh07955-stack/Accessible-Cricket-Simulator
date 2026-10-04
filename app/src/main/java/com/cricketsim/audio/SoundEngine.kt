@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
 import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.CommentaryLibrary
 import kotlinx.coroutines.CoroutineScope
@@ -973,7 +974,39 @@ class SoundEngine(context: Context) {
 
     // --- Vibration ---
 
-    private val vibrator: Vibrator? = appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    // Android 12+ hands out vibrators through VibratorManager; asking for the
+    // old VIBRATOR_SERVICE still works but some OEM skins (realme UI / ColorOS)
+    // route it differently, so use the manager's default vibrator when we can.
+    @Suppress("DEPRECATION")
+    private val vibrator: Vibrator? =
+        if (Build.VERSION.SDK_INT >= 31) {
+            (appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+                ?: (appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
+        } else {
+            appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
+    // WHY ALARM USAGE: a vibration sent with no attributes is classed by Android 13+
+    // as "unknown/media" haptics, which the user can switch off in system settings
+    // (and several skins, realme UI among them, ship with it low or off, or tie it to
+    // the touch-feedback switch). The batting rhythm then silently never buzzes
+    // although the VIBRATE permission is fine. The rhythm buzz is the player's only
+    // cue they can feel, so it is sent as an ALARM-usage vibration, which follows the
+    // alarm vibration setting and is not blocked by the media/touch switches.
+    private val vibrationAttributes: AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ALARM)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
+
+    /** Plays an effect with the attributes above; if the device rejects that, plays it plainly rather than not at all. */
+    @Suppress("DEPRECATION")
+    private fun fire(device: Vibrator, effect: VibrationEffect) {
+        try {
+            device.vibrate(effect, vibrationAttributes)
+        } catch (e: Exception) {
+            runCatching { device.vibrate(effect) }
+        }
+    }
     private val hasAmplitudeControl: Boolean by lazy {
         Build.VERSION.SDK_INT >= 26 && vibrator?.hasAmplitudeControl() == true
     }
@@ -995,9 +1028,9 @@ class SoundEngine(context: Context) {
                     // vibration motor has the best chance of being felt
                     // at all when it's always driven at full strength.
                     val amplitudes = IntArray(timings.size) { i -> if (i % 2 == 1) 255 else 0 }
-                    device.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
+                    fire(device, VibrationEffect.createWaveform(timings, amplitudes, -1))
                 } else {
-                    device.vibrate(VibrationEffect.createWaveform(timings, -1))
+                    fire(device, VibrationEffect.createWaveform(timings, -1))
                 }
             } else {
                 device.vibrate(timings, -1)
@@ -1046,7 +1079,7 @@ class SoundEngine(context: Context) {
         runCatching {
             if (Build.VERSION.SDK_INT >= 26) {
                 val amplitude = if (hasAmplitudeControl) 255 else VibrationEffect.DEFAULT_AMPLITUDE
-                device.vibrate(VibrationEffect.createOneShot(durationMs, amplitude))
+                fire(device, VibrationEffect.createOneShot(durationMs, amplitude))
             } else {
                 @Suppress("DEPRECATION")
                 device.vibrate(durationMs)
