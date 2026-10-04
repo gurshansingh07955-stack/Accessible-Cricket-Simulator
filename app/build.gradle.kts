@@ -3,6 +3,16 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// The ONE place to change the version. versionName is what people see (Settings > Apps),
+// versionCode must go up by 1 with every release so Android treats it as an update.
+// The version is also put in the APK file name below, so builds are easy to tell apart.
+val appVersionName = "0.1.1"
+val appVersionCode = 2
+
+base {
+    archivesName.set("Accessible-Cricket-Simulator-v$appVersionName")
+}
+
 android {
     namespace = "com.cricketsim"
     compileSdk = 34
@@ -20,8 +30,8 @@ android {
         // nothing to filter or split.
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0-logic-port"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
