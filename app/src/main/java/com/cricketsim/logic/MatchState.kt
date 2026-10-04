@@ -153,7 +153,13 @@ data class MatchState(
     // legal delivery); the next legal delivery ends it; a further no-ball starts a new one.
     // Like drsReviewsUsed, an older saved match is read back with this false, which is
     // exactly right, so MatchSaveStore.CURRENT_VERSION did not need to change.
-    val freeHit: Boolean = false
+    val freeHit: Boolean = false,
+
+    // The innings ball count (overs * 6 + balls) at which the AI captain last moved a
+    // fielder, so he does not tinker again straight away (FieldingSystem.aiFieldMoveAllowance).
+    // Reset for each innings. An older saved match reads back 0, which only means "changed
+    // at the start", so no save needs migrating.
+    val lastAiFieldChangeBall: Int = 0
 )
 
 object MatchStateMachine {
@@ -456,11 +462,16 @@ object MatchStateMachine {
 
         val currentInningsData = MatchStats.addBowlerIfNotExists(state.currentInningsData, nextBowler)
 
-        val fieldPlacements = FieldingSystem.generateAiFieldPlacements(
-            FieldingSystem.getFieldingPlayers(state.bowlingTeam, nextBowler.id),
-            FieldingSystem.isPowerplayOver(state.format, state.score.overs),
-            situationalBias
-        )
+        // Carry the field forward over the bowling change -- the new bowler takes the old
+        // bowler's place in the ring -- instead of rebuilding it every over. Any adjustment
+        // the captain wants is made by MatchSimulation.prepareAiDelivery, a few fielders at
+        // a time. A fresh field is only generated if there is nothing to carry over.
+        val fieldPlacements = carryOverFieldPlacements(state.fieldPlacements, state.currentBowler.id, nextBowler.id)
+            ?: FieldingSystem.generateAiFieldPlacements(
+                FieldingSystem.getFieldingPlayers(state.bowlingTeam, nextBowler.id),
+                FieldingSystem.isPowerplayOver(state.format, state.score.overs),
+                situationalBias
+            )
 
         return state.copy(currentBowler = nextBowler, currentInningsData = currentInningsData, fieldPlacements = fieldPlacements)
     }
@@ -632,7 +643,8 @@ object MatchStateMachine {
             // batting side (see drsReviewsUsed above).
             drsReviewsUsed = 0,
             // A free hit never carries into a new innings.
-            freeHit = false
+            freeHit = false,
+            lastAiFieldChangeBall = 0
         )
     }
 

@@ -410,6 +410,86 @@ object FieldingSystem {
     }
 
     /**
+     * How many fielders the AI captain may move before this delivery. A real captain does
+     * not rebuild the ring before every ball: he sets it, then tweaks it now and then.
+     *  - the very first ball: sets the opening field;
+     *  - the powerplay has just ended: the restrictions lift, so a proper re-think;
+     *  - a wicket has just fallen: a new batter, so a few changes;
+     *  - between overs: a few changes;
+     *  - late in an over (the fifth or sixth ball): at most a small tweak, and only if
+     *    nothing was changed in the last five balls, so never twice in quick succession.
+     * Anything else: 0 -- the field stays exactly as it is.
+     */
+    fun aiFieldMoveAllowance(
+        ballsBowled: Int,
+        ballsInOver: Int,
+        ballsSinceLastChange: Int,
+        powerplayJustEnded: Boolean,
+        lastBallWasWicket: Boolean
+    ): Int {
+        if (ballsBowled == 0) return 9
+        if (powerplayJustEnded) return 5
+        if (lastBallWasWicket) return 3
+        if (ballsInOver == 0) return 3
+        if (ballsInOver >= 4 && ballsSinceLastChange >= 5) return 2
+        return 0
+    }
+
+    /**
+     * A captain's ADJUSTMENT to an existing field, not a rebuild: works out the field the
+     * situation now calls for (the same named templates generateAiFieldPlacements uses), then
+     * moves at most `maxMoves` fielders towards it and leaves everyone else exactly where
+     * they stand. Fielders already standing in a spot the new template wants are never moved
+     * (generateAiFieldPlacements deals fielders to slots by rating, so a small change of
+     * template used to shuffle most of the ring). The moves made first are the most
+     * catching-critical slots, and a move that would make the field illegal is dropped.
+     *
+     * If `current` can't be adjusted (empty, or its fielders aren't this side's), a fresh
+     * field is generated instead.
+     */
+    fun adjustAiField(
+        current: List<FieldPlacement>,
+        fieldingPlayers: List<Player>,
+        isPowerplay: Boolean,
+        situationalBias: Double,
+        maxMoves: Int
+    ): List<FieldPlacement> {
+        fun fresh() = generateAiFieldPlacements(fieldingPlayers, isPowerplay, situationalBias)
+
+        // Whoever just finished bowling takes the vacated spot of whoever is bowling now.
+        val ids = fieldingPlayers.map { it.id }.toSet()
+        val placedIds = current.filter { it.playerId in ids }.map { it.playerId }.toSet()
+        val incoming = fieldingPlayers.filter { it.id !in placedIds }.sortedByDescending { it.fieldingRating }
+        val vacatedCount = current.count { it.playerId !in ids }
+        if (current.isEmpty() || vacatedCount != incoming.size) return fresh()
+        var nextIncoming = 0
+        val base = current.map { if (it.playerId in ids) it else it.copy(playerId = incoming[nextIncoming++].id) }
+
+        // Which spots of the wanted template are already manned, and which fielders are out of place.
+        val template = FIELD_TEMPLATES.getValue(pickFieldTemplateKey(isPowerplay, situationalBias, null))
+        val openSlots = template.toMutableList()
+        val outOfPlace = mutableListOf<FieldPlacement>()
+        for (spot in base) {
+            val hit = openSlots.indexOfFirst { it.sector == spot.sector && it.depth == spot.depth && it.variant == spot.variant }
+            if (hit >= 0) openSlots.removeAt(hit) else outOfPlace.add(spot)
+        }
+
+        // Best fielders go to the most catching-critical open slots first, as before.
+        val rating = fieldingPlayers.associate { it.id to it.fieldingRating }
+        val ranked = outOfPlace.sortedByDescending { rating[it.playerId] ?: 0 }
+        val moves = ranked.zip(openSlots).take(maxOf(maxMoves, 0))
+
+        for (n in moves.size downTo 0) {
+            val movedTo = moves.take(n).associate { (spot, slot) -> spot.playerId to slot }
+            val candidate = base.map { spot ->
+                movedTo[spot.playerId]?.let { slot -> FieldPlacement(spot.playerId, slot.sector, slot.depth, slot.variant) } ?: spot
+            }
+            if (isFieldLegal(candidate, isPowerplay)) return candidate
+        }
+        return fresh()
+    }
+
+    /**
      * Tapping a fielder cycles through the valid depths for their
      * current sector — most sectors just toggle short <-> deep, point
      * and square leg cycle through their three tiers (e.g. Point ->

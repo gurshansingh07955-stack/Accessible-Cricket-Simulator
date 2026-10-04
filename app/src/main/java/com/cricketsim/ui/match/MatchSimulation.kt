@@ -139,27 +139,50 @@ object MatchSimulation {
         BowlingSystem.generateAiBowlingDecision(state.currentBowler, AiSituation.bowlingBias(state))
 
     /**
-     * The AI captain's preparation for the next delivery, in the web's
-     * beginBattingFlow order: read the situation, decide the delivery, and
-     * set the field for THAT delivery now that its actual length is known,
-     * all before the batter chooses a shot. Returns the state with the new
-     * field already in it, the delivery, and one sentence per fielder who
-     * moved (in the batter's own terms: who, from where, to where).
+     * The AI captain's preparation for the next delivery: read the situation, decide the
+     * delivery, and -- only at the moments a real captain would -- adjust the field, all
+     * before the batter chooses a shot. Returns the state, the delivery, and one sentence
+     * per fielder who moved (in the batter's own terms: who, from where, to where).
+     *
+     * The field is NOT rebuilt before every ball. It is adjusted between overs, after a
+     * wicket, when the powerplay ends, and (once) late in an over, and each adjustment moves
+     * only a few fielders; see FieldingSystem.aiFieldMoveAllowance and adjustAiField. The
+     * bowler's length for this ball no longer drives the field: a captain sets a plan for
+     * the over, not a new trap for every delivery.
      */
     fun prepareAiDelivery(state: MatchState): AiDelivery {
         val bias = AiSituation.bowlingBias(state)
         val bowling = BowlingSystem.generateAiBowlingDecision(state.currentBowler, bias)
-        val isPowerplay = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)
-        val placements = FieldingSystem.generateAiFieldPlacements(
-            fieldingPlayers = FieldingSystem.getFieldingPlayers(state.bowlingTeam, state.currentBowler.id),
-            isPowerplay = isPowerplay,
-            situationalBias = bias,
-            upcomingLength = bowling.actualLength
+        val ballsBowled = state.score.overs * 6 + state.score.balls
+        val isPowerplay = FieldingSystem.isPowerplayBall(state.format, ballsBowled)
+        val powerplayJustEnded = ballsBowled > 0 && !isPowerplay &&
+            FieldingSystem.isPowerplayBall(state.format, ballsBowled - 1)
+
+        val allowance = FieldingSystem.aiFieldMoveAllowance(
+            ballsBowled = ballsBowled,
+            ballsInOver = state.score.balls,
+            ballsSinceLastChange = ballsBowled - state.lastAiFieldChangeBall,
+            powerplayJustEnded = powerplayJustEnded,
+            lastBallWasWicket = state.ballByBall.lastOrNull()?.isWicket == true
         )
+        val placements = if (allowance <= 0) {
+            state.fieldPlacements
+        } else {
+            FieldingSystem.adjustAiField(
+                current = state.fieldPlacements,
+                fieldingPlayers = FieldingSystem.getFieldingPlayers(state.bowlingTeam, state.currentBowler.id),
+                isPowerplay = isPowerplay,
+                situationalBias = bias,
+                maxMoves = allowance
+            )
+        }
+        // The opening field is set before the innings starts, so it is not narrated as moves.
+        val changes = if (ballsBowled == 0) emptyList() else describeFieldChanges(state, placements)
+        val withField = MatchStateMachine.setFieldPlacements(state, placements)
         return AiDelivery(
-            state = MatchStateMachine.setFieldPlacements(state, placements),
+            state = if (changes.isNotEmpty()) withField.copy(lastAiFieldChangeBall = ballsBowled) else withField,
             bowling = bowling,
-            fieldChanges = describeFieldChanges(state, placements)
+            fieldChanges = changes
         )
     }
 
