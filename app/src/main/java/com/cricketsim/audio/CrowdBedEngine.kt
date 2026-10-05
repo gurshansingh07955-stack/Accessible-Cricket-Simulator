@@ -315,7 +315,7 @@ internal class CrowdBedEngine(
         private val excSlew = 1f - exp(-1f / (1.5f * blocksPerSecond))
 
         private fun nextSurge(excitement: Float): Int =
-            ((18f + 22f * Random.nextFloat()) * (1f - 0.5f * excitement) * (bed.sampleRate.toFloat() / blockFrames)).toInt()
+            ((10f + 15f * Random.nextFloat()) * (1f - 0.5f * excitement) * (bed.sampleRate.toFloat() / blockFrames)).toInt()
 
         private fun trigger(reaction: CrowdEngine.Reaction) {
             val (level, seconds) = when (reaction) {
@@ -337,8 +337,8 @@ internal class CrowdBedEngine(
 
             // Now and then the crowd surges a little and settles by itself.
             if (--surgeCountdown <= 0) {
-                swellTarget = max(swellTarget, 0.2f + 0.3f * Random.nextFloat())
-                swellHoldBlocks = max(swellHoldBlocks, (1.2f * blocksPerSecond).toInt())
+                swellTarget = max(swellTarget, 0.35f + 0.45f * Random.nextFloat())
+                swellHoldBlocks = max(swellHoldBlocks, (2.0f * blocksPerSecond).toInt())
                 surgeCountdown = nextSurge(exc)
             }
             if (swellHoldBlocks > 0) {
@@ -351,11 +351,11 @@ internal class CrowdBedEngine(
 
             phase1 += phaseStep1
             phase2 += phaseStep2
-            val gain1 = BASE_GAIN * (1f + 0.22f * sin(phase1)) * (1f + 0.15f * swell)
-            val gain2 = BASE_GAIN * (1f + 0.22f * sin(phase2)) * (1f + 0.15f * swell)
+            val gain1 = BASE_GAIN * (1f + 0.22f * sin(phase1)) * (1f + SURGE_LIFT * swell)
+            val gain2 = BASE_GAIN * (1f + 0.22f * sin(phase2)) * (1f + SURGE_LIFT * swell)
 
             // Calm crowds sound a little distant; excitement opens the top end.
-            val cutoff = 5000f + 15000f * min(1f, 0.8f * exc + 0.6f * swell)
+            val cutoff = 11000f + 9000f * min(1f, 0.6f * exc + 0.8f * swell)
             val alpha = 1f - exp(-6.2831855f * cutoff / bed.sampleRate)
 
             val left = bed.left
@@ -376,6 +376,9 @@ internal class CrowdBedEngine(
     private companion object {
         const val MAX_SECONDS = 75
         const val BASE_GAIN = 0.62f
+
+        /** How much louder the crowd gets at a full surge (0.45 = 45% louder). */
+        const val SURGE_LIFT = 0.45f
         const val INV = 1f / 32768f
     }
 }
