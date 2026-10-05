@@ -37,6 +37,7 @@ import com.cricketsim.audio.MatchAudioDirector
 import com.cricketsim.logic.BattingDecision
 import com.cricketsim.logic.DrsCase
 import com.cricketsim.logic.DrsSystem
+import com.cricketsim.logic.DrinksBreak
 import com.cricketsim.logic.DrsVerdict
 import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.FootworkType
@@ -363,7 +364,9 @@ fun MatchScreen(
                     result = result,
                     drsCase = DrsCase(
                         reviewingTeamName = before.battingTeam.name,
-                        batterName = before.currentBatsmen.first.name,
+                        // A run out may be the non-striker, so name whoever was actually given out.
+                        batterName = listOf(before.currentBatsmen.first, before.currentBatsmen.second)
+                            .firstOrNull { it.id == result.outcome.outBatsmanId }?.name ?: before.currentBatsmen.first.name,
                         bowlerName = before.currentBowler.name,
                         dismissalType = dismissal,
                         delivery = result.bowlingDecision,
@@ -481,6 +484,27 @@ fun MatchScreen(
                 services?.announceSpoken(playNotice)
                 director?.onRainResumed(matchState.secondInningsInterruption != null)
                 matchState = MatchStateMachine.resumeFromRainDelay(matchState)
+            }
+        )
+        return
+    }
+
+    // A drinks break (T20 after 10 overs, ODI after 25, Test every 15). The sound and the
+    // commentary start when it appears and end when Resume is tapped.
+    val drinks = matchState.drinksBreak
+    if (drinks != null) {
+        BackHandler(onBack = { confirmingLeave = true })
+        LaunchedEffect(drinks) {
+            director?.onDrinksStarted()
+            services?.announceSpoken(DrinksBreak.spokenLine(drinks))
+        }
+        DrinksBreakScreen(
+            title = DrinksBreak.TITLE,
+            lines = DrinksBreak.lines(drinks),
+            onResume = {
+                director?.onDrinksEnded()
+                services?.announceSpoken("Play resumes.")
+                matchState = matchState.copy(drinksBreak = null)
             }
         )
         return

@@ -6,6 +6,7 @@ import com.cricketsim.logic.BallOutcome
 import com.cricketsim.logic.BowlingSystem
 import com.cricketsim.logic.Difficulty
 import com.cricketsim.logic.DismissalType
+import com.cricketsim.logic.DrinksBreak
 import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.MatchEngine
 import com.cricketsim.logic.MatchState
@@ -262,7 +263,8 @@ object MatchSimulation {
         } else {
             MatchStateMachine.changeBowler(rotated, AiSituation.bowlingBias(rotated))
         }
-        return maybeInterruptForRain(withBowlerHandled, stadium)
+        // A drinks break comes after the rain check, and never during a rain delay.
+        return DrinksBreak.startIfDue(maybeInterruptForRain(withBowlerHandled, stadium))
     }
 
     /**
@@ -348,7 +350,19 @@ object MatchSimulation {
 
         if (outcome.isWicket) {
             val dismissalType = outcome.dismissalType ?: DismissalType.BOWLED
-            newState = MatchStateMachine.recordWicketFall(newState, striker.id, dismissalType)
+            // A run out can take either batter; every other dismissal is the striker's. Inside this
+            // block "striker" means whoever was actually dismissed, so everything below follows them.
+            val outBatter = listOf(state.currentBatsmen.first, state.currentBatsmen.second)
+                .firstOrNull { it.id == outcome.outBatsmanId } ?: state.currentBatsmen.first
+            val striker = outBatter
+            newState = MatchStateMachine.recordWicketFall(
+                newState, striker.id, dismissalType,
+                if (dismissalType == DismissalType.RUN_OUT) outcome.fielderName else null
+            )
+            if (dismissalType == DismissalType.RUN_OUT && outcome.runs % 2 == 1) {
+                // They had crossed before the wicket went down, so the ends have changed.
+                newState = MatchStateMachine.rotateStrike(newState)
+            }
 
             // If the innings ends on this exact ball, nobody needs to be sent in.
             if (!isInningsOver(newState)) {
@@ -362,7 +376,11 @@ object MatchSimulation {
                             runs = outStats?.runs ?: 0,
                             ballsFaced = outStats?.ballsFaced ?: 0,
                             dismissalType = dismissalType,
-                            dismissedBy = newState.currentBowler.name
+                            dismissedBy = if (dismissalType == DismissalType.RUN_OUT) {
+                                outcome.fielderName ?: newState.currentBowler.name
+                            } else {
+                                newState.currentBowler.name
+                            }
                         )
                     )
                     if (overJustCompleted) {
@@ -417,7 +435,12 @@ object MatchSimulation {
         difficulty: Difficulty,
         commentary: String
     ): BallResult {
-        val notOut = original.outcome.copy(isWicket = false, dismissalType = null, commentary = commentary)
+        // An overturned run out gets back the run that was taken off when he was given out.
+        val restoredRuns = if (original.outcome.dismissalType == DismissalType.RUN_OUT) original.outcome.runs + 1 else original.outcome.runs
+        val notOut = original.outcome.copy(
+            isWicket = false, dismissalType = null, commentary = commentary,
+            runs = restoredRuns, outBatsmanId = null, fielderName = null
+        )
         return simulateOneBall(
             state = before,
             stadium = stadium,

@@ -65,7 +65,10 @@ enum class RecordedAsset(val fileName: String, val path: String, val rawName: St
     DRS_BGM("drs_bgm.mp3", "/_cdn/sfx/drs_bgm.mp3", "drs_bgm"),
     DRS_FIRECRACKER("drs_firecracker.mp3", "/_cdn/sfx/drs_firecracker.mp3", "drs_firecracker"),
     DRS_LOSE("drs_lose.mp3", "/_cdn/sfx/drs_lose.mp3", "drs_lose"),
-    DRS_UMPIRES_CALL_AGAINST("drs_umpires_call_against.mp3", "/_cdn/sfx/drs_umpires_call_against.mp3", "drs_umpires_call_against")
+    DRS_UMPIRES_CALL_AGAINST("drs_umpires_call_against.mp3", "/_cdn/sfx/drs_umpires_call_against.mp3", "drs_umpires_call_against"),
+
+    // --- Drinks break ---
+    DRINKS_BREAK("drinks_break_drinking.mp3", "/_cdn/sfx/drinks_break_drinking.mp3", "drinks_break_drinking")
 }
 
 sealed interface AssetSource {

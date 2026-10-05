@@ -37,5 +37,9 @@ data class BallOutcome(
     // kept nullable anyway since nothing currently depends on it being
     // guaranteed non-null.
     val bowlingQualityTier: BowlingQualityTier? = null,
-    val bowlingActualLength: DeliveryLength? = null
+    val bowlingActualLength: DeliveryLength? = null,
+    /** Who was dismissed when it was NOT the striker (a run out can take either batter); null = the striker. */
+    val outBatsmanId: String? = null,
+    /** The fielder involved in a run out, for the scorecard; null for every other ball. */
+    val fielderName: String? = null
 )

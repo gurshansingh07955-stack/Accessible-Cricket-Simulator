@@ -114,6 +114,16 @@ fun RainDelayScreen(
     )
 }
 
+/** The drinks break: a heading, then where the match stands and how the last stretch went. */
+@Composable
+fun DrinksBreakScreen(title: String, lines: List<String>, onResume: () -> Unit) {
+    InfoScreen(
+        title = title,
+        lines = lines,
+        actions = listOf("Resume play" to onResume)
+    )
+}
+
 @Composable
 fun InningsBreakScreen(state: MatchState, lastBall: String, onStart: () -> Unit, onScorecard: () -> Unit) {
     val targetWord = if (state.dlsRevised) "DLS-revised target" else "Target"

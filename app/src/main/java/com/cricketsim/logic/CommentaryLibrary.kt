@@ -82,7 +82,9 @@ enum class CommentaryCategory {
     HAT_TRICK, ON_HAT_TRICK, DOUBLE_HAT_TRICK,
     TOSS_BAT, TOSS_BOWL, FIELDING_CHANGE, RAIN_START, RAIN_STOP, DLS_REVISED,
     // Decision Review System (Android-only — see this file's doc comment).
-    REVIEW_REQUESTED, REVIEW_OVERTURNED, REVIEW_UMPIRES_CALL, REVIEW_STANDS
+    REVIEW_REQUESTED, REVIEW_OVERTURNED, REVIEW_UMPIRES_CALL, REVIEW_STANDS,
+    // Run outs, stumpings, caught and bowled, and the drinks break (clips generated with the same voices).
+    WICKET_RUN_OUT, WICKET_STUMPED, WICKET_CAUGHT_AND_BOWLED, DRINKS_START, DRINKS_END
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -609,6 +611,56 @@ object CommentaryLibrary {
                 CommentaryLine("review_stands_2_excited", "Not enough to overturn it! The soft signal stays as given!", "/_cdn/commentary/review_stands_2_excited.mp3"),
                 CommentaryLine("review_stands_2_calm", "That was always going to be a tough ask, the evidence backed up the umpire.", "/_cdn/commentary/review_stands_2_calm.mp3")
             )
+        ),
+        CommentaryCategory.WICKET_RUN_OUT to listOf(
+            CommentaryPair(
+                CommentaryLine("runout_1_excited", "Run out! There's been a terrible mix-up out in the middle, and one batter is stranded!", "/_cdn/commentary/runout_1_excited.mp3"),
+                CommentaryLine("runout_1_calm", "A direct hit from the fielder, and the batter was miles short of his ground.", "/_cdn/commentary/runout_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("runout_2_excited", "He's gone! A brilliant bit of fielding and the stumps are shattered, that's a run out!", "/_cdn/commentary/runout_2_excited.mp3"),
+                CommentaryLine("runout_2_calm", "That's the danger of a quick single, there's no room for error against a sharp fielder.", "/_cdn/commentary/runout_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.WICKET_STUMPED to listOf(
+            CommentaryPair(
+                CommentaryLine("stumped_1_excited", "He's out of his crease and the keeper whips the bails off! Stumped!", "/_cdn/commentary/stumped_1_excited.mp3"),
+                CommentaryLine("stumped_1_calm", "Lightning quick work from the wicketkeeper, the batter simply could not get back in time.", "/_cdn/commentary/stumped_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("stumped_2_excited", "Stumped! He charged down the pitch, missed it completely, and the keeper does the rest!", "/_cdn/commentary/stumped_2_excited.mp3"),
+                CommentaryLine("stumped_2_calm", "Tempted out of the crease by the flight, and punished instantly behind the stumps.", "/_cdn/commentary/stumped_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.WICKET_CAUGHT_AND_BOWLED to listOf(
+            CommentaryPair(
+                CommentaryLine("caughtandbowled_1_excited", "Caught and bowled! The ball goes straight back, and the bowler holds on to a stunning catch!", "/_cdn/commentary/caughtandbowled_1_excited.mp3"),
+                CommentaryLine("caughtandbowled_1_calm", "A rare sight, the bowler had almost no time to react and still took it cleanly.", "/_cdn/commentary/caughtandbowled_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("caughtandbowled_2_excited", "What a catch by the bowler himself! Caught and bowled, and the batter can't believe it!", "/_cdn/commentary/caughtandbowled_2_excited.mp3"),
+                CommentaryLine("caughtandbowled_2_calm", "A sharp reflex catch right in front of him, he barely had to move.", "/_cdn/commentary/caughtandbowled_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.DRINKS_START to listOf(
+            CommentaryPair(
+                CommentaryLine("drinksstart_1_excited", "And that's the drinks break! The players are heading off for a well-earned drink!", "/_cdn/commentary/drinksstart_1_excited.mp3"),
+                CommentaryLine("drinksstart_1_calm", "A good chance for both sides to catch their breath and talk over the plan.", "/_cdn/commentary/drinksstart_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("drinksstart_2_excited", "The umpires have called for drinks! The water bottles are out on the field!", "/_cdn/commentary/drinksstart_2_excited.mp3"),
+                CommentaryLine("drinksstart_2_calm", "Time for the captains to regroup before the next stage of the innings.", "/_cdn/commentary/drinksstart_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.DRINKS_END to listOf(
+            CommentaryPair(
+                CommentaryLine("drinksend_1_excited", "And the drinks break is over, the players are walking back out, it's time to get going again!", "/_cdn/commentary/drinksend_1_excited.mp3"),
+                CommentaryLine("drinksend_1_calm", "Refreshed and ready, let's see which side has used that break better.", "/_cdn/commentary/drinksend_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("drinksend_2_excited", "Back to the action! The bottles are cleared and play is about to resume!", "/_cdn/commentary/drinksend_2_excited.mp3"),
+                CommentaryLine("drinksend_2_calm", "The batters will want to keep their momentum, and the bowlers will want to break it.", "/_cdn/commentary/drinksend_2_calm.mp3")
+            )
         )
     )
 
@@ -621,6 +673,9 @@ object CommentaryLibrary {
      */
     fun categorizeBallOutcome(outcome: BallOutcome): CommentaryCategory {
         if (outcome.isWicket) {
+            if (outcome.dismissalType == DismissalType.RUN_OUT) return CommentaryCategory.WICKET_RUN_OUT
+            if (outcome.dismissalType == DismissalType.STUMPED) return CommentaryCategory.WICKET_STUMPED
+            if (outcome.dismissalType == DismissalType.CAUGHT_AND_BOWLED) return CommentaryCategory.WICKET_CAUGHT_AND_BOWLED
             if (outcome.dismissalType == DismissalType.BOWLED) return CommentaryCategory.WICKET_BOWLED
             if (outcome.dismissalType == DismissalType.LBW) return CommentaryCategory.WICKET_LBW
             // caught

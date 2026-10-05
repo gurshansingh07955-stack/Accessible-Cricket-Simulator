@@ -7,4 +7,4 @@ package com.cricketsim.logic
  * Pulled out into its own file since BallOutcome.kt needs it now, ahead
  * of the full MatchState.kt port.
  */
-enum class DismissalType { BOWLED, CAUGHT, LBW }
+enum class DismissalType { BOWLED, CAUGHT, LBW, RUN_OUT, STUMPED, CAUGHT_AND_BOWLED }

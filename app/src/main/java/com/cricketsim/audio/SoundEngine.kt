@@ -491,6 +491,12 @@ class SoundEngine(context: Context) {
         playRecorded(RecordedAsset.DRS_UMPIRES_CALL_AGAINST, 0.8f * MASTER)
     }
 
+    /** The drinks break: a person drinking water (generated with ElevenLabs' sound-generation, like the DRS sounds). */
+    fun playDrinksBreak() {
+        if (!settings.soundEffects) return
+        playRecorded(RecordedAsset.DRINKS_BREAK, 0.9f * MASTER)
+    }
+
     /**
      * A plain, non-looping MediaPlayer for a recording found via
      * AudioAssets — the same bundled-pack-then-stream lookup every other
@@ -1297,7 +1303,8 @@ class SoundEngine(context: Context) {
             RecordedAsset.DRS_THIRD_UMPIRE_CHECK,
             RecordedAsset.DRS_FIRECRACKER,
             RecordedAsset.DRS_LOSE,
-            RecordedAsset.DRS_UMPIRES_CALL_AGAINST
+            RecordedAsset.DRS_UMPIRES_CALL_AGAINST,
+            RecordedAsset.DRINKS_BREAK
         )
     }
 }

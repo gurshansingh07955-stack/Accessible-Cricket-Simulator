@@ -106,12 +106,15 @@ object MatchLines {
     /** The wicket announcement, worded like the web's Wicket! dialog. */
     fun dismissalSummary(dismissal: PendingDismissal): String {
         val how = when (dismissal.dismissalType) {
-            DismissalType.BOWLED -> "Bowled"
-            DismissalType.LBW -> "LBW"
-            else -> "Caught"
+            DismissalType.BOWLED -> "Bowled, bowled by ${dismissal.dismissedBy}."
+            DismissalType.LBW -> "LBW, bowled by ${dismissal.dismissedBy}."
+            DismissalType.RUN_OUT -> "Run out, with ${dismissal.dismissedBy} involved."
+            DismissalType.STUMPED -> "Stumped, bowled by ${dismissal.dismissedBy}."
+            DismissalType.CAUGHT_AND_BOWLED -> "Caught and bowled by ${dismissal.dismissedBy}."
+            else -> "Caught, bowled by ${dismissal.dismissedBy}."
         }
         return "${dismissal.playerName} is out for ${countOf(dismissal.runs, "run")} off " +
-            "${countOf(dismissal.ballsFaced, "ball")}. $how, bowled by ${dismissal.dismissedBy}."
+            "${countOf(dismissal.ballsFaced, "ball")}. $how"
     }
 
     /**
@@ -166,6 +169,9 @@ object ScorecardLines {
         DismissalType.BOWLED -> if (by != null) "bowled by $by" else "bowled"
         DismissalType.LBW -> if (by != null) "lbw, bowled by $by" else "lbw"
         DismissalType.CAUGHT -> if (by != null) "caught, bowler $by" else "caught"
+        DismissalType.RUN_OUT -> if (by != null) "run out, $by" else "run out"
+        DismissalType.STUMPED -> if (by != null) "stumped, bowled by $by" else "stumped"
+        DismissalType.CAUGHT_AND_BOWLED -> if (by != null) "caught and bowled by $by" else "caught and bowled"
         else -> "out"
     }
 

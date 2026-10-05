@@ -92,6 +92,7 @@ drs_bgm|/_cdn/sfx/drs_bgm.mp3
 drs_firecracker|/_cdn/sfx/drs_firecracker.mp3
 drs_lose|/_cdn/sfx/drs_lose.mp3
 drs_umpires_call_against|/_cdn/sfx/drs_umpires_call_against.mp3
+drinks_break_drinking|/_cdn/sfx/drinks_break_drinking.mp3
 EOF
 
 echo

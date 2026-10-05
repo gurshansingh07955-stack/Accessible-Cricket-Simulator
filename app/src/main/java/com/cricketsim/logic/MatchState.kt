@@ -159,7 +159,12 @@ data class MatchState(
     // fielder, so he does not tinker again straight away (FieldingSystem.aiFieldMoveAllowance).
     // Reset for each innings. An older saved match reads back 0, which only means "changed
     // at the start", so no save needs migrating.
-    val lastAiFieldChangeBall: Int = 0
+    val lastAiFieldChangeBall: Int = 0,
+    // The over after which the last drinks break was taken (0 = none yet this innings), so a break
+    // is never taken twice. Reset for each innings. Older saves read back 0, which is correct.
+    val lastDrinksBreakOver: Int = 0,
+    // Set while a drinks break is on (DrinksBreak.startIfDue); the match screen shows it until Resume.
+    val drinksBreak: DrinksBreakInfo? = null
 )
 
 object MatchStateMachine {
@@ -488,9 +493,15 @@ object MatchStateMachine {
      * correct even if an end-of-over strike rotation has already been
      * applied to `state`.
      */
-    fun recordWicketFall(state: MatchState, outBatsmanId: String, dismissalType: DismissalType = DismissalType.BOWLED): MatchState {
+    fun recordWicketFall(
+        state: MatchState,
+        outBatsmanId: String,
+        dismissalType: DismissalType = DismissalType.BOWLED,
+        dismissedByName: String? = null
+    ): MatchState {
         val currentWickets = state.score.wickets + 1
-        val dismissedBy = state.currentBowler.name
+        // The bowler is credited unless the caller names someone else (the fielder, for a run out).
+        val dismissedBy = dismissedByName ?: state.currentBowler.name
 
         val currentInningsData = MatchStats.recordDismissal(state.currentInningsData, outBatsmanId, dismissalType, dismissedBy)
 
@@ -644,7 +655,9 @@ object MatchStateMachine {
             drsReviewsUsed = 0,
             // A free hit never carries into a new innings.
             freeHit = false,
-            lastAiFieldChangeBall = 0
+            lastAiFieldChangeBall = 0,
+            lastDrinksBreakOver = 0,
+            drinksBreak = null
         )
     }
 

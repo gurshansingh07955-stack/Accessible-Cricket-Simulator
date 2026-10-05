@@ -452,12 +452,23 @@ object MatchEngine {
                 // (non-fielding) wicket chance the ball already carried
                 // could still have been a genuine bowled/lbw on its own
                 // merits.
-                val dismissalTypes = if (fieldingCatchOpportunity) {
+                val dismissalTypes = (if (fieldingCatchOpportunity) {
                     listOf(DismissalType.CAUGHT, DismissalType.CAUGHT, DismissalType.CAUGHT, DismissalType.BOWLED, DismissalType.LBW)
                 } else {
                     listOf(DismissalType.BOWLED, DismissalType.CAUGHT, DismissalType.LBW)
+                }).toMutableList()
+                // A stumping is only possible when the batter has stepped out of the crease
+                // (the swipe-right "step out / advance" intent). Spin brings the keeper up to the stumps.
+                if (battingDecision?.intent == IntentDirection.RIGHT) {
+                    val stumpingWeight = if (bowlingDecision.bowlingStyle == BowlingStyle.SPIN) 5 else 3
+                    repeat(stumpingWeight) { dismissalTypes.add(DismissalType.STUMPED) }
                 }
-                dismissalType = dismissalTypes[(Random.nextDouble() * dismissalTypes.size).toInt().coerceAtMost(dismissalTypes.size - 1)]
+                var pickedKind = dismissalTypes[(Random.nextDouble() * dismissalTypes.size).toInt().coerceAtMost(dismissalTypes.size - 1)]
+                // Caught and bowled is rare: roughly one match in five or six.
+                if (pickedKind == DismissalType.CAUGHT && Random.nextDouble() < caughtAndBowledChance(matchState.format)) {
+                    pickedKind = DismissalType.CAUGHT_AND_BOWLED
+                }
+                dismissalType = pickedKind
                 if (dismissalType == DismissalType.CAUGHT) {
                     // Edge caught behind/in the slips vs. mistimed and
                     // caught in the outfield — again decided once and
@@ -484,19 +495,71 @@ object MatchEngine {
             extraRuns = 1
         }
 
+        // A run out: only on a ball that is being run for (1 to 3), never on a no-ball or free hit
+        // (the batter is protected there), and at most MAX_RUN_OUTS_PER_INNINGS in an innings.
+        var outBatterId: String? = null
+        var outFielderName: String? = null
+        var outBatterName: String? = null
+        if (!isWicket && !isWide && !protectedFromDismissal && runs in 1..3) {
+            val runOutsSoFar = matchState.ballByBall.count { it.dismissalType == DismissalType.RUN_OUT }
+            if (runOutsSoFar < MAX_RUN_OUTS_PER_INNINGS && Random.nextDouble() < runOutChance(matchState.oversLimit, runs)) {
+                isWicket = true
+                dismissalType = DismissalType.RUN_OUT
+                isEdge = null
+                // Going for the last run is what ran him out, so that run does not count.
+                runs -= 1
+                val out = if (Random.nextBoolean()) matchState.currentBatsmen.first else matchState.currentBatsmen.second
+                outBatterId = out.id
+                outBatterName = out.name
+                outFielderName = matchState.bowlingTeam.players.filter { it.id != bowler.id }.randomOrNull()?.name ?: bowler.name
+            }
+        }
+
         val result = BallOutcome(
             runs = runs, isWicket = isWicket, isWide = isWide, isNoBall = isNoBall, extraRuns = extraRuns,
             batsmanId = batsman.id, bowlerId = bowler.id, commentary = "",
             dismissalType = dismissalType, isEdge = isEdge,
-            bowlingQualityTier = bowlingDecision.qualityTier, bowlingActualLength = bowlingDecision.actualLength
+            bowlingQualityTier = bowlingDecision.qualityTier, bowlingActualLength = bowlingDecision.actualLength,
+            outBatsmanId = outBatterId, fielderName = outFielderName
         )
-        val playText = generateCommentary(result, batsman.name, bowler.name)
+        val playText = generateCommentary(result, outBatterName ?: batsman.name, bowler.name)
         // A no-ball is announced first; if the batter also hit it, what he did follows.
         val commentary = if (noBallText == null) playText else if (runs == 0) noBallText else "$noBallText $playText"
         return result.copy(commentary = commentary)
     }
 
     private fun randomIndex(size: Int): Int = (Random.nextDouble() * size).toInt().coerceAtMost(size - 1)
+
+    /** Run outs are "once or twice an innings": never more than this many. */
+    private const val MAX_RUN_OUTS_PER_INNINGS = 2
+
+    /**
+     * The chance that a ball being run for (1, 2 or 3) ends in a run out. Scaled so that an
+     * innings of any length averages about one run out (the cap above keeps it to two):
+     * roughly 1.3 divided by the number of balls in an innings that are run for.
+     */
+    private fun runOutChance(oversLimit: Int, runs: Int): Double {
+        val ballsRunFor = (oversLimit * 6 * 0.45).coerceAtLeast(6.0)
+        val weight = when (runs) {
+            1 -> 0.8
+            2 -> 1.3
+            else -> 1.8
+        }
+        return (1.3 / ballsRunFor * weight).coerceAtMost(0.05)
+    }
+
+    /**
+     * The share of caught dismissals that are caught and bowled. Worked out from how many catches
+     * a match of that length produces, so it happens about once in five or six matches.
+     */
+    private fun caughtAndBowledChance(format: MatchFormat): Double = when (format) {
+        MatchFormat.T20 -> 0.03
+        MatchFormat.ODI -> 0.02
+        MatchFormat.TEST -> 0.02
+        MatchFormat.T10 -> 0.04
+        MatchFormat.FIVE_OVERS -> 0.06
+        MatchFormat.ONE_OVER -> 0.08
+    }
 
     /**
      * Generates commentary string based on outcome. Every phrase pool
@@ -517,6 +580,27 @@ object MatchEngine {
         }
 
         if (outcome.isWicket) {
+            if (outcome.dismissalType == DismissalType.RUN_OUT) {
+                val phrases = listOf(
+                    "Run out! A terrible mix-up and $batsmanName is short of the crease!",
+                    "Direct hit! $batsmanName is well short, a brilliant run out."
+                )
+                return phrases[randomIndex(phrases.size)]
+            }
+            if (outcome.dismissalType == DismissalType.STUMPED) {
+                val phrases = listOf(
+                    "Stumped! $batsmanName is out of the crease and the keeper whips off the bails!",
+                    "Beaten in the flight and stumped, $batsmanName has to go."
+                )
+                return phrases[randomIndex(phrases.size)]
+            }
+            if (outcome.dismissalType == DismissalType.CAUGHT_AND_BOWLED) {
+                val phrases = listOf(
+                    "Caught and bowled! $bowlerName takes a sharp catch off his own bowling, $batsmanName is out!",
+                    "Straight back to the bowler and he holds on! $batsmanName is caught and bowled."
+                )
+                return phrases[randomIndex(phrases.size)]
+            }
             if (outcome.dismissalType == DismissalType.BOWLED) {
                 val phrases = listOf(
                     "OUT! $batsmanName has to go, bowled by $bowlerName!",

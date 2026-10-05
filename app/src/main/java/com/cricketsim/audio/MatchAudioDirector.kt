@@ -3,6 +3,7 @@ package com.cricketsim.audio
 import com.cricketsim.logic.BallOutcome
 import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.CommentaryLibrary
+import com.cricketsim.logic.DismissalType
 import com.cricketsim.logic.MatchEngine
 import com.cricketsim.logic.MatchState
 import kotlin.math.abs
@@ -120,7 +121,8 @@ class MatchAudioDirector(private val services: GameServices) {
         // On a wicket ball the partnership total is unchanged, so this only
         // ever fires on a genuine scoring ball.
         val partnershipMilestone = CommentaryLibrary.getPartnershipMilestoneCrossed(partnershipBefore, partnershipAfter)
-        val bowlerWicketMilestone = if (outcome.isWicket) {
+        // A run out is not the bowler's wicket, so it never counts towards a haul or a hat-trick.
+        val bowlerWicketMilestone = if (outcome.isWicket && outcome.dismissalType != DismissalType.RUN_OUT) {
             CommentaryLibrary.getBowlerWicketMilestoneCrossed(bowlerWicketsBefore, bowlerWicketsAfter)
         } else {
             null
@@ -130,7 +132,7 @@ class MatchAudioDirector(private val services: GameServices) {
         var tripleBoundary: CommentaryCategory? = null
         var hatTrick: CommentaryCategory? = null
         if (!outcome.isWide && !outcome.isNoBall) {
-            if (outcome.isWicket) {
+            if (outcome.isWicket && outcome.dismissalType != DismissalType.RUN_OUT) {
                 lastBoundary = 0
                 streak = if (streakBowlerId == bowlerId) streak + 1 else 1
                 streakBowlerId = bowlerId
@@ -199,6 +201,20 @@ class MatchAudioDirector(private val services: GameServices) {
         sound.stopRainAmbience()
         sound.enqueueCommentary(CommentaryCategory.RAIN_STOP)
         if (secondInningsInterruption) sound.enqueueCommentary(CommentaryCategory.DLS_REVISED)
+    }
+
+    /**
+     * A drinks break begins: the sound of a drink, then the commentators remark on it. Both are
+     * held back a moment so they don't run over the last ball's own sounds and commentary.
+     */
+    fun onDrinksStarted() {
+        sound.schedule(1200L) { sound.playDrinksBreak() }
+        sound.schedule(2600L) { sound.enqueueCommentary(CommentaryCategory.DRINKS_START) }
+    }
+
+    /** The drinks break is over and play is about to restart. */
+    fun onDrinksEnded() {
+        sound.enqueueCommentary(CommentaryCategory.DRINKS_END)
     }
 
     /** `switched` is the state after MatchStateMachine.switchInnings. */

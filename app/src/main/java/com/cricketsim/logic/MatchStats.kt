@@ -423,7 +423,7 @@ object MatchStats {
         // Update bowler stats
         updated = updateBowlerStats(
             updated, outcome.bowlerId, runsConcededThisBall,
-            outcome.isWicket, outcome.isWide, outcome.isNoBall,
+            outcome.isWicket && outcome.dismissalType != DismissalType.RUN_OUT, outcome.isWide, outcome.isNoBall,
             isMaiden
         )
 
