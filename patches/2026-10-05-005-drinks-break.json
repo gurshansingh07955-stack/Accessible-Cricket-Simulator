@@ -1,0 +1,100 @@
+{
+  "name": "drinks-break",
+  "message": "Drinks break in T20 (after 10 overs), ODI (after 25) and Test (every 15): screen with last-overs summary, drinking sound and commentary",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/DrinksBreak.kt",
+    "contains": "object DrinksBreak"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/DrinksBreak.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * What the drinks-break screen shows: where the match stands, and how the last stretch of\n * overs went for each side.\n */\ndata class DrinksBreakInfo(\n    /** The over the break comes after (10, 25, 15, 30...). */\n    val atOver: Int,\n    /** How many overs the \"last N overs\" figures cover. */\n    val windowOvers: Int,\n    val battingTeamName: String,\n    val bowlingTeamName: String,\n    val scoreRuns: Int,\n    val scoreWickets: Int,\n    val runsInWindow: Int,\n    val wicketsInWindow: Int\n)\n\n/**\n * Drinks breaks, in the formats that have them:\n *  - T20: one per innings, after 10 overs.\n *  - ODI: one per innings, after 25 overs.\n *  - Test: one every 15 overs (15, 30, 45...), as a day's play has several.\n * T10, five-over and one-over matches are too short and have none.\n *\n * The check is made when an over ends (MatchSimulation.endOfOver). The break itself is just\n * `MatchState.drinksBreak` being set; the match screen shows it until the player taps Resume.\n */\nobject DrinksBreak {\n\n    const val TITLE = \"Drinks break.\"\n\n    fun intervalFor(format: MatchFormat): Int? = when (format) {\n        MatchFormat.T20 -> 10\n        MatchFormat.ODI -> 25\n        MatchFormat.TEST -> 15\n        else -> null\n    }\n\n    /** Starts a drinks break if one is due after the over that has just finished; otherwise returns the state unchanged. */\n    fun startIfDue(state: MatchState): MatchState {\n        if (state.activeRainDelay != null) return state\n        val interval = intervalFor(state.format) ?: return state\n        val overs = state.score.overs\n        if (overs <= 0 || overs <= state.lastDrinksBreakOver) return state\n        // No break once the innings is at its limit.\n        if (overs >= state.oversLimit) return state\n        val due = if (state.format == MatchFormat.TEST) overs % interval == 0 else overs == interval\n        if (!due) return state\n        return state.copy(lastDrinksBreakOver = overs, drinksBreak = summarise(state, interval))\n    }\n\n    /** Runs scored and wickets fallen in the last [window] completed overs of this innings. */\n    private fun summarise(state: MatchState, window: Int): DrinksBreakInfo {\n        val startOver = (state.score.overs - window).coerceAtLeast(0)\n        var legalBalls = 0\n        var runs = 0\n        var wickets = 0\n        for (ball in state.ballByBall) {\n            val overIndex = legalBalls / 6\n            if (overIndex >= startOver) {\n                runs += ball.runs + ball.extraRuns\n                if (ball.isWicket) wickets++\n            }\n            if (!ball.isWide && !ball.isNoBall) legalBalls++\n        }\n        return DrinksBreakInfo(\n            atOver = state.score.overs,\n            windowOvers = window,\n            battingTeamName = state.battingTeam.name,\n            bowlingTeamName = state.bowlingTeam.name,\n            scoreRuns = state.score.runs,\n            scoreWickets = state.score.wickets,\n            runsInWindow = runs,\n            wicketsInWindow = wickets\n        )\n    }\n\n    private fun plural(count: Int, one: String, many: String = one + \"s\"): String =\n        if (count == 1) \"$count $one\" else \"$count $many\"\n\n    /** The lines the screen shows, one sentence each. */\n    fun lines(info: DrinksBreakInfo): List<String> = listOf(\n        \"After ${plural(info.atOver, \"over\")}, ${info.battingTeamName} are ${info.scoreRuns} for ${info.scoreWickets}.\",\n        \"In the last ${plural(info.windowOvers, \"over\")}, ${info.battingTeamName} scored ${plural(info.runsInWindow, \"run\")} \" +\n            \"and ${info.bowlingTeamName} took ${plural(info.wicketsInWindow, \"wicket\")}.\"\n    )\n\n    /** One spoken announcement for a screen reader. */\n    fun spokenLine(info: DrinksBreakInfo): String = TITLE + \" \" + lines(info).joinToString(\" \")\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    val lastAiFieldChangeBall: Int = 0\n)",
+      "replace": "    val lastAiFieldChangeBall: Int = 0,\n    // The over after which the last drinks break was taken (0 = none yet this innings), so a break\n    // is never taken twice. Reset for each innings. Older saves read back 0, which is correct.\n    val lastDrinksBreakOver: Int = 0,\n    // Set while a drinks break is on (DrinksBreak.startIfDue); the match screen shows it until Resume.\n    val drinksBreak: DrinksBreakInfo? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "            freeHit = false,\n            lastAiFieldChangeBall = 0\n        )\n",
+      "replace": "            freeHit = false,\n            lastAiFieldChangeBall = 0,\n            lastDrinksBreakOver = 0,\n            drinksBreak = null\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "        return maybeInterruptForRain(withBowlerHandled, stadium)\n    }",
+      "replace": "        // A drinks break comes after the rain check, and never during a rain delay.\n        return DrinksBreak.startIfDue(maybeInterruptForRain(withBowlerHandled, stadium))\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "import com.cricketsim.logic.DismissalType\n",
+      "replace": "import com.cricketsim.logic.DismissalType\nimport com.cricketsim.logic.DrinksBreak\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchFlowScreens.kt",
+      "find": "@Composable\nfun InningsBreakScreen(state: MatchState, lastBall: String, onStart: () -> Unit, onScorecard: () -> Unit) {\n",
+      "replace": "/** The drinks break: a heading, then where the match stands and how the last stretch went. */\n@Composable\nfun DrinksBreakScreen(title: String, lines: List<String>, onResume: () -> Unit) {\n    InfoScreen(\n        title = title,\n        lines = lines,\n        actions = listOf(\"Resume play\" to onResume)\n    )\n}\n\n@Composable\nfun InningsBreakScreen(state: MatchState, lastBall: String, onStart: () -> Unit, onScorecard: () -> Unit) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "import com.cricketsim.logic.DrsVerdict\n",
+      "replace": "import com.cricketsim.logic.DrinksBreak\nimport com.cricketsim.logic.DrsVerdict\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    if (showInningsBreak) {\n        InningsBreakScreen(\n",
+      "replace": "    // A drinks break (T20 after 10 overs, ODI after 25, Test every 15). The sound and the\n    // commentary start when it appears and end when Resume is tapped.\n    val drinks = matchState.drinksBreak\n    if (drinks != null) {\n        BackHandler(onBack = { confirmingLeave = true })\n        LaunchedEffect(drinks) {\n            director?.onDrinksStarted()\n            services?.announceSpoken(DrinksBreak.spokenLine(drinks))\n        }\n        DrinksBreakScreen(\n            title = DrinksBreak.TITLE,\n            lines = DrinksBreak.lines(drinks),\n            onResume = {\n                director?.onDrinksEnded()\n                services?.announceSpoken(\"Play resumes.\")\n                matchState = matchState.copy(drinksBreak = null)\n            }\n        )\n        return\n    }\n\n    if (showInningsBreak) {\n        InningsBreakScreen(\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/MatchAudioDirector.kt",
+      "find": "        if (secondInningsInterruption) sound.enqueueCommentary(CommentaryCategory.DLS_REVISED)\n    }\n",
+      "replace": "        if (secondInningsInterruption) sound.enqueueCommentary(CommentaryCategory.DLS_REVISED)\n    }\n\n    /**\n     * A drinks break begins: the sound of a drink, then the commentators remark on it. Both are\n     * held back a moment so they don't run over the last ball's own sounds and commentary.\n     */\n    fun onDrinksStarted() {\n        sound.schedule(1200L) { sound.playDrinksBreak() }\n        sound.schedule(2600L) { sound.enqueueCommentary(CommentaryCategory.DRINKS_START) }\n    }\n\n    /** The drinks break is over and play is about to restart. */\n    fun onDrinksEnded() {\n        sound.enqueueCommentary(CommentaryCategory.DRINKS_END)\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        playRecorded(RecordedAsset.DRS_UMPIRES_CALL_AGAINST, 0.8f * MASTER)\n    }\n",
+      "replace": "        playRecorded(RecordedAsset.DRS_UMPIRES_CALL_AGAINST, 0.8f * MASTER)\n    }\n\n    /** The drinks break: a person drinking water (generated with ElevenLabs' sound-generation, like the DRS sounds). */\n    fun playDrinksBreak() {\n        if (!settings.soundEffects) return\n        playRecorded(RecordedAsset.DRINKS_BREAK, 0.9f * MASTER)\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            RecordedAsset.DRS_UMPIRES_CALL_AGAINST\n        )\n",
+      "replace": "            RecordedAsset.DRS_UMPIRES_CALL_AGAINST,\n            RecordedAsset.DRINKS_BREAK\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/AudioAssets.kt",
+      "find": "    DRS_UMPIRES_CALL_AGAINST(\"drs_umpires_call_against.mp3\", \"/_cdn/sfx/drs_umpires_call_against.mp3\", \"drs_umpires_call_against\")\n}",
+      "replace": "    DRS_UMPIRES_CALL_AGAINST(\"drs_umpires_call_against.mp3\", \"/_cdn/sfx/drs_umpires_call_against.mp3\", \"drs_umpires_call_against\"),\n\n    // --- Drinks break ---\n    DRINKS_BREAK(\"drinks_break_drinking.mp3\", \"/_cdn/sfx/drinks_break_drinking.mp3\", \"drinks_break_drinking\")\n}",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "drs_umpires_call_against|/_cdn/sfx/drs_umpires_call_against.mp3\nEOF\n",
+      "replace": "drs_umpires_call_against|/_cdn/sfx/drs_umpires_call_against.mp3\ndrinks_break_drinking|/_cdn/sfx/drinks_break_drinking.mp3\nEOF\n",
+      "count": 1
+    }
+  ]
+}
