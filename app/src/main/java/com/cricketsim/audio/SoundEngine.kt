@@ -1223,7 +1223,7 @@ class SoundEngine(context: Context) {
         const val COMMENTARY_HANDOVER_MS = 140L
 
         /** Use the live synthesised stereo crowd (false = the old recorded crowd loop). */
-        const val USE_LIVE_CROWD = true
+        const val USE_LIVE_CROWD = false
 
         // The aim tone's playback-rate sweep — a wide range so the pitch
         // change across a drag is obvious, not subtle. Unmeasured on a real
