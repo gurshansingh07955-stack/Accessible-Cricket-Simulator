@@ -33,7 +33,9 @@ import kotlin.random.Random
  * All buffers are generated once and cached by SoundEngine.
  */
 internal object Synth {
-    const val SAMPLE_RATE = 22050
+    // 44.1 kHz (was 22.05 kHz): twice the sample rate keeps the highs (the crack of the bat, the
+    // hiss of rain) instead of cutting everything above 11 kHz, so the effects sound full, not dull.
+    const val SAMPLE_RATE = 44100
 
     private enum class Wave { SINE, TRIANGLE, SAWTOOTH, SQUARE }
 
@@ -159,16 +161,23 @@ internal object Synth {
         return toPcm(out, 0.7f)
     }
 
-    /** A major arpeggio, C5 E5 G5 C6. */
+    /**
+     * A full-blooded strike for a four or a six: a bright crack, the knock of the bat
+     * itself, and a short low "whump" of the ball being sent away. (This replaced a
+     * musical arpeggio, which sounded like a game jingle rather than a cricket shot.)
+     */
     fun boundary(): ShortArray {
-        val out = FloatArray(frames(0.5))
-        val notes = doubleArrayOf(523.25, 659.25, 783.99, 1046.5)
-        notes.forEachIndexed { index, freq ->
-            addTone(out, index * 0.08, 0.2, Wave.SINE, { freq }) { t ->
-                if (t < 0.02) linRamp(0.0, 0.3, t, 0.02) else expRamp(0.3, 0.01, t - 0.02, 0.08)
-            }
+        val out = FloatArray(frames(0.6))
+        val random = Random(17)
+        val crack = Filter()
+        for (i in 0 until frames(0.08)) {
+            val t = i.toDouble() / SAMPLE_RATE
+            crack.step(noise(random), 2200.0, 0.9)
+            out[i] += (crack.high * expRamp(1.0, 0.001, t, 0.06) * 0.9).toFloat()
         }
-        return toPcm(out)
+        addTone(out, 0.0, 0.12, Wave.TRIANGLE, { t -> expRamp(420.0, 110.0, t, 0.09) }) { t -> expRamp(0.9, 0.001, t, 0.1) }
+        addTone(out, 0.04, 0.4, Wave.SINE, { t -> expRamp(150.0, 55.0, t, 0.3) }) { t -> expRamp(0.4, 0.001, t, 0.35) }
+        return toPcm(normalize(out, 0.9f))
     }
 
     /**
@@ -190,11 +199,28 @@ internal object Synth {
         return toPcm(normalize(out, 0.7f))
     }
 
-    /** A dramatic descending sawtooth. */
+    /**
+     * Stumps going down: the sharp crack of ball on wood, a low thud, then the stumps and
+     * bails clattering as a handful of short, damped wooden "pings" at different pitches.
+     * (This replaced a falling sawtooth that sounded like a video-game "you lose" cue.)
+     */
     fun wicket(): ShortArray {
         val out = FloatArray(frames(0.9))
-        addTone(out, 0.0, 0.9, Wave.SAWTOOTH, { t -> expRamp(400.0, 50.0, t, 0.8) }) { t -> linRamp(0.3, 0.0, t, 0.8) }
-        return toPcm(out)
+        val random = Random(13)
+        val crack = Filter()
+        for (i in 0 until frames(0.05)) {
+            val t = i.toDouble() / SAMPLE_RATE
+            crack.step(noise(random), 3200.0, 1.2)
+            out[i] += (crack.bandPass * expRamp(1.0, 0.001, t, 0.04) * 1.6).toFloat()
+        }
+        addTone(out, 0.0, 0.18, Wave.SINE, { t -> expRamp(160.0, 70.0, t, 0.15) }) { t -> expRamp(0.7, 0.001, t, 0.16) }
+        val pings = doubleArrayOf(1180.0, 1620.0, 2150.0, 2740.0, 1400.0, 1900.0)
+        pings.forEachIndexed { index, freq ->
+            val start = 0.01 + index * 0.045 + random.nextDouble() * 0.03
+            addTone(out, start, 0.22, Wave.SINE, { freq }) { t -> expRamp(0.32, 0.001, t, 0.18) }
+            addTone(out, start, 0.22, Wave.TRIANGLE, { freq * 2.3 }) { t -> expRamp(0.12, 0.001, t, 0.07) }
+        }
+        return toPcm(normalize(out, 0.85f))
     }
 
     /** Band-passed noise sweeping 200 -> 800 -> 100 Hz. */

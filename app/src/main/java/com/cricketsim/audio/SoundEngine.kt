@@ -390,24 +390,29 @@ class SoundEngine(context: Context) {
         when {
             isWicket -> {
                 playPcm(Fx.WICKET, MASTER)
+                crowdReact(CrowdEngine.Reaction.WICKET)
                 duckFor(300)
                 swellCrowd(2200)
                 schedule(800) { playCheer(big = true) }
             }
             runs == 6 -> {
                 playPcm(Fx.BOUNDARY, MASTER)
+                crowdReact(CrowdEngine.Reaction.SIX)
                 duckFor(180)
                 swellCrowd(2400)
                 schedule(500) { playCheer(big = true) }
             }
             runs >= 4 -> {
                 playPcm(Fx.BOUNDARY, MASTER)
+                crowdReact(CrowdEngine.Reaction.FOUR)
                 duckFor(180)
                 swellCrowd(2400)
                 schedule(500) { playCheer(big = false) }
             }
             else -> {
                 if (!playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) playPcm(Fx.BAT_HIT, MASTER)
+                // A dot ball in a tense moment draws a group "ooh" now and then.
+                if (runs == 0 && tension > 0.55f && Math.random() < 0.3) crowdReact(CrowdEngine.Reaction.GASP)
                 duckFor(250)
             }
         }
@@ -575,6 +580,33 @@ class SoundEngine(context: Context) {
         }
     }
 
+    /**
+     * Wraps the live stereo crowd (CrowdEngine) so it can be driven like any other loop.
+     * The engine has no playback speed, so the "rate" the crowd code already sends
+     * (0.97 calm .. 1.05 tense) is read back as the match tension and becomes the
+     * engine's excitement: filters move instead of a recording being sped up.
+     */
+    private class EngineLoop(val engine: CrowdEngine) : LoopChannel {
+        override fun start() = engine.resume()
+        override fun pause() = engine.pause()
+        override fun resume() = engine.resume()
+        override fun stop() = engine.stop()
+        override fun setVolume(volume: Float) = engine.setVolume(volume)
+        override fun setRate(rate: Float) = engine.setExcitement((rate - 0.97f) / 0.08f)
+    }
+
+    /** Starts the live stereo crowd, or null if this phone won't open a stereo stream (the caller then uses the recording). */
+    private fun startLiveCrowd(): LoopChannel? {
+        if (!USE_LIVE_CROWD) return null
+        val engine = CrowdEngine(effectAttributes)
+        return if (engine.start()) EngineLoop(engine) else null
+    }
+
+    /** Lets the live crowd react to something that just happened (no effect on the old recorded bed). */
+    private fun crowdReact(reaction: CrowdEngine.Reaction) {
+        (crowdChannel as? EngineLoop)?.engine?.react(reaction)
+    }
+
     private fun synthLoop(fx: Fx): LoopChannel? =
         buildTrack(pcmFor(fx), looping = true, lowLatency = false)?.let { SynthLoop(it) }
 
@@ -685,7 +717,10 @@ class SoundEngine(context: Context) {
         swellJob?.cancel()
         swellUntilMs = 0L
 
-        val source = if (useSynth) null else AudioAssets.find(appContext, RecordedAsset.CROWD_BED)
+        // First choice: the live stereo crowd. The recording and the old synthesized bed
+        // are kept as fallbacks for a phone that refuses a stereo stream.
+        val live = if (useSynth) null else startLiveCrowd()
+        val source = if (useSynth || live != null) null else AudioAssets.find(appContext, RecordedAsset.CROWD_BED)
         var channel: LoopChannel? = null
         if (source != null) {
             channel = mediaLoop(source) {
@@ -698,7 +733,7 @@ class SoundEngine(context: Context) {
                 }
             }
         }
-        val active = channel ?: synthLoop(Fx.CROWD) ?: return
+        val active = live ?: channel ?: synthLoop(Fx.CROWD) ?: return
         val ramp = Ramper(scope) { active.setVolume(it) }
         crowdChannel = active
         crowdRamp = ramp
@@ -899,7 +934,65 @@ class SoundEngine(context: Context) {
         }
         if (paths.isEmpty()) return
         commentaryQueue.addAll(paths)
-        if (!commentaryPlaying) playNextCommentary()
+        if (!commentaryPlaying) playNextCommentary() else prefetchNextCommentary()
+    }
+
+    // --- Commentary look-ahead ---
+    // WHY: each clip used to be loaded only once the previous one had ended, so there was a
+    // small, uneven silence between the two commentators (longer for a clip streamed over
+    // the network). Now the next clip is loaded while the current one is still speaking, and
+    // starts after a short natural breath. If anything about this misbehaves, set
+    // COMMENTARY_PREFETCH to false and the old one-at-a-time behaviour is back.
+
+    private class PrefetchedClip(val path: String, val player: MediaPlayer) {
+        @Volatile var ready = false
+    }
+
+    private var prefetched: PrefetchedClip? = null
+
+    /** A commentary player pointed at its source (bundled copy, or the web if not bundled), not yet prepared. */
+    private fun buildCommentaryPlayer(path: String): MediaPlayer? {
+        val player = MediaPlayer()
+        return try {
+            player.setAudioAttributes(speechAttributes)
+            val bundled = AudioPack.bytesFor(appContext, path.substringAfterLast('/'))
+            if (bundled != null) {
+                player.setDataSource(ByteArrayMediaDataSource(bundled))
+            } else {
+                player.setDataSource(AudioAssets.absoluteUrl(path))
+            }
+            player.setVolume(COMMENTARY_VOLUME, COMMENTARY_VOLUME)
+            player
+        } catch (e: Exception) {
+            runCatching { player.release() }
+            null
+        }
+    }
+
+    /** Starts loading the clip that will play after the current one. */
+    private fun prefetchNextCommentary() {
+        if (!COMMENTARY_PREFETCH || prefetched != null) return
+        val path = commentaryQueue.firstOrNull() ?: return
+        val player = buildCommentaryPlayer(path) ?: return
+        val clip = PrefetchedClip(path, player)
+        prefetched = clip
+        player.setOnPreparedListener { clip.ready = true }
+        player.setOnErrorListener { _, _, _ ->
+            if (prefetched === clip) prefetched = null
+            runCatching { player.release() }
+            true
+        }
+        try {
+            player.prepareAsync()
+        } catch (e: Exception) {
+            if (prefetched === clip) prefetched = null
+            runCatching { player.release() }
+        }
+    }
+
+    private fun dropPrefetched() {
+        prefetched?.let { runCatching { it.player.release() } }
+        prefetched = null
     }
 
     private fun releaseCommentaryPlayer() {
@@ -926,6 +1019,27 @@ class SoundEngine(context: Context) {
         }
 
         val token = ++commentaryToken
+        val ahead = prefetched
+        if (COMMENTARY_PREFETCH && ahead != null && ahead.path == path && ahead.ready) {
+            // Already loaded while the last clip was speaking: no loading gap. A short breath
+            // (like one speaker handing over to the other) and then it plays.
+            prefetched = null
+            commentaryPlayer = ahead.player
+            ahead.player.setOnCompletionListener { if (token == commentaryToken) playNextCommentary() }
+            ahead.player.setOnErrorListener { _, _, _ ->
+                if (token == commentaryToken) playNextCommentary()
+                true
+            }
+            scope.launch {
+                delay(COMMENTARY_HANDOVER_MS)
+                if (token == commentaryToken && !paused) {
+                    runCatching { ahead.player.start() }
+                    prefetchNextCommentary()
+                }
+            }
+            return
+        }
+        dropPrefetched()
         var started = false
         val fileName = path.substringAfterLast('/')
         val player = MediaPlayer()
@@ -944,6 +1058,7 @@ class SoundEngine(context: Context) {
             player.setOnPreparedListener {
                 started = true
                 it.start()
+                prefetchNextCommentary()
             }
             player.setOnCompletionListener { if (token == commentaryToken) playNextCommentary() }
             player.setOnErrorListener { _, _, _ ->
@@ -967,6 +1082,7 @@ class SoundEngine(context: Context) {
     fun stopCommentary() {
         commentaryToken++
         commentaryQueue.clear()
+        dropPrefetched()
         releaseCommentaryPlayer()
         if (commentaryPlaying) duckEnd()
         commentaryPlaying = false
@@ -1099,6 +1215,15 @@ class SoundEngine(context: Context) {
         const val RAIN_GAIN = 0.45f
         const val COMMENTARY_VOLUME = 0.85f
         const val COMMENTARY_START_TIMEOUT_MS = 8_000L
+
+        /** Load the next commentary clip while the current one speaks (false = old one-at-a-time behaviour). */
+        const val COMMENTARY_PREFETCH = true
+
+        /** Breath between the two commentators when the next clip is already loaded. */
+        const val COMMENTARY_HANDOVER_MS = 140L
+
+        /** Use the live synthesised stereo crowd (false = the old recorded crowd loop). */
+        const val USE_LIVE_CROWD = true
 
         // The aim tone's playback-rate sweep — a wide range so the pitch
         // change across a drag is obvious, not subtle. Unmeasured on a real
