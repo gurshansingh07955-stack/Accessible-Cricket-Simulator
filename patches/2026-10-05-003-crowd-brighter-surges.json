@@ -1,0 +1,45 @@
+{
+  "name": "crowd-brighter-bigger-surges",
+  "message": "Crowd: brighter when calm, bigger and more frequent surges",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/CrowdBedEngine.kt",
+    "contains": "SURGE_LIFT"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/CrowdBedEngine.kt",
+      "find": "val cutoff = 5000f + 15000f * min(1f, 0.8f * exc + 0.6f * swell)\n",
+      "replace": "val cutoff = 11000f + 9000f * min(1f, 0.6f * exc + 0.8f * swell)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/CrowdBedEngine.kt",
+      "find": "            val gain1 = BASE_GAIN * (1f + 0.22f * sin(phase1)) * (1f + 0.15f * swell)\n            val gain2 = BASE_GAIN * (1f + 0.22f * sin(phase2)) * (1f + 0.15f * swell)\n",
+      "replace": "            val gain1 = BASE_GAIN * (1f + 0.22f * sin(phase1)) * (1f + SURGE_LIFT * swell)\n            val gain2 = BASE_GAIN * (1f + 0.22f * sin(phase2)) * (1f + SURGE_LIFT * swell)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/CrowdBedEngine.kt",
+      "find": "((18f + 22f * Random.nextFloat())",
+      "replace": "((10f + 15f * Random.nextFloat())",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/CrowdBedEngine.kt",
+      "find": "swellTarget = max(swellTarget, 0.2f + 0.3f * Random.nextFloat())\n                swellHoldBlocks = max(swellHoldBlocks, (1.2f * blocksPerSecond).toInt())\n",
+      "replace": "swellTarget = max(swellTarget, 0.35f + 0.45f * Random.nextFloat())\n                swellHoldBlocks = max(swellHoldBlocks, (2.0f * blocksPerSecond).toInt())\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/CrowdBedEngine.kt",
+      "find": "        const val BASE_GAIN = 0.62f\n",
+      "replace": "        const val BASE_GAIN = 0.62f\n\n        /** How much louder the crowd gets at a full surge (0.45 = 45% louder). */\n        const val SURGE_LIFT = 0.45f\n",
+      "count": 1
+    }
+  ]
+}
