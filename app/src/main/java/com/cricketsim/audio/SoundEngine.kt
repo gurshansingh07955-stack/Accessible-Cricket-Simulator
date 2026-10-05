@@ -595,6 +595,39 @@ class SoundEngine(context: Context) {
         override fun setRate(rate: Float) = engine.setExcitement((rate - 0.97f) / 0.08f)
     }
 
+    /** Wraps the recorded-crowd stereo stream (CrowdBedEngine); the playback "rate" the crowd code sends is read back as tension. */
+    private class BedLoop(val engine: CrowdBedEngine) : LoopChannel {
+        override fun start() = engine.resume()
+        override fun pause() = engine.pause()
+        override fun resume() = engine.resume()
+        override fun stop() = engine.stop()
+        override fun setVolume(volume: Float) = engine.setVolume(volume)
+        override fun setRate(rate: Float) = engine.setExcitement((rate - 0.97f) / 0.08f)
+    }
+
+    /**
+     * Starts the real crowd recording as a live stereo stream, or returns null if there is no
+     * recording yet. If the recording can't be decoded later, the crowd is relaunched with the
+     * plain looping player so the match is never left without crowd sound.
+     */
+    private fun startBedCrowd(): LoopChannel? {
+        if (!USE_RECORDED_STEREO_CROWD) return null
+        val bedSource = AudioAssets.find(appContext, RecordedAsset.CROWD_BED) ?: return null
+        var created: CrowdBedEngine? = null
+        val engine = CrowdBedEngine(appContext, bedSource, effectAttributes) {
+            scope.launch {
+                val current = crowdChannel
+                if (current is BedLoop && current.engine === created) {
+                    stopCrowdNow()
+                    launchCrowd(useSynth = false, allowBed = false)
+                }
+            }
+        }
+        created = engine
+        engine.start()
+        return BedLoop(engine)
+    }
+
     /** Starts the live stereo crowd, or null if this phone won't open a stereo stream (the caller then uses the recording). */
     private fun startLiveCrowd(): LoopChannel? {
         if (!USE_LIVE_CROWD) return null
@@ -605,6 +638,7 @@ class SoundEngine(context: Context) {
     /** Lets the live crowd react to something that just happened (no effect on the old recorded bed). */
     private fun crowdReact(reaction: CrowdEngine.Reaction) {
         (crowdChannel as? EngineLoop)?.engine?.react(reaction)
+        (crowdChannel as? BedLoop)?.engine?.react(reaction)
     }
 
     private fun synthLoop(fx: Fx): LoopChannel? =
@@ -713,13 +747,13 @@ class SoundEngine(context: Context) {
         launchCrowd(useSynth = false)
     }
 
-    private fun launchCrowd(useSynth: Boolean) {
+    private fun launchCrowd(useSynth: Boolean, allowBed: Boolean = true) {
         swellJob?.cancel()
         swellUntilMs = 0L
 
         // First choice: the live stereo crowd. The recording and the old synthesized bed
         // are kept as fallbacks for a phone that refuses a stereo stream.
-        val live = if (useSynth) null else startLiveCrowd()
+        val live = if (useSynth) null else (if (allowBed) startBedCrowd() else null) ?: startLiveCrowd()
         val source = if (useSynth || live != null) null else AudioAssets.find(appContext, RecordedAsset.CROWD_BED)
         var channel: LoopChannel? = null
         if (source != null) {
@@ -1221,6 +1255,12 @@ class SoundEngine(context: Context) {
 
         /** Breath between the two commentators when the next clip is already loaded. */
         const val COMMENTARY_HANDOVER_MS = 140L
+
+        /**
+         * Play the real crowd recording as a live stereo stream (wide, seamless, breathing, opens
+         * up with tension). False = the old plain looping player, exactly as before.
+         */
+        const val USE_RECORDED_STEREO_CROWD = true
 
         /** Use the live synthesised stereo crowd (false = the old recorded crowd loop). */
         const val USE_LIVE_CROWD = false

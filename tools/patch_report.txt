@@ -1,6 +1,6 @@
-Patch run: 37249567113
-Timestamp (UTC): 2026-10-05T00:58:48Z
+Patch run: 37250056411
+Timestamp (UTC): 2026-10-05T01:06:09Z
 Result: OK
 -----
-Patch 2026-10-05-001-crowd-back-to-recording.json
-  applied 1 operation(s) to 1 file(s)
+Patch 2026-10-05-002-recorded-stereo-crowd.json
+  applied 6 operation(s) to 2 file(s)
