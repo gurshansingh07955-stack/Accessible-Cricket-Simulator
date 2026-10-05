@@ -1,0 +1,31 @@
+{
+  "name": "better-effects-44k",
+  "message": "Synth: 44.1kHz sample rate; realistic stumps-down and boundary-strike sounds",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/Synth.kt",
+    "contains": "Stumps going down"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/Synth.kt",
+      "find": "    const val SAMPLE_RATE = 22050\n",
+      "replace": "    // 44.1 kHz (was 22.05 kHz): twice the sample rate keeps the highs (the crack of the bat, the\n    // hiss of rain) instead of cutting everything above 11 kHz, so the effects sound full, not dull.\n    const val SAMPLE_RATE = 44100\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/Synth.kt",
+      "find": "    /** A dramatic descending sawtooth. */\n    fun wicket(): ShortArray {\n        val out = FloatArray(frames(0.9))\n        addTone(out, 0.0, 0.9, Wave.SAWTOOTH, { t -> expRamp(400.0, 50.0, t, 0.8) }) { t -> linRamp(0.3, 0.0, t, 0.8) }\n        return toPcm(out)\n    }\n",
+      "replace": "    /**\n     * Stumps going down: the sharp crack of ball on wood, a low thud, then the stumps and\n     * bails clattering as a handful of short, damped wooden \"pings\" at different pitches.\n     * (This replaced a falling sawtooth that sounded like a video-game \"you lose\" cue.)\n     */\n    fun wicket(): ShortArray {\n        val out = FloatArray(frames(0.9))\n        val random = Random(13)\n        val crack = Filter()\n        for (i in 0 until frames(0.05)) {\n            val t = i.toDouble() / SAMPLE_RATE\n            crack.step(noise(random), 3200.0, 1.2)\n            out[i] += (crack.bandPass * expRamp(1.0, 0.001, t, 0.04) * 1.6).toFloat()\n        }\n        addTone(out, 0.0, 0.18, Wave.SINE, { t -> expRamp(160.0, 70.0, t, 0.15) }) { t -> expRamp(0.7, 0.001, t, 0.16) }\n        val pings = doubleArrayOf(1180.0, 1620.0, 2150.0, 2740.0, 1400.0, 1900.0)\n        pings.forEachIndexed { index, freq ->\n            val start = 0.01 + index * 0.045 + random.nextDouble() * 0.03\n            addTone(out, start, 0.22, Wave.SINE, { freq }) { t -> expRamp(0.32, 0.001, t, 0.18) }\n            addTone(out, start, 0.22, Wave.TRIANGLE, { freq * 2.3 }) { t -> expRamp(0.12, 0.001, t, 0.07) }\n        }\n        return toPcm(normalize(out, 0.85f))\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/Synth.kt",
+      "find": "    /** A major arpeggio, C5 E5 G5 C6. */\n    fun boundary(): ShortArray {\n        val out = FloatArray(frames(0.5))\n        val notes = doubleArrayOf(523.25, 659.25, 783.99, 1046.5)\n        notes.forEachIndexed { index, freq ->\n            addTone(out, index * 0.08, 0.2, Wave.SINE, { freq }) { t ->\n                if (t < 0.02) linRamp(0.0, 0.3, t, 0.02) else expRamp(0.3, 0.01, t - 0.02, 0.08)\n            }\n        }\n        return toPcm(out)\n    }\n",
+      "replace": "    /**\n     * A full-blooded strike for a four or a six: a bright crack, the knock of the bat\n     * itself, and a short low \"whump\" of the ball being sent away. (This replaced a\n     * musical arpeggio, which sounded like a game jingle rather than a cricket shot.)\n     */\n    fun boundary(): ShortArray {\n        val out = FloatArray(frames(0.6))\n        val random = Random(17)\n        val crack = Filter()\n        for (i in 0 until frames(0.08)) {\n            val t = i.toDouble() / SAMPLE_RATE\n            crack.step(noise(random), 2200.0, 0.9)\n            out[i] += (crack.high * expRamp(1.0, 0.001, t, 0.06) * 0.9).toFloat()\n        }\n        addTone(out, 0.0, 0.12, Wave.TRIANGLE, { t -> expRamp(420.0, 110.0, t, 0.09) }) { t -> expRamp(0.9, 0.001, t, 0.1) }\n        addTone(out, 0.04, 0.4, Wave.SINE, { t -> expRamp(150.0, 55.0, t, 0.3) }) { t -> expRamp(0.4, 0.001, t, 0.35) }\n        return toPcm(normalize(out, 0.9f))\n    }\n",
+      "count": 1
+    }
+  ]
+}

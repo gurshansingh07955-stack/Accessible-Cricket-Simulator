@@ -1,0 +1,59 @@
+{
+  "name": "commentary-lookahead-and-switches",
+  "message": "Commentary: load the next clip while one speaks; add on/off switches for new crowd and look-ahead",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+    "contains": "COMMENTARY_PREFETCH"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    private fun releaseCommentaryPlayer() {\n",
+      "replace": "    // --- Commentary look-ahead ---\n    // WHY: each clip used to be loaded only once the previous one had ended, so there was a\n    // small, uneven silence between the two commentators (longer for a clip streamed over\n    // the network). Now the next clip is loaded while the current one is still speaking, and\n    // starts after a short natural breath. If anything about this misbehaves, set\n    // COMMENTARY_PREFETCH to false and the old one-at-a-time behaviour is back.\n\n    private class PrefetchedClip(val path: String, val player: MediaPlayer) {\n        @Volatile var ready = false\n    }\n\n    private var prefetched: PrefetchedClip? = null\n\n    /** A commentary player pointed at its source (bundled copy, or the web if not bundled), not yet prepared. */\n    private fun buildCommentaryPlayer(path: String): MediaPlayer? {\n        val player = MediaPlayer()\n        return try {\n            player.setAudioAttributes(speechAttributes)\n            val bundled = AudioPack.bytesFor(appContext, path.substringAfterLast('/'))\n            if (bundled != null) {\n                player.setDataSource(ByteArrayMediaDataSource(bundled))\n            } else {\n                player.setDataSource(AudioAssets.absoluteUrl(path))\n            }\n            player.setVolume(COMMENTARY_VOLUME, COMMENTARY_VOLUME)\n            player\n        } catch (e: Exception) {\n            runCatching { player.release() }\n            null\n        }\n    }\n\n    /** Starts loading the clip that will play after the current one. */\n    private fun prefetchNextCommentary() {\n        if (!COMMENTARY_PREFETCH || prefetched != null) return\n        val path = commentaryQueue.firstOrNull() ?: return\n        val player = buildCommentaryPlayer(path) ?: return\n        val clip = PrefetchedClip(path, player)\n        prefetched = clip\n        player.setOnPreparedListener { clip.ready = true }\n        player.setOnErrorListener { _, _, _ ->\n            if (prefetched === clip) prefetched = null\n            runCatching { player.release() }\n            true\n        }\n        try {\n            player.prepareAsync()\n        } catch (e: Exception) {\n            if (prefetched === clip) prefetched = null\n            runCatching { player.release() }\n        }\n    }\n\n    private fun dropPrefetched() {\n        prefetched?.let { runCatching { it.player.release() } }\n        prefetched = null\n    }\n\n    private fun releaseCommentaryPlayer() {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        commentaryQueue.addAll(paths)\n        if (!commentaryPlaying) playNextCommentary()\n",
+      "replace": "        commentaryQueue.addAll(paths)\n        if (!commentaryPlaying) playNextCommentary() else prefetchNextCommentary()\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        val token = ++commentaryToken\n        var started = false\n",
+      "replace": "        val token = ++commentaryToken\n        val ahead = prefetched\n        if (COMMENTARY_PREFETCH && ahead != null && ahead.path == path && ahead.ready) {\n            // Already loaded while the last clip was speaking: no loading gap. A short breath\n            // (like one speaker handing over to the other) and then it plays.\n            prefetched = null\n            commentaryPlayer = ahead.player\n            ahead.player.setOnCompletionListener { if (token == commentaryToken) playNextCommentary() }\n            ahead.player.setOnErrorListener { _, _, _ ->\n                if (token == commentaryToken) playNextCommentary()\n                true\n            }\n            scope.launch {\n                delay(COMMENTARY_HANDOVER_MS)\n                if (token == commentaryToken && !paused) {\n                    runCatching { ahead.player.start() }\n                    prefetchNextCommentary()\n                }\n            }\n            return\n        }\n        dropPrefetched()\n        var started = false\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            player.setOnPreparedListener {\n                started = true\n                it.start()\n            }\n",
+      "replace": "            player.setOnPreparedListener {\n                started = true\n                it.start()\n                prefetchNextCommentary()\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        commentaryToken++\n        commentaryQueue.clear()\n        releaseCommentaryPlayer()\n",
+      "replace": "        commentaryToken++\n        commentaryQueue.clear()\n        dropPrefetched()\n        releaseCommentaryPlayer()\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        const val COMMENTARY_START_TIMEOUT_MS = 8_000L\n",
+      "replace": "        const val COMMENTARY_START_TIMEOUT_MS = 8_000L\n\n        /** Load the next commentary clip while the current one speaks (false = old one-at-a-time behaviour). */\n        const val COMMENTARY_PREFETCH = true\n\n        /** Breath between the two commentators when the next clip is already loaded. */\n        const val COMMENTARY_HANDOVER_MS = 140L\n\n        /** Use the live synthesised stereo crowd (false = the old recorded crowd loop). */\n        const val USE_LIVE_CROWD = true\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    private fun startLiveCrowd(): LoopChannel? {\n        val engine = CrowdEngine(effectAttributes)\n",
+      "replace": "    private fun startLiveCrowd(): LoopChannel? {\n        if (!USE_LIVE_CROWD) return null\n        val engine = CrowdEngine(effectAttributes)\n",
+      "count": 1
+    }
+  ]
+}
