@@ -1,0 +1,17 @@
+{
+  "name": "crowd-back-to-recording",
+  "message": "Switch crowd back to the recorded loop (live synthesised crowd sounded like radio static)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+    "contains": "const val USE_LIVE_CROWD = false"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        const val USE_LIVE_CROWD = true\n",
+      "replace": "        const val USE_LIVE_CROWD = false\n",
+      "count": 1
+    }
+  ]
+}
