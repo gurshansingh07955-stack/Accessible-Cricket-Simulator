@@ -1,7 +1,8 @@
 Audio fetch report
 Source: https://5764.floot.app
 Sound recordings expected: 13
-Commentary clips referenced by CommentaryLibrary.kt: 234
-Files packed into app/src/main/res/raw/audio_pack.bin this run: 248
-Packed file size: 16705904 bytes
+Commentary clips referenced by CommentaryLibrary.kt: 242
+National anthems listed in Anthems.kt: 0
+Files packed into app/src/main/res/raw/audio_pack.bin this run: 256
+Packed file size: 17178656 bytes
 Not available on the web app (skipped): 0
