@@ -1,0 +1,120 @@
+{
+  "name": "national-anthems",
+  "message": "National anthems after the toss: real public-domain recordings trimmed to 10 s, home side first, with commentary",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/Anthems.kt",
+    "contains": "object Anthems"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/Anthems.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * National anthems, played after the toss: the home side's first, then the visitors'\n * (random order at a neutral ground). Each is a real recording, cut to its first ten seconds\n * with a fade-out.\n *\n * WHERE THE RECORDINGS COME FROM: Wikimedia Commons, each one listed there as public domain\n * (mostly United States Navy Band and other military-band recordings). They are NOT stored in\n * the repository. tools/fetch_audio.sh reads the `Anthem(\"CODE\", \"url\", ...)` lines below,\n * downloads each file, trims and levels it with ffmpeg, and packs it into the audio pack as\n * anthem_<code>.mp3 (see the \"Fetch audio into the app\" workflow). Until that has been run, the\n * anthems are missing from the pack and are simply skipped.\n *\n * Teams with no recording here (West Indies, Scotland, Nepal, UAE) have no anthem step.\n * To add one, add an Anthem line with a public-domain or licensed recording's direct URL.\n */\nobject Anthems {\n\n    class Anthem(val code: String, val sourceUrl: String, val credit: String)\n\n    val ALL: List<Anthem> = listOf(\n        Anthem(\"IND\", \"https://upload.wikimedia.org/wikipedia/commons/f/f3/Jana_Gana_Mana_%28instrumental%29_-_Indian_Armed_Forces_Orchestra.ogg\", \"Indian Armed Forces Orchestra\"),\n        Anthem(\"ENG\", \"https://upload.wikimedia.org/wikipedia/commons/0/03/United_States_Navy_Band_-_God_Save_the_Queen.oga\", \"United States Navy Band\"),\n        Anthem(\"AUS\", \"https://upload.wikimedia.org/wikipedia/commons/a/a6/U.S._Navy_Band%2C_Advance_Australia_Fair_%28instrumental%29.ogg\", \"United States Navy Band\"),\n        Anthem(\"PAK\", \"https://upload.wikimedia.org/wikipedia/commons/3/3a/Pakistani_national_anthem_-_United_States_Navy_Band.ogg\", \"United States Navy Band\"),\n        Anthem(\"RSA\", \"https://upload.wikimedia.org/wikipedia/commons/f/f0/%22The_Call_of_South_Africa%22_performed_by_the_ASAF_Choir_and_the_Cantare_Male_Voice_Choir.oga\", \"ASAF Choir and Cantare Male Voice Choir\"),\n        Anthem(\"NZ\", \"https://upload.wikimedia.org/wikipedia/commons/d/d6/God_Defend_New_Zealand_instrumental.ogg\", \"instrumental recording\"),\n        Anthem(\"SL\", \"https://upload.wikimedia.org/wikipedia/commons/8/8c/Sri_Lankan_national_anthem%2C_performed_by_the_United_States_Navy_Band.oga\", \"United States Navy Band\"),\n        Anthem(\"BAN\", \"https://upload.wikimedia.org/wikipedia/commons/7/7d/Amar_Sonar_Bangla_instrumental_by_US_Navy_Band.oga\", \"United States Navy Band\"),\n        Anthem(\"AFG\", \"https://upload.wikimedia.org/wikipedia/commons/0/0a/National_Anthem_of_Afghanistan_%28Instrumental%29.ogg\", \"instrumental recording\"),\n        Anthem(\"IRE\", \"https://upload.wikimedia.org/wikipedia/commons/7/7c/United_States_Navy_Band_-_Amhr%C3%A1n_na_bhFiann.ogg\", \"United States Navy Band\"),\n        Anthem(\"ZIM\", \"https://upload.wikimedia.org/wikipedia/commons/e/e5/National_Anthem_of_Zimbabwe%2C_performed_by_the_Royal_Australian_Navy_Band.ogg\", \"Royal Australian Navy Band\"),\n        Anthem(\"NED\", \"https://upload.wikimedia.org/wikipedia/commons/2/2e/United_States_Navy_Band_-_Het_Wilhelmus.ogg\", \"United States Navy Band\"),\n        Anthem(\"OMA\", \"https://upload.wikimedia.org/wikipedia/commons/5/5a/Peace_to_the_Sultan_%28%D9%86%D8%B4%D9%8A%D8%AF_%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85_%D8%A7%D9%84%D8%B3%D9%84%D8%B7%D8%A7%D9%86%D9%8A%29.ogg\", \"recording from Wikimedia Commons\"),\n        Anthem(\"USA\", \"https://upload.wikimedia.org/wikipedia/commons/2/25/%22The_Star-Spangled_Banner%22_performed_by_the_United_States_Navy_Band.mp3\", \"United States Navy Band\")\n    )\n\n    /** The packed file name for a team's anthem. */\n    fun fileName(code: String): String = \"anthem_${code.lowercase()}.mp3\"\n\n    fun forTeam(team: Team): Anthem? = ALL.firstOrNull { it.code == team.countryCode }\n\n    fun hasAny(a: Team, b: Team): Boolean = forTeam(a) != null || forTeam(b) != null\n\n    /**\n     * The order the two teams' anthems are played in: the home side first. A team is \"at home\"\n     * when the stadium is listed as one of its home grounds; at a neutral ground (neither side\n     * at home, or both) the order is random.\n     */\n    fun order(userTeam: Team, opponentTeam: Team, stadium: Stadium): List<Team> {\n        val userHome = userTeam.id in stadium.homeTeamIds\n        val opponentHome = opponentTeam.id in stadium.homeTeamIds\n        return when {\n            userHome && !opponentHome -> listOf(userTeam, opponentTeam)\n            opponentHome && !userHome -> listOf(opponentTeam, userTeam)\n            else -> listOf(userTeam, opponentTeam).shuffled()\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AnthemScreen.kt",
+      "content": "package com.cricketsim.ui.match\n\nimport androidx.activity.compose.BackHandler\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.DisposableEffect\nimport androidx.compose.runtime.LaunchedEffect\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.rememberUpdatedState\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.liveRegion\nimport androidx.compose.ui.semantics.LiveRegionMode\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.audio.LocalGameServices\nimport com.cricketsim.logic.Anthems\nimport com.cricketsim.logic.CommentaryCategory\nimport com.cricketsim.logic.Team\nimport kotlinx.coroutines.CompletableDeferred\nimport kotlinx.coroutines.delay\n\n/**\n * The national anthems, between the toss and the first ball. For each team in turn, in the order\n * given (home side first): the commentators ask everyone to rise, then the team's ten-second\n * anthem plays. A team with no anthem recording in the audio pack is skipped, and if neither\n * has one the screen finishes at once. Skip anthems (or the system Back button) moves straight on.\n */\n@Composable\nfun AnthemScreen(teams: List<Team>, onFinished: () -> Unit) {\n    val services = LocalGameServices.current\n    val sound = services?.sound\n    var status by remember { mutableStateOf(\"The national anthems are about to begin.\") }\n    var advanced by remember { mutableStateOf(false) }\n    val finish by rememberUpdatedState {\n        if (!advanced) {\n            advanced = true\n            sound?.stopAnthem()\n            sound?.stopCommentary()\n            onFinished()\n        }\n    }\n\n    BackHandler(onBack = { finish() })\n\n    LaunchedEffect(Unit) {\n        if (services == null || sound == null || !services.settings.soundEffects) {\n            finish()\n            return@LaunchedEffect\n        }\n        var played = 0\n        for (team in teams) {\n            val anthem = Anthems.forTeam(team) ?: continue\n            val file = Anthems.fileName(anthem.code)\n            if (!sound.hasAnthem(file)) continue\n            status = \"National anthem of ${team.name}.\"\n            services.announceSpoken(status)\n            delay(1800)\n            sound.enqueueCommentary(if (played == 0) CommentaryCategory.ANTHEM_FIRST else CommentaryCategory.ANTHEM_SECOND)\n            played++\n            // Let the commentators finish asking everyone to rise before the music starts.\n            delay(600)\n            var waited = 0\n            while (sound.isCommentaryBusy() && waited < 20_000) {\n                delay(200)\n                waited += 200\n            }\n            val ended = CompletableDeferred<Unit>()\n            if (sound.playAnthem(file) { ended.complete(Unit) }) ended.await()\n            delay(700)\n        }\n        finish()\n    }\n\n    DisposableEffect(Unit) {\n        onDispose {\n            sound?.stopAnthem()\n        }\n    }\n\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .padding(24.dp)\n    ) {\n        Text(\n            text = \"National anthems\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        Spacer(modifier = Modifier.height(12.dp))\n        Text(\n            text = status,\n            style = MaterialTheme.typography.bodyLarge,\n            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }\n        )\n        Spacer(modifier = Modifier.height(24.dp))\n        Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Skip anthems\")\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/Screen.kt",
+      "find": "    /**\n     * The match itself: a real, user-controlled match against an AI",
+      "replace": "    /** The national anthems, played between the toss and the first ball (see AnthemScreen). */\n    data class Anthems(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team, val toss: TossResult) : Screen\n\n    /**\n     * The match itself: a real, user-controlled match against an AI",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "import com.cricketsim.logic.CricketData\n",
+      "replace": "import com.cricketsim.logic.Anthems\nimport com.cricketsim.logic.CricketData\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "import com.cricketsim.ui.match.MatchScreen\n",
+      "replace": "import com.cricketsim.ui.match.AnthemScreen\nimport com.cricketsim.ui.match.MatchScreen\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "    val crowdWanted = screen is Screen.TossSelection || screen is Screen.Match\n",
+      "replace": "    val crowdWanted = screen is Screen.TossSelection || screen is Screen.Anthems || screen is Screen.Match\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "                    screen = Screen.Match(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)\n",
+      "replace": "                    // The anthems come between the toss and the first ball (skipped if neither team has one).\n                    screen = if (Anthems.hasAny(current.userTeam, current.opponentTeam)) {\n                        Screen.Anthems(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)\n                    } else {\n                        Screen.Match(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)\n                    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "        is Screen.Match -> {\n",
+      "replace": "        is Screen.Anthems -> {\n            AnthemScreen(\n                teams = Anthems.order(current.userTeam, current.opponentTeam, current.stadium),\n                onFinished = {\n                    screen = Screen.Match(current.format, current.stadium, current.userTeam, current.opponentTeam, current.toss)\n                }\n            )\n        }\n        is Screen.Match -> {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    // --- Vibration ---\n",
+      "replace": "    // --- National anthems ---\n    // A team's ten-second anthem, played from the audio pack between the toss and the first ball.\n\n    private var anthemPlayer: MediaPlayer? = null\n    private var anthemToken = 0\n    private var anthemDucking = false\n\n    /** True while commentary is speaking or waiting to speak (the anthem screen waits for its introduction to end). */\n    fun isCommentaryBusy(): Boolean = commentaryPlaying || commentaryQueue.isNotEmpty()\n\n    /** Whether this anthem is in the audio pack (it is missing until \"Fetch audio into the app\" has been run). */\n    fun hasAnthem(fileName: String): Boolean = AudioPack.bytesFor(appContext, fileName) != null\n\n    /**\n     * Plays an anthem. Returns false, and never calls [onFinished], if the file isn't in the pack.\n     * [onFinished] runs once, when the anthem ends, fails, or is stopped by the safety timer.\n     */\n    fun playAnthem(fileName: String, onFinished: () -> Unit): Boolean {\n        stopAnthem()\n        val data = AudioPack.bytesFor(appContext, fileName) ?: return false\n        val token = ++anthemToken\n        val player = MediaPlayer()\n        val finish: () -> Unit = {\n            if (token == anthemToken) {\n                stopAnthem()\n                onFinished()\n            }\n        }\n        return try {\n            player.setAudioAttributes(\n                AudioAttributes.Builder()\n                    .setUsage(AudioAttributes.USAGE_GAME)\n                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)\n                    .build()\n            )\n            player.setDataSource(ByteArrayMediaDataSource(data))\n            player.setVolume(ANTHEM_VOLUME, ANTHEM_VOLUME)\n            player.setOnPreparedListener { if (token == anthemToken) it.start() }\n            player.setOnCompletionListener { finish() }\n            player.setOnErrorListener { _, _, _ ->\n                finish()\n                true\n            }\n            anthemPlayer = player\n            anthemDucking = true\n            duckStart()\n            player.prepareAsync()\n            scope.launch {\n                delay(ANTHEM_MAX_MS)\n                finish()\n            }\n            true\n        } catch (e: Exception) {\n            runCatching { player.release() }\n            false\n        }\n    }\n\n    fun stopAnthem() {\n        anthemToken++\n        anthemPlayer?.let { runCatching { it.release() } }\n        anthemPlayer = null\n        if (anthemDucking) {\n            anthemDucking = false\n            duckEnd()\n        }\n    }\n\n    // --- Vibration ---\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        stopDrsReviewAudio()\n        stopCommentary()\n    }\n",
+      "replace": "        stopDrsReviewAudio()\n        stopCommentary()\n        stopAnthem()\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    fun release() {\n        stopCommentary()\n",
+      "replace": "    fun release() {\n        stopCommentary()\n        stopAnthem()\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        const val USE_LIVE_CROWD = false\n",
+      "replace": "        const val USE_LIVE_CROWD = false\n\n        /** Anthem loudness, and the longest one is allowed to play (they are cut to 10 s) before a safety stop. */\n        const val ANTHEM_VOLUME = 0.9f\n        const val ANTHEM_MAX_MS = 13_000L\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt",
+      "find": "    SUPER_OVER_ANNOUNCE, SUPER_OVER_START\n}",
+      "replace": "    SUPER_OVER_ANNOUNCE, SUPER_OVER_START,\n    ANTHEM_FIRST, ANTHEM_SECOND\n}",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt",
+      "find": "\"/_cdn/commentary/superoverstart_2_calm.mp3\")\n            )\n        )\n    )\n",
+      "replace": "\"/_cdn/commentary/superoverstart_2_calm.mp3\")\n            )\n        ),\n        CommentaryCategory.ANTHEM_FIRST to listOf(\n            CommentaryPair(\n                CommentaryLine(\"anthemfirst_1_excited\", \"Ladies and gentlemen, please rise for the national anthems!\", \"/_cdn/commentary/anthemfirst_1_excited.mp3\"),\n                CommentaryLine(\"anthemfirst_1_calm\", \"The players line up together, a proud moment before the contest begins.\", \"/_cdn/commentary/anthemfirst_1_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"anthemfirst_2_excited\", \"It is time for the national anthems, and the first one is about to begin!\", \"/_cdn/commentary/anthemfirst_2_excited.mp3\"),\n                CommentaryLine(\"anthemfirst_2_calm\", \"Every player standing tall, with the whole crowd behind them.\", \"/_cdn/commentary/anthemfirst_2_calm.mp3\")\n            )\n        ),\n        CommentaryCategory.ANTHEM_SECOND to listOf(\n            CommentaryPair(\n                CommentaryLine(\"anthemsecond_1_excited\", \"And now, the national anthem of the other side!\", \"/_cdn/commentary/anthemsecond_1_excited.mp3\"),\n                CommentaryLine(\"anthemsecond_1_calm\", \"A moment of respect from everyone here before the action begins.\", \"/_cdn/commentary/anthemsecond_1_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"anthemsecond_2_excited\", \"Now the second anthem rings out around the ground!\", \"/_cdn/commentary/anthemsecond_2_excited.mp3\"),\n                CommentaryLine(\"anthemsecond_2_calm\", \"Two nations, one game, and a lot of pride out in the middle.\", \"/_cdn/commentary/anthemsecond_2_calm.mp3\")\n            )\n        )\n    )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "fetched_files=$(find \"$SCRATCH_DIR\" -type f -name '*.mp3' | wc -l)\n",
+      "replace": "echo\necho \"== Downloading and trimming national anthems ==\"\n# The recordings are public-domain files on Wikimedia Commons, listed in Anthems.kt. Each is cut to\n# its first ten seconds (after any leading silence), levelled so no anthem is much louder than\n# another, and faded out, then stored like every other clip as anthem_<code>.mp3.\nANTHEMS_FILE=\"app/src/main/java/com/cricketsim/logic/Anthems.kt\"\nANTHEM_UA=\"CricketGameAudioBuild/1.0 (https://github.com/gurshansingh07955-stack/Accessible-Cricket-Simulator)\"\nanthem_count=0\nif command -v ffmpeg >/dev/null 2>&1; then\n  while IFS='|' read -r code url; do\n    [ -z \"$code\" ] && continue\n    anthem_count=$((anthem_count + 1))\n    lower=$(echo \"$code\" | tr 'A-Z' 'a-z')\n    src=\"$SCRATCH_DIR/anthem_src_$lower\"\n    if curl -fsSL --retry 3 --retry-delay 3 --max-time 180 -A \"$ANTHEM_UA\" -o \"$src\" \"$url\" && [ -s \"$src\" ]; then\n      if ffmpeg -nostdin -loglevel error -y -i \"$src\" -vn \\\n          -af \"silenceremove=start_periods=1:start_threshold=-50dB,atrim=0:10,loudnorm=I=-18:TP=-2:LRA=7,afade=t=out:st=8.6:d=1.4\" \\\n          -ar 44100 -ac 2 -b:a 128k \"$SCRATCH_DIR/anthem_$lower.mp3\"; then\n        got=$((got + 1))\n      else\n        missing+=(\"anthem_$lower.mp3 (could not convert)\")\n      fi\n    else\n      missing+=(\"anthem_$lower.mp3 (could not download)\")\n    fi\n    rm -f \"$src\"\n    sleep 1\n  done < <(grep -o 'Anthem(\"[A-Z]*\", \"https://[^\"]*\"' \"$ANTHEMS_FILE\" | sed -E 's/Anthem\\(\"([A-Z]*)\", \"([^\"]*)\"/\\1|\\2/')\nelse\n  echo \"ffmpeg is not available here, so the anthems were skipped.\" >&2\nfi\n\nfetched_files=$(find \"$SCRATCH_DIR\" -type f -name '*.mp3' | wc -l)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "  echo \"Commentary clips referenced by CommentaryLibrary.kt: $clip_count\"\n",
+      "replace": "  echo \"Commentary clips referenced by CommentaryLibrary.kt: $clip_count\"\n  echo \"National anthems listed in Anthems.kt: $anthem_count\"\n",
+      "count": 1
+    }
+  ]
+}
