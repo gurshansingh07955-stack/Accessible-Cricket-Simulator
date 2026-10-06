@@ -38,6 +38,7 @@ import com.cricketsim.logic.BattingDecision
 import com.cricketsim.logic.DrsCase
 import com.cricketsim.logic.DrsSystem
 import com.cricketsim.logic.DrinksBreak
+import com.cricketsim.logic.SuperOver
 import com.cricketsim.logic.DrsVerdict
 import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.FootworkType
@@ -280,6 +281,29 @@ fun MatchScreen(
     // match ending. Split out of advanceOneBall so a ball held back for a
     // Decision Review can be committed later, either as it was simulated
     // or replayed as a not-out. `before` is the state the ball started from.
+    // The match (or a Super Over) has ended: either it is level, so the next Super Over begins, or it is decided.
+    fun concludeMatchOrSuperOver(nextState: MatchState) {
+        if (SuperOver.isTieAtEnd(nextState)) {
+            val started = SuperOver.begin(nextState)
+            matchState = started
+            recentCommentary = emptyList()
+            director?.onSuperOverAnnounced()
+            services?.announceSpoken(SuperOver.tieAnnouncement(started))
+            return
+        }
+        val decided = SuperOver.finalise(nextState)
+        if (decided != null) {
+            matchState = decided
+            resultText = SuperOver.resultText(decided)
+        } else {
+            matchState = MatchSimulation.finishMatch(nextState)
+            resultText = MatchSimulation.matchResultText(nextState)
+        }
+        matchOver = true
+        director?.onMatchEnded()
+        resultText?.let { services?.announceSpoken(it) }
+    }
+
     fun commitBall(before: MatchState, result: BallResult) {
         val nextState = result.state
         // The user's early/late swing note (if any) belongs to exactly this
@@ -303,13 +327,7 @@ fun MatchScreen(
         // MatchSimulation only leaves a pick pending when the innings is
         // NOT ending on this ball, so these checks never fight a prompt.
         when {
-            MatchSimulation.isTargetReached(nextState) -> {
-                matchState = MatchSimulation.finishMatch(nextState)
-                matchOver = true
-                resultText = MatchSimulation.matchResultText(nextState)
-                director?.onMatchEnded()
-                resultText?.let { services?.announceSpoken(it) }
-            }
+            MatchSimulation.isTargetReached(nextState) -> concludeMatchOrSuperOver(nextState)
             MatchSimulation.isInningsOver(nextState) -> {
                 if (nextState.currentInnings == 1) {
                     breakLastBall = summary
@@ -321,11 +339,7 @@ fun MatchScreen(
                     val targetWord = if (switched.dlsRevised) "DLS-revised target" else "Target"
                     services?.announceSpoken("Innings break. $targetWord is ${switched.target}.")
                 } else {
-                    matchState = MatchSimulation.finishMatch(nextState)
-                    matchOver = true
-                    resultText = MatchSimulation.matchResultText(nextState)
-                    director?.onMatchEnded()
-                    resultText?.let { services?.announceSpoken(it) }
+                    concludeMatchOrSuperOver(nextState)
                 }
             }
             else -> director?.updateTension(nextState)
@@ -491,6 +505,24 @@ fun MatchScreen(
 
     // A drinks break (T20 after 10 overs, ODI after 25, Test every 15). The sound and the
     // commentary start when it appears and end when Resume is tapped.
+    // After a tie: the user names their three batters and one bowler for the Super Over.
+    if (matchState.superOverNominating) {
+        BackHandler(onBack = { confirmingLeave = true })
+        SuperOverNominationScreen(
+            introLines = SuperOver.introLines(matchState),
+            batters = SuperOver.eligibleBatters(matchState),
+            bowlers = SuperOver.eligibleBowlers(matchState),
+            onConfirm = { batters, bowler ->
+                val started = SuperOver.nominate(matchState, batters, bowler)
+                matchState = started
+                recentCommentary = emptyList()
+                director?.onSuperOverStarted()
+                services?.announceSpoken(SuperOver.startAnnouncement(started))
+            }
+        )
+        return
+    }
+
     val drinks = matchState.drinksBreak
     if (drinks != null) {
         BackHandler(onBack = { confirmingLeave = true })

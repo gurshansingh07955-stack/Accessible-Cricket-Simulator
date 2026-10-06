@@ -164,7 +164,20 @@ data class MatchState(
     // is never taken twice. Reset for each innings. Older saves read back 0, which is correct.
     val lastDrinksBreakOver: Int = 0,
     // Set while a drinks break is on (DrinksBreak.startIfDue); the match screen shows it until Resume.
-    val drinksBreak: DrinksBreakInfo? = null
+    val drinksBreak: DrinksBreakInfo? = null,
+    // --- Super Over (see SuperOver) ---
+    // 0 = ordinary match. 1, 2... = which Super Over is being played. Older saves read 0.
+    val superOverRound: Int = 0,
+    // Players already used in an earlier Super Over (they cannot be used again).
+    val superOverUsedIds: List<String> = emptyList(),
+    val superOverResults: List<SuperOverResult> = emptyList(),
+    // team id -> its nominated batters and bowler for the Super Over being played
+    val superOverNominations: Map<String, SuperOverNomination> = emptyMap(),
+    val superOverFirstBattingId: String? = null,
+    // True while the user still has to name their three batters and bowler.
+    val superOverNominating: Boolean = false,
+    // The finished match (its two innings and scorecards), kept while Super Overs are played.
+    val regulationState: MatchState? = null
 )
 
 object MatchStateMachine {
@@ -582,6 +595,8 @@ object MatchStateMachine {
      * prompts for a pick before play resumes.
      */
     fun switchInnings(state: MatchState): MatchState {
+        // In a Super Over the "second innings" is the chase of one over by the other nominated side.
+        if (state.superOverRound > 0) return SuperOver.switchToChase(state)
         if (state.currentInnings != 1) {
             // Web source: console.error + return state unchanged.
             return state

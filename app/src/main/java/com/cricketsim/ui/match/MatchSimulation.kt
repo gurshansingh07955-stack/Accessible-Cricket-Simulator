@@ -453,7 +453,8 @@ object MatchSimulation {
 
     /** True once the current innings should end: all out, or the overs limit is used up. */
     fun isInningsOver(state: MatchState): Boolean {
-        if (state.score.wickets >= 10) return true
+        // All out = every batter but one is out: 10 for a full XI, 2 for a Super Over's three batters.
+        if (state.score.wickets >= state.battingTeam.players.size - 1) return true
         return state.score.overs >= state.oversLimit && state.score.balls == 0
     }
 
@@ -487,7 +488,7 @@ object MatchSimulation {
         val target = state.target ?: return null
 
         if (isTargetReached(state)) {
-            val wicketsInHand = 10 - state.score.wickets
+            val wicketsInHand = (state.battingTeam.players.size - 1) - state.score.wickets
             val plural = if (wicketsInHand == 1) "" else "s"
             return "${state.battingTeam.name} won by $wicketsInHand wicket$plural."
         }

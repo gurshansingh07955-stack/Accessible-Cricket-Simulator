@@ -84,7 +84,8 @@ enum class CommentaryCategory {
     // Decision Review System (Android-only — see this file's doc comment).
     REVIEW_REQUESTED, REVIEW_OVERTURNED, REVIEW_UMPIRES_CALL, REVIEW_STANDS,
     // Run outs, stumpings, caught and bowled, and the drinks break (clips generated with the same voices).
-    WICKET_RUN_OUT, WICKET_STUMPED, WICKET_CAUGHT_AND_BOWLED, DRINKS_START, DRINKS_END
+    WICKET_RUN_OUT, WICKET_STUMPED, WICKET_CAUGHT_AND_BOWLED, DRINKS_START, DRINKS_END,
+    SUPER_OVER_ANNOUNCE, SUPER_OVER_START
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -660,6 +661,26 @@ object CommentaryLibrary {
             CommentaryPair(
                 CommentaryLine("drinksend_2_excited", "Back to the action! The bottles are cleared and play is about to resume!", "/_cdn/commentary/drinksend_2_excited.mp3"),
                 CommentaryLine("drinksend_2_calm", "The batters will want to keep their momentum, and the bowlers will want to break it.", "/_cdn/commentary/drinksend_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.SUPER_OVER_ANNOUNCE to listOf(
+            CommentaryPair(
+                CommentaryLine("superoverannounce_1_excited", "It's a tie! The scores are level, and we are going to a Super Over!", "/_cdn/commentary/superoverannounce_1_excited.mp3"),
+                CommentaryLine("superoverannounce_1_calm", "Nothing could separate these two sides, so one more over each will decide it.", "/_cdn/commentary/superoverannounce_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("superoverannounce_2_excited", "Unbelievable scenes! The match is tied and it all comes down to a Super Over!", "/_cdn/commentary/superoverannounce_2_excited.mp3"),
+                CommentaryLine("superoverannounce_2_calm", "One over, two wickets, and a place in history for whoever holds their nerve.", "/_cdn/commentary/superoverannounce_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.SUPER_OVER_START to listOf(
+            CommentaryPair(
+                CommentaryLine("superoverstart_1_excited", "And here we go, the Super Over is underway, every single ball is going to count!", "/_cdn/commentary/superoverstart_1_excited.mp3"),
+                CommentaryLine("superoverstart_1_calm", "Six balls, two wickets, and all of the pressure in the world on both sides.", "/_cdn/commentary/superoverstart_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("superoverstart_2_excited", "The Super Over begins! The batters are walking out and the bowler has the ball!", "/_cdn/commentary/superoverstart_2_excited.mp3"),
+                CommentaryLine("superoverstart_2_calm", "A tense moment, the nominated players know there is no room for error.", "/_cdn/commentary/superoverstart_2_calm.mp3")
             )
         )
     )

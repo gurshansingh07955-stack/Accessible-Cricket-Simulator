@@ -688,7 +688,7 @@ object MatchEngine {
         val target = matchState.target ?: 0
         val currentRuns = matchState.score.runs
         val runsNeeded = target - currentRuns
-        val wicketsLeft = 10 - matchState.score.wickets
+        val wicketsLeft = (matchState.battingTeam.players.size - 1) - matchState.score.wickets
 
         val maxOvers = matchState.oversLimit
         val ballsBowled = matchState.score.overs * 6 + matchState.score.balls

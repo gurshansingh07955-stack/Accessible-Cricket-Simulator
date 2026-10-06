@@ -156,7 +156,7 @@ object MatchLines {
     fun resultSummaryLines(state: MatchState): List<String> = listOfNotNull(
         state.firstInningsData?.let { "First innings: ${ScorecardLines.inningsHeader(it)}" },
         "Second innings: ${ScorecardLines.inningsHeader(state.currentInningsData)}"
-    )
+    ) + SuperOver.summaryLines(state)
 }
 
 /** Scorecard rows, one self-contained sentence each. */

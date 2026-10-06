@@ -217,6 +217,18 @@ class MatchAudioDirector(private val services: GameServices) {
         sound.enqueueCommentary(CommentaryCategory.DRINKS_END)
     }
 
+    /** The scores are level: the crowd erupts, then the commentators announce a Super Over. */
+    fun onSuperOverAnnounced() {
+        sound.swellCrowd(2600)
+        sound.schedule(1500L) { sound.enqueueCommentary(CommentaryCategory.SUPER_OVER_ANNOUNCE) }
+    }
+
+    /** The Super Over's first ball is about to be bowled. */
+    fun onSuperOverStarted() {
+        sound.swellCrowd(2200)
+        sound.enqueueCommentary(CommentaryCategory.SUPER_OVER_START)
+    }
+
     /** `switched` is the state after MatchStateMachine.switchInnings. */
     fun onInningsBreak(switched: MatchState) {
         if (switched.dlsRevised) sound.enqueueCommentary(CommentaryCategory.DLS_REVISED)
