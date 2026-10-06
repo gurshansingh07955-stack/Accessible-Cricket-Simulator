@@ -44,6 +44,9 @@ sealed interface Screen {
     // Both teams here are already finalized 11-player XIs.
     data class TossSelection(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team) : Screen
 
+    /** The national anthems, played between the toss and the first ball (see AnthemScreen). */
+    data class Anthems(val format: MatchFormat, val stadium: Stadium, val userTeam: Team, val opponentTeam: Team, val toss: TossResult) : Screen
+
     /**
      * The match itself: a real, user-controlled match against an AI
      * opponent. See MatchScreen.kt's own doc comment. `resume` is set when

@@ -221,6 +221,7 @@ class SoundEngine(context: Context) {
         stopAimTone()
         stopDrsReviewAudio()
         stopCommentary()
+        stopAnthem()
     }
 
     fun onAppForegrounded() {
@@ -231,6 +232,7 @@ class SoundEngine(context: Context) {
 
     fun release() {
         stopCommentary()
+        stopAnthem()
         crowdRamp?.cancel()
         crowdRamp = null
         rainRamp?.cancel()
@@ -1128,6 +1130,74 @@ class SoundEngine(context: Context) {
         commentaryPlaying = false
     }
 
+    // --- National anthems ---
+    // A team's ten-second anthem, played from the audio pack between the toss and the first ball.
+
+    private var anthemPlayer: MediaPlayer? = null
+    private var anthemToken = 0
+    private var anthemDucking = false
+
+    /** True while commentary is speaking or waiting to speak (the anthem screen waits for its introduction to end). */
+    fun isCommentaryBusy(): Boolean = commentaryPlaying || commentaryQueue.isNotEmpty()
+
+    /** Whether this anthem is in the audio pack (it is missing until "Fetch audio into the app" has been run). */
+    fun hasAnthem(fileName: String): Boolean = AudioPack.bytesFor(appContext, fileName) != null
+
+    /**
+     * Plays an anthem. Returns false, and never calls [onFinished], if the file isn't in the pack.
+     * [onFinished] runs once, when the anthem ends, fails, or is stopped by the safety timer.
+     */
+    fun playAnthem(fileName: String, onFinished: () -> Unit): Boolean {
+        stopAnthem()
+        val data = AudioPack.bytesFor(appContext, fileName) ?: return false
+        val token = ++anthemToken
+        val player = MediaPlayer()
+        val finish: () -> Unit = {
+            if (token == anthemToken) {
+                stopAnthem()
+                onFinished()
+            }
+        }
+        return try {
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            player.setDataSource(ByteArrayMediaDataSource(data))
+            player.setVolume(ANTHEM_VOLUME, ANTHEM_VOLUME)
+            player.setOnPreparedListener { if (token == anthemToken) it.start() }
+            player.setOnCompletionListener { finish() }
+            player.setOnErrorListener { _, _, _ ->
+                finish()
+                true
+            }
+            anthemPlayer = player
+            anthemDucking = true
+            duckStart()
+            player.prepareAsync()
+            scope.launch {
+                delay(ANTHEM_MAX_MS)
+                finish()
+            }
+            true
+        } catch (e: Exception) {
+            runCatching { player.release() }
+            false
+        }
+    }
+
+    fun stopAnthem() {
+        anthemToken++
+        anthemPlayer?.let { runCatching { it.release() } }
+        anthemPlayer = null
+        if (anthemDucking) {
+            anthemDucking = false
+            duckEnd()
+        }
+    }
+
     // --- Vibration ---
 
     // Android 12+ hands out vibrators through VibratorManager; asking for the
@@ -1270,6 +1340,10 @@ class SoundEngine(context: Context) {
 
         /** Use the live synthesised stereo crowd (false = the old recorded crowd loop). */
         const val USE_LIVE_CROWD = false
+
+        /** Anthem loudness, and the longest one is allowed to play (they are cut to 10 s) before a safety stop. */
+        const val ANTHEM_VOLUME = 0.9f
+        const val ANTHEM_MAX_MS = 13_000L
 
         // The aim tone's playback-rate sweep — a wide range so the pitch
         // change across a drag is obvious, not subtle. Unmeasured on a real

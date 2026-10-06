@@ -104,6 +104,38 @@ for path in $clip_paths; do
   fetch "$BASE_URL$path" "$SCRATCH_DIR/$(basename "$path")"
 done
 
+echo
+echo "== Downloading and trimming national anthems =="
+# The recordings are public-domain files on Wikimedia Commons, listed in Anthems.kt. Each is cut to
+# its first ten seconds (after any leading silence), levelled so no anthem is much louder than
+# another, and faded out, then stored like every other clip as anthem_<code>.mp3.
+ANTHEMS_FILE="app/src/main/java/com/cricketsim/logic/Anthems.kt"
+ANTHEM_UA="CricketGameAudioBuild/1.0 (https://github.com/gurshansingh07955-stack/Accessible-Cricket-Simulator)"
+anthem_count=0
+if command -v ffmpeg >/dev/null 2>&1; then
+  while IFS='|' read -r code url; do
+    [ -z "$code" ] && continue
+    anthem_count=$((anthem_count + 1))
+    lower=$(echo "$code" | tr 'A-Z' 'a-z')
+    src="$SCRATCH_DIR/anthem_src_$lower"
+    if curl -fsSL --retry 3 --retry-delay 3 --max-time 180 -A "$ANTHEM_UA" -o "$src" "$url" && [ -s "$src" ]; then
+      if ffmpeg -nostdin -loglevel error -y -i "$src" -vn \
+          -af "silenceremove=start_periods=1:start_threshold=-50dB,atrim=0:10,loudnorm=I=-18:TP=-2:LRA=7,afade=t=out:st=8.6:d=1.4" \
+          -ar 44100 -ac 2 -b:a 128k "$SCRATCH_DIR/anthem_$lower.mp3"; then
+        got=$((got + 1))
+      else
+        missing+=("anthem_$lower.mp3 (could not convert)")
+      fi
+    else
+      missing+=("anthem_$lower.mp3 (could not download)")
+    fi
+    rm -f "$src"
+    sleep 1
+  done < <(grep -o 'Anthem("[A-Z]*", "https://[^"]*"' "$ANTHEMS_FILE" | sed -E 's/Anthem\("([A-Z]*)", "([^"]*)"/\1|\2/')
+else
+  echo "ffmpeg is not available here, so the anthems were skipped." >&2
+fi
+
 fetched_files=$(find "$SCRATCH_DIR" -type f -name '*.mp3' | wc -l)
 if [ "$fetched_files" -eq 0 ]; then
   echo "Nothing was fetched: is $BASE_URL reachable? Leaving existing files untouched." >&2
@@ -159,6 +191,7 @@ find "$OLD_CLIP_DIR" -mindepth 1 -delete
   echo "Source: $BASE_URL"
   echo "Sound recordings expected: 13"
   echo "Commentary clips referenced by CommentaryLibrary.kt: $clip_count"
+  echo "National anthems listed in Anthems.kt: $anthem_count"
   echo "Files packed into $OUT_FILE this run: $fetched_files"
   echo "Packed file size: $(wc -c < "$OUT_FILE") bytes"
   echo "Not available on the web app (skipped): ${#missing[@]}"

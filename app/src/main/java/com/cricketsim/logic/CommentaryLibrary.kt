@@ -85,7 +85,8 @@ enum class CommentaryCategory {
     REVIEW_REQUESTED, REVIEW_OVERTURNED, REVIEW_UMPIRES_CALL, REVIEW_STANDS,
     // Run outs, stumpings, caught and bowled, and the drinks break (clips generated with the same voices).
     WICKET_RUN_OUT, WICKET_STUMPED, WICKET_CAUGHT_AND_BOWLED, DRINKS_START, DRINKS_END,
-    SUPER_OVER_ANNOUNCE, SUPER_OVER_START
+    SUPER_OVER_ANNOUNCE, SUPER_OVER_START,
+    ANTHEM_FIRST, ANTHEM_SECOND
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -681,6 +682,26 @@ object CommentaryLibrary {
             CommentaryPair(
                 CommentaryLine("superoverstart_2_excited", "The Super Over begins! The batters are walking out and the bowler has the ball!", "/_cdn/commentary/superoverstart_2_excited.mp3"),
                 CommentaryLine("superoverstart_2_calm", "A tense moment, the nominated players know there is no room for error.", "/_cdn/commentary/superoverstart_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.ANTHEM_FIRST to listOf(
+            CommentaryPair(
+                CommentaryLine("anthemfirst_1_excited", "Ladies and gentlemen, please rise for the national anthems!", "/_cdn/commentary/anthemfirst_1_excited.mp3"),
+                CommentaryLine("anthemfirst_1_calm", "The players line up together, a proud moment before the contest begins.", "/_cdn/commentary/anthemfirst_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("anthemfirst_2_excited", "It is time for the national anthems, and the first one is about to begin!", "/_cdn/commentary/anthemfirst_2_excited.mp3"),
+                CommentaryLine("anthemfirst_2_calm", "Every player standing tall, with the whole crowd behind them.", "/_cdn/commentary/anthemfirst_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.ANTHEM_SECOND to listOf(
+            CommentaryPair(
+                CommentaryLine("anthemsecond_1_excited", "And now, the national anthem of the other side!", "/_cdn/commentary/anthemsecond_1_excited.mp3"),
+                CommentaryLine("anthemsecond_1_calm", "A moment of respect from everyone here before the action begins.", "/_cdn/commentary/anthemsecond_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("anthemsecond_2_excited", "Now the second anthem rings out around the ground!", "/_cdn/commentary/anthemsecond_2_excited.mp3"),
+                CommentaryLine("anthemsecond_2_calm", "Two nations, one game, and a lot of pride out in the middle.", "/_cdn/commentary/anthemsecond_2_calm.mp3")
             )
         )
     )

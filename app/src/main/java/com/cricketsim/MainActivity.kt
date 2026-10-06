@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.cricketsim.audio.GameServices
 import com.cricketsim.audio.LocalGameServices
+import com.cricketsim.logic.Anthems
 import com.cricketsim.logic.CricketData
 import com.cricketsim.logic.Team
 import com.cricketsim.persistence.MatchSnapshot
@@ -23,6 +24,7 @@ import com.cricketsim.persistence.summary
 import com.cricketsim.ui.Screen
 import com.cricketsim.ui.home.AboutScreen
 import com.cricketsim.ui.home.HomeScreen
+import com.cricketsim.ui.match.AnthemScreen
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.settings.SettingsScreen
 import com.cricketsim.ui.setup.FormatSelectionScreen
@@ -154,7 +156,7 @@ fun CricketSimApp() {
     }
 
     // See "THE CROWD STARTS AT THE TOSS" in the doc comment above.
-    val crowdWanted = screen is Screen.TossSelection || screen is Screen.Match
+    val crowdWanted = screen is Screen.TossSelection || screen is Screen.Anthems || screen is Screen.Match
     val soundEffectsOn = services?.settings?.soundEffects ?: false
     LaunchedEffect(crowdWanted, soundEffectsOn) {
         val sound = services?.sound ?: return@LaunchedEffect
@@ -239,9 +241,22 @@ fun CricketSimApp() {
                 userTeam = current.userTeam,
                 opponentTeam = current.opponentTeam,
                 onTossComplete = { toss ->
-                    screen = Screen.Match(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)
+                    // The anthems come between the toss and the first ball (skipped if neither team has one).
+                    screen = if (Anthems.hasAny(current.userTeam, current.opponentTeam)) {
+                        Screen.Anthems(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)
+                    } else {
+                        Screen.Match(current.format, current.stadium, current.userTeam, current.opponentTeam, toss)
+                    }
                 },
                 onBack = onBack
+            )
+        }
+        is Screen.Anthems -> {
+            AnthemScreen(
+                teams = Anthems.order(current.userTeam, current.opponentTeam, current.stadium),
+                onFinished = {
+                    screen = Screen.Match(current.format, current.stadium, current.userTeam, current.opponentTeam, current.toss)
+                }
             )
         }
         is Screen.Match -> {
