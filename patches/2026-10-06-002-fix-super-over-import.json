@@ -1,0 +1,17 @@
+{
+  "name": "fix-super-over-import",
+  "message": "Fix build: MatchLines needs the SuperOver import",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+    "contains": "import com.cricketsim.logic.SuperOver"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "import com.cricketsim.logic.PendingDismissal\n",
+      "replace": "import com.cricketsim.logic.PendingDismissal\nimport com.cricketsim.logic.SuperOver\n",
+      "count": 1
+    }
+  ]
+}
