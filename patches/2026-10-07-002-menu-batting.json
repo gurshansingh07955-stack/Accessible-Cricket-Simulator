@@ -1,0 +1,100 @@
+{
+  "name": "menu-batting",
+  "message": "Settings option: bat without gestures (footwork, shot and intent chosen from lists)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/match/BattingMenuScreen.kt",
+    "contains": "fun BatMenuStep"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingMenuScreen.kt",
+      "content": "package com.cricketsim.ui.match\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Row\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.foundation.layout.width\nimport androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.selection.selectable\nimport androidx.compose.foundation.selection.selectableGroup\nimport androidx.compose.foundation.verticalScroll\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.RadioButton\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.LaunchedEffect\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Alignment\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.Role\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.audio.LocalGameServices\nimport com.cricketsim.logic.BattingSystem\nimport com.cricketsim.logic.FootworkType\nimport com.cricketsim.logic.IntentDirection\nimport com.cricketsim.logic.NamedShot\n\n/**\n * Batting without gestures (Settings > Batting controls). Instead of the tap / long-press for\n * footwork and the two swipe surfaces for shot and intent, everything is picked from plain lists\n * that a screen reader walks with its ordinary swipes: footwork, then the shot, then the intent,\n * then one Play button. Only the timing tap that follows stays a tap, because hitting the ball\n * on the beat is the game itself.\n *\n * The delivery is told first (it is also spoken as the screen opens), so the choice is made with\n * the same information the gesture version gives.\n */\n@Composable\ninternal fun BatMenuStep(\n    deliverySummary: String,\n    fieldNote: String,\n    callout: String,\n    initialFootwork: FootworkType,\n    onPlay: (FootworkType, NamedShot, IntentDirection?) -> Unit\n) {\n    val services = LocalGameServices.current\n    var footwork by remember { mutableStateOf(initialFootwork) }\n    var shot by remember { mutableStateOf<NamedShot?>(null) }\n    var intent by remember { mutableStateOf<IntentDirection?>(null) }\n    var problem by remember { mutableStateOf<String?>(null) }\n\n    LaunchedEffect(problem) {\n        problem?.let { services?.announceSpoken(it) }\n    }\n\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .verticalScroll(rememberScrollState())\n            .padding(24.dp)\n    ) {\n        Text(\n            text = \"Choose your shot\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            text = callout + \"Delivery: $deliverySummary. $fieldNote\",\n            style = MaterialTheme.typography.bodyLarge\n        )\n\n        MenuHeading(\"Footwork\")\n        Column(modifier = Modifier.selectableGroup()) {\n            MenuRadioRow(\"Front foot\", footwork == FootworkType.FRONT_FOOT) { footwork = FootworkType.FRONT_FOOT }\n            MenuRadioRow(\"Back foot\", footwork == FootworkType.BACK_FOOT) { footwork = FootworkType.BACK_FOOT }\n        }\n\n        MenuHeading(\"Shot\")\n        Column(modifier = Modifier.selectableGroup()) {\n            BattingSystem.SHOT_OPTIONS.forEach { option ->\n                MenuRadioRow(option.label, shot == option.value) {\n                    shot = option.value\n                    problem = null\n                }\n            }\n        }\n\n        MenuHeading(\"Intent\")\n        Text(\n            \"Needed for every shot except Leave and the two defensive shots.\",\n            style = MaterialTheme.typography.bodySmall\n        )\n        Column(modifier = Modifier.selectableGroup()) {\n            listOf(IntentDirection.UP, IntentDirection.LEFT, IntentDirection.DOWN, IntentDirection.RIGHT).forEach { option ->\n                MenuRadioRow(BattingSystem.intentLabel(option), intent == option) {\n                    intent = option\n                    problem = null\n                }\n            }\n        }\n\n        Spacer(modifier = Modifier.height(16.dp))\n        problem?.let {\n            Text(it, style = MaterialTheme.typography.bodyMedium)\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n        Button(\n            onClick = {\n                val chosen = shot\n                val needsIntent = chosen != null && chosen != NamedShot.LEAVE && !BattingSystem.isDefensiveShot(chosen)\n                when {\n                    chosen == null -> problem = \"Choose a shot first.\"\n                    needsIntent && intent == null -> problem = \"Choose an intent for this shot.\"\n                    else -> onPlay(footwork, chosen, if (needsIntent) intent else null)\n                }\n            },\n            modifier = Modifier.fillMaxWidth()\n        ) {\n            Text(\"Play this shot\")\n        }\n    }\n}\n\n@Composable\nprivate fun MenuHeading(text: String) {\n    Spacer(modifier = Modifier.height(20.dp))\n    Text(\n        text = text,\n        style = MaterialTheme.typography.titleLarge,\n        modifier = Modifier.semantics { heading() }\n    )\n    Spacer(modifier = Modifier.height(4.dp))\n}\n\n@Composable\nprivate fun MenuRadioRow(label: String, selected: Boolean, onSelect: () -> Unit) {\n    Row(\n        modifier = Modifier\n            .fillMaxWidth()\n            .selectable(selected = selected, onClick = onSelect, role = Role.RadioButton)\n            .padding(vertical = 12.dp, horizontal = 8.dp),\n        verticalAlignment = Alignment.CenterVertically\n    ) {\n        RadioButton(selected = selected, onClick = null)\n        Spacer(modifier = Modifier.width(16.dp))\n        Text(label, style = MaterialTheme.typography.titleMedium)\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "    val crowdVolume: Float = 0.7f\n)",
+      "replace": "    val crowdVolume: Float = 0.7f,\n    // Batting without gestures: footwork, shot and intent chosen from lists (see BatMenuStep).\n    val menuBatting: Boolean = false\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "            crowdVolume = prefs.getFloat(KEY_CROWD_VOLUME, defaults.crowdVolume).coerceIn(0f, 1f)\n        )",
+      "replace": "            crowdVolume = prefs.getFloat(KEY_CROWD_VOLUME, defaults.crowdVolume).coerceIn(0f, 1f),\n            menuBatting = prefs.getBoolean(KEY_MENU_BATTING, defaults.menuBatting)\n        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "            .putFloat(KEY_CROWD_VOLUME, settings.crowdVolume)\n",
+      "replace": "            .putFloat(KEY_CROWD_VOLUME, settings.crowdVolume)\n            .putBoolean(KEY_MENU_BATTING, settings.menuBatting)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "        const val KEY_CROWD_VOLUME = \"crowd_volume\"\n",
+      "replace": "        const val KEY_CROWD_VOLUME = \"crowd_volume\"\n        const val KEY_MENU_BATTING = \"menu_batting\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/settings/SettingsScreen.kt",
+      "find": "        SectionHeading(\"Voice commentary\")\n",
+      "replace": "        SectionHeading(\"Batting controls\")\n        SwitchRow(\n            label = \"Batting without gestures\",\n            description = \"Choose footwork, shot and intent from lists with your screen reader's ordinary swipes, instead of tapping and swiping on the screen. The timing tap stays.\",\n            checked = settings.menuBatting,\n            onChange = { on -> services.update { it.copy(menuBatting = on) } }\n        )\n\n        SectionHeading(\"Voice commentary\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "private enum class BatStep { SHOT, INTENT, TIMING }",
+      "replace": "private enum class BatStep { SHOT, INTENT, TIMING, MENU }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "    onBallPlayed: (ResolvedBowlingDecision, BattingDecision, String?) -> Unit\n) {\n    val services = LocalGameServices.current\n    var step by remember { mutableStateOf(BatStep.SHOT) }\n",
+      "replace": "    onBallPlayed: (ResolvedBowlingDecision, BattingDecision, String?) -> Unit,\n    // True when \"Batting without gestures\" is on: footwork, shot and intent come from lists.\n    menuMode: Boolean = false\n) {\n    val services = LocalGameServices.current\n    var step by remember { mutableStateOf(if (menuMode) BatStep.MENU else BatStep.SHOT) }\n    // The footwork actually used: the one passed in, unless the menu changes it.\n    var activeFootwork by remember { mutableStateOf(footwork) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "                            footwork = footwork,\n                            shot = NamedShot.LEAVE,",
+      "replace": "                            footwork = activeFootwork,\n                            shot = NamedShot.LEAVE,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "                        footwork = footwork,\n                        shot = shot,",
+      "replace": "                        footwork = activeFootwork,\n                        shot = shot,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "    when (step) {\n        BatStep.SHOT -> BatShotStep(\n",
+      "replace": "    when (step) {\n        BatStep.MENU -> BatMenuStep(\n            deliverySummary = deliverySummary(delivery),\n            fieldNote = reveal.fieldNote,\n            callout = callout,\n            initialFootwork = footwork,\n            onPlay = { chosenFootwork, chosenShot, chosenIntent ->\n                activeFootwork = chosenFootwork\n                shot = chosenShot\n                intent = chosenIntent\n                if (chosenShot == NamedShot.LEAVE) {\n                    // Leaving needs no timing: the ball is simply let go.\n                    onBallPlayed(\n                        delivery,\n                        BattingDecision(\n                            footwork = chosenFootwork,\n                            shot = NamedShot.LEAVE,\n                            intent = null,\n                            timingTier = BowlingQualityTier.GOOD,\n                            timingDeltaFraction = 0.0\n                        ),\n                        null\n                    )\n                } else {\n                    step = BatStep.TIMING\n                }\n            }\n        )\n        BatStep.SHOT -> BatShotStep(\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            footwork = pendingFootwork,\n",
+      "replace": "            footwork = pendingFootwork,\n            menuMode = services?.settings?.menuBatting == true,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            FaceNextBallControl(\n                onSelected = { footwork ->\n                    pendingFootwork = footwork\n                    showBattingScreen = true\n                }\n            )\n",
+      "replace": "            if (services?.settings?.menuBatting == true) {\n                // Batting without gestures: no tap or long-press. One plain button opens the window\n                // where footwork, shot and intent are chosen from lists.\n                Button(\n                    onClick = {\n                        pendingFootwork = FootworkType.FRONT_FOOT\n                        showBattingScreen = true\n                    },\n                    modifier = Modifier.fillMaxWidth()\n                ) {\n                    Text(\"Face next ball\")\n                }\n            } else {\n                FaceNextBallControl(\n                    onSelected = { footwork ->\n                        pendingFootwork = footwork\n                        showBattingScreen = true\n                    }\n                )\n            }\n",
+      "count": 1
+    }
+  ]
+}
