@@ -620,6 +620,7 @@ fun MatchScreen(
         BattingScreen(
             batsman = matchState.currentBatsmen.first,
             footwork = pendingFootwork,
+            menuMode = services?.settings?.menuBatting == true,
             // Called once, after the footwork commit: the AI captain reads
             // the situation, decides the delivery and sets its field for it
             // (all before the batter picks a shot), and the batter is told
@@ -732,12 +733,26 @@ fun MatchScreen(
                 Text("Bowl")
             }
         } else {
-            FaceNextBallControl(
-                onSelected = { footwork ->
-                    pendingFootwork = footwork
-                    showBattingScreen = true
+            if (services?.settings?.menuBatting == true) {
+                // Batting without gestures: no tap or long-press. One plain button opens the window
+                // where footwork, shot and intent are chosen from lists.
+                Button(
+                    onClick = {
+                        pendingFootwork = FootworkType.FRONT_FOOT
+                        showBattingScreen = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Face next ball")
                 }
-            )
+            } else {
+                FaceNextBallControl(
+                    onSelected = { footwork ->
+                        pendingFootwork = footwork
+                        showBattingScreen = true
+                    }
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(MatchLines.strikerLine(matchState), style = MaterialTheme.typography.bodyLarge)

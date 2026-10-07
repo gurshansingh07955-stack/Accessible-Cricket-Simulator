@@ -1,6 +1,6 @@
-Patch run: 37588268531
-Timestamp (UTC): 2026-10-07T07:35:39Z
+Patch run: 37608604637
+Timestamp (UTC): 2026-10-07T10:37:22Z
 Result: OK
 -----
-Patch 2026-10-07-001-new-shots.json
-  applied 28 operation(s) to 9 file(s)
+Patch 2026-10-07-002-menu-batting.json
+  applied 13 operation(s) to 5 file(s)

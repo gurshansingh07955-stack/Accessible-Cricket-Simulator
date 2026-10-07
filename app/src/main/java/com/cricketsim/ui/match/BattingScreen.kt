@@ -167,7 +167,7 @@ import kotlinx.coroutines.launch
  *   reader on an actual device in this form yet.
  */
 
-private enum class BatStep { SHOT, INTENT, TIMING }
+private enum class BatStep { SHOT, INTENT, TIMING, MENU }
 
 // Five pulses, tap on the fifth — same as the web.
 private const val BAT_PULSE_COUNT = 5
@@ -274,10 +274,14 @@ fun BattingScreen(
     batsman: Player,
     footwork: FootworkType,
     generateDelivery: () -> DeliveryReveal,
-    onBallPlayed: (ResolvedBowlingDecision, BattingDecision, String?) -> Unit
+    onBallPlayed: (ResolvedBowlingDecision, BattingDecision, String?) -> Unit,
+    // True when "Batting without gestures" is on: footwork, shot and intent come from lists.
+    menuMode: Boolean = false
 ) {
     val services = LocalGameServices.current
-    var step by remember { mutableStateOf(BatStep.SHOT) }
+    var step by remember { mutableStateOf(if (menuMode) BatStep.MENU else BatStep.SHOT) }
+    // The footwork actually used: the one passed in, unless the menu changes it.
+    var activeFootwork by remember { mutableStateOf(footwork) }
     // Computed exactly once for this screen's lifetime, right as it
     // enters composition.
     val reveal = remember { generateDelivery() }
@@ -298,6 +302,33 @@ fun BattingScreen(
     }
 
     when (step) {
+        BatStep.MENU -> BatMenuStep(
+            deliverySummary = deliverySummary(delivery),
+            fieldNote = reveal.fieldNote,
+            callout = callout,
+            initialFootwork = footwork,
+            onPlay = { chosenFootwork, chosenShot, chosenIntent ->
+                activeFootwork = chosenFootwork
+                shot = chosenShot
+                intent = chosenIntent
+                if (chosenShot == NamedShot.LEAVE) {
+                    // Leaving needs no timing: the ball is simply let go.
+                    onBallPlayed(
+                        delivery,
+                        BattingDecision(
+                            footwork = chosenFootwork,
+                            shot = NamedShot.LEAVE,
+                            intent = null,
+                            timingTier = BowlingQualityTier.GOOD,
+                            timingDeltaFraction = 0.0
+                        ),
+                        null
+                    )
+                } else {
+                    step = BatStep.TIMING
+                }
+            }
+        )
         BatStep.SHOT -> BatShotStep(
             deliverySummary = deliverySummary(delivery),
             fieldNote = reveal.fieldNote,
@@ -309,7 +340,7 @@ fun BattingScreen(
                     onBallPlayed(
                         delivery,
                         BattingDecision(
-                            footwork = footwork,
+                            footwork = activeFootwork,
                             shot = NamedShot.LEAVE,
                             intent = null,
                             timingTier = BowlingQualityTier.GOOD,
@@ -339,7 +370,7 @@ fun BattingScreen(
                 onBallPlayed(
                     delivery,
                     BattingDecision(
-                        footwork = footwork,
+                        footwork = activeFootwork,
                         shot = shot,
                         intent = intent,
                         timingTier = result.tier,

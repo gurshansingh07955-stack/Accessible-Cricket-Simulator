@@ -31,7 +31,9 @@ data class GameSettings(
     // 0 (silent) to 1 (full): an independent multiplier on top of the
     // crowd ambience's own tension/duck/swell gain, so the crowd can be
     // turned down without touching the sound effects.
-    val crowdVolume: Float = 0.7f
+    val crowdVolume: Float = 0.7f,
+    // Batting without gestures: footwork, shot and intent chosen from lists (see BatMenuStep).
+    val menuBatting: Boolean = false
 )
 
 class SettingsStore(context: Context) {
@@ -45,7 +47,8 @@ class SettingsStore(context: Context) {
             soundEffects = prefs.getBoolean(KEY_SOUND_EFFECTS, defaults.soundEffects),
             spokenCommentary = prefs.getBoolean(KEY_SPOKEN_COMMENTARY, defaults.spokenCommentary),
             aiCommentaryMode = readEnum(KEY_AI_COMMENTARY, defaults.aiCommentaryMode),
-            crowdVolume = prefs.getFloat(KEY_CROWD_VOLUME, defaults.crowdVolume).coerceIn(0f, 1f)
+            crowdVolume = prefs.getFloat(KEY_CROWD_VOLUME, defaults.crowdVolume).coerceIn(0f, 1f),
+            menuBatting = prefs.getBoolean(KEY_MENU_BATTING, defaults.menuBatting)
         )
     }
 
@@ -57,6 +60,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_SPOKEN_COMMENTARY, settings.spokenCommentary)
             .putString(KEY_AI_COMMENTARY, settings.aiCommentaryMode.name)
             .putFloat(KEY_CROWD_VOLUME, settings.crowdVolume)
+            .putBoolean(KEY_MENU_BATTING, settings.menuBatting)
             .apply()
     }
 
@@ -75,5 +79,6 @@ class SettingsStore(context: Context) {
         const val KEY_SPOKEN_COMMENTARY = "spoken_commentary"
         const val KEY_AI_COMMENTARY = "ai_commentary_mode"
         const val KEY_CROWD_VOLUME = "crowd_volume"
+        const val KEY_MENU_BATTING = "menu_batting"
     }
 }

@@ -123,6 +123,14 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         )
 
+        SectionHeading("Batting controls")
+        SwitchRow(
+            label = "Batting without gestures",
+            description = "Choose footwork, shot and intent from lists with your screen reader's ordinary swipes, instead of tapping and swiping on the screen. The timing tap stays.",
+            checked = settings.menuBatting,
+            onChange = { on -> services.update { it.copy(menuBatting = on) } }
+        )
+
         SectionHeading("Voice commentary")
         Text(
             "Pre-recorded commentators react to what happens in the match.",
