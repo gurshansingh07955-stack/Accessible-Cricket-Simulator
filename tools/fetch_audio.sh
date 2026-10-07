@@ -112,6 +112,11 @@ echo "== Downloading and trimming national anthems =="
 ANTHEMS_FILE="app/src/main/java/com/cricketsim/logic/Anthems.kt"
 ANTHEM_UA="CricketGameAudioBuild/1.0 (https://github.com/gurshansingh07955-stack/Accessible-Cricket-Simulator)"
 anthem_count=0
+# The GitHub runner does not always have ffmpeg, which the anthems need to trim and level them.
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "ffmpeg not found, installing it..."
+  (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) >/dev/null 2>&1 || echo "Could not install ffmpeg." >&2
+fi
 if command -v ffmpeg >/dev/null 2>&1; then
   while IFS='|' read -r code url; do
     [ -z "$code" ] && continue
@@ -134,6 +139,7 @@ if command -v ffmpeg >/dev/null 2>&1; then
   done < <(grep -o 'Anthem("[A-Z]*", "https://[^"]*"' "$ANTHEMS_FILE" | sed -E 's/Anthem\("([A-Z]*)", "([^"]*)"/\1|\2/')
 else
   echo "ffmpeg is not available here, so the anthems were skipped." >&2
+  missing+=("all national anthems (ffmpeg is not available)")
 fi
 
 fetched_files=$(find "$SCRATCH_DIR" -type f -name '*.mp3' | wc -l)
