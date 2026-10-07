@@ -1,0 +1,24 @@
+{
+  "name": "anthem-ffmpeg",
+  "message": "Fetch audio: install ffmpeg on the runner when it is missing, and report it if the anthems are skipped",
+  "alreadyAppliedIf": {
+    "file": "tools/fetch_audio.sh",
+    "contains": "installing it"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "if command -v ffmpeg >/dev/null 2>&1; then\n  while IFS='|' read -r code url; do\n",
+      "replace": "# The GitHub runner does not always have ffmpeg, which the anthems need to trim and level them.\nif ! command -v ffmpeg >/dev/null 2>&1; then\n  echo \"ffmpeg not found, installing it...\"\n  (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) >/dev/null 2>&1 || echo \"Could not install ffmpeg.\" >&2\nfi\nif command -v ffmpeg >/dev/null 2>&1; then\n  while IFS='|' read -r code url; do\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "  echo \"ffmpeg is not available here, so the anthems were skipped.\" >&2\n",
+      "replace": "  echo \"ffmpeg is not available here, so the anthems were skipped.\" >&2\n  missing+=(\"all national anthems (ffmpeg is not available)\")\n",
+      "count": 1
+    }
+  ]
+}
