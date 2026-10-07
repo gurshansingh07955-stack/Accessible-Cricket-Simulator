@@ -392,6 +392,64 @@ object MatchStateMachine {
     }
 
     /**
+     * How many deliveries of the current over have been bowled, wides and no-balls included
+     * (so the over counts as started from the very first delivery, whatever it was).
+     */
+    fun deliveriesThisOver(state: MatchState): Int {
+        val overStart = state.score.overs * 6
+        var legalSoFar = 0
+        var inThisOver = 0
+        for (ball in state.ballByBall) {
+            if (legalSoFar >= overStart) inThisOver++
+            if (!ball.isWide && !ball.isNoBall) legalSoFar++
+        }
+        return inThisOver
+    }
+
+    /**
+     * Who the user can swap in for the bowler just chosen for this over: any bowler with overs left,
+     * except the one already chosen and the one who bowled the over before (no back-to-back overs).
+     */
+    fun getBowlerChangeOptions(state: MatchState): List<Player> {
+        val maxOvers = getMaxOversPerBowler(state.format)
+        val previousOverBowlerId = state.ballByBall.lastOrNull()?.bowlerId
+        return state.bowlingTeam.players
+            .filter { it.role == PlayerRole.BOWLER || it.role == PlayerRole.ALL_ROUNDER }
+            .filter { oversBowledBy(state, it.id) < maxOvers }
+            .filter { it.id != state.currentBowler.id && it.id != previousOverBowlerId }
+    }
+
+    /**
+     * The "Change bowler" option shows from the moment a bowler has been chosen for an over until
+     * the first delivery of that over is bowled. Not in a Super Over, where the bowler is fixed.
+     */
+    fun canChangeBowler(state: MatchState): Boolean =
+        state.superOverRound == 0 &&
+            !state.needsBowlerSelection &&
+            state.pendingDismissal == null &&
+            deliveriesThisOver(state) == 0 &&
+            getBowlerChangeOptions(state).isNotEmpty()
+
+    /**
+     * Swaps the bowler chosen for this over for another one, before a ball has been bowled. The field
+     * the user may already have set is kept (the new bowler and the old one simply trade places), and
+     * the bowler who was swapped out, having bowled nothing, is taken back out of the figures.
+     */
+    fun changeBowlerBeforeFirstBall(state: MatchState, bowler: Player): MatchState {
+        val previous = state.currentBowler
+        if (bowler.id == previous.id) return state
+        val fieldPlacements = carryOverFieldPlacements(state.fieldPlacements, previous.id, bowler.id)
+            ?: FieldingSystem.createDefaultFieldPlacements(FieldingSystem.getFieldingPlayers(state.bowlingTeam, bowler.id))
+        val withNew = MatchStats.addBowlerIfNotExists(state.currentInningsData, bowler)
+        val cleaned = withNew.copy(
+            bowlerStats = withNew.bowlerStats.filterNot {
+                it.playerId == previous.id && it.overs == 0 && it.balls == 0 && it.wides == 0 && it.noBalls == 0
+            }
+        )
+        return state.copy(currentBowler = bowler, currentInningsData = cleaned, fieldPlacements = fieldPlacements)
+    }
+
+    /**
      * Confirms who bowls next. If no ball has been bowled yet this
      * innings, this is the opening bowler pick and resets the
      * (still-empty) innings data around the chosen bowler. Otherwise

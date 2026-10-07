@@ -208,6 +208,8 @@ fun MatchScreen(
     // Set the instant "Face next ball" is tapped/held — see
     // FaceNextBallControl. Read once, when BattingScreen mounts.
     var pendingFootwork by remember { mutableStateOf(FootworkType.FRONT_FOOT) }
+    // The "Change bowler" window, offered only before the first ball of an over is bowled.
+    var showChangeBowler by remember { mutableStateOf(false) }
     // The early/late note on the user's own swing, waiting to be folded
     // into the last-ball summary when the ball is committed — see the
     // class doc comment's "SWING NOTE". Null when there is nothing to add.
@@ -580,6 +582,22 @@ fun MatchScreen(
         return
     }
 
+    if (showChangeBowler) {
+        BackHandler(onBack = { showChangeBowler = false })
+        BowlerSelectionScreen(
+            title = "Change your bowler",
+            players = MatchStateMachine.getBowlerChangeOptions(matchState),
+            bowlerStats = matchState.currentInningsData.bowlerStats,
+            maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(matchState.format),
+            onConfirm = { bowler ->
+                matchState = MatchStateMachine.changeBowlerBeforeFirstBall(matchState, bowler)
+                showChangeBowler = false
+                services?.announceSpoken("${bowler.name} will bowl this over.")
+            }
+        )
+        return
+    }
+
     if (matchState.needsBowlerSelection) {
         val noBallsBowledYet = matchState.currentInningsData.totalBalls == 0 && matchState.currentInningsData.totalOvers == 0
         BowlerSelectionScreen(
@@ -731,6 +749,13 @@ fun MatchScreen(
 
             Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("Bowl")
+            }
+            // Only until the first ball of this over has been bowled; after that the option is gone.
+            if (MatchStateMachine.canChangeBowler(matchState)) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = { showChangeBowler = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Change bowler")
+                }
             }
         } else {
             if (services?.settings?.menuBatting == true) {
