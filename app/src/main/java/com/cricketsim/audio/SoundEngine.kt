@@ -116,7 +116,7 @@ class SoundEngine(context: Context) {
 
     // --- Synthesized buffers ---
 
-    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN }
+    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN, GLOVES }
 
     private val synthCache = HashMap<Fx, ShortArray>()
 
@@ -137,6 +137,7 @@ class SoundEngine(context: Context) {
                 Fx.CROWD -> Synth.crowdBed()
                 Fx.AIM_TONE -> Synth.aimTone()
                 Fx.SIREN -> Synth.siren()
+                Fx.GLOVES -> Synth.gloves()
             }
         }
     }
@@ -387,7 +388,7 @@ class SoundEngine(context: Context) {
     }
 
     /** The sound of what just happened on the ball, with the crowd's reaction. Web mapping, see the class comment. */
-    fun playOutcomeSounds(isWicket: Boolean, runs: Int) {
+    fun playOutcomeSounds(isWicket: Boolean, runs: Int, leftAlone: Boolean = false) {
         if (!settings.soundEffects) return
         when {
             isWicket -> {
@@ -410,6 +411,11 @@ class SoundEngine(context: Context) {
                 duckFor(180)
                 swellCrowd(2400)
                 schedule(500) { playCheer(big = false) }
+            }
+            leftAlone -> {
+                // The batter let it go: the ball thuds into the keeper's gloves, with no bat on it.
+                playPcm(Fx.GLOVES, MASTER)
+                duckFor(150)
             }
             else -> {
                 if (!playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) playPcm(Fx.BAT_HIT, MASTER)

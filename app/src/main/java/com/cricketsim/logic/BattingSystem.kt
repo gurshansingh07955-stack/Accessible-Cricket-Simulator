@@ -29,7 +29,9 @@ enum class FootworkType { FRONT_FOOT, BACK_FOOT }
 enum class NamedShot {
     FORWARD_DEFENSE, BACKWARD_DEFENSE, STRAIGHT_DRIVE, ON_DRIVE, COVER_DRIVE, SQUARE_DRIVE,
     CUT_SHOT, LATE_CUT, PULL_SHOT, HOOK_SHOT, LEG_GLANCE_FLICK, SWEEP_SHOT, REVERSE_SWEEP,
-    UPPER_CUT, SCOOP_SHOT
+    UPPER_CUT, SCOOP_SHOT,
+    // Added later: Leave (no shot at all), Off Drive, Short Punch, Helicopter Shot and Switch Hit.
+    LEAVE, OFF_DRIVE, SHORT_PUNCH, HELICOPTER_SHOT, SWITCH_HIT
 }
 
 enum class IntentDirection { UP, DOWN, LEFT, RIGHT }
@@ -106,13 +108,20 @@ object BattingSystem {
 
     // Order matches the design spec exactly — this is also the vertical
     // drag-zone order shown on the shot-selection screen.
+    // Twenty shots now, so each one's band on the screen is 5% of the height (it was 6.7% with fifteen).
+    // Leave is flagged "defensive" here only so the computer batter never picks it as an attacking
+    // shot: it chooses to leave on its own (see generateAiBattingDecision), and the leave is handled
+    // separately everywhere (no intent step, no timing step, no shot probabilities).
     val SHOT_OPTIONS: List<ShotInfo> = listOf(
+        ShotInfo(NamedShot.LEAVE, "Leave", true),
         ShotInfo(NamedShot.FORWARD_DEFENSE, "Forward Defense", true),
         ShotInfo(NamedShot.BACKWARD_DEFENSE, "Backward Defense", true),
         ShotInfo(NamedShot.STRAIGHT_DRIVE, "Straight Drive", false),
+        ShotInfo(NamedShot.OFF_DRIVE, "Off Drive", false),
         ShotInfo(NamedShot.ON_DRIVE, "On Drive", false),
         ShotInfo(NamedShot.COVER_DRIVE, "Cover Drive", false),
         ShotInfo(NamedShot.SQUARE_DRIVE, "Square Drive", false),
+        ShotInfo(NamedShot.SHORT_PUNCH, "Short Punch", false),
         ShotInfo(NamedShot.CUT_SHOT, "Cut Shot", false),
         ShotInfo(NamedShot.LATE_CUT, "Late Cut", false),
         ShotInfo(NamedShot.PULL_SHOT, "Pull Shot", false),
@@ -121,7 +130,9 @@ object BattingSystem {
         ShotInfo(NamedShot.SWEEP_SHOT, "Sweep Shot", false),
         ShotInfo(NamedShot.REVERSE_SWEEP, "Reverse Sweep", false),
         ShotInfo(NamedShot.UPPER_CUT, "Upper Cut", false),
-        ShotInfo(NamedShot.SCOOP_SHOT, "Scoop Shot", false)
+        ShotInfo(NamedShot.SCOOP_SHOT, "Scoop Shot", false),
+        ShotInfo(NamedShot.HELICOPTER_SHOT, "Helicopter Shot", false),
+        ShotInfo(NamedShot.SWITCH_HIT, "Switch Hit", false)
     )
 
     fun isDefensiveShot(shot: NamedShot): Boolean =
@@ -261,6 +272,25 @@ object BattingSystem {
             excellent = listOf(BowlingLength.FULL, BowlingLength.GOOD_LENGTH, MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS, BowlingLength.HALF_VOLLEY),
             good = listOf(BowlingLength.SHORT, MisExecutedLength.LONG_HOP, BowlingLength.BACK_OF_LENGTH)
         ),
+        NamedShot.OFF_DRIVE to CompatibilityRule(
+            excellent = listOf(BowlingLength.FULL, MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS, BowlingLength.HALF_VOLLEY),
+            good = listOf(BowlingLength.GOOD_LENGTH)
+        ),
+        // Punched off the back foot to a short-of-a-length ball.
+        NamedShot.SHORT_PUNCH to CompatibilityRule(
+            excellent = listOf(BowlingLength.SHORT, BowlingLength.BACK_OF_LENGTH),
+            good = listOf(BowlingLength.GOOD_LENGTH, MisExecutedLength.LONG_HOP, BowlingLength.BOUNCER)
+        ),
+        // Whipped through the line, best against full balls and yorkers.
+        NamedShot.HELICOPTER_SHOT to CompatibilityRule(
+            excellent = listOf(BowlingLength.YORKER, BowlingLength.FULL, MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS),
+            good = listOf(BowlingLength.HALF_VOLLEY, BowlingLength.GOOD_LENGTH)
+        ),
+        // The batter swaps hands as the bowler runs in; a good ball to hit is a straight, hittable one.
+        NamedShot.SWITCH_HIT to CompatibilityRule(
+            excellent = listOf(BowlingLength.GOOD_LENGTH, BowlingLength.FULL, BowlingLength.HALF_VOLLEY),
+            good = listOf(BowlingLength.BACK_OF_LENGTH, MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS, BowlingLength.SHORT)
+        ),
         NamedShot.UPPER_CUT to CompatibilityRule(
             excellent = listOf(BowlingLength.BOUNCER),
             good = listOf(BowlingLength.SHORT, MisExecutedLength.LONG_HOP)
@@ -295,7 +325,7 @@ object BattingSystem {
             }
         }
 
-        val rule = SHOT_COMPATIBILITY.getValue(shot)
+        val rule = SHOT_COMPATIBILITY[shot] ?: return ShotCompatibilityTier.GOOD
         return when {
             actualLength in rule.excellent -> ShotCompatibilityTier.EXCELLENT
             actualLength in rule.good -> ShotCompatibilityTier.GOOD
@@ -528,6 +558,27 @@ object BattingSystem {
         multiplyKey(probs, OutcomeProbs::dot, 1.2)
     }
 
+    /** What makes a few shots different from a plain drive: the helicopter and switch hit are big-hitting and risky. */
+    private fun applyShotCharacter(probs: OutcomeProbs, shot: NamedShot) {
+        when (shot) {
+            NamedShot.HELICOPTER_SHOT -> {
+                multiplyKey(probs, OutcomeProbs::six, 1.5)
+                multiplyKey(probs, OutcomeProbs::four, 0.9)
+                multiplyKey(probs, OutcomeProbs::wicket, 1.1)
+            }
+            NamedShot.SWITCH_HIT -> {
+                multiplyKey(probs, OutcomeProbs::six, 1.4)
+                multiplyKey(probs, OutcomeProbs::wicket, 1.25)
+                multiplyKey(probs, OutcomeProbs::dot, 1.05)
+            }
+            NamedShot.SHORT_PUNCH -> {
+                multiplyKey(probs, OutcomeProbs::four, 1.1)
+                multiplyKey(probs, OutcomeProbs::wicket, 0.95)
+            }
+            else -> {}
+        }
+    }
+
     private fun applyTimingTier(probs: OutcomeProbs, tier: TimingTier) {
         when (tier) {
             BowlingQualityTier.PERFECT -> {
@@ -662,6 +713,7 @@ object BattingSystem {
     ): OutcomeProbs {
         applyFootworkMatch(probs, computeFootworkMatch(decision.footwork, actualLength))
         applyShotCompatibility(probs, computeShotCompatibility(decision.shot, actualLength, bowlingStyle), decision.shot)
+        applyShotCharacter(probs, decision.shot)
         if (decision.intent != null) {
             applyIntentDirection(probs, decision.intent, actualLength, bowlingStyle)
         }
@@ -767,7 +819,9 @@ object BattingSystem {
         actualLength: CompatibleLength,
         bowlingStyle: BowlingStyle,
         bowlingQualityTier: BowlingQualityTier,
-        situationalAggressionBias: Double = 0.0
+        situationalAggressionBias: Double = 0.0,
+        // Where the ball is pitched in line; lets the computer batter leave one that is well outside off or leg.
+        bowlingLine: BowlingLine? = null
     ): BattingDecision {
         val bias = situationalAggressionBias.coerceIn(-1.0, 1.0)
 
@@ -811,7 +865,18 @@ object BattingSystem {
         if (!isAttacking) {
             // A real batsman's defensive shot is determined by
             // footwork, not an independent random pick.
-            shot = if (footwork == FootworkType.FRONT_FOOT) NamedShot.FORWARD_DEFENSE else NamedShot.BACKWARD_DEFENSE
+            // A ball well outside off or leg that he is not attacking is often simply left alone.
+            val wellOutside = bowlingLine == BowlingLine.OUTSIDE_OFF || bowlingLine == BowlingLine.OUTSIDE_LEG
+            val leaveChance = when {
+                !wellOutside -> 0.0
+                actualLength in SHORT_ISH || actualLength == BowlingLength.GOOD_LENGTH -> 0.6
+                else -> 0.25
+            }
+            shot = when {
+                Random.nextDouble() < leaveChance -> NamedShot.LEAVE
+                footwork == FootworkType.FRONT_FOOT -> NamedShot.FORWARD_DEFENSE
+                else -> NamedShot.BACKWARD_DEFENSE
+            }
         } else {
             // Reach for whatever suits this ball — Excellent first,
             // then Good, then a safe generic fallback if neither tier
@@ -838,7 +903,7 @@ object BattingSystem {
 
         // --- Intent: only for non-defensive shots ---
         var intent: IntentDirection? = null
-        if (!isDefensiveShot(shot)) {
+        if (!isDefensiveShot(shot) && shot != NamedShot.LEAVE) {
             val rightWeight = 20 * (if (bowlingStyle == BowlingStyle.SPIN) 1.6 else 0.7)
             intent = weightedPickBatting(
                 listOf(
@@ -914,7 +979,11 @@ object BattingSystem {
         NamedShot.SWEEP_SHOT to FieldingSector.SQUARE_LEG,
         NamedShot.REVERSE_SWEEP to FieldingSector.POINT,
         NamedShot.UPPER_CUT to FieldingSector.THIRD_MAN,
-        NamedShot.SCOOP_SHOT to FieldingSector.FINE_LEG
+        NamedShot.SCOOP_SHOT to FieldingSector.FINE_LEG,
+        NamedShot.OFF_DRIVE to FieldingSector.MID_OFF,
+        NamedShot.SHORT_PUNCH to FieldingSector.POINT,
+        NamedShot.HELICOPTER_SHOT to FieldingSector.MID_WICKET,
+        NamedShot.SWITCH_HIT to FieldingSector.COVER
     )
 
     // Shots with a genuine top-edge/mishit risk built into the shot
@@ -922,7 +991,7 @@ object BattingSystem {
     // cricket's most common catches at square leg, deep square leg,
     // fine leg, and third man come off exactly these shots.
     private val ALWAYS_AERIAL_SHOTS: List<NamedShot> =
-        listOf(NamedShot.PULL_SHOT, NamedShot.HOOK_SHOT, NamedShot.UPPER_CUT, NamedShot.SCOOP_SHOT)
+        listOf(NamedShot.PULL_SHOT, NamedShot.HOOK_SHOT, NamedShot.UPPER_CUT, NamedShot.SCOOP_SHOT, NamedShot.HELICOPTER_SHOT, NamedShot.SWITCH_HIT)
 
     /**
      * Where a resolved batting decision is likely to send the ball.
@@ -932,7 +1001,7 @@ object BattingSystem {
      * fielding could do.
      */
     fun getShotDirection(shot: NamedShot, intent: IntentDirection?): ShotDirection? {
-        if (isDefensiveShot(shot)) return null
+        if (isDefensiveShot(shot) || shot == NamedShot.LEAVE) return null
         val sector = SHOT_PRIMARY_SECTOR.getValue(shot)
         val isAerial = shot in ALWAYS_AERIAL_SHOTS || intent == IntentDirection.UP
         return ShotDirection(sector, isAerial)

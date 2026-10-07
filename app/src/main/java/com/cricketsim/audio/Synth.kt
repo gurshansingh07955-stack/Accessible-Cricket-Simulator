@@ -161,6 +161,20 @@ internal object Synth {
         return toPcm(out, 0.7f)
     }
 
+    /** The ball thudding into the wicketkeeper's gloves: a dull low "pop" with a brief soft slap. */
+    fun gloves(): ShortArray {
+        val out = FloatArray(frames(0.25))
+        addTone(out, 0.0, 0.14, Wave.SINE, { t -> expRamp(210.0, 80.0, t, 0.1) }) { t -> expRamp(0.9, 0.001, t, 0.1) }
+        val random = Random(23)
+        val filter = Filter()
+        for (i in 0 until frames(0.06)) {
+            val t = i.toDouble() / SAMPLE_RATE
+            filter.step(noise(random), 1300.0, 0.9)
+            out[i] += (filter.bandPass * expRamp(0.9, 0.001, t, 0.04)).toFloat()
+        }
+        return toPcm(normalize(out, 0.8f))
+    }
+
     /**
      * A full-blooded strike for a four or a six: a bright crack, the knock of the bat
      * itself, and a short low "whump" of the ball being sent away. (This replaced a

@@ -351,7 +351,8 @@ object MatchEngine {
         // produces the exact same BattingDecision shape a real gesture
         // would.
         var fieldingCatchOpportunity = false
-        if (battingDecision != null) {
+        // A leave plays no shot, so none of the shot adjustments apply to it.
+        if (battingDecision != null && battingDecision.shot != NamedShot.LEAVE) {
             BattingSystem.applyBattingDecisionToProbabilities(
                 probs, battingDecision, bowlingDecision.actualLength, bowlingDecision.bowlingStyle
             )
@@ -416,6 +417,23 @@ object MatchEngine {
         var dismissalType: DismissalType? = null
         var isEdge: Boolean? = null
 
+        // Leave: no timing and no shot. The ball goes through to the keeper unless it would have
+        // hit the stumps (then bowled, or LBW if it was on the pads). A wide stays a wide, and a
+        // no-ball or free hit protects him as usual.
+        var leftAlone = false
+        var leaveDismissal: DismissalType? = null
+        if (battingDecision?.shot == NamedShot.LEAVE) {
+            leftAlone = true
+            if (outcomeType != "wide") {
+                if (!protectedFromDismissal && Random.nextDouble() < leaveHitsStumpsChance(bowlingDecision)) {
+                    outcomeType = "wicket"
+                    leaveDismissal = leaveDismissalType(bowlingDecision.line)
+                } else {
+                    outcomeType = "dot"
+                }
+            }
+        }
+
         when (outcomeType) {
             "one" -> runs = 1
             "two" -> runs = 2
@@ -469,6 +487,7 @@ object MatchEngine {
                     pickedKind = DismissalType.CAUGHT_AND_BOWLED
                 }
                 dismissalType = pickedKind
+                if (leaveDismissal != null) dismissalType = leaveDismissal
                 if (dismissalType == DismissalType.CAUGHT) {
                     // Edge caught behind/in the slips vs. mistimed and
                     // caught in the outfield — again decided once and
@@ -520,15 +539,67 @@ object MatchEngine {
             batsmanId = batsman.id, bowlerId = bowler.id, commentary = "",
             dismissalType = dismissalType, isEdge = isEdge,
             bowlingQualityTier = bowlingDecision.qualityTier, bowlingActualLength = bowlingDecision.actualLength,
-            outBatsmanId = outBatterId, fielderName = outFielderName
+            outBatsmanId = outBatterId, fielderName = outFielderName, leftAlone = leftAlone
         )
-        val playText = generateCommentary(result, outBatterName ?: batsman.name, bowler.name)
+        val playText = if (leftAlone && !isWicket && !isWide) {
+            leaveText(batsman.name)
+        } else {
+            generateCommentary(result, outBatterName ?: batsman.name, bowler.name)
+        }
         // A no-ball is announced first; if the batter also hit it, what he did follows.
         val commentary = if (noBallText == null) playText else if (runs == 0) noBallText else "$noBallText $playText"
         return result.copy(commentary = commentary)
     }
 
     private fun randomIndex(size: Int): Int = (Random.nextDouble() * size).toInt().coerceAtMost(size - 1)
+
+    /** How likely a ball that is left alone would have hit the stumps, from its line, length and how well it was bowled. */
+    private fun leaveHitsStumpsChance(decision: ResolvedBowlingDecision): Double {
+        val lineChance = when (decision.line) {
+            BowlingLine.OUTSIDE_OFF -> 0.04
+            BowlingLine.OFF_STUMP -> 0.40
+            BowlingLine.MIDDLE_STUMP -> 0.65
+            BowlingLine.LEG_STUMP -> 0.50
+            BowlingLine.OUTSIDE_LEG -> 0.02
+        }
+        val lengthFactor = when (decision.actualLength) {
+            BowlingLength.YORKER, BowlingLength.FULL, BowlingLength.HALF_VOLLEY -> 1.15
+            MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS -> 1.15
+            BowlingLength.GOOD_LENGTH -> 0.9
+            BowlingLength.BACK_OF_LENGTH -> 0.55
+            BowlingLength.SHORT, MisExecutedLength.LONG_HOP -> 0.2
+            BowlingLength.BOUNCER -> 0.05
+            else -> 0.8
+        }
+        val qualityFactor = when (decision.qualityTier) {
+            BowlingQualityTier.PERFECT -> 1.3
+            BowlingQualityTier.IDEAL -> 1.15
+            BowlingQualityTier.GOOD -> 1.0
+            BowlingQualityTier.BAD -> 0.8
+            BowlingQualityTier.VERY_BAD -> 0.6
+        }
+        return (lineChance * lengthFactor * qualityFactor).coerceIn(0.0, 0.9)
+    }
+
+    /** A ball left alone that hits the stumps is bowled, unless it was on the pads, when it can be LBW. */
+    private fun leaveDismissalType(line: BowlingLine): DismissalType {
+        val lbwShare = when (line) {
+            BowlingLine.OFF_STUMP -> 0.12
+            BowlingLine.MIDDLE_STUMP -> 0.40
+            BowlingLine.LEG_STUMP -> 0.35
+            else -> 0.0
+        }
+        return if (Random.nextDouble() < lbwShare) DismissalType.LBW else DismissalType.BOWLED
+    }
+
+    private fun leaveText(batsmanName: String): String {
+        val phrases = listOf(
+            "$batsmanName leaves it alone and the keeper gathers it cleanly.",
+            "No shot offered by $batsmanName, it goes straight through to the keeper.",
+            "$batsmanName shoulders arms and lets it go."
+        )
+        return phrases[randomIndex(phrases.size)]
+    }
 
     /** Run outs are "once or twice an innings": never more than this many. */
     private const val MAX_RUN_OUTS_PER_INNINGS = 2

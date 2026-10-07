@@ -324,7 +324,8 @@ object MatchSimulation {
             actualLength = bowlingDecision.actualLength,
             bowlingStyle = bowlingDecision.bowlingStyle,
             bowlingQualityTier = bowlingDecision.qualityTier,
-            situationalAggressionBias = AiSituation.battingBias(state, AiSituation.recentOverRuns(state))
+            situationalAggressionBias = AiSituation.battingBias(state, AiSituation.recentOverRuns(state)),
+            bowlingLine = bowlingDecision.line
         )
 
         val isPowerplay = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)

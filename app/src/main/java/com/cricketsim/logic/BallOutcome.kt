@@ -41,5 +41,7 @@ data class BallOutcome(
     /** Who was dismissed when it was NOT the striker (a run out can take either batter); null = the striker. */
     val outBatsmanId: String? = null,
     /** The fielder involved in a run out, for the scorecard; null for every other ball. */
-    val fielderName: String? = null
+    val fielderName: String? = null,
+    /** The batter chose to leave the ball (no shot): it went to the keeper, or hit the stumps. */
+    val leftAlone: Boolean = false
 )

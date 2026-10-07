@@ -8,6 +8,7 @@ import com.cricketsim.logic.DismissalType
 import com.cricketsim.logic.InningsData
 import com.cricketsim.logic.MatchEngine
 import com.cricketsim.logic.MatchState
+import com.cricketsim.logic.NamedShot
 import com.cricketsim.logic.PendingDismissal
 import com.cricketsim.logic.SuperOver
 import com.cricketsim.logic.Partnership
@@ -147,7 +148,8 @@ object MatchLines {
         }
         val quality = outcome.bowlingQualityTier?.let { " Ball quality: ${BowlingSystem.qualityTierLabel(it)}." } ?: ""
         val shot = decision?.let {
-            " Shot played: ${BattingSystem.shotLabel(it.shot)}. Timing: ${BowlingSystem.qualityTierLabel(it.timingTier)}." +
+            " Shot played: ${BattingSystem.shotLabel(it.shot)}." +
+                (if (it.shot == NamedShot.LEAVE) "" else " Timing: ${BowlingSystem.qualityTierLabel(it.timingTier)}.") +
                 (swingNote?.let { note -> " $note" } ?: "")
         } ?: ""
         return base + quality + shot

@@ -172,7 +172,7 @@ class MatchAudioDirector(private val services: GameServices) {
         val category = CommentaryLibrary.categorizeBallOutcome(outcome)
         // The outcome sound and voice commentary wait for the siren to finish on a no-ball.
         sound.schedule(if (outcome.isNoBall) 1500L else 400L) {
-            sound.playOutcomeSounds(outcome.isWicket, outcome.runs)
+            sound.playOutcomeSounds(outcome.isWicket, outcome.runs, outcome.leftAlone)
             if (outcome.isWicket) sound.vibrate(200, 100, 200) else if (outcome.runs >= 4) sound.vibrate(100)
 
             sound.enqueueCommentary(category)

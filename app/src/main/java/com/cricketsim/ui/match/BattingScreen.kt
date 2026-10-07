@@ -304,7 +304,20 @@ fun BattingScreen(
             callout = callout,
             onSelected = { chosen ->
                 shot = chosen
-                if (BattingSystem.isDefensiveShot(chosen)) {
+                if (chosen == NamedShot.LEAVE) {
+                    // Leaving needs no direction and no timing: the ball is simply let go.
+                    onBallPlayed(
+                        delivery,
+                        BattingDecision(
+                            footwork = footwork,
+                            shot = NamedShot.LEAVE,
+                            intent = null,
+                            timingTier = BowlingQualityTier.GOOD,
+                            timingDeltaFraction = 0.0
+                        ),
+                        null
+                    )
+                } else if (BattingSystem.isDefensiveShot(chosen)) {
                     intent = null
                     step = BatStep.TIMING
                 } else {
