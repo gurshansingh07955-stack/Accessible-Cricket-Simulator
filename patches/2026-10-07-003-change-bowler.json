@@ -1,0 +1,38 @@
+{
+  "name": "change-bowler-before-first-ball",
+  "message": "Change bowler option after choosing a bowler, until the first ball of the over is bowled",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+    "contains": "fun changeBowlerBeforeFirstBall"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        return previous.map { if (it.playerId == incomingBowlerId) it.copy(playerId = outgoingBowlerId) else it }\n    }\n",
+      "replace": "        return previous.map { if (it.playerId == incomingBowlerId) it.copy(playerId = outgoingBowlerId) else it }\n    }\n\n    /**\n     * How many deliveries of the current over have been bowled, wides and no-balls included\n     * (so the over counts as started from the very first delivery, whatever it was).\n     */\n    fun deliveriesThisOver(state: MatchState): Int {\n        val overStart = state.score.overs * 6\n        var legalSoFar = 0\n        var inThisOver = 0\n        for (ball in state.ballByBall) {\n            if (legalSoFar >= overStart) inThisOver++\n            if (!ball.isWide && !ball.isNoBall) legalSoFar++\n        }\n        return inThisOver\n    }\n\n    /**\n     * Who the user can swap in for the bowler just chosen for this over: any bowler with overs left,\n     * except the one already chosen and the one who bowled the over before (no back-to-back overs).\n     */\n    fun getBowlerChangeOptions(state: MatchState): List<Player> {\n        val maxOvers = getMaxOversPerBowler(state.format)\n        val previousOverBowlerId = state.ballByBall.lastOrNull()?.bowlerId\n        return state.bowlingTeam.players\n            .filter { it.role == PlayerRole.BOWLER || it.role == PlayerRole.ALL_ROUNDER }\n            .filter { oversBowledBy(state, it.id) < maxOvers }\n            .filter { it.id != state.currentBowler.id && it.id != previousOverBowlerId }\n    }\n\n    /**\n     * The \"Change bowler\" option shows from the moment a bowler has been chosen for an over until\n     * the first delivery of that over is bowled. Not in a Super Over, where the bowler is fixed.\n     */\n    fun canChangeBowler(state: MatchState): Boolean =\n        state.superOverRound == 0 &&\n            !state.needsBowlerSelection &&\n            state.pendingDismissal == null &&\n            deliveriesThisOver(state) == 0 &&\n            getBowlerChangeOptions(state).isNotEmpty()\n\n    /**\n     * Swaps the bowler chosen for this over for another one, before a ball has been bowled. The field\n     * the user may already have set is kept (the new bowler and the old one simply trade places), and\n     * the bowler who was swapped out, having bowled nothing, is taken back out of the figures.\n     */\n    fun changeBowlerBeforeFirstBall(state: MatchState, bowler: Player): MatchState {\n        val previous = state.currentBowler\n        if (bowler.id == previous.id) return state\n        val fieldPlacements = carryOverFieldPlacements(state.fieldPlacements, previous.id, bowler.id)\n            ?: FieldingSystem.createDefaultFieldPlacements(FieldingSystem.getFieldingPlayers(state.bowlingTeam, bowler.id))\n        val withNew = MatchStats.addBowlerIfNotExists(state.currentInningsData, bowler)\n        val cleaned = withNew.copy(\n            bowlerStats = withNew.bowlerStats.filterNot {\n                it.playerId == previous.id && it.overs == 0 && it.balls == 0 && it.wides == 0 && it.noBalls == 0\n            }\n        )\n        return state.copy(currentBowler = bowler, currentInningsData = cleaned, fieldPlacements = fieldPlacements)\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    var pendingFootwork by remember { mutableStateOf(FootworkType.FRONT_FOOT) }\n",
+      "replace": "    var pendingFootwork by remember { mutableStateOf(FootworkType.FRONT_FOOT) }\n    // The \"Change bowler\" window, offered only before the first ball of an over is bowled.\n    var showChangeBowler by remember { mutableStateOf(false) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    if (matchState.needsBowlerSelection) {\n        val noBallsBowledYet",
+      "replace": "    if (showChangeBowler) {\n        BackHandler(onBack = { showChangeBowler = false })\n        BowlerSelectionScreen(\n            title = \"Change your bowler\",\n            players = MatchStateMachine.getBowlerChangeOptions(matchState),\n            bowlerStats = matchState.currentInningsData.bowlerStats,\n            maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(matchState.format),\n            onConfirm = { bowler ->\n                matchState = MatchStateMachine.changeBowlerBeforeFirstBall(matchState, bowler)\n                showChangeBowler = false\n                services?.announceSpoken(\"${bowler.name} will bowl this over.\")\n            }\n        )\n        return\n    }\n\n    if (matchState.needsBowlerSelection) {\n        val noBallsBowledYet",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {\n                Text(\"Bowl\")\n            }\n",
+      "replace": "            Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {\n                Text(\"Bowl\")\n            }\n            // Only until the first ball of this over has been bowled; after that the option is gone.\n            if (MatchStateMachine.canChangeBowler(matchState)) {\n                Spacer(modifier = Modifier.height(8.dp))\n                Button(onClick = { showChangeBowler = true }, modifier = Modifier.fillMaxWidth()) {\n                    Text(\"Change bowler\")\n                }\n            }\n",
+      "count": 1
+    }
+  ]
+}
