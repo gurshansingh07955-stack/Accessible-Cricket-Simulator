@@ -1,0 +1,206 @@
+{
+  "name": "new-shots-and-leave",
+  "message": "Add Leave, Off Drive, Short Punch, Helicopter Shot and Switch Hit",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+    "contains": "HELICOPTER_SHOT"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "enum class NamedShot {\n    FORWARD_DEFENSE, BACKWARD_DEFENSE, STRAIGHT_DRIVE, ON_DRIVE, COVER_DRIVE, SQUARE_DRIVE,\n    CUT_SHOT, LATE_CUT, PULL_SHOT, HOOK_SHOT, LEG_GLANCE_FLICK, SWEEP_SHOT, REVERSE_SWEEP,\n    UPPER_CUT, SCOOP_SHOT\n}",
+      "replace": "enum class NamedShot {\n    FORWARD_DEFENSE, BACKWARD_DEFENSE, STRAIGHT_DRIVE, ON_DRIVE, COVER_DRIVE, SQUARE_DRIVE,\n    CUT_SHOT, LATE_CUT, PULL_SHOT, HOOK_SHOT, LEG_GLANCE_FLICK, SWEEP_SHOT, REVERSE_SWEEP,\n    UPPER_CUT, SCOOP_SHOT,\n    // Added later: Leave (no shot at all), Off Drive, Short Punch, Helicopter Shot and Switch Hit.\n    LEAVE, OFF_DRIVE, SHORT_PUNCH, HELICOPTER_SHOT, SWITCH_HIT\n}",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "    val SHOT_OPTIONS: List<ShotInfo> = listOf(\n        ShotInfo(NamedShot.FORWARD_DEFENSE, \"Forward Defense\", true),\n        ShotInfo(NamedShot.BACKWARD_DEFENSE, \"Backward Defense\", true),\n        ShotInfo(NamedShot.STRAIGHT_DRIVE, \"Straight Drive\", false),\n        ShotInfo(NamedShot.ON_DRIVE, \"On Drive\", false),\n        ShotInfo(NamedShot.COVER_DRIVE, \"Cover Drive\", false),\n        ShotInfo(NamedShot.SQUARE_DRIVE, \"Square Drive\", false),\n        ShotInfo(NamedShot.CUT_SHOT, \"Cut Shot\", false),\n        ShotInfo(NamedShot.LATE_CUT, \"Late Cut\", false),\n        ShotInfo(NamedShot.PULL_SHOT, \"Pull Shot\", false),\n        ShotInfo(NamedShot.HOOK_SHOT, \"Hook Shot\", false),\n        ShotInfo(NamedShot.LEG_GLANCE_FLICK, \"Leg Glance / Flick\", false),\n        ShotInfo(NamedShot.SWEEP_SHOT, \"Sweep Shot\", false),\n        ShotInfo(NamedShot.REVERSE_SWEEP, \"Reverse Sweep\", false),\n        ShotInfo(NamedShot.UPPER_CUT, \"Upper Cut\", false),\n        ShotInfo(NamedShot.SCOOP_SHOT, \"Scoop Shot\", false)\n    )\n",
+      "replace": "    // Twenty shots now, so each one's band on the screen is 5% of the height (it was 6.7% with fifteen).\n    // Leave is flagged \"defensive\" here only so the computer batter never picks it as an attacking\n    // shot: it chooses to leave on its own (see generateAiBattingDecision), and the leave is handled\n    // separately everywhere (no intent step, no timing step, no shot probabilities).\n    val SHOT_OPTIONS: List<ShotInfo> = listOf(\n        ShotInfo(NamedShot.LEAVE, \"Leave\", true),\n        ShotInfo(NamedShot.FORWARD_DEFENSE, \"Forward Defense\", true),\n        ShotInfo(NamedShot.BACKWARD_DEFENSE, \"Backward Defense\", true),\n        ShotInfo(NamedShot.STRAIGHT_DRIVE, \"Straight Drive\", false),\n        ShotInfo(NamedShot.OFF_DRIVE, \"Off Drive\", false),\n        ShotInfo(NamedShot.ON_DRIVE, \"On Drive\", false),\n        ShotInfo(NamedShot.COVER_DRIVE, \"Cover Drive\", false),\n        ShotInfo(NamedShot.SQUARE_DRIVE, \"Square Drive\", false),\n        ShotInfo(NamedShot.SHORT_PUNCH, \"Short Punch\", false),\n        ShotInfo(NamedShot.CUT_SHOT, \"Cut Shot\", false),\n        ShotInfo(NamedShot.LATE_CUT, \"Late Cut\", false),\n        ShotInfo(NamedShot.PULL_SHOT, \"Pull Shot\", false),\n        ShotInfo(NamedShot.HOOK_SHOT, \"Hook Shot\", false),\n        ShotInfo(NamedShot.LEG_GLANCE_FLICK, \"Leg Glance / Flick\", false),\n        ShotInfo(NamedShot.SWEEP_SHOT, \"Sweep Shot\", false),\n        ShotInfo(NamedShot.REVERSE_SWEEP, \"Reverse Sweep\", false),\n        ShotInfo(NamedShot.UPPER_CUT, \"Upper Cut\", false),\n        ShotInfo(NamedShot.SCOOP_SHOT, \"Scoop Shot\", false),\n        ShotInfo(NamedShot.HELICOPTER_SHOT, \"Helicopter Shot\", false),\n        ShotInfo(NamedShot.SWITCH_HIT, \"Switch Hit\", false)\n    )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "        NamedShot.UPPER_CUT to CompatibilityRule(\n",
+      "replace": "        NamedShot.OFF_DRIVE to CompatibilityRule(\n            excellent = listOf(BowlingLength.FULL, MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS, BowlingLength.HALF_VOLLEY),\n            good = listOf(BowlingLength.GOOD_LENGTH)\n        ),\n        // Punched off the back foot to a short-of-a-length ball.\n        NamedShot.SHORT_PUNCH to CompatibilityRule(\n            excellent = listOf(BowlingLength.SHORT, BowlingLength.BACK_OF_LENGTH),\n            good = listOf(BowlingLength.GOOD_LENGTH, MisExecutedLength.LONG_HOP, BowlingLength.BOUNCER)\n        ),\n        // Whipped through the line, best against full balls and yorkers.\n        NamedShot.HELICOPTER_SHOT to CompatibilityRule(\n            excellent = listOf(BowlingLength.YORKER, BowlingLength.FULL, MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS),\n            good = listOf(BowlingLength.HALF_VOLLEY, BowlingLength.GOOD_LENGTH)\n        ),\n        // The batter swaps hands as the bowler runs in; a good ball to hit is a straight, hittable one.\n        NamedShot.SWITCH_HIT to CompatibilityRule(\n            excellent = listOf(BowlingLength.GOOD_LENGTH, BowlingLength.FULL, BowlingLength.HALF_VOLLEY),\n            good = listOf(BowlingLength.BACK_OF_LENGTH, MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS, BowlingLength.SHORT)\n        ),\n        NamedShot.UPPER_CUT to CompatibilityRule(\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "        val rule = SHOT_COMPATIBILITY.getValue(shot)\n",
+      "replace": "        val rule = SHOT_COMPATIBILITY[shot] ?: return ShotCompatibilityTier.GOOD\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "    private fun applyTimingTier(probs: OutcomeProbs, tier: TimingTier) {\n",
+      "replace": "    /** What makes a few shots different from a plain drive: the helicopter and switch hit are big-hitting and risky. */\n    private fun applyShotCharacter(probs: OutcomeProbs, shot: NamedShot) {\n        when (shot) {\n            NamedShot.HELICOPTER_SHOT -> {\n                multiplyKey(probs, OutcomeProbs::six, 1.5)\n                multiplyKey(probs, OutcomeProbs::four, 0.9)\n                multiplyKey(probs, OutcomeProbs::wicket, 1.1)\n            }\n            NamedShot.SWITCH_HIT -> {\n                multiplyKey(probs, OutcomeProbs::six, 1.4)\n                multiplyKey(probs, OutcomeProbs::wicket, 1.25)\n                multiplyKey(probs, OutcomeProbs::dot, 1.05)\n            }\n            NamedShot.SHORT_PUNCH -> {\n                multiplyKey(probs, OutcomeProbs::four, 1.1)\n                multiplyKey(probs, OutcomeProbs::wicket, 0.95)\n            }\n            else -> {}\n        }\n    }\n\n    private fun applyTimingTier(probs: OutcomeProbs, tier: TimingTier) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "        applyShotCompatibility(probs, computeShotCompatibility(decision.shot, actualLength, bowlingStyle), decision.shot)\n",
+      "replace": "        applyShotCompatibility(probs, computeShotCompatibility(decision.shot, actualLength, bowlingStyle), decision.shot)\n        applyShotCharacter(probs, decision.shot)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "        situationalAggressionBias: Double = 0.0\n    ): BattingDecision {\n",
+      "replace": "        situationalAggressionBias: Double = 0.0,\n        // Where the ball is pitched in line; lets the computer batter leave one that is well outside off or leg.\n        bowlingLine: BowlingLine? = null\n    ): BattingDecision {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "            shot = if (footwork == FootworkType.FRONT_FOOT) NamedShot.FORWARD_DEFENSE else NamedShot.BACKWARD_DEFENSE\n",
+      "replace": "            // A ball well outside off or leg that he is not attacking is often simply left alone.\n            val wellOutside = bowlingLine == BowlingLine.OUTSIDE_OFF || bowlingLine == BowlingLine.OUTSIDE_LEG\n            val leaveChance = when {\n                !wellOutside -> 0.0\n                actualLength in SHORT_ISH || actualLength == BowlingLength.GOOD_LENGTH -> 0.6\n                else -> 0.25\n            }\n            shot = when {\n                Random.nextDouble() < leaveChance -> NamedShot.LEAVE\n                footwork == FootworkType.FRONT_FOOT -> NamedShot.FORWARD_DEFENSE\n                else -> NamedShot.BACKWARD_DEFENSE\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "        if (!isDefensiveShot(shot)) {\n            val rightWeight",
+      "replace": "        if (!isDefensiveShot(shot) && shot != NamedShot.LEAVE) {\n            val rightWeight",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "        NamedShot.SCOOP_SHOT to FieldingSector.FINE_LEG\n    )\n",
+      "replace": "        NamedShot.SCOOP_SHOT to FieldingSector.FINE_LEG,\n        NamedShot.OFF_DRIVE to FieldingSector.MID_OFF,\n        NamedShot.SHORT_PUNCH to FieldingSector.POINT,\n        NamedShot.HELICOPTER_SHOT to FieldingSector.MID_WICKET,\n        NamedShot.SWITCH_HIT to FieldingSector.COVER\n    )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "listOf(NamedShot.PULL_SHOT, NamedShot.HOOK_SHOT, NamedShot.UPPER_CUT, NamedShot.SCOOP_SHOT)",
+      "replace": "listOf(NamedShot.PULL_SHOT, NamedShot.HOOK_SHOT, NamedShot.UPPER_CUT, NamedShot.SCOOP_SHOT, NamedShot.HELICOPTER_SHOT, NamedShot.SWITCH_HIT)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BattingSystem.kt",
+      "find": "        if (isDefensiveShot(shot)) return null\n        val sector = SHOT_PRIMARY_SECTOR.getValue(shot)\n",
+      "replace": "        if (isDefensiveShot(shot) || shot == NamedShot.LEAVE) return null\n        val sector = SHOT_PRIMARY_SECTOR.getValue(shot)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallOutcome.kt",
+      "find": "    val fielderName: String? = null\n)",
+      "replace": "    val fielderName: String? = null,\n    /** The batter chose to leave the ball (no shot): it went to the keeper, or hit the stumps. */\n    val leftAlone: Boolean = false\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        if (battingDecision != null) {\n            BattingSystem.applyBattingDecisionToProbabilities(\n",
+      "replace": "        // A leave plays no shot, so none of the shot adjustments apply to it.\n        if (battingDecision != null && battingDecision.shot != NamedShot.LEAVE) {\n            BattingSystem.applyBattingDecisionToProbabilities(\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        when (outcomeType) {\n            \"one\" -> runs = 1\n",
+      "replace": "        // Leave: no timing and no shot. The ball goes through to the keeper unless it would have\n        // hit the stumps (then bowled, or LBW if it was on the pads). A wide stays a wide, and a\n        // no-ball or free hit protects him as usual.\n        var leftAlone = false\n        var leaveDismissal: DismissalType? = null\n        if (battingDecision?.shot == NamedShot.LEAVE) {\n            leftAlone = true\n            if (outcomeType != \"wide\") {\n                if (!protectedFromDismissal && Random.nextDouble() < leaveHitsStumpsChance(bowlingDecision)) {\n                    outcomeType = \"wicket\"\n                    leaveDismissal = leaveDismissalType(bowlingDecision.line)\n                } else {\n                    outcomeType = \"dot\"\n                }\n            }\n        }\n\n        when (outcomeType) {\n            \"one\" -> runs = 1\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "                dismissalType = pickedKind\n",
+      "replace": "                dismissalType = pickedKind\n                if (leaveDismissal != null) dismissalType = leaveDismissal\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "            outBatsmanId = outBatterId, fielderName = outFielderName\n        )\n        val playText = generateCommentary(result, outBatterName ?: batsman.name, bowler.name)\n",
+      "replace": "            outBatsmanId = outBatterId, fielderName = outFielderName, leftAlone = leftAlone\n        )\n        val playText = if (leftAlone && !isWicket && !isWide) {\n            leaveText(batsman.name)\n        } else {\n            generateCommentary(result, outBatterName ?: batsman.name, bowler.name)\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "    private fun randomIndex(size: Int): Int = (Random.nextDouble() * size).toInt().coerceAtMost(size - 1)\n",
+      "replace": "    private fun randomIndex(size: Int): Int = (Random.nextDouble() * size).toInt().coerceAtMost(size - 1)\n\n    /** How likely a ball that is left alone would have hit the stumps, from its line, length and how well it was bowled. */\n    private fun leaveHitsStumpsChance(decision: ResolvedBowlingDecision): Double {\n        val lineChance = when (decision.line) {\n            BowlingLine.OUTSIDE_OFF -> 0.04\n            BowlingLine.OFF_STUMP -> 0.40\n            BowlingLine.MIDDLE_STUMP -> 0.65\n            BowlingLine.LEG_STUMP -> 0.50\n            BowlingLine.OUTSIDE_LEG -> 0.02\n        }\n        val lengthFactor = when (decision.actualLength) {\n            BowlingLength.YORKER, BowlingLength.FULL, BowlingLength.HALF_VOLLEY -> 1.15\n            MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS -> 1.15\n            BowlingLength.GOOD_LENGTH -> 0.9\n            BowlingLength.BACK_OF_LENGTH -> 0.55\n            BowlingLength.SHORT, MisExecutedLength.LONG_HOP -> 0.2\n            BowlingLength.BOUNCER -> 0.05\n            else -> 0.8\n        }\n        val qualityFactor = when (decision.qualityTier) {\n            BowlingQualityTier.PERFECT -> 1.3\n            BowlingQualityTier.IDEAL -> 1.15\n            BowlingQualityTier.GOOD -> 1.0\n            BowlingQualityTier.BAD -> 0.8\n            BowlingQualityTier.VERY_BAD -> 0.6\n        }\n        return (lineChance * lengthFactor * qualityFactor).coerceIn(0.0, 0.9)\n    }\n\n    /** A ball left alone that hits the stumps is bowled, unless it was on the pads, when it can be LBW. */\n    private fun leaveDismissalType(line: BowlingLine): DismissalType {\n        val lbwShare = when (line) {\n            BowlingLine.OFF_STUMP -> 0.12\n            BowlingLine.MIDDLE_STUMP -> 0.40\n            BowlingLine.LEG_STUMP -> 0.35\n            else -> 0.0\n        }\n        return if (Random.nextDouble() < lbwShare) DismissalType.LBW else DismissalType.BOWLED\n    }\n\n    private fun leaveText(batsmanName: String): String {\n        val phrases = listOf(\n            \"$batsmanName leaves it alone and the keeper gathers it cleanly.\",\n            \"No shot offered by $batsmanName, it goes straight through to the keeper.\",\n            \"$batsmanName shoulders arms and lets it go.\"\n        )\n        return phrases[randomIndex(phrases.size)]\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "                shot = chosen\n                if (BattingSystem.isDefensiveShot(chosen)) {\n",
+      "replace": "                shot = chosen\n                if (chosen == NamedShot.LEAVE) {\n                    // Leaving needs no direction and no timing: the ball is simply let go.\n                    onBallPlayed(\n                        delivery,\n                        BattingDecision(\n                            footwork = footwork,\n                            shot = NamedShot.LEAVE,\n                            intent = null,\n                            timingTier = BowlingQualityTier.GOOD,\n                            timingDeltaFraction = 0.0\n                        ),\n                        null\n                    )\n                } else if (BattingSystem.isDefensiveShot(chosen)) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "            bowlingQualityTier = bowlingDecision.qualityTier,\n            situationalAggressionBias = AiSituation.battingBias(state, AiSituation.recentOverRuns(state))\n        )",
+      "replace": "            bowlingQualityTier = bowlingDecision.qualityTier,\n            situationalAggressionBias = AiSituation.battingBias(state, AiSituation.recentOverRuns(state)),\n            bowlingLine = bowlingDecision.line\n        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "import com.cricketsim.logic.MatchState\n",
+      "replace": "import com.cricketsim.logic.MatchState\nimport com.cricketsim.logic.NamedShot\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "            \" Shot played: ${BattingSystem.shotLabel(it.shot)}. Timing: ${BowlingSystem.qualityTierLabel(it.timingTier)}.\" +\n",
+      "replace": "            \" Shot played: ${BattingSystem.shotLabel(it.shot)}.\" +\n                (if (it.shot == NamedShot.LEAVE) \"\" else \" Timing: ${BowlingSystem.qualityTierLabel(it.timingTier)}.\") +\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/MatchAudioDirector.kt",
+      "find": "            sound.playOutcomeSounds(outcome.isWicket, outcome.runs)\n",
+      "replace": "            sound.playOutcomeSounds(outcome.isWicket, outcome.runs, outcome.leftAlone)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    fun playOutcomeSounds(isWicket: Boolean, runs: Int) {\n",
+      "replace": "    fun playOutcomeSounds(isWicket: Boolean, runs: Int, leftAlone: Boolean = false) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            else -> {\n                if (!playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) playPcm(Fx.BAT_HIT, MASTER)\n",
+      "replace": "            leftAlone -> {\n                // The batter let it go: the ball thuds into the keeper's gloves, with no bat on it.\n                playPcm(Fx.GLOVES, MASTER)\n                duckFor(150)\n            }\n            else -> {\n                if (!playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) playPcm(Fx.BAT_HIT, MASTER)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN }",
+      "replace": "COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN, GLOVES }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "                Fx.SIREN -> Synth.siren()\n            }\n",
+      "replace": "                Fx.SIREN -> Synth.siren()\n                Fx.GLOVES -> Synth.gloves()\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/Synth.kt",
+      "find": "            out[i] += (filter.high * expRamp(0.5, 0.01, t, 0.05)).toFloat()\n        }\n        return toPcm(out, 0.7f)\n    }\n",
+      "replace": "            out[i] += (filter.high * expRamp(0.5, 0.01, t, 0.05)).toFloat()\n        }\n        return toPcm(out, 0.7f)\n    }\n\n    /** The ball thudding into the wicketkeeper's gloves: a dull low \"pop\" with a brief soft slap. */\n    fun gloves(): ShortArray {\n        val out = FloatArray(frames(0.25))\n        addTone(out, 0.0, 0.14, Wave.SINE, { t -> expRamp(210.0, 80.0, t, 0.1) }) { t -> expRamp(0.9, 0.001, t, 0.1) }\n        val random = Random(23)\n        val filter = Filter()\n        for (i in 0 until frames(0.06)) {\n            val t = i.toDouble() / SAMPLE_RATE\n            filter.step(noise(random), 1300.0, 0.9)\n            out[i] += (filter.bandPass * expRamp(0.9, 0.001, t, 0.04)).toFloat()\n        }\n        return toPcm(normalize(out, 0.8f))\n    }\n",
+      "count": 1
+    }
+  ]
+}
