@@ -33,6 +33,7 @@ import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.FootworkType
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlinx.coroutines.delay
 
@@ -61,6 +62,8 @@ fun AutoBowlPanel(seconds: Int, holdTimer: Boolean, onBowl: (FootworkType) -> Un
     var remaining by remember { mutableStateOf(seconds) }
     var waiting by remember { mutableStateOf(true) }
     var paused by remember { mutableStateOf(false) }
+    var shownTilt by remember { mutableStateOf(0) }
+    var sensorMissing by remember { mutableStateOf(false) }
     val latestOnBowl by rememberUpdatedState(onBowl)
     val latestHold by rememberUpdatedState(holdTimer)
     val tilt = remember { TiltTracker() }
@@ -69,6 +72,7 @@ fun AutoBowlPanel(seconds: Int, holdTimer: Boolean, onBowl: (FootworkType) -> Un
     DisposableEffect(lifecycle) {
         val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         val sensor = manager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        sensorMissing = sensor == null
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 tilt.onReading(event.values[0], event.values[1], event.values[2])
@@ -99,25 +103,29 @@ fun AutoBowlPanel(seconds: Int, holdTimer: Boolean, onBowl: (FootworkType) -> Un
     LaunchedEffect(Unit) {
         var candidate = 0
         var heldMs = 0
+        // The side last confirmed. It is confirmed out loud every time the phone is tilted that way
+        // (even if it is already the footwork), so the player always gets an answer to a tilt;
+        // coming back to level lets the same side be confirmed again.
+        var confirmed = 0
         while (true) {
             delay(100)
+            shownTilt = tilt.degrees.roundToInt()
             val direction = tilt.direction
             if (direction == 0) {
                 candidate = 0
                 heldMs = 0
+                confirmed = 0
                 continue
             }
             if (direction == candidate) heldMs += 100 else {
                 candidate = direction
                 heldMs = 0
             }
-            if (heldMs >= HOLD_MS) {
-                val wanted = if (direction > 0) FootworkType.FRONT_FOOT else FootworkType.BACK_FOOT
-                if (wanted != footwork) {
-                    footwork = wanted
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    services?.announceSpoken(if (wanted == FootworkType.FRONT_FOOT) "Front foot." else "Back foot.")
-                }
+            if (heldMs >= HOLD_MS && direction != confirmed) {
+                confirmed = direction
+                footwork = if (direction > 0) FootworkType.FRONT_FOOT else FootworkType.BACK_FOOT
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                services?.announceSpoken(if (direction > 0) "Front foot." else "Back foot.")
             }
         }
     }
@@ -158,6 +166,16 @@ fun AutoBowlPanel(seconds: Int, holdTimer: Boolean, onBowl: (FootworkType) -> Un
                 "Tilt your phone left for front foot, right for back foot.",
             style = MaterialTheme.typography.bodyMedium
         )
+        // A plain readout of the tilt sensor, so it is clear whether the phone is being read at all.
+        Text(
+            text = when {
+                sensorMissing -> "This phone has no tilt sensor, so footwork stays on front foot."
+                shownTilt > 0 -> "Tilt: $shownTilt degrees left."
+                shownTilt < 0 -> "Tilt: ${-shownTilt} degrees right."
+                else -> "Tilt: level."
+            },
+            style = MaterialTheme.typography.bodySmall
+        )
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = { paused = !paused }, modifier = Modifier.fillMaxWidth()) {
             Text(if (paused) "Resume timer" else "Pause timer")
@@ -165,9 +183,11 @@ fun AutoBowlPanel(seconds: Int, holdTimer: Boolean, onBowl: (FootworkType) -> Un
     }
 }
 
-private const val HOLD_MS = 300
-private const val TILT_DEGREES = 25f
-private const val NEUTRAL_DEGREES = 12f
+// How far the phone must be tilted from level (as it was when the countdown began) to count, and for
+// how long. Kept fairly small so an ordinary tilt of the wrist is enough.
+private const val HOLD_MS = 200
+private const val TILT_DEGREES = 15f
+private const val NEUTRAL_DEGREES = 8f
 
 /**
  * Reads the accelerometer as a left/right roll angle. The first half second after the countdown
@@ -183,12 +203,17 @@ private class TiltTracker {
     private var baselineSum = 0f
     private var baselineCount = 0
 
+    /** Degrees from the starting position: positive when tilted left, negative when tilted right. */
+    @Volatile var degrees: Float = 0f
+        private set
+
     fun recentre() {
         baseline = null
         baselineSum = 0f
         baselineCount = 0
         smoothed = 0f
         direction = 0
+        degrees = 0f
     }
 
     fun onReading(ax: Float, ay: Float, az: Float) {
@@ -204,6 +229,7 @@ private class TiltTracker {
         }
         smoothed += 0.2f * (roll - smoothed)
         val delta = smoothed - reference
+        degrees = delta
         direction = when {
             delta > TILT_DEGREES -> 1
             delta < -TILT_DEGREES -> -1
