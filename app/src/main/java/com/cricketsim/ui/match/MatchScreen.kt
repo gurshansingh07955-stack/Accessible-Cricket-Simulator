@@ -770,6 +770,16 @@ fun MatchScreen(
                 ) {
                     Text("Face next ball")
                 }
+            } else if (services?.settings?.faceNextBall == false) {
+                // "Face next ball" is switched off: the ball comes by itself, footwork by tilting the phone.
+                AutoBowlPanel(
+                    seconds = services?.settings?.autoBowlSeconds ?: 10,
+                    holdTimer = confirmingLeave,
+                    onBowl = { footwork ->
+                        pendingFootwork = footwork
+                        showBattingScreen = true
+                    }
+                )
             } else {
                 FaceNextBallControl(
                     onSelected = { footwork ->

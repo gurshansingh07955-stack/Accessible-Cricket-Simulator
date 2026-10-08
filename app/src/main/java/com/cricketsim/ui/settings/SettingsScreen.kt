@@ -131,6 +131,37 @@ fun SettingsScreen(onBack: () -> Unit) {
             onChange = { on -> services.update { it.copy(menuBatting = on) } }
         )
 
+        if (settings.menuBatting) {
+            // Footwork is chosen inside the batting window in this mode, so the button is needed.
+            Text(
+                "Face next ball stays on while Batting without gestures is on.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+            )
+        } else {
+            SwitchRow(
+                label = "Face next ball button",
+                description = "On: tap or long-press to face each ball, as before. Off: the ball arrives by itself after a countdown, and you choose front or back foot by tilting your phone left or right.",
+                checked = settings.faceNextBall,
+                onChange = { on -> services.update { it.copy(faceNextBall = on) } }
+            )
+            if (!settings.faceNextBall) {
+                Text(
+                    "Seconds before the next ball",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                )
+                listOf(10, 15, 20).forEach { option ->
+                    RadioRow(
+                        label = "$option seconds",
+                        description = null,
+                        selected = settings.autoBowlSeconds == option,
+                        onSelect = { services.update { it.copy(autoBowlSeconds = option) } }
+                    )
+                }
+            }
+        }
+
         SectionHeading("Voice commentary")
         Text(
             "Pre-recorded commentators react to what happens in the match.",

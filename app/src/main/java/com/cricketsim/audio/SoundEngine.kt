@@ -1204,6 +1204,12 @@ class SoundEngine(context: Context) {
         }
     }
 
+    /** A soft tick for the last seconds of the auto-bowl countdown. */
+    fun playCountdownTick() {
+        if (!settings.soundEffects) return
+        playPcm(Fx.TICK, 0.7f * MASTER)
+    }
+
     // --- Vibration ---
 
     // Android 12+ hands out vibrators through VibratorManager; asking for the
