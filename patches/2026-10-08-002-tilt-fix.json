@@ -1,0 +1,73 @@
+{
+  "name": "tilt-more-forgiving",
+  "message": "Tilt footwork: smaller tilt and shorter hold, always confirm a tilt, show a tilt readout",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+    "contains": "shownTilt"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "import kotlin.math.atan2\nimport kotlin.math.sqrt\n",
+      "replace": "import kotlin.math.atan2\nimport kotlin.math.roundToInt\nimport kotlin.math.sqrt\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "    var paused by remember { mutableStateOf(false) }\n    val latestOnBowl",
+      "replace": "    var paused by remember { mutableStateOf(false) }\n    var shownTilt by remember { mutableStateOf(0) }\n    var sensorMissing by remember { mutableStateOf(false) }\n    val latestOnBowl",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "        val sensor = manager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)\n",
+      "replace": "        val sensor = manager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)\n        sensorMissing = sensor == null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "        var candidate = 0\n        var heldMs = 0\n        while (true) {\n            delay(100)\n            val direction = tilt.direction\n            if (direction == 0) {\n                candidate = 0\n                heldMs = 0\n                continue\n            }\n            if (direction == candidate) heldMs += 100 else {\n                candidate = direction\n                heldMs = 0\n            }\n            if (heldMs >= HOLD_MS) {\n                val wanted = if (direction > 0) FootworkType.FRONT_FOOT else FootworkType.BACK_FOOT\n                if (wanted != footwork) {\n                    footwork = wanted\n                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)\n                    services?.announceSpoken(if (wanted == FootworkType.FRONT_FOOT) \"Front foot.\" else \"Back foot.\")\n                }\n            }\n        }\n",
+      "replace": "        var candidate = 0\n        var heldMs = 0\n        // The side last confirmed. It is confirmed out loud every time the phone is tilted that way\n        // (even if it is already the footwork), so the player always gets an answer to a tilt;\n        // coming back to level lets the same side be confirmed again.\n        var confirmed = 0\n        while (true) {\n            delay(100)\n            shownTilt = tilt.degrees.roundToInt()\n            val direction = tilt.direction\n            if (direction == 0) {\n                candidate = 0\n                heldMs = 0\n                confirmed = 0\n                continue\n            }\n            if (direction == candidate) heldMs += 100 else {\n                candidate = direction\n                heldMs = 0\n            }\n            if (heldMs >= HOLD_MS && direction != confirmed) {\n                confirmed = direction\n                footwork = if (direction > 0) FootworkType.FRONT_FOOT else FootworkType.BACK_FOOT\n                haptics.performHapticFeedback(HapticFeedbackType.LongPress)\n                services?.announceSpoken(if (direction > 0) \"Front foot.\" else \"Back foot.\")\n            }\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "        Spacer(modifier = Modifier.height(8.dp))\n        Button(onClick = { paused = !paused }",
+      "replace": "        // A plain readout of the tilt sensor, so it is clear whether the phone is being read at all.\n        Text(\n            text = when {\n                sensorMissing -> \"This phone has no tilt sensor, so footwork stays on front foot.\"\n                shownTilt > 0 -> \"Tilt: $shownTilt degrees left.\"\n                shownTilt < 0 -> \"Tilt: ${-shownTilt} degrees right.\"\n                else -> \"Tilt: level.\"\n            },\n            style = MaterialTheme.typography.bodySmall\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Button(onClick = { paused = !paused }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "private const val HOLD_MS = 300\nprivate const val TILT_DEGREES = 25f\nprivate const val NEUTRAL_DEGREES = 12f\n",
+      "replace": "// How far the phone must be tilted from level (as it was when the countdown began) to count, and for\n// how long. Kept fairly small so an ordinary tilt of the wrist is enough.\nprivate const val HOLD_MS = 200\nprivate const val TILT_DEGREES = 15f\nprivate const val NEUTRAL_DEGREES = 8f\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "    private var baselineCount = 0\n\n    fun recentre() {",
+      "replace": "    private var baselineCount = 0\n\n    /** Degrees from the starting position: positive when tilted left, negative when tilted right. */\n    @Volatile var degrees: Float = 0f\n        private set\n\n    fun recentre() {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "        smoothed = 0f\n        direction = 0\n    }\n",
+      "replace": "        smoothed = 0f\n        direction = 0\n        degrees = 0f\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AutoBowlPanel.kt",
+      "find": "        val delta = smoothed - reference\n",
+      "replace": "        val delta = smoothed - reference\n        degrees = delta\n",
+      "count": 1
+    }
+  ]
+}
