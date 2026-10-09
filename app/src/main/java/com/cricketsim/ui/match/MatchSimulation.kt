@@ -359,7 +359,8 @@ object MatchSimulation {
             newState = MatchStateMachine.recordWicketFall(
                 newState, striker.id, dismissalType,
                 if (dismissalType == DismissalType.RUN_OUT) outcome.fielderName else null,
-                caughtByName = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null
+                caughtByName = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null,
+                caughtAtText = if (dismissalType == DismissalType.CAUGHT) outcome.fielderPosition else null
             )
             if (dismissalType == DismissalType.RUN_OUT && outcome.runs % 2 == 1) {
                 // They had crossed before the wicket went down, so the ends have changed.
@@ -383,7 +384,8 @@ object MatchSimulation {
                             } else {
                                 newState.currentBowler.name
                             },
-                            caughtBy = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null
+                            caughtBy = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null,
+                            caughtAt = if (dismissalType == DismissalType.CAUGHT) outcome.fielderPosition else null
                         )
                     )
                     if (overJustCompleted) {

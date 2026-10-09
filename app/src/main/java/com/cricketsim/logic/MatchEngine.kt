@@ -518,6 +518,7 @@ object MatchEngine {
         // (the batter is protected there), and at most MAX_RUN_OUTS_PER_INNINGS in an innings.
         var outBatterId: String? = null
         var outFielderName: String? = null
+        var outFielderPosition: String? = null
         var outBatterName: String? = null
         if (!isWicket && !isWide && !protectedFromDismissal && runs in 1..3) {
             val runOutsSoFar = matchState.ballByBall.count { it.dismissalType == DismissalType.RUN_OUT }
@@ -534,12 +535,14 @@ object MatchEngine {
             }
         }
 
-        // Who took the catch. Caught and bowled is the bowler himself; any other catch goes to a
-        // random fielder who is not the bowler. (Run-outs name their fielder above.)
+        // Who took the catch, worked out from where the ball went (not at random). Caught and bowled
+        // is the bowler himself. (Run-outs name their fielder above.)
         if (isWicket && dismissalType == DismissalType.CAUGHT_AND_BOWLED) {
             outFielderName = bowler.name
         } else if (isWicket && dismissalType == DismissalType.CAUGHT) {
-            outFielderName = matchState.bowlingTeam.players.filter { it.id != bowler.id }.randomOrNull()?.name ?: bowler.name
+            val taken = resolveCatcher(matchState, bowler, battingDecision, isEdge)
+            outFielderName = taken?.name
+            outFielderPosition = taken?.position
         }
 
         val result = BallOutcome(
@@ -547,7 +550,7 @@ object MatchEngine {
             batsmanId = batsman.id, bowlerId = bowler.id, commentary = "",
             dismissalType = dismissalType, isEdge = isEdge,
             bowlingQualityTier = bowlingDecision.qualityTier, bowlingActualLength = bowlingDecision.actualLength,
-            outBatsmanId = outBatterId, fielderName = outFielderName, leftAlone = leftAlone
+            outBatsmanId = outBatterId, fielderName = outFielderName, fielderPosition = outFielderPosition, leftAlone = leftAlone
         )
         val playText = if (leftAlone && !isWicket && !isWide) {
             leaveText(batsman.name)
@@ -557,6 +560,66 @@ object MatchEngine {
         // A no-ball is announced first; if the batter also hit it, what he did follows.
         val commentary = if (noBallText == null) playText else if (runs == 0) noBallText else "$noBallText $playText"
         return result.copy(commentary = commentary)
+    }
+
+    private class CatchTaken(val name: String, val position: String?)
+
+    /**
+     * Works out who holds a catch from where the ball actually went, instead of picking a fielder
+     * at random:
+     * - An edge goes behind the bat: to a slip or gully (a leg slip for a leg-side edge) if the
+     *   field has one, otherwise to the wicketkeeper, who takes most of them anyway.
+     * - A shot struck in the air goes to the fielder standing in that part of the ground: the deep
+     *   fielder first (the catch the field-placement odds are built on), else a short or close one.
+     * - If nobody stands in that part, the nearest fielder round the ground takes it.
+     * The bowler and the keeper are never in the placed field, so they are handled separately.
+     */
+    private fun resolveCatcher(
+        matchState: MatchState,
+        bowler: Player,
+        decision: BattingDecision?,
+        isEdge: Boolean?
+    ): CatchTaken? {
+        val team = matchState.bowlingTeam
+        val keeperId = team.wicketkeeperId ?: team.players.find { it.role == PlayerRole.WICKETKEEPER }?.id
+        val keeper = team.players.find { it.id == keeperId && it.id != bowler.id }
+        val placed = matchState.fieldPlacements.filter { it.playerId != bowler.id && it.playerId != keeperId }
+        fun taken(p: FieldPlacement): CatchTaken? =
+            team.players.find { it.id == p.playerId }?.let {
+                CatchTaken(it.name, "at " + FieldingSystem.getPositionLabel(p).lowercase())
+            }
+        val direction = decision?.let { BattingSystem.getShotDirection(it.shot, it.intent) }
+        val legSide = setOf(
+            FieldingSector.LEG_SLIP, FieldingSector.SQUARE_LEG, FieldingSector.MID_WICKET,
+            FieldingSector.COW_CORNER, FieldingSector.MID_ON, FieldingSector.FINE_LEG
+        )
+
+        if (isEdge == true) {
+            val onLegSide = direction != null && direction.sector in legSide
+            val cordonSector = if (onLegSide) FieldingSector.LEG_SLIP else FieldingSector.SLIP_GULLY
+            val cordon = placed.filter { it.sector == cordonSector }
+            if (cordon.isNotEmpty() && (keeper == null || Random.nextDouble() < 0.5)) {
+                taken(cordon.random())?.let { return it }
+            }
+            if (keeper != null) return CatchTaken(keeper.name, "behind the stumps")
+        }
+
+        if (direction != null) {
+            val inSector = placed.filter { it.sector == direction.sector }
+            val here = if (direction.isAerial) {
+                inSector.firstOrNull { it.depth == FieldingDepth.DEEP } ?: inSector.firstOrNull { it.depth != FieldingDepth.DEEP }
+            } else {
+                inSector.firstOrNull { it.depth != FieldingDepth.DEEP } ?: inSector.firstOrNull()
+            }
+            val pick = here ?: placed.minByOrNull {
+                FieldingSystem.sectorGapDegrees(it.sector, direction.sector) +
+                    (if (direction.isAerial && it.depth == FieldingDepth.CLOSE) 40.0 else 0.0)
+            }
+            if (pick != null) taken(pick)?.let { return it }
+        }
+
+        placed.randomOrNull()?.let { p -> taken(p)?.let { return it } }
+        return keeper?.let { CatchTaken(it.name, "behind the stumps") }
     }
 
     private fun randomIndex(size: Int): Int = (Random.nextDouble() * size).toInt().coerceAtMost(size - 1)
@@ -695,7 +758,8 @@ object MatchEngine {
                 return phrases[randomIndex(phrases.size)]
             }
             // caught: say who took it
-            val caughtSuffix = outcome.fielderName?.let { " Caught by $it." } ?: ""
+            val taker = outcome.fielderName
+            val caughtSuffix = if (taker == null) "" else " Caught by $taker" + (outcome.fielderPosition?.let { " $it" } ?: "") + "."
             if (outcome.isEdge == true) {
                 val phrases = listOf(
                     "Edged and caught! $batsmanName has to depart after that thin edge.",

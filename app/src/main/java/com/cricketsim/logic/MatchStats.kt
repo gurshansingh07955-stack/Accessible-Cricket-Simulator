@@ -62,8 +62,9 @@ data class BatsmanStats(
     val dismissalType: DismissalType? = null,
     val dismissedBy: String? = null,
     val isCurrentlyBatting: Boolean,
-    // Who took the catch (null for every other kind of dismissal, and for old saves).
-    val caughtBy: String? = null
+    // Who took the catch and where (null for every other kind of dismissal, and for old saves).
+    val caughtBy: String? = null,
+    val caughtAt: String? = null
 )
 
 data class BowlerStats(
@@ -108,7 +109,8 @@ data class FallOfWicket(
     val balls: Int,
     val dismissalType: DismissalType,
     val dismissedBy: String,
-    val caughtBy: String? = null
+    val caughtBy: String? = null,
+    val caughtAt: String? = null
 )
 
 data class InningsData(
@@ -314,7 +316,8 @@ object MatchStats {
         batsmanId: String,
         dismissalType: DismissalType,
         dismissedBy: String,
-        caughtBy: String? = null
+        caughtBy: String? = null,
+        caughtAt: String? = null
     ): InningsData {
         val dismissed = inningsData.batsmanStats.firstOrNull { it.playerId == batsmanId }
 
@@ -325,6 +328,7 @@ object MatchStats {
                     dismissalType = dismissalType,
                     dismissedBy = dismissedBy,
                     caughtBy = caughtBy,
+                    caughtAt = caughtAt,
                     isCurrentlyBatting = false
                 )
             } else {
@@ -346,7 +350,8 @@ object MatchStats {
                 balls = inningsData.totalBalls,
                 dismissalType = dismissalType,
                 dismissedBy = dismissedBy,
-                caughtBy = caughtBy
+                caughtBy = caughtBy,
+                caughtAt = caughtAt
             )
         }
 

@@ -23,6 +23,9 @@ import java.util.Locale
  * each is a single swipe stop.
  */
 
+/** "Virat Kohli at long-on" / "MS Dhoni behind the stumps"; just the name when no place is known. */
+private fun caughtByText(by: String, at: String?): String = if (at != null) "$by $at" else by
+
 internal fun countOf(n: Int, singular: String, plural: String = singular + "s"): String =
     "$n ${if (n == 1) singular else plural}"
 
@@ -114,7 +117,7 @@ object MatchLines {
             DismissalType.STUMPED -> "Stumped, bowled by ${dismissal.dismissedBy}."
             DismissalType.CAUGHT_AND_BOWLED -> "Caught and bowled by ${dismissal.dismissedBy}."
             else -> if (dismissal.caughtBy != null) {
-                "Caught by ${dismissal.caughtBy}, bowled by ${dismissal.dismissedBy}."
+                "Caught by ${caughtByText(dismissal.caughtBy ?: "", dismissal.caughtAt)}, bowled by ${dismissal.dismissedBy}."
             } else {
                 "Caught, bowled by ${dismissal.dismissedBy}."
             }
@@ -172,11 +175,11 @@ object ScorecardLines {
     fun inningsHeader(innings: InningsData): String =
         "${innings.battingTeamName}, ${innings.totalRuns} for ${innings.totalWickets} in ${innings.totalOvers}.${innings.totalBalls} overs."
 
-    private fun dismissalPhrase(type: DismissalType?, by: String?, caughtBy: String? = null): String = when (type) {
+    private fun dismissalPhrase(type: DismissalType?, by: String?, caughtBy: String? = null, caughtAt: String? = null): String = when (type) {
         DismissalType.BOWLED -> if (by != null) "bowled by $by" else "bowled"
         DismissalType.LBW -> if (by != null) "lbw, bowled by $by" else "lbw"
         DismissalType.CAUGHT -> when {
-            caughtBy != null && by != null -> "caught by $caughtBy, bowled by $by"
+            caughtBy != null && by != null -> "caught by ${caughtByText(caughtBy, caughtAt)}, bowled by $by"
             by != null -> "caught, bowler $by"
             else -> "caught"
         }
@@ -188,7 +191,7 @@ object ScorecardLines {
 
     fun battingRows(innings: InningsData): List<String> {
         val batters = innings.batsmanStats.map { stats ->
-            val status = if (stats.isOut) dismissalPhrase(stats.dismissalType, stats.dismissedBy, stats.caughtBy) else "not out"
+            val status = if (stats.isOut) dismissalPhrase(stats.dismissalType, stats.dismissedBy, stats.caughtBy, stats.caughtAt) else "not out"
             "${stats.playerName}, $status, ${countOf(stats.runs, "run")} off ${countOf(stats.ballsFaced, "ball")}, " +
                 "${countOf(stats.fours, "four")}, ${countOf(stats.sixes, "six", "sixes")}, " +
                 "strike rate ${formatDecimal(stats.strikeRate, 1)}."
@@ -225,7 +228,7 @@ object ScorecardLines {
         if (innings.fallOfWickets.isEmpty()) return listOf("No wickets have fallen yet.")
         return innings.fallOfWickets.map { w ->
             "Wicket ${w.wicketNumber}: ${w.batsmanName}, ${countOf(w.batsmanRuns, "run")} off ${countOf(w.batsmanBalls, "ball")}, " +
-                "${dismissalPhrase(w.dismissalType, w.dismissedBy, w.caughtBy)}. " +
+                "${dismissalPhrase(w.dismissalType, w.dismissedBy, w.caughtBy, w.caughtAt)}. " +
                 "Team ${w.teamRuns} for ${w.wicketNumber} after ${w.overs}.${w.balls} overs."
         }
     }

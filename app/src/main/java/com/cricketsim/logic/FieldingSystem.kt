@@ -140,6 +140,12 @@ object FieldingSystem {
         return entry[spot.depth] ?: entry.values.firstOrNull() ?: "Fielder"
     }
 
+    /** How far apart two sectors are round the ground, in degrees (0 to 180). Used to find who is nearest a shot. */
+    fun sectorGapDegrees(a: FieldingSector, b: FieldingSector): Double {
+        val d = abs(SECTOR_GEOMETRY.getValue(a).angleDeg - SECTOR_GEOMETRY.getValue(b).angleDeg) % 360.0
+        return if (d > 180.0) 360.0 - d else d
+    }
+
     /**
      * Normalized (0-1) x/y coordinates for rendering a fielding spot on
      * the circular field map. (0.5, 0.5) is the center of the ground;

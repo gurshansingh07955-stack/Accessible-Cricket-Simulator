@@ -42,6 +42,8 @@ data class BallOutcome(
     val outBatsmanId: String? = null,
     /** The fielder involved in a run out, for the scorecard; null for every other ball. */
     val fielderName: String? = null,
+    // For a catch: where the fielder took it, as a phrase ("at long-on", "behind the stumps").
+    val fielderPosition: String? = null,
     /** The batter chose to leave the ball (no shot): it went to the keeper, or hit the stumps. */
     val leftAlone: Boolean = false
 )

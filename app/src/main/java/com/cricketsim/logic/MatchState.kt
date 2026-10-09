@@ -53,7 +53,8 @@ data class PendingDismissal(
     val ballsFaced: Int,
     val dismissalType: DismissalType,
     val dismissedBy: String,
-    val caughtBy: String? = null
+    val caughtBy: String? = null,
+    val caughtAt: String? = null
 )
 
 data class MatchState(
@@ -570,13 +571,14 @@ object MatchStateMachine {
         outBatsmanId: String,
         dismissalType: DismissalType = DismissalType.BOWLED,
         dismissedByName: String? = null,
-        caughtByName: String? = null
+        caughtByName: String? = null,
+        caughtAtText: String? = null
     ): MatchState {
         val currentWickets = state.score.wickets + 1
         // The bowler is credited unless the caller names someone else (the fielder, for a run out).
         val dismissedBy = dismissedByName ?: state.currentBowler.name
 
-        val currentInningsData = MatchStats.recordDismissal(state.currentInningsData, outBatsmanId, dismissalType, dismissedBy, caughtByName)
+        val currentInningsData = MatchStats.recordDismissal(state.currentInningsData, outBatsmanId, dismissalType, dismissedBy, caughtByName, caughtAtText)
 
         return state.copy(score = state.score.copy(wickets = currentWickets), currentInningsData = currentInningsData)
     }
