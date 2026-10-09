@@ -165,7 +165,21 @@ fun MatchResultScreen(
 }
 
 @Composable
-fun ConfirmLeaveScreen(onStay: () -> Unit, onLeave: () -> Unit) {
+fun ConfirmLeaveScreen(onStay: () -> Unit, onLeave: () -> Unit, saved: Boolean = true) {
+    if (!saved) {
+        // A tournament match is not saved part-way.
+        InfoScreen(
+            title = "Leave this match?",
+            lines = listOf(
+                "A tournament match is not saved part-way. If you leave now, you will play this match again from the toss."
+            ),
+            actions = listOf(
+                "Keep playing" to onStay,
+                "Leave match" to onLeave
+            )
+        )
+        return
+    }
     InfoScreen(
         title = "Save and leave this match?",
         lines = listOf(

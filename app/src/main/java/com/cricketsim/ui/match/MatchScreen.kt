@@ -180,7 +180,11 @@ fun MatchScreen(
     toss: TossResult,
     onBack: () -> Unit,
     onMatchFinished: () -> Unit,
-    resume: MatchSnapshot? = null
+    resume: MatchSnapshot? = null,
+    // A tournament match turns the normal autosave off (it must not touch the Resume match slot).
+    autosave: Boolean = true,
+    // Called once with the finished match (after any Super Over); the tournament records the result.
+    onMatchComplete: ((MatchState) -> Unit)? = null
 ) {
     val services = LocalGameServices.current
     val settings = services?.settings ?: GameSettings()
@@ -260,7 +264,7 @@ fun MatchScreen(
     // older saved match just by being opened.
     val saves = services?.saves
     LaunchedEffect(saves, matchState, recentCommentary, showInningsBreak, breakLastBall, matchOver) {
-        if (saves == null) return@LaunchedEffect
+        if (saves == null || !autosave) return@LaunchedEffect
         if (matchOver) {
             saves.clear()
         } else if (matchState.ballByBall.isNotEmpty() || matchState.currentInnings == 2) {
@@ -304,6 +308,7 @@ fun MatchScreen(
         matchOver = true
         director?.onMatchEnded()
         resultText?.let { services?.announceSpoken(it) }
+        onMatchComplete?.invoke(matchState)
     }
 
     fun commitBall(before: MatchState, result: BallResult) {
@@ -405,7 +410,7 @@ fun MatchScreen(
         // Back here cancels, same as the Stay button — it never silently
         // discards a live match.
         BackHandler(onBack = { confirmingLeave = false })
-        ConfirmLeaveScreen(onStay = { confirmingLeave = false }, onLeave = onBack)
+        ConfirmLeaveScreen(onStay = { confirmingLeave = false }, onLeave = onBack, saved = autosave)
         return
     }
 

@@ -44,7 +44,9 @@ data class TournamentFixture(
     val stadiumId: String,
     /** Shown instead of team names while they are not known ("1st v 2nd"). */
     val placeholder: String = "",
-    val result: FixtureResult? = null
+    val result: FixtureResult? = null,
+    /** The finished match (both innings), for the scorecard. Kept without ball-by-ball history. */
+    val scorecard: MatchState? = null
 )
 
 /** One player's running totals across the tournament. */
@@ -171,7 +173,9 @@ object CplData {
                 nw("Rahkeem Cornwall", D, AR, 70, 68, SPIN), nw("Anderson Phillip", D, BWL, 20, 72),
                 nw("Karima Gore", B, AR, 55, 62, SPIN), nw("Anderson Mahase", B, AR, 50, 60), nw("Joshua James", B, BWL, 20, 62),
                 ex("Moeen Ali", O), ex("Kusal Perera", O), ex("Shadab Khan", O),
-                nw("Sufiyan Muqeem", O, BWL, 15, 78, SPIN), ex("Milind Kumar", O)
+                nw("Sufiyan Muqeem", O, BWL, 15, 78, SPIN), ex("Milind Kumar", O),
+                // A sixth overseas signing; the real squad is bigger than 17 and nobody is left out.
+                nw("Tajinder Singh", O, AR, 62, 50)
             )),
             TeamDef("cpl_bar", "Barbados Tridents", "Tridents", "BAR", "kensington-oval", listOf(
                 ex("Gudakesh Motie"), ex("Sherfane Rutherford"), ex("Brandon King"), nw("Zachary Carter", D, BAT, 58, 20),
@@ -195,7 +199,9 @@ object CplData {
                 nw("Vitel Lawes", D, BWL, 15, 66, SPIN), nw("Romaine Morris", D, BWL, 20, 62),
                 ex("Kirk McKenzie", B), nw("Kelvin Pitman", B, BAT, 52, 20), nw("Jeavor Royal", B, WK, 60, 10),
                 ex("Saim Ayub", O), nw("Maaz Sadaqat", O, AR, 74, 55, SPIN), ex("Usman Khan", O),
-                nw("Hassan Khan", O, AR, 66, 70, SPIN), nw("Hunain Shah", O, BWL, 15, 78)
+                nw("Hassan Khan", O, AR, 66, 70, SPIN), nw("Hunain Shah", O, BWL, 15, 78),
+                // The Kingsmen named seven overseas players; all seven are here.
+                nw("Shayan Jahangir", O, BAT, 68, 10), nw("Tayyab Arif", O, BAT, 60, 10)
             )),
             TeamDef("cpl_skn", "St Kitts & Nevis Patriots", "Patriots", "SKN", "warner-park", listOf(
                 ex("Johnson Charles"), ex("Jason Holder"), ex("Kyle Mayers"), nw("Andre Fletcher", D, WK, 74, 10),

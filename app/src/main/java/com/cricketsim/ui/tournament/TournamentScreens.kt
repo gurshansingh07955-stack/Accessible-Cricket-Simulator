@@ -27,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,19 +36,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.CplData
+import com.cricketsim.logic.CplSimulator
+import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.PlayerRole
+import com.cricketsim.logic.SimMode
 import com.cricketsim.logic.SquadTag
 import com.cricketsim.logic.Team
+import com.cricketsim.logic.TossResult
 import com.cricketsim.logic.TournamentFixture
 import com.cricketsim.logic.TournamentState
 import com.cricketsim.persistence.TournamentSaveStore
+import com.cricketsim.ui.match.MatchScreen
+import com.cricketsim.ui.match.ScorecardScreen
+import com.cricketsim.ui.setup.PlayingXIScreen
+import com.cricketsim.ui.setup.TossScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 /**
@@ -59,6 +72,12 @@ import kotlin.random.Random
  *       -> CPL 2026: Start, or Resume / Delete when a tournament is saved
  *         -> Choose your team (with View squad for every team)
  *           -> the tournament: Matches, Table, Venues and Stats tabs
+ *              (Matches: play your own match or simulate matches, open any scorecard)
+ *
+ * PLAYING YOUR MATCH: Playing XI (CPL rules checked) -> toss -> the normal live match screen. The
+ * franchise sides have no anthems. A tournament match is NOT autosaved part-way (the normal Resume
+ * slot is left alone); leaving it mid-way means starting it again from the toss. The result, scorecard
+ * and stats are recorded the moment the match ends.
  *
  * The tournament saves itself whenever it changes, so leaving and coming back resumes it.
  *
@@ -73,6 +92,10 @@ private sealed interface TPage {
     object TeamSelect : TPage
     data class Squad(val teamId: String) : TPage
     object Hub : TPage
+    data class PickXI(val fixtureId: Int, val attempt: Int = 0) : TPage
+    data class Toss(val fixtureId: Int, val userXI: Team, val opponentXI: Team) : TPage
+    data class PlayMatch(val fixtureId: Int, val userXI: Team, val opponentXI: Team, val toss: TossResult) : TPage
+    data class Scorecard(val fixtureId: Int) : TPage
 }
 
 @Composable
@@ -86,6 +109,30 @@ fun TournamentFlow(onExit: () -> Unit) {
     var saved by remember { mutableStateOf<TournamentState?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+    var xiProblem by remember { mutableStateOf<String?>(null) }
+
+    // Runs the simulation off the main thread, then saves. Only one run at a time.
+    val simulate: (SimMode) -> Unit = { mode ->
+        val current = saved
+        if (current != null && !busy) {
+            busy = true
+            message = "Simulating, please wait."
+            scope.launch {
+                val updated = withContext(Dispatchers.Default) { CplSimulator.run(current, mode, Random.Default) }
+                val played = updated.fixtures.count { it.result != null } - current.fixtures.count { it.result != null }
+                saved = updated
+                store.save(updated)
+                message = when {
+                    played <= 0 -> "Nothing to simulate right now."
+                    played == 1 -> "Simulated 1 match."
+                    else -> "Simulated $played matches."
+                }
+                busy = false
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         saved = store.load()
@@ -156,7 +203,97 @@ fun TournamentFlow(onExit: () -> Unit) {
             val back = { page = TPage.Cpl }
             BackHandler(onBack = back)
             val state = saved
-            if (state != null) TournamentHub(state = state, onLeave = back) else back()
+            if (state != null) {
+                TournamentHub(
+                    state = state,
+                    busy = busy,
+                    message = message,
+                    onSimulate = simulate,
+                    onScorecard = { id -> page = TPage.Scorecard(id) },
+                    onPlay = { id -> page = TPage.PickXI(id) },
+                    onLeave = back
+                )
+            } else back()
+        }
+        is TPage.PickXI -> {
+            val back = { page = TPage.Hub }
+            BackHandler(onBack = back)
+            val state = saved
+            val fixture = state?.fixtures?.find { it.id == current.fixtureId }
+            val userId = state?.userTeamId
+            val userSquad = state?.teams?.find { it.id == userId }
+            val opponentId = if (fixture?.homeId == userId) fixture?.awayId else fixture?.homeId
+            val opponentSquad = state?.teams?.find { it.id == opponentId }
+            val stadium = fixture?.let { CplData.stadium(it.stadiumId) }
+            if (state != null && fixture != null && userSquad != null && opponentSquad != null && stadium != null) {
+                // The suggested XI comes first, so the screen's Auto-pick gives a legal XI for this ground.
+                val selection = remember(current.fixtureId) { CplSimulator.squadForSelection(userSquad, state.tags, stadium) }
+                key(current.attempt) {
+                    PlayingXIScreen(
+                        userTeam = selection,
+                        onXIConfirmed = { xi ->
+                            val problem = CplSimulator.xiProblem(xi, state.tags)
+                            if (problem != null) {
+                                xiProblem = problem
+                                page = TPage.PickXI(current.fixtureId, current.attempt + 1)
+                            } else {
+                                val opponentXI = CplSimulator.pickXI(opponentSquad, state.tags, stadium)
+                                page = TPage.Toss(current.fixtureId, xi, opponentXI)
+                            }
+                        },
+                        onBack = back
+                    )
+                }
+                val problem = xiProblem
+                if (problem != null) {
+                    AlertDialog(
+                        onDismissRequest = { xiProblem = null },
+                        title = { Text("Change your team") },
+                        text = { Text(problem) },
+                        confirmButton = { TextButton(onClick = { xiProblem = null }) { Text("OK") } }
+                    )
+                }
+            } else back()
+        }
+        is TPage.Toss -> {
+            val back = { page = TPage.PickXI(current.fixtureId) }
+            BackHandler(onBack = back)
+            TossScreen(
+                userTeam = current.userXI,
+                opponentTeam = current.opponentXI,
+                onTossComplete = { toss -> page = TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, toss) },
+                onBack = back
+            )
+        }
+        is TPage.PlayMatch -> {
+            val back = { page = TPage.Hub }
+            val stadium = saved?.fixtures?.find { it.id == current.fixtureId }?.let { CplData.stadium(it.stadiumId) }
+            if (stadium != null) {
+                MatchScreen(
+                    format = MatchFormat.T20,
+                    stadium = stadium,
+                    userTeam = current.userXI,
+                    opponentTeam = current.opponentXI,
+                    toss = current.toss,
+                    onBack = back,
+                    onMatchFinished = back,
+                    autosave = false,
+                    onMatchComplete = { finished ->
+                        val state = saved
+                        if (state != null) {
+                            val updated = CplSimulator.recordPlayedMatch(state, current.fixtureId, finished, current.userXI, current.opponentXI)
+                            saved = updated
+                            scope.launch { store.save(updated) }
+                        }
+                    }
+                )
+            } else back()
+        }
+        is TPage.Scorecard -> {
+            val back = { page = TPage.Hub }
+            BackHandler(onBack = back)
+            val card = saved?.fixtures?.find { it.id == current.fixtureId }?.scorecard
+            if (card != null) ScorecardScreen(state = card, onBack = back) else back()
         }
     }
 }
@@ -375,7 +512,15 @@ private fun SquadPage(team: Team, tags: Map<String, SquadTag>, onBack: () -> Uni
 // ---- The tournament itself ------------------------------------------------------------------
 
 @Composable
-private fun TournamentHub(state: TournamentState, onLeave: () -> Unit) {
+private fun TournamentHub(
+    state: TournamentState,
+    busy: Boolean,
+    message: String,
+    onSimulate: (SimMode) -> Unit,
+    onScorecard: (Int) -> Unit,
+    onPlay: (Int) -> Unit,
+    onLeave: () -> Unit
+) {
     var tab by remember { mutableStateOf(0) }
     val titles = listOf("Matches", "Table", "Venues", "Stats")
     val myTeam = state.teams.find { it.id == state.userTeamId }?.name ?: ""
@@ -395,7 +540,7 @@ private fun TournamentHub(state: TournamentState, onLeave: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             when (tab) {
-                0 -> MatchesTab(state)
+                0 -> MatchesTab(state, busy, message, onSimulate, onScorecard, onPlay)
                 1 -> TableTab(state)
                 2 -> VenuesTab(state)
                 else -> StatsTab(state)
@@ -410,22 +555,87 @@ private fun nameOf(state: TournamentState, id: String?): String =
     state.teams.find { it.id == id }?.name ?: "To be decided"
 
 @Composable
-private fun MatchesTab(state: TournamentState) {
+private fun MatchesTab(
+    state: TournamentState,
+    busy: Boolean,
+    message: String,
+    onSimulate: (SimMode) -> Unit,
+    onScorecard: (Int) -> Unit,
+    onPlay: (Int) -> Unit
+) {
+    val next = CplSimulator.nextFixture(state)
+    val champion = CplSimulator.champion(state)
+    val nextIsMine = next != null && CplSimulator.involves(next, state.userTeamId)
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
-            Text(
-                text = "The fixture list is random for every tournament. Playing your matches and simulating the others comes in the next update.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                if (champion != null) {
+                    Text(
+                        text = "Champions: ${champion.name}.",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                } else if (next != null) {
+                    val ground = CplData.stadium(next.stadiumId)?.name ?: ""
+                    Text(
+                        text = "Next: Match ${next.number}, ${nameOf(state, next.homeId)} v ${nameOf(state, next.awayId)} at $ground." +
+                            if (nextIsMine) " This is your match." else "",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                if (next != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (nextIsMine) {
+                        Button(onClick = { onPlay(next.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text("Play my match")
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedButton(onClick = { onSimulate(SimMode.NEXT) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text("Simulate my match instead")
+                        }
+                    } else {
+                        Button(onClick = { onSimulate(SimMode.NEXT) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text("Simulate next match")
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { onSimulate(SimMode.UNTIL_MINE) },
+                        enabled = !busy && !nextIsMine,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Simulate until my next match") }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedButton(onClick = { onSimulate(SimMode.ALL) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Simulate the rest of the tournament")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Matches are played by the game's own match engine on each ground's real pitch and weather. " +
+                            "You can play your own matches yourself or simulate them.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (message.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                    )
+                }
+            }
         }
-        items(state.fixtures, key = { it.id }) { f -> FixtureCard(state, f) }
+        items(state.fixtures, key = { it.id }) { f ->
+            Column(modifier = Modifier.fillMaxWidth()) { FixtureCard(state, f, onScorecard) }
+        }
     }
 }
 
 @Composable
-private fun FixtureCard(state: TournamentState, f: TournamentFixture) {
+private fun FixtureCard(state: TournamentState, f: TournamentFixture, onScorecard: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(12.dp)
     val stadium = CplData.stadium(f.stadiumId)
@@ -462,6 +672,11 @@ private fun FixtureCard(state: TournamentState, f: TournamentFixture) {
             style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant
         )
+    }
+    if (f.scorecard != null) {
+        OutlinedButton(onClick = { onScorecard(f.id) }, modifier = Modifier.fillMaxWidth()) {
+            Text("View scorecard, match ${f.number}")
+        }
     }
 }
 

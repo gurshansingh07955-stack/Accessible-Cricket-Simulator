@@ -1,6 +1,12 @@
-Patch run: 37898442001
-Timestamp (UTC): 2026-10-09T07:20:32Z
+Patch run: 37935442714
+Timestamp (UTC): 2026-10-09T13:14:41Z
 Result: OK
 -----
-Patch 2026-10-09-005-cpl-tournament-part1.json
-  applied 8 operation(s) to 6 file(s)
+Patch 2026-10-09-006-cpl-full-squads.json
+  applied 2 operation(s) to 1 file(s)
+Patch 2026-10-09-007-cpl-tournament-part2a.json
+  applied 3 operation(s) to 3 file(s)
+Patch 2026-10-09-008-cpl-super-over.json
+  applied 1 operation(s) to 1 file(s)
+Patch 2026-10-09-009-cpl-play-my-match.json
+  applied 7 operation(s) to 4 file(s)
