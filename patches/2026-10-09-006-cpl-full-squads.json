@@ -1,0 +1,24 @@
+{
+  "name": "cpl-full-squads",
+  "message": "CPL: keep every announced player (Falcons 18, Kingsmen 19)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+    "contains": "Tayyab Arif"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "nw(\"Sufiyan Muqeem\", O, BWL, 15, 78, SPIN), ex(\"Milind Kumar\", O)\n            )),",
+      "replace": "nw(\"Sufiyan Muqeem\", O, BWL, 15, 78, SPIN), ex(\"Milind Kumar\", O),\n                // A sixth overseas signing; the real squad is bigger than 17 and nobody is left out.\n                nw(\"Tajinder Singh\", O, AR, 62, 50)\n            )),",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "nw(\"Hassan Khan\", O, AR, 66, 70, SPIN), nw(\"Hunain Shah\", O, BWL, 15, 78)\n            )),",
+      "replace": "nw(\"Hassan Khan\", O, AR, 66, 70, SPIN), nw(\"Hunain Shah\", O, BWL, 15, 78),\n                // The Kingsmen named seven overseas players; all seven are here.\n                nw(\"Shayan Jahangir\", O, BAT, 68, 10), nw(\"Tayyab Arif\", O, BAT, 60, 10)\n            )),",
+      "count": 1
+    }
+  ]
+}
