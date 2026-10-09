@@ -27,6 +27,7 @@ import com.cricketsim.ui.home.HomeScreen
 import com.cricketsim.ui.match.AnthemScreen
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.settings.SettingsScreen
+import com.cricketsim.ui.tournament.TournamentFlow
 import com.cricketsim.ui.setup.FormatSelectionScreen
 import com.cricketsim.ui.setup.PlayingXIScreen
 import com.cricketsim.ui.setup.StadiumSelectionScreen
@@ -183,9 +184,11 @@ fun CricketSimApp() {
                     )
                 }
             },
+            onTournament = { screen = Screen.Tournament },
             onSettings = { screen = Screen.Settings(returnTo = current) },
             onAbout = { screen = Screen.About }
         )
+        is Screen.Tournament -> TournamentFlow(onExit = { screen = Screen.Home })
         is Screen.About -> {
             val onBack = { screen = Screen.Home }
             BackHandler(onBack = onBack)

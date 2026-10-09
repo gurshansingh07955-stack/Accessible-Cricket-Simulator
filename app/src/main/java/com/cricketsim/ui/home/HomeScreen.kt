@@ -78,6 +78,7 @@ fun HomeScreen(
     savedMatchSummary: String?,
     onPlay: () -> Unit,
     onResume: () -> Unit,
+    onTournament: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit
 ) {
@@ -131,6 +132,14 @@ fun HomeScreen(
                 emphasised = false,
                 enabled = savedMatchSummary != null,
                 onClick = onResume
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            MenuButton(
+                title = "Tournament",
+                description = "Play a full league season. CPL 2026 is ready.",
+                emphasised = false,
+                enabled = true,
+                onClick = onTournament
             )
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(

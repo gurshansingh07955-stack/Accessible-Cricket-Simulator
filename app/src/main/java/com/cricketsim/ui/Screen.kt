@@ -21,6 +21,9 @@ sealed interface Screen {
     /** What this game is and how it is played. */
     object About : Screen
 
+    /** Tournaments (CPL 2026 first): a self-contained flow, see ui/tournament/TournamentScreens.kt. */
+    object Tournament : Screen
+
     /** Step 1 of setting up a NEW match (reached from Home's Play match). */
     object FormatSelection : Screen
 
