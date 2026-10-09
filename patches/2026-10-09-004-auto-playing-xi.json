@@ -1,0 +1,38 @@
+{
+  "name": "auto-playing-xi",
+  "message": "Add an Auto-pick Playing XI button; the XI can still be changed afterwards",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+    "contains": "onAutoPick"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "    var viceCaptainId by remember { mutableStateOf<String?>(null) }\n\n    when (step) {",
+      "replace": "    var viceCaptainId by remember { mutableStateOf<String?>(null) }\n    // Set when the user taps \"Auto-pick\": the picked XI plus its captain, vice-captain and keeper.\n    var autoPick by remember { mutableStateOf<CricketData.AutoXIResult?>(null) }\n    val autoPickIds = autoPick?.players?.map { it.id }?.toSet()\n    // Spoken/shown after an auto-pick, and again if the user then changes the XI.\n    val autoNote: String? = autoPick?.let { a ->\n        if (selectedIds == autoPickIds) {\n            fun nameOf(id: String) = a.players.find { it.id == id }?.name ?: \"\"\n            \"Auto-picked your Playing XI. Captain ${nameOf(a.captainId)}, vice-captain ${nameOf(a.viceCaptainId)}, \" +\n                \"wicketkeeper ${nameOf(a.wicketkeeperId)}. Tap Continue to go on, or change players below.\"\n        } else {\n            \"You changed the Playing XI, so you will choose captain, vice-captain and wicketkeeper next.\"\n        }\n    }\n\n    when (step) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "            onContinue = { step = XIStep.CAPTAIN },\n            onBack = onBack\n        )",
+      "replace": "            autoNote = autoNote,\n            onAutoPick = {\n                // Same picker the AI side uses: the usual XI, with a keeper and enough bowlers.\n                val auto = CricketData.autoSelectPlayingXI(userTeam)\n                autoPick = auto\n                selectedIds = auto.players.map { it.id }.toSet()\n                captainId = auto.captainId\n                viceCaptainId = auto.viceCaptainId\n            },\n            onContinue = {\n                val auto = autoPick\n                if (auto != null && selectedIds == autoPickIds) {\n                    // Untouched auto XI: its captain, vice-captain and keeper are already chosen.\n                    onXIConfirmed(\n                        CricketData.buildMatchSquad(\n                            fullTeam = userTeam,\n                            selectedPlayerIds = auto.players.map { it.id },\n                            captainId = auto.captainId,\n                            viceCaptainId = auto.viceCaptainId,\n                            wicketkeeperId = auto.wicketkeeperId\n                        )\n                    )\n                } else {\n                    step = XIStep.CAPTAIN\n                }\n            },\n            onBack = onBack\n        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "    onToggle: (String) -> Unit,\n    onContinue: () -> Unit,\n    onBack: () -> Unit\n) {",
+      "replace": "    onToggle: (String) -> Unit,\n    autoNote: String?,\n    onAutoPick: () -> Unit,\n    onContinue: () -> Unit,\n    onBack: () -> Unit\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "        Spacer(modifier = Modifier.height(16.dp))\n\n        LazyColumn(modifier = Modifier.weight(1f)) {\n            items(team.players,",
+      "replace": "        Spacer(modifier = Modifier.height(8.dp))\n        // Skips the long pick: fills in a sensible XI (and its captain and keeper). The user can\n        // still change any player afterwards.\n        Button(onClick = onAutoPick, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Auto-pick my Playing XI\")\n        }\n        if (autoNote != null) {\n            Spacer(modifier = Modifier.height(8.dp))\n            Text(\n                text = autoNote,\n                style = MaterialTheme.typography.bodyMedium,\n                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }\n            )\n        }\n        Spacer(modifier = Modifier.height(16.dp))\n\n        LazyColumn(modifier = Modifier.weight(1f)) {\n            items(team.players,",
+      "count": 1
+    }
+  ]
+}
