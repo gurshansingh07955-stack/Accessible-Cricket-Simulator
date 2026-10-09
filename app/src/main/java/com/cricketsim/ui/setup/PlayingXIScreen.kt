@@ -65,13 +65,51 @@ fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () ->
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var captainId by remember { mutableStateOf<String?>(null) }
     var viceCaptainId by remember { mutableStateOf<String?>(null) }
+    // Set when the user taps "Auto-pick": the picked XI plus its captain, vice-captain and keeper.
+    var autoPick by remember { mutableStateOf<CricketData.AutoXIResult?>(null) }
+    val autoPickIds = autoPick?.players?.map { it.id }?.toSet()
+    // Spoken/shown after an auto-pick, and again if the user then changes the XI.
+    val autoNote: String? = autoPick?.let { a ->
+        if (selectedIds == autoPickIds) {
+            fun nameOf(id: String) = a.players.find { it.id == id }?.name ?: ""
+            "Auto-picked your Playing XI. Captain ${nameOf(a.captainId)}, vice-captain ${nameOf(a.viceCaptainId)}, " +
+                "wicketkeeper ${nameOf(a.wicketkeeperId)}. Tap Continue to go on, or change players below."
+        } else {
+            "You changed the Playing XI, so you will choose captain, vice-captain and wicketkeeper next."
+        }
+    }
 
     when (step) {
         XIStep.SQUAD -> SquadSelectionStep(
             team = userTeam,
             selectedIds = selectedIds,
             onToggle = { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id },
-            onContinue = { step = XIStep.CAPTAIN },
+            autoNote = autoNote,
+            onAutoPick = {
+                // Same picker the AI side uses: the usual XI, with a keeper and enough bowlers.
+                val auto = CricketData.autoSelectPlayingXI(userTeam)
+                autoPick = auto
+                selectedIds = auto.players.map { it.id }.toSet()
+                captainId = auto.captainId
+                viceCaptainId = auto.viceCaptainId
+            },
+            onContinue = {
+                val auto = autoPick
+                if (auto != null && selectedIds == autoPickIds) {
+                    // Untouched auto XI: its captain, vice-captain and keeper are already chosen.
+                    onXIConfirmed(
+                        CricketData.buildMatchSquad(
+                            fullTeam = userTeam,
+                            selectedPlayerIds = auto.players.map { it.id },
+                            captainId = auto.captainId,
+                            viceCaptainId = auto.viceCaptainId,
+                            wicketkeeperId = auto.wicketkeeperId
+                        )
+                    )
+                } else {
+                    step = XIStep.CAPTAIN
+                }
+            },
             onBack = onBack
         )
         XIStep.CAPTAIN -> {
@@ -138,6 +176,8 @@ private fun SquadSelectionStep(
     team: Team,
     selectedIds: Set<String>,
     onToggle: (String) -> Unit,
+    autoNote: String?,
+    onAutoPick: () -> Unit,
     onContinue: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -157,6 +197,20 @@ private fun SquadSelectionStep(
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        // Skips the long pick: fills in a sensible XI (and its captain and keeper). The user can
+        // still change any player afterwards.
+        Button(onClick = onAutoPick, modifier = Modifier.fillMaxWidth()) {
+            Text("Auto-pick my Playing XI")
+        }
+        if (autoNote != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = autoNote,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn(modifier = Modifier.weight(1f)) {
