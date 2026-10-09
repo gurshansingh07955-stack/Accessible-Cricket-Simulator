@@ -1,0 +1,129 @@
+{
+  "name": "caught-by-fielder",
+  "message": "Name the fielder who took the catch (wicket screen, commentary text, scorecard, fall of wickets)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+    "contains": "val caughtBy: String? = null"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "    val dismissedBy: String? = null,\n    val isCurrentlyBatting: Boolean\n)",
+      "replace": "    val dismissedBy: String? = null,\n    val isCurrentlyBatting: Boolean,\n    // Who took the catch (null for every other kind of dismissal, and for old saves).\n    val caughtBy: String? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "    val dismissalType: DismissalType,\n    val dismissedBy: String\n)",
+      "replace": "    val dismissalType: DismissalType,\n    val dismissedBy: String,\n    val caughtBy: String? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "        dismissedBy: String\n    ): InningsData {\n        val dismissed =",
+      "replace": "        dismissedBy: String,\n        caughtBy: String? = null\n    ): InningsData {\n        val dismissed =",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "                    dismissedBy = dismissedBy,\n                    isCurrentlyBatting = false",
+      "replace": "                    dismissedBy = dismissedBy,\n                    caughtBy = caughtBy,\n                    isCurrentlyBatting = false",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "                dismissedBy = dismissedBy\n            )\n        }\n\n        return inningsData.copy(batsmanStats",
+      "replace": "                dismissedBy = dismissedBy,\n                caughtBy = caughtBy\n            )\n        }\n\n        return inningsData.copy(batsmanStats",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    val dismissedBy: String\n)\n\ndata class MatchState(",
+      "replace": "    val dismissedBy: String,\n    val caughtBy: String? = null\n)\n\ndata class MatchState(",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        dismissedByName: String? = null\n    ): MatchState {",
+      "replace": "        dismissedByName: String? = null,\n        caughtByName: String? = null\n    ): MatchState {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "MatchStats.recordDismissal(state.currentInningsData, outBatsmanId, dismissalType, dismissedBy)",
+      "replace": "MatchStats.recordDismissal(state.currentInningsData, outBatsmanId, dismissalType, dismissedBy, caughtByName)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        val result = BallOutcome(\n            runs = runs, isWicket = isWicket,",
+      "replace": "        // Who took the catch. Caught and bowled is the bowler himself; any other catch goes to a\n        // random fielder who is not the bowler. (Run-outs name their fielder above.)\n        if (isWicket && dismissalType == DismissalType.CAUGHT_AND_BOWLED) {\n            outFielderName = bowler.name\n        } else if (isWicket && dismissalType == DismissalType.CAUGHT) {\n            outFielderName = matchState.bowlingTeam.players.filter { it.id != bowler.id }.randomOrNull()?.name ?: bowler.name\n        }\n\n        val result = BallOutcome(\n            runs = runs, isWicket = isWicket,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "            // caught\n            if (outcome.isEdge == true) {\n                val phrases = listOf(\n                    \"Edged and caught! $batsmanName has to depart after that thin edge.\",\n                    \"There's the edge, and it's safely taken! $batsmanName is out.\"\n                )\n                return phrases[randomIndex(phrases.size)]\n            }\n            val phrases = listOf(\n                \"Caught! $batsmanName mistimes it and is caught in the deep.\",\n                \"Skied it! Well taken by the fielder, $batsmanName has to go.\"\n            )\n            return phrases[randomIndex(phrases.size)]\n        }",
+      "replace": "            // caught: say who took it\n            val caughtSuffix = outcome.fielderName?.let { \" Caught by $it.\" } ?: \"\"\n            if (outcome.isEdge == true) {\n                val phrases = listOf(\n                    \"Edged and caught! $batsmanName has to depart after that thin edge.\",\n                    \"There's the edge, and it's safely taken! $batsmanName is out.\"\n                )\n                return phrases[randomIndex(phrases.size)] + caughtSuffix\n            }\n            val phrases = listOf(\n                \"Caught! $batsmanName mistimes it and is caught in the deep.\",\n                \"Skied it! Well taken by the fielder, $batsmanName has to go.\"\n            )\n            return phrases[randomIndex(phrases.size)] + caughtSuffix\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "                if (dismissalType == DismissalType.RUN_OUT) outcome.fielderName else null\n            )",
+      "replace": "                if (dismissalType == DismissalType.RUN_OUT) outcome.fielderName else null,\n                caughtByName = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null\n            )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "                            } else {\n                                newState.currentBowler.name\n                            }\n                        )",
+      "replace": "                            } else {\n                                newState.currentBowler.name\n                            },\n                            caughtBy = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null\n                        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "            else -> \"Caught, bowled by ${dismissal.dismissedBy}.\"",
+      "replace": "            else -> if (dismissal.caughtBy != null) {\n                \"Caught by ${dismissal.caughtBy}, bowled by ${dismissal.dismissedBy}.\"\n            } else {\n                \"Caught, bowled by ${dismissal.dismissedBy}.\"\n            }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    private fun dismissalPhrase(type: DismissalType?, by: String?): String = when (type) {",
+      "replace": "    private fun dismissalPhrase(type: DismissalType?, by: String?, caughtBy: String? = null): String = when (type) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "        DismissalType.CAUGHT -> if (by != null) \"caught, bowler $by\" else \"caught\"",
+      "replace": "        DismissalType.CAUGHT -> when {\n            caughtBy != null && by != null -> \"caught by $caughtBy, bowled by $by\"\n            by != null -> \"caught, bowler $by\"\n            else -> \"caught\"\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "dismissalPhrase(stats.dismissalType, stats.dismissedBy)",
+      "replace": "dismissalPhrase(stats.dismissalType, stats.dismissedBy, stats.caughtBy)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "dismissalPhrase(w.dismissalType, w.dismissedBy)",
+      "replace": "dismissalPhrase(w.dismissalType, w.dismissedBy, w.caughtBy)",
+      "count": 1
+    }
+  ]
+}
