@@ -1,0 +1,171 @@
+{
+  "name": "catch-position",
+  "message": "Work out who takes a catch from where the ball went (keeper/slip for edges, the fielder in that part of the ground for aerial shots) and say where",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+    "contains": "val caughtAt: String? = null"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallOutcome.kt",
+      "find": "    val fielderName: String? = null,\n",
+      "replace": "    val fielderName: String? = null,\n    // For a catch: where the fielder took it, as a phrase (\"at long-on\", \"behind the stumps\").\n    val fielderPosition: String? = null,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/FieldingSystem.kt",
+      "find": "    /**\n     * Normalized (0-1) x/y coordinates for rendering a fielding spot on",
+      "replace": "    /** How far apart two sectors are round the ground, in degrees (0 to 180). Used to find who is nearest a shot. */\n    fun sectorGapDegrees(a: FieldingSector, b: FieldingSector): Double {\n        val d = abs(SECTOR_GEOMETRY.getValue(a).angleDeg - SECTOR_GEOMETRY.getValue(b).angleDeg) % 360.0\n        return if (d > 180.0) 360.0 - d else d\n    }\n\n    /**\n     * Normalized (0-1) x/y coordinates for rendering a fielding spot on",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "    val isCurrentlyBatting: Boolean,\n    // Who took the catch (null for every other kind of dismissal, and for old saves).\n    val caughtBy: String? = null\n)",
+      "replace": "    val isCurrentlyBatting: Boolean,\n    // Who took the catch and where (null for every other kind of dismissal, and for old saves).\n    val caughtBy: String? = null,\n    val caughtAt: String? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "    val dismissedBy: String,\n    val caughtBy: String? = null\n)",
+      "replace": "    val dismissedBy: String,\n    val caughtBy: String? = null,\n    val caughtAt: String? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "        caughtBy: String? = null\n    ): InningsData {",
+      "replace": "        caughtBy: String? = null,\n        caughtAt: String? = null\n    ): InningsData {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "                    caughtBy = caughtBy,\n                    isCurrentlyBatting = false",
+      "replace": "                    caughtBy = caughtBy,\n                    caughtAt = caughtAt,\n                    isCurrentlyBatting = false",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "                dismissedBy = dismissedBy,\n                caughtBy = caughtBy\n            )",
+      "replace": "                dismissedBy = dismissedBy,\n                caughtBy = caughtBy,\n                caughtAt = caughtAt\n            )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    val dismissedBy: String,\n    val caughtBy: String? = null\n)\n\ndata class MatchState(",
+      "replace": "    val dismissedBy: String,\n    val caughtBy: String? = null,\n    val caughtAt: String? = null\n)\n\ndata class MatchState(",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        caughtByName: String? = null\n    ): MatchState {",
+      "replace": "        caughtByName: String? = null,\n        caughtAtText: String? = null\n    ): MatchState {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "dismissedBy, caughtByName)",
+      "replace": "dismissedBy, caughtByName, caughtAtText)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        var outFielderName: String? = null\n",
+      "replace": "        var outFielderName: String? = null\n        var outFielderPosition: String? = null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        // Who took the catch. Caught and bowled is the bowler himself; any other catch goes to a\n        // random fielder who is not the bowler. (Run-outs name their fielder above.)\n        if (isWicket && dismissalType == DismissalType.CAUGHT_AND_BOWLED) {\n            outFielderName = bowler.name\n        } else if (isWicket && dismissalType == DismissalType.CAUGHT) {\n            outFielderName = matchState.bowlingTeam.players.filter { it.id != bowler.id }.randomOrNull()?.name ?: bowler.name\n        }\n",
+      "replace": "        // Who took the catch, worked out from where the ball went (not at random). Caught and bowled\n        // is the bowler himself. (Run-outs name their fielder above.)\n        if (isWicket && dismissalType == DismissalType.CAUGHT_AND_BOWLED) {\n            outFielderName = bowler.name\n        } else if (isWicket && dismissalType == DismissalType.CAUGHT) {\n            val taken = resolveCatcher(matchState, bowler, battingDecision, isEdge)\n            outFielderName = taken?.name\n            outFielderPosition = taken?.position\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "fielderName = outFielderName, leftAlone = leftAlone",
+      "replace": "fielderName = outFielderName, fielderPosition = outFielderPosition, leftAlone = leftAlone",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "            val caughtSuffix = outcome.fielderName?.let { \" Caught by $it.\" } ?: \"\"\n",
+      "replace": "            val taker = outcome.fielderName\n            val caughtSuffix = if (taker == null) \"\" else \" Caught by $taker\" + (outcome.fielderPosition?.let { \" $it\" } ?: \"\") + \".\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "    private fun randomIndex(size: Int): Int =",
+      "replace": "    private class CatchTaken(val name: String, val position: String?)\n\n    /**\n     * Works out who holds a catch from where the ball actually went, instead of picking a fielder\n     * at random:\n     * - An edge goes behind the bat: to a slip or gully (a leg slip for a leg-side edge) if the\n     *   field has one, otherwise to the wicketkeeper, who takes most of them anyway.\n     * - A shot struck in the air goes to the fielder standing in that part of the ground: the deep\n     *   fielder first (the catch the field-placement odds are built on), else a short or close one.\n     * - If nobody stands in that part, the nearest fielder round the ground takes it.\n     * The bowler and the keeper are never in the placed field, so they are handled separately.\n     */\n    private fun resolveCatcher(\n        matchState: MatchState,\n        bowler: Player,\n        decision: BattingDecision?,\n        isEdge: Boolean?\n    ): CatchTaken? {\n        val team = matchState.bowlingTeam\n        val keeperId = team.wicketkeeperId ?: team.players.find { it.role == PlayerRole.WICKETKEEPER }?.id\n        val keeper = team.players.find { it.id == keeperId && it.id != bowler.id }\n        val placed = matchState.fieldPlacements.filter { it.playerId != bowler.id && it.playerId != keeperId }\n        fun taken(p: FieldPlacement): CatchTaken? =\n            team.players.find { it.id == p.playerId }?.let {\n                CatchTaken(it.name, \"at \" + FieldingSystem.getPositionLabel(p).lowercase())\n            }\n        val direction = decision?.let { BattingSystem.getShotDirection(it.shot, it.intent) }\n        val legSide = setOf(\n            FieldingSector.LEG_SLIP, FieldingSector.SQUARE_LEG, FieldingSector.MID_WICKET,\n            FieldingSector.COW_CORNER, FieldingSector.MID_ON, FieldingSector.FINE_LEG\n        )\n\n        if (isEdge == true) {\n            val onLegSide = direction != null && direction.sector in legSide\n            val cordonSector = if (onLegSide) FieldingSector.LEG_SLIP else FieldingSector.SLIP_GULLY\n            val cordon = placed.filter { it.sector == cordonSector }\n            if (cordon.isNotEmpty() && (keeper == null || Random.nextDouble() < 0.5)) {\n                taken(cordon.random())?.let { return it }\n            }\n            if (keeper != null) return CatchTaken(keeper.name, \"behind the stumps\")\n        }\n\n        if (direction != null) {\n            val inSector = placed.filter { it.sector == direction.sector }\n            val here = if (direction.isAerial) {\n                inSector.firstOrNull { it.depth == FieldingDepth.DEEP } ?: inSector.firstOrNull { it.depth != FieldingDepth.DEEP }\n            } else {\n                inSector.firstOrNull { it.depth != FieldingDepth.DEEP } ?: inSector.firstOrNull()\n            }\n            val pick = here ?: placed.minByOrNull {\n                FieldingSystem.sectorGapDegrees(it.sector, direction.sector) +\n                    (if (direction.isAerial && it.depth == FieldingDepth.CLOSE) 40.0 else 0.0)\n            }\n            if (pick != null) taken(pick)?.let { return it }\n        }\n\n        placed.randomOrNull()?.let { p -> taken(p)?.let { return it } }\n        return keeper?.let { CatchTaken(it.name, \"behind the stumps\") }\n    }\n\n    private fun randomIndex(size: Int): Int =",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "                caughtByName = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null",
+      "replace": "                caughtByName = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null,\n                caughtAtText = if (dismissalType == DismissalType.CAUGHT) outcome.fielderPosition else null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "                            caughtBy = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null",
+      "replace": "                            caughtBy = if (dismissalType == DismissalType.CAUGHT) outcome.fielderName else null,\n                            caughtAt = if (dismissalType == DismissalType.CAUGHT) outcome.fielderPosition else null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "internal fun countOf(n: Int, singular: String, plural: String = singular + \"s\"): String =",
+      "replace": "/** \"Virat Kohli at long-on\" / \"MS Dhoni behind the stumps\"; just the name when no place is known. */\nprivate fun caughtByText(by: String, at: String?): String = if (at != null) \"$by $at\" else by\n\ninternal fun countOf(n: Int, singular: String, plural: String = singular + \"s\"): String =",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "\"Caught by ${dismissal.caughtBy}, bowled by ${dismissal.dismissedBy}.\"",
+      "replace": "\"Caught by ${caughtByText(dismissal.caughtBy ?: \"\", dismissal.caughtAt)}, bowled by ${dismissal.dismissedBy}.\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "caughtBy: String? = null): String = when (type) {",
+      "replace": "caughtBy: String? = null, caughtAt: String? = null): String = when (type) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "caughtBy != null && by != null -> \"caught by $caughtBy, bowled by $by\"",
+      "replace": "caughtBy != null && by != null -> \"caught by ${caughtByText(caughtBy, caughtAt)}, bowled by $by\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "stats.dismissedBy, stats.caughtBy)",
+      "replace": "stats.dismissedBy, stats.caughtBy, stats.caughtAt)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "w.dismissedBy, w.caughtBy)",
+      "replace": "w.dismissedBy, w.caughtBy, w.caughtAt)",
+      "count": 1
+    }
+  ]
+}
