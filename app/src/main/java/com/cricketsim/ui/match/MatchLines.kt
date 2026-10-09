@@ -113,7 +113,11 @@ object MatchLines {
             DismissalType.RUN_OUT -> "Run out, with ${dismissal.dismissedBy} involved."
             DismissalType.STUMPED -> "Stumped, bowled by ${dismissal.dismissedBy}."
             DismissalType.CAUGHT_AND_BOWLED -> "Caught and bowled by ${dismissal.dismissedBy}."
-            else -> "Caught, bowled by ${dismissal.dismissedBy}."
+            else -> if (dismissal.caughtBy != null) {
+                "Caught by ${dismissal.caughtBy}, bowled by ${dismissal.dismissedBy}."
+            } else {
+                "Caught, bowled by ${dismissal.dismissedBy}."
+            }
         }
         return "${dismissal.playerName} is out for ${countOf(dismissal.runs, "run")} off " +
             "${countOf(dismissal.ballsFaced, "ball")}. $how"
@@ -168,10 +172,14 @@ object ScorecardLines {
     fun inningsHeader(innings: InningsData): String =
         "${innings.battingTeamName}, ${innings.totalRuns} for ${innings.totalWickets} in ${innings.totalOvers}.${innings.totalBalls} overs."
 
-    private fun dismissalPhrase(type: DismissalType?, by: String?): String = when (type) {
+    private fun dismissalPhrase(type: DismissalType?, by: String?, caughtBy: String? = null): String = when (type) {
         DismissalType.BOWLED -> if (by != null) "bowled by $by" else "bowled"
         DismissalType.LBW -> if (by != null) "lbw, bowled by $by" else "lbw"
-        DismissalType.CAUGHT -> if (by != null) "caught, bowler $by" else "caught"
+        DismissalType.CAUGHT -> when {
+            caughtBy != null && by != null -> "caught by $caughtBy, bowled by $by"
+            by != null -> "caught, bowler $by"
+            else -> "caught"
+        }
         DismissalType.RUN_OUT -> if (by != null) "run out, $by" else "run out"
         DismissalType.STUMPED -> if (by != null) "stumped, bowled by $by" else "stumped"
         DismissalType.CAUGHT_AND_BOWLED -> if (by != null) "caught and bowled by $by" else "caught and bowled"
@@ -180,7 +188,7 @@ object ScorecardLines {
 
     fun battingRows(innings: InningsData): List<String> {
         val batters = innings.batsmanStats.map { stats ->
-            val status = if (stats.isOut) dismissalPhrase(stats.dismissalType, stats.dismissedBy) else "not out"
+            val status = if (stats.isOut) dismissalPhrase(stats.dismissalType, stats.dismissedBy, stats.caughtBy) else "not out"
             "${stats.playerName}, $status, ${countOf(stats.runs, "run")} off ${countOf(stats.ballsFaced, "ball")}, " +
                 "${countOf(stats.fours, "four")}, ${countOf(stats.sixes, "six", "sixes")}, " +
                 "strike rate ${formatDecimal(stats.strikeRate, 1)}."
@@ -217,7 +225,7 @@ object ScorecardLines {
         if (innings.fallOfWickets.isEmpty()) return listOf("No wickets have fallen yet.")
         return innings.fallOfWickets.map { w ->
             "Wicket ${w.wicketNumber}: ${w.batsmanName}, ${countOf(w.batsmanRuns, "run")} off ${countOf(w.batsmanBalls, "ball")}, " +
-                "${dismissalPhrase(w.dismissalType, w.dismissedBy)}. " +
+                "${dismissalPhrase(w.dismissalType, w.dismissedBy, w.caughtBy)}. " +
                 "Team ${w.teamRuns} for ${w.wicketNumber} after ${w.overs}.${w.balls} overs."
         }
     }

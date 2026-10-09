@@ -534,6 +534,14 @@ object MatchEngine {
             }
         }
 
+        // Who took the catch. Caught and bowled is the bowler himself; any other catch goes to a
+        // random fielder who is not the bowler. (Run-outs name their fielder above.)
+        if (isWicket && dismissalType == DismissalType.CAUGHT_AND_BOWLED) {
+            outFielderName = bowler.name
+        } else if (isWicket && dismissalType == DismissalType.CAUGHT) {
+            outFielderName = matchState.bowlingTeam.players.filter { it.id != bowler.id }.randomOrNull()?.name ?: bowler.name
+        }
+
         val result = BallOutcome(
             runs = runs, isWicket = isWicket, isWide = isWide, isNoBall = isNoBall, extraRuns = extraRuns,
             batsmanId = batsman.id, bowlerId = bowler.id, commentary = "",
@@ -686,19 +694,20 @@ object MatchEngine {
                 )
                 return phrases[randomIndex(phrases.size)]
             }
-            // caught
+            // caught: say who took it
+            val caughtSuffix = outcome.fielderName?.let { " Caught by $it." } ?: ""
             if (outcome.isEdge == true) {
                 val phrases = listOf(
                     "Edged and caught! $batsmanName has to depart after that thin edge.",
                     "There's the edge, and it's safely taken! $batsmanName is out."
                 )
-                return phrases[randomIndex(phrases.size)]
+                return phrases[randomIndex(phrases.size)] + caughtSuffix
             }
             val phrases = listOf(
                 "Caught! $batsmanName mistimes it and is caught in the deep.",
                 "Skied it! Well taken by the fielder, $batsmanName has to go."
             )
-            return phrases[randomIndex(phrases.size)]
+            return phrases[randomIndex(phrases.size)] + caughtSuffix
         }
 
         if (outcome.runs == 6) {
