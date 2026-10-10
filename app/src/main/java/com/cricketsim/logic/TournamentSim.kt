@@ -8,19 +8,22 @@ enum class SimMode { NEXT, UNTIL_MINE, ALL }
 
 /**
  * Plays the tournament's matches without anyone watching: picks each side's XI for the ground,
- * does the toss, and then runs the game's REAL match engine ball by ball. Nothing here is
- * invented for the tournament, which is the point: the result of a match between two AI sides
- * depends on the same things as a match you play yourself:
+ * does the toss, then plays the match ball by ball through the game's own match code (scorecard,
+ * strike rotation, bowling changes, fields, rain and DLS, Super Overs). Each ball's result comes
+ * from AiBallModel, which depends on the real context of the ball and not on dice alone:
  *
- *  - the STADIUM: its pitch type, boundary size, dew and altitude reach the engine through the
- *    match's pitch type and WeatherSystem.getStadiumMatchEffects, exactly as in a normal match;
- *  - the WEATHER rolled for that ground (and rain, with the same DLS rules);
- *  - the PLAYERS' ratings against each other, ball by ball, with the same AI bowling changes,
- *    field settings and batting aggression as everywhere else;
+ *  - the STADIUM: its pitch type, boundary size, dew and altitude (WeatherSystem's stadium
+ *    effects), and the weather rolled for that ground, including rain and DLS;
+ *  - the PLAYERS: batter against bowler ratings, how set the batter is, the phase of the
+ *    innings, and the pressure of a chase;
  *  - the PLAN: each captain picks his XI for the pitch (an extra spinner on a dusty pitch, a
  *    seamer on a green one) and chooses to bat or bowl from the pitch and the dew.
  * The only dice are the coin toss and the ball-by-ball cricket itself. A tied match goes to a Super
  * Over with the game's real Super Over rules (see SuperOver), repeated until one side wins.
+ *
+ * WHY NOT THE LIVE ENGINE'S DICE: MatchEngine.simulateBall is built for a person on one side; with
+ * two AI sides it scored 230-260 and made bowlers wicketless. See AiBallModel for how the
+ * replacement was calibrated.
  *
  * Runs on a background thread: a whole tournament is some eight thousand balls.
  */
@@ -132,14 +135,14 @@ object CplSimulator {
             )
         )
 
-        s = playInnings(s, stadium)
+        s = playInnings(s, stadium, random)
         if (s.currentInnings != 2) return null
 
         // The regulation result; a tie goes to a Super Over (and more, until one side wins), played
         // on the same engine, ground and weather as the match itself.
         var finished = MatchSimulation.finishMatch(s)
         if (SuperOver.isTieAtEnd(s)) {
-            playSuperOvers(s, home, away, stadium)?.let { finished = it }
+            playSuperOvers(s, home, away, stadium, random)?.let { finished = it }
         }
         val result = buildResult(finished, home, away) ?: return null
         // The scorecard needs only the two innings; the ball-by-ball history would only bloat the save.
@@ -167,7 +170,9 @@ object CplSimulator {
         val resultText = when {
             tied -> (SuperOver.resultText(finished) ?: "Match tied. $winnerName won.") + " " +
                 SuperOver.summaryLines(finished).joinToString(" ")
-            else -> MatchSimulation.matchResultText(finished) ?: "$winnerName won."
+            else -> (MatchSimulation.matchResultText(finished) ?: "$winnerName won.") +
+                // After rain the margin is measured against the revised (DLS) target, not the first-innings score.
+                (if (finished.dlsRevised && finished.target != null) " Target revised to ${finished.target} by DLS." else "")
         }
         val summary = "${CplData.shortName(first.battingTeamId)} ${firstScore.runs}/${firstScore.wickets}, " +
             "${CplData.shortName(second.battingTeamId)} ${finished.score.runs}/${finished.score.wickets}. $resultText"
@@ -191,7 +196,7 @@ object CplSimulator {
      * Super Over is over. Both sides are AI-controlled here, so a batter who is out is replaced
      * at once, rain delays and drinks breaks are skipped, and the loop cannot run forever.
      */
-    private fun playInnings(start: MatchState, stadium: Stadium): MatchState {
+    private fun playInnings(start: MatchState, stadium: Stadium, random: Random): MatchState {
         var s = start
         var deliveries = 0
         var loops = 0
@@ -213,11 +218,15 @@ object CplSimulator {
                 break
             }
             val delivery = MatchSimulation.prepareAiDelivery(s)
+            // The ball itself comes from AiBallModel (ratings, pitch, ground, phase, chase); the match
+            // code then applies it exactly as it applies any ball.
+            val outcome = AiBallModel.sample(delivery.state, stadium, random)
             s = MatchSimulation.simulateOneBall(
                 state = delivery.state,
                 stadium = stadium,
                 difficulty = Difficulty.MEDIUM,
-                presetBowlingDecision = delivery.bowling
+                presetBowlingDecision = delivery.bowling,
+                outcomeOverride = outcome
             ).state
             deliveries++
         }
@@ -230,7 +239,7 @@ object CplSimulator {
      * nominates its best three batters and best bowler. Returns the finished match with the
      * winner recorded, or null if it could not be played.
      */
-    private fun playSuperOvers(regulationEnd: MatchState, home: Team, away: Team, stadium: Stadium): MatchState? {
+    private fun playSuperOvers(regulationEnd: MatchState, home: Team, away: Team, stadium: Stadium, random: Random): MatchState? {
         // The Super Over machinery looks the full squads up through userTeam / opponentTeam.
         var s = regulationEnd.copy(userTeam = home, opponentTeam = away)
         var rounds = 0
@@ -241,7 +250,7 @@ object CplSimulator {
             val batters = nomination.batterIds.mapNotNull { id -> home.players.firstOrNull { it.id == id } }
             val bowler = home.players.firstOrNull { it.id == nomination.bowlerId } ?: home.players.first()
             s = SuperOver.nominate(s, batters, bowler)
-            s = playInnings(s, stadium)
+            s = playInnings(s, stadium, random)
             if (s.currentInnings != 2 || !SuperOver.isTieAtEnd(s)) break
         }
         return SuperOver.finalise(s)
