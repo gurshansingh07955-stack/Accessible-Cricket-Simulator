@@ -405,6 +405,13 @@ object CplSimulator {
         return if (parts.isEmpty()) null else parts.joinToString(" ")
     }
 
+    /** The fixture a saved match belongs to: the earliest unplayed one between these two teams. */
+    fun fixtureFor(state: TournamentState, userId: String, opponentId: String): Int? =
+        state.fixtures.firstOrNull {
+            it.result == null &&
+                ((it.homeId == userId && it.awayId == opponentId) || (it.homeId == opponentId && it.awayId == userId))
+        }?.id
+
     fun involves(f: TournamentFixture, teamId: String) = f.homeId == teamId || f.awayId == teamId
 
     private fun winnerOf(f: TournamentFixture?): String? = f?.result?.winnerId

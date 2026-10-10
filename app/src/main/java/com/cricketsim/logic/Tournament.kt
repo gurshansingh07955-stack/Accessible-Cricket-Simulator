@@ -89,7 +89,9 @@ data class TournamentState(
     val tags: Map<String, SquadTag>,
     val fixtures: List<TournamentFixture>,
     val playerStats: Map<String, PlayerStats> = emptyMap(),
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    /** Set once the winning celebration has been shown, so it plays once. */
+    val celebrated: Boolean = false
 )
 
 data class StandingRow(

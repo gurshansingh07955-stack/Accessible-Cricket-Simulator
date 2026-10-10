@@ -165,7 +165,7 @@ fun MatchResultScreen(
 }
 
 @Composable
-fun ConfirmLeaveScreen(onStay: () -> Unit, onLeave: () -> Unit, saved: Boolean = true) {
+fun ConfirmLeaveScreen(onStay: () -> Unit, onLeave: () -> Unit, saved: Boolean = true, inTournament: Boolean = false) {
     if (!saved) {
         // A tournament match is not saved part-way.
         InfoScreen(
@@ -183,7 +183,11 @@ fun ConfirmLeaveScreen(onStay: () -> Unit, onLeave: () -> Unit, saved: Boolean =
     InfoScreen(
         title = "Save and leave this match?",
         lines = listOf(
-            "Your match is saved automatically. You can pick it up again from the first screen with Resume saved match."
+            if (inTournament) {
+                "Your match is saved automatically. You can pick it up again from the CPL 2026 tournament page, with Resume match."
+            } else {
+                "Your match is saved automatically. You can pick it up again from the first screen with Resume saved match."
+            }
         ),
         actions = listOf(
             "Keep playing" to onStay,

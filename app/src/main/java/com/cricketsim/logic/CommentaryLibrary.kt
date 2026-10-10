@@ -86,7 +86,9 @@ enum class CommentaryCategory {
     // Run outs, stumpings, caught and bowled, and the drinks break (clips generated with the same voices).
     WICKET_RUN_OUT, WICKET_STUMPED, WICKET_CAUGHT_AND_BOWLED, DRINKS_START, DRINKS_END,
     SUPER_OVER_ANNOUNCE, SUPER_OVER_START,
-    ANTHEM_FIRST, ANTHEM_SECOND
+    ANTHEM_FIRST, ANTHEM_SECOND,
+    // Tournaments: the champions are decided, and the Player of the Series is named.
+    TOURNAMENT_CHAMPIONS, TOURNAMENT_CROWNED, PLAYER_OF_SERIES
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -702,6 +704,44 @@ object CommentaryLibrary {
             CommentaryPair(
                 CommentaryLine("anthemsecond_2_excited", "Now the second anthem rings out around the ground!", "/_cdn/commentary/anthemsecond_2_excited.mp3"),
                 CommentaryLine("anthemsecond_2_calm", "Two nations, one game, and a lot of pride out in the middle.", "/_cdn/commentary/anthemsecond_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TOURNAMENT_CHAMPIONS to listOf(
+            CommentaryPair(
+                CommentaryLine("tournament_champions_1_excited", "That's it! They've done it! Champions of the Caribbean Premier League! What a night, what a season!", "/_cdn/commentary/tournament_champions_1_excited.mp3"),
+                CommentaryLine("tournament_champions_1_calm", "Absolutely deserved. Weeks of hard work, and now the trophy is theirs.", "/_cdn/commentary/tournament_champions_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("tournament_champions_2_excited", "The trophy is lifted! Fireworks over the ground and the crowd is on its feet!", "/_cdn/commentary/tournament_champions_2_excited.mp3"),
+                CommentaryLine("tournament_champions_2_calm", "A season to remember, and a champion side to be proud of.", "/_cdn/commentary/tournament_champions_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("tournament_champions_3_excited", "Champions! Champions! The celebrations are only just beginning out here!", "/_cdn/commentary/tournament_champions_3_excited.mp3"),
+                CommentaryLine("tournament_champions_3_calm", "You could not script it better. Take a bow, every single one of them.", "/_cdn/commentary/tournament_champions_3_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TOURNAMENT_CROWNED to listOf(
+            CommentaryPair(
+                CommentaryLine("tournament_crowned_1_excited", "And that's the tournament! The champions are crowned, and what a Final it was!", "/_cdn/commentary/tournament_crowned_1_excited.mp3"),
+                CommentaryLine("tournament_crowned_1_calm", "A fine season from everyone, and a worthy winner at the end of it.", "/_cdn/commentary/tournament_crowned_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("tournament_crowned_2_excited", "The trophy has found its home for the year! Congratulations to the champions!", "/_cdn/commentary/tournament_crowned_2_excited.mp3"),
+                CommentaryLine("tournament_crowned_2_calm", "There is always next season, but tonight belongs to the winners.", "/_cdn/commentary/tournament_crowned_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.PLAYER_OF_SERIES to listOf(
+            CommentaryPair(
+                CommentaryLine("series_award_1_excited", "And the Player of the Series award goes to a true star of this tournament! Brilliant from start to finish!", "/_cdn/commentary/series_award_1_excited.mp3"),
+                CommentaryLine("series_award_1_calm", "Consistent all season long, and always there when the team needed it most.", "/_cdn/commentary/series_award_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("series_award_2_excited", "What a tournament that was! Player of the Series, and nobody can argue with that!", "/_cdn/commentary/series_award_2_excited.mp3"),
+                CommentaryLine("series_award_2_calm", "A standout across the whole season. Richly deserved.", "/_cdn/commentary/series_award_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("series_award_3_excited", "Give them a huge round of applause! Player of the Series, a performance to remember!", "/_cdn/commentary/series_award_3_excited.mp3"),
+                CommentaryLine("series_award_3_calm", "Match after match, they delivered. That is exactly what this award is for.", "/_cdn/commentary/series_award_3_calm.mp3")
             )
         )
     )

@@ -276,6 +276,68 @@ internal object Synth {
         return toPcm(out)
     }
 
+    /**
+     * The tournament-winning celebration, about nine seconds: a three-step brass fanfare into a held
+     * chord, fireworks popping across the sky, and a crowd roar swelling underneath. Synthesized, so it
+     * needs no download; the recorded big roar is layered over it when that recording is available.
+     */
+    fun celebration(): ShortArray {
+        val out = FloatArray(frames(9.0))
+        val random = Random(21)
+
+        fun brass(start: Double, dur: Double, hz: Double, gain: Double) {
+            fun envelope(t: Double): Double {
+                val attack = min(1.0, t / 0.03)
+                val release = if (t > dur - 0.18) max(0.0, (dur - t) / 0.18) else 1.0
+                return attack * release
+            }
+            addTone(out, start, dur, Wave.SAWTOOTH, { t -> hz * (1.0 + 0.004 * sin(2.0 * PI * 5.5 * t)) }) { t -> gain * envelope(t) }
+            addTone(out, start, dur, Wave.SQUARE, { hz * 2.0 }) { t -> gain * 0.2 * envelope(t) }
+        }
+        val c4 = 261.63
+        val e4 = 329.63
+        val g4 = 392.0
+        val c5 = 523.25
+        val e5 = 659.25
+        val g5 = 783.99
+        for (hz in doubleArrayOf(c4, e4, g4)) brass(0.0, 0.35, hz, 0.12)
+        for (hz in doubleArrayOf(e4, g4, c5)) brass(0.42, 0.35, hz, 0.12)
+        for (hz in doubleArrayOf(g4, c5, e5)) brass(0.84, 0.35, hz, 0.12)
+        for (hz in doubleArrayOf(c4, g4, c5, e5, g5)) brass(1.3, 2.4, hz, 0.1)
+
+        // Fireworks: a crack, a low thump, and a sparkle falling away.
+        val pops = doubleArrayOf(1.5, 2.0, 2.45, 3.0, 3.6, 4.2, 4.8, 5.5, 6.2, 6.9)
+        val crack = Filter()
+        pops.forEachIndexed { index, start ->
+            val first = frames(start)
+            for (i in 0 until frames(0.06)) {
+                val t = i.toDouble() / SAMPLE_RATE
+                crack.step(noise(random), 2800.0 + 400.0 * (index % 3), 1.2)
+                val k = first + i
+                if (k < out.size) out[k] += (crack.bandPass * expRamp(1.0, 0.001, t, 0.05) * 1.1).toFloat()
+            }
+            addTone(out, start, 0.2, Wave.SINE, { t -> expRamp(150.0, 55.0, t, 0.18) }) { t -> expRamp(0.35, 0.001, t, 0.18) }
+            val sparkle = Filter()
+            for (i in 0 until frames(0.7)) {
+                val t = i.toDouble() / SAMPLE_RATE
+                sparkle.step(noise(random), 6000.0, 0.9)
+                val k = first + frames(0.05) + i
+                if (k < out.size) out[k] += (sparkle.high * expRamp(0.18, 0.001, t, 0.65)).toFloat()
+            }
+        }
+
+        // The crowd: filtered noise that swells in over a second and slowly settles.
+        val roar = Filter()
+        for (i in 0 until frames(8.6)) {
+            val t = i.toDouble() / SAMPLE_RATE
+            roar.step(noise(random), 500.0 + 1500.0 * min(1.0, t / 1.0), 0.8)
+            val gain = if (t < 1.0) linRamp(0.0, 0.4, t, 1.0) else expRamp(0.4, 0.02, t - 1.0, 7.6)
+            val k = frames(0.3) + i
+            if (k < out.size) out[k] += (roar.lowPass * gain * 2.2).toFloat()
+        }
+        return toPcm(normalize(out, 0.9f))
+    }
+
     // --- Stand-ins for the recordings the web always has (not in the web) ---
 
     /** A short metallic clink for the coin flip. */

@@ -82,9 +82,10 @@ data class MatchSnapshot(
  * class wrote itself under the same version, and load() checks the critical
  * pieces anyway. It is untested, like everything else written recently.
  */
-class MatchSaveStore(context: Context) {
+// `fileName` lets a second slot exist (the tournament keeps its own half-played match) without touching the first.
+class MatchSaveStore(context: Context, fileName: String = "saved_match.json") {
 
-    private val file = File(context.applicationContext.filesDir, "saved_match.json")
+    private val file = File(context.applicationContext.filesDir, fileName)
     private val lock = Mutex()
 
     private val gson: Gson = GsonBuilder()

@@ -116,7 +116,7 @@ class SoundEngine(context: Context) {
 
     // --- Synthesized buffers ---
 
-    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN, GLOVES }
+    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN, GLOVES, CELEBRATION }
 
     private val synthCache = HashMap<Fx, ShortArray>()
 
@@ -138,6 +138,7 @@ class SoundEngine(context: Context) {
                 Fx.AIM_TONE -> Synth.aimTone()
                 Fx.SIREN -> Synth.siren()
                 Fx.GLOVES -> Synth.gloves()
+                Fx.CELEBRATION -> Synth.celebration()
             }
         }
     }
@@ -436,6 +437,18 @@ class SoundEngine(context: Context) {
     fun playCoinFlip() {
         if (!settings.soundEffects) return
         if (!playRecorded(RecordedAsset.COIN_FLIP, 0.8f * MASTER)) playPcm(Fx.COIN, MASTER)
+    }
+
+    /**
+     * The tournament-winning celebration: a synthesized brass fanfare with fireworks and a crowd roar,
+     * with the recorded big roar layered over it when that recording is there, and a burst of vibration.
+     */
+    fun playTournamentCelebration() {
+        if (settings.soundEffects) {
+            playPcm(Fx.CELEBRATION, MASTER)
+            playRecorded(RecordedAsset.BIG_ROAR, 0.7f * MASTER)
+        }
+        vibrate(0L, 120L, 80L, 120L, 80L, 350L)
     }
 
     private fun playThunder() {

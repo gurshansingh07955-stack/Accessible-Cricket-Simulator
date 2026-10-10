@@ -1,6 +1,7 @@
 package com.cricketsim.ui.tournament
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +46,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.cricketsim.audio.LocalGameServices
+import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.CplSimulator
 import com.cricketsim.logic.MatchFormat
@@ -53,12 +58,16 @@ import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossResult
 import com.cricketsim.logic.TournamentFixture
 import com.cricketsim.logic.TournamentState
+import com.cricketsim.persistence.MatchSaveStore
+import com.cricketsim.persistence.MatchSnapshot
 import com.cricketsim.persistence.TournamentSaveStore
+import com.cricketsim.persistence.summary
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.match.ScorecardScreen
 import com.cricketsim.ui.setup.PlayingXIScreen
 import com.cricketsim.ui.setup.TossScreen
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
@@ -75,9 +84,10 @@ import kotlin.random.Random
  *              (Matches: play your own match or simulate matches, open any scorecard)
  *
  * PLAYING YOUR MATCH: Playing XI (CPL rules checked) -> toss -> the normal live match screen. The
- * franchise sides have no anthems. A tournament match is NOT autosaved part-way (the normal Resume
- * slot is left alone); leaving it mid-way means starting it again from the toss. The result, scorecard
- * and stats are recorded the moment the match ends.
+ * franchise sides have no anthems. A tournament match autosaves itself part-way into its OWN file
+ * (saved_tournament_match.json; the normal Resume match slot is left alone) and is offered again
+ * as "Resume match" on the CPL 2026 page and on the Matches tab. The result, scorecard and stats
+ * are recorded the moment the match ends, which also clears that save.
  *
  * The tournament saves itself whenever it changes, so leaving and coming back resumes it.
  *
@@ -92,9 +102,17 @@ private sealed interface TPage {
     object TeamSelect : TPage
     data class Squad(val teamId: String) : TPage
     object Hub : TPage
+    object Celebration : TPage
     data class PickXI(val fixtureId: Int, val attempt: Int = 0) : TPage
     data class Toss(val fixtureId: Int, val userXI: Team, val opponentXI: Team) : TPage
-    data class PlayMatch(val fixtureId: Int, val userXI: Team, val opponentXI: Team, val toss: TossResult) : TPage
+    data class PlayMatch(
+        val fixtureId: Int,
+        val userXI: Team,
+        val opponentXI: Team,
+        val toss: TossResult,
+        /** Set when picking a saved match back up. */
+        val resume: MatchSnapshot? = null
+    ) : TPage
     data class Scorecard(val fixtureId: Int) : TPage
 }
 
@@ -102,6 +120,8 @@ private sealed interface TPage {
 fun TournamentFlow(onExit: () -> Unit) {
     val context = LocalContext.current
     val store = remember { TournamentSaveStore(context) }
+    // A tournament match saves itself part-way into its OWN slot, so the normal Resume match is never touched.
+    val matchStore = remember { MatchSaveStore(context, "saved_tournament_match.json") }
     val scope = rememberCoroutineScope()
     val built = remember { CplData.buildTeams() }
 
@@ -112,6 +132,7 @@ fun TournamentFlow(onExit: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var xiProblem by remember { mutableStateOf<String?>(null) }
+    var pendingMatch by remember { mutableStateOf<MatchSnapshot?>(null) }
 
     // Runs the simulation off the main thread, then saves. Only one run at a time.
     val simulate: (SimMode) -> Unit = { mode ->
@@ -119,6 +140,11 @@ fun TournamentFlow(onExit: () -> Unit) {
         if (current != null && !busy) {
             busy = true
             message = "Simulating, please wait."
+            // Simulating past the user's own fixture replaces a match left part-way.
+            if (mode != SimMode.UNTIL_MINE && pendingMatch != null) {
+                pendingMatch = null
+                scope.launch { matchStore.clear() }
+            }
             scope.launch {
                 val updated = withContext(Dispatchers.Default) { CplSimulator.run(current, mode, Random.Default) }
                 val played = updated.fixtures.count { it.result != null } - current.fixtures.count { it.result != null }
@@ -138,7 +164,15 @@ fun TournamentFlow(onExit: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
-        saved = store.load()
+        val tournament = store.load()
+        saved = tournament
+        // A saved match counts only if there is a tournament it belongs to.
+        val snapshot = matchStore.load()
+        if (tournament != null && snapshot != null && snapshot.state.userTeam.id == tournament.userTeamId) {
+            pendingMatch = snapshot
+        } else if (snapshot != null) {
+            matchStore.clear()
+        }
         loaded = true
     }
 
@@ -158,6 +192,17 @@ fun TournamentFlow(onExit: () -> Unit) {
             CplPage(
                 loaded = loaded,
                 saved = saved,
+                pendingSummary = pendingMatch?.summary(),
+                onResumeMatch = {
+                    val snapshot = pendingMatch
+                    val state = saved
+                    val fixtureId = if (snapshot != null && state != null) {
+                        CplSimulator.fixtureFor(state, snapshot.state.userTeam.id, snapshot.state.opponentTeam.id)
+                    } else null
+                    if (snapshot != null && fixtureId != null) {
+                        page = TPage.PlayMatch(fixtureId, snapshot.state.userTeam, snapshot.state.opponentTeam, snapshot.toss, snapshot)
+                    }
+                },
                 onStart = { page = TPage.TeamSelect },
                 onResume = { page = TPage.Hub },
                 onDelete = { confirmDelete = true },
@@ -172,7 +217,11 @@ fun TournamentFlow(onExit: () -> Unit) {
                         TextButton(onClick = {
                             confirmDelete = false
                             saved = null
-                            scope.launch { store.delete() }
+                            pendingMatch = null
+                            scope.launch {
+                                store.delete()
+                                matchStore.clear()
+                            }
                         }) { Text("Delete tournament") }
                     },
                     dismissButton = {
@@ -207,13 +256,39 @@ fun TournamentFlow(onExit: () -> Unit) {
             BackHandler(onBack = back)
             val state = saved
             if (state != null) {
+                // The Final has just been decided and not yet celebrated: go to the celebration first.
+                val needsCelebration = CplSimulator.champion(state) != null && !state.celebrated
+                LaunchedEffect(needsCelebration) {
+                    if (needsCelebration) page = TPage.Celebration
+                }
                 TournamentHub(
                     state = state,
                     busy = busy,
                     message = message,
                     onSimulate = simulate,
                     onScorecard = { id -> page = TPage.Scorecard(id) },
-                    onPlay = { id -> page = TPage.PickXI(id) },
+                    onPlay = { id ->
+                        // Starting this match from the beginning drops any half-played save of it.
+                        if (pendingMatch != null) {
+                            pendingMatch = null
+                            scope.launch { matchStore.clear() }
+                        }
+                        page = TPage.PickXI(id)
+                    },
+                    matchInProgress = pendingMatch != null,
+                    onResumeMatch = {
+                        val snapshot = pendingMatch
+                        val fixtureId = if (snapshot != null) {
+                            CplSimulator.fixtureFor(state, snapshot.state.userTeam.id, snapshot.state.opponentTeam.id)
+                        } else null
+                        if (snapshot != null && fixtureId != null) {
+                            page = TPage.PlayMatch(fixtureId, snapshot.state.userTeam, snapshot.state.opponentTeam, snapshot.toss, snapshot)
+                        }
+                    },
+                    onDiscardMatch = {
+                        pendingMatch = null
+                        scope.launch { matchStore.clear() }
+                    },
                     onLeave = back
                 )
             } else back()
@@ -269,8 +344,14 @@ fun TournamentFlow(onExit: () -> Unit) {
             )
         }
         is TPage.PlayMatch -> {
-            val back = { page = TPage.Hub }
-            val stadium = saved?.fixtures?.find { it.id == current.fixtureId }?.let { CplData.stadium(it.stadiumId) }
+            // Leaving mid-match: the match has saved itself, so read it back for the Resume buttons.
+            val back = {
+                page = TPage.Hub
+                scope.launch { pendingMatch = matchStore.load() }
+                Unit
+            }
+            val stadium = current.resume?.stadium
+                ?: saved?.fixtures?.find { it.id == current.fixtureId }?.let { CplData.stadium(it.stadiumId) }
             if (stadium != null) {
                 MatchScreen(
                     format = MatchFormat.T20,
@@ -279,9 +360,11 @@ fun TournamentFlow(onExit: () -> Unit) {
                     opponentTeam = current.opponentXI,
                     toss = current.toss,
                     onBack = back,
-                    onMatchFinished = back,
-                    autosave = false,
+                    onMatchFinished = { page = TPage.Hub },
+                    resume = current.resume,
+                    saveStore = matchStore,
                     onMatchComplete = { finished ->
+                        pendingMatch = null
                         val state = saved
                         if (state != null) {
                             val updated = CplSimulator.recordPlayedMatch(state, current.fixtureId, finished, current.userXI, current.opponentXI)
@@ -295,6 +378,19 @@ fun TournamentFlow(onExit: () -> Unit) {
                     }
                 )
             } else back()
+        }
+        is TPage.Celebration -> {
+            val state = saved
+            val done = {
+                val latest = saved
+                if (latest != null) {
+                    val updated = latest.copy(celebrated = true)
+                    saved = updated
+                    scope.launch { store.save(updated) }
+                }
+                page = TPage.Hub
+            }
+            if (state != null) CelebrationScreen(state = state, onContinue = done) else done()
         }
         is TPage.Scorecard -> {
             val back = { page = TPage.Hub }
@@ -400,6 +496,8 @@ private fun LeaguesPage(hasSaved: Boolean, onCpl: () -> Unit, onBack: () -> Unit
 private fun CplPage(
     loaded: Boolean,
     saved: TournamentState?,
+    pendingSummary: String?,
+    onResumeMatch: () -> Unit,
     onStart: () -> Unit,
     onResume: () -> Unit,
     onDelete: () -> Unit,
@@ -419,6 +517,16 @@ private fun CplPage(
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Spacer(modifier = Modifier.height(16.dp))
+                if (pendingSummary != null) {
+                    Text(
+                        text = "A match is in progress. $pendingSummary",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = onResumeMatch, modifier = Modifier.fillMaxWidth()) { Text("Resume match") }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 Button(onClick = onResume, modifier = Modifier.fillMaxWidth()) { Text("Resume tournament") }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Delete saved tournament") }
@@ -516,6 +624,91 @@ private fun SquadPage(team: Team, tags: Map<String, SquadTag>, onBack: () -> Uni
     }
 }
 
+// ---- The celebration -------------------------------------------------------------------------
+
+/**
+ * Shown once, when the Final has been decided (played by you or simulated): a fanfare with
+ * fireworks and a roar, the commentators crowning the champions, then the Player of the Match in
+ * the Final and the Player of the Series. Everything shown is also spoken, in this order, so a
+ * screen-reader user hears the same ceremony: the sound first, then the commentary, then the names.
+ */
+@Composable
+private fun CelebrationScreen(state: TournamentState, onContinue: () -> Unit) {
+    val champion = CplSimulator.champion(state)
+    val userWon = champion?.id == state.userTeamId
+    val series = CplSimulator.playerOfTheSeries(state)
+    val finalAward = state.fixtures.firstOrNull { it.stage == "Final" }?.result?.playerOfMatch
+    val headline = if (userWon) "You are the champions!" else "Tournament complete"
+    val championLine = when {
+        champion == null -> ""
+        userWon -> "Congratulations! ${champion.name} have won ${state.name}."
+        else -> "${champion.name} are the ${state.name} champions."
+    }
+    val finalLine = if (!finalAward.isNullOrEmpty()) "Player of the match in the Final: $finalAward." else ""
+    val seriesLine = if (series != null) {
+        "Player of the series: ${series.name}, ${CplData.shortName(series.teamId)}, with ${series.runs} runs and ${series.wickets} wickets." +
+            if (series.teamId == state.userTeamId) " One of your own players!" else ""
+    } else ""
+    val services = LocalGameServices.current
+    BackHandler(onBack = onContinue)
+
+    LaunchedEffect(Unit) {
+        val sound = services?.sound
+        sound?.playTournamentCelebration()
+        delay(2800)
+        sound?.enqueueCommentary(if (userWon) CommentaryCategory.TOURNAMENT_CHAMPIONS else CommentaryCategory.TOURNAMENT_CROWNED)
+        delay(600)
+        while (sound?.isCommentaryBusy() == true) delay(300)
+        services?.announceSpoken(listOf(headline, championLine, finalLine).filter { it.isNotEmpty() }.joinToString(" "))
+        if (series != null) {
+            delay(1500)
+            sound?.enqueueCommentary(CommentaryCategory.PLAYER_OF_SERIES)
+            delay(600)
+            while (sound?.isCommentaryBusy() == true) delay(300)
+            services?.announceSpoken(seriesLine)
+        }
+    }
+
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(colors.primaryContainer)
+                .padding(24.dp)
+        ) {
+            Text(
+                text = headline,
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = colors.onPrimaryContainer,
+                modifier = Modifier.semantics { heading() }
+            )
+            if (championLine.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = championLine, style = MaterialTheme.typography.titleLarge, color = colors.onPrimaryContainer)
+            }
+            if (finalLine.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = finalLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)
+            }
+            if (seriesLine.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = seriesLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)
+            }
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("Continue to the tournament") }
+    }
+}
+
 // ---- The tournament itself ------------------------------------------------------------------
 
 @Composable
@@ -526,6 +719,9 @@ private fun TournamentHub(
     onSimulate: (SimMode) -> Unit,
     onScorecard: (Int) -> Unit,
     onPlay: (Int) -> Unit,
+    matchInProgress: Boolean,
+    onResumeMatch: () -> Unit,
+    onDiscardMatch: () -> Unit,
     onLeave: () -> Unit
 ) {
     var tab by remember { mutableStateOf(0) }
@@ -547,7 +743,7 @@ private fun TournamentHub(
         Spacer(modifier = Modifier.height(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             when (tab) {
-                0 -> MatchesTab(state, busy, message, onSimulate, onScorecard, onPlay)
+                0 -> MatchesTab(state, busy, message, onSimulate, onScorecard, onPlay, matchInProgress, onResumeMatch, onDiscardMatch)
                 1 -> TableTab(state)
                 2 -> VenuesTab(state)
                 else -> StatsTab(state)
@@ -568,7 +764,10 @@ private fun MatchesTab(
     message: String,
     onSimulate: (SimMode) -> Unit,
     onScorecard: (Int) -> Unit,
-    onPlay: (Int) -> Unit
+    onPlay: (Int) -> Unit,
+    matchInProgress: Boolean,
+    onResumeMatch: () -> Unit,
+    onDiscardMatch: () -> Unit
 ) {
     val next = CplSimulator.nextFixture(state)
     val champion = CplSimulator.champion(state)
@@ -597,7 +796,19 @@ private fun MatchesTab(
                 }
                 if (next != null) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    if (nextIsMine) {
+                    if (nextIsMine && matchInProgress) {
+                        Button(onClick = onResumeMatch, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text("Resume my match")
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedButton(onClick = { onPlay(next.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text("Discard saved match and start again")
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedButton(onClick = { onSimulate(SimMode.NEXT) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text("Simulate my match instead")
+                        }
+                    } else if (nextIsMine) {
                         Button(onClick = { onPlay(next.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                             Text("Play my match")
                         }

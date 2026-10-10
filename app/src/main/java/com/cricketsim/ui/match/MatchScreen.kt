@@ -184,7 +184,9 @@ fun MatchScreen(
     // A tournament match turns the normal autosave off (it must not touch the Resume match slot).
     autosave: Boolean = true,
     // Called once with the finished match (after any Super Over); the tournament records the result.
-    onMatchComplete: ((MatchState) -> Unit)? = null
+    onMatchComplete: ((MatchState) -> Unit)? = null,
+    // Where this match saves itself; null means the normal Resume match slot. The tournament passes its own.
+    saveStore: MatchSaveStore? = null
 ) {
     val services = LocalGameServices.current
     val settings = services?.settings ?: GameSettings()
@@ -262,7 +264,7 @@ fun MatchScreen(
     // goes into a snapshot changes. A finished match deletes its save;
     // a brand-new one waits for its first ball so it cannot overwrite an
     // older saved match just by being opened.
-    val saves = services?.saves
+    val saves = saveStore ?: services?.saves
     LaunchedEffect(saves, matchState, recentCommentary, showInningsBreak, breakLastBall, matchOver) {
         if (saves == null || !autosave) return@LaunchedEffect
         if (matchOver) {
@@ -416,7 +418,7 @@ fun MatchScreen(
         // Back here cancels, same as the Stay button — it never silently
         // discards a live match.
         BackHandler(onBack = { confirmingLeave = false })
-        ConfirmLeaveScreen(onStay = { confirmingLeave = false }, onLeave = onBack, saved = autosave)
+        ConfirmLeaveScreen(onStay = { confirmingLeave = false }, onLeave = onBack, saved = autosave, inTournament = saveStore != null)
         return
     }
 
