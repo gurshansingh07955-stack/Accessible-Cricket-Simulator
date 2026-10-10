@@ -307,7 +307,13 @@ fun MatchScreen(
         }
         matchOver = true
         director?.onMatchEnded()
-        resultText?.let { services?.announceSpoken(it) }
+        // The result, then the Player of the Match, in one announcement so one cannot cut the other off.
+        val award = com.cricketsim.logic.PlayerAwards.playerOfTheMatch(matchState)
+        val spoken = listOfNotNull(
+            resultText,
+            award?.let { "Player of the match: ${it.name}, ${it.summary}." }
+        ).joinToString(" ")
+        if (spoken.isNotEmpty()) services?.announceSpoken(spoken)
         onMatchComplete?.invoke(matchState)
     }
 

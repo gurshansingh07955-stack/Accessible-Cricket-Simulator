@@ -164,6 +164,9 @@ object MatchLines {
 
     /** Both innings' totals, for the match-result screen. */
     fun resultSummaryLines(state: MatchState): List<String> = listOfNotNull(
+        com.cricketsim.logic.PlayerAwards.playerOfTheMatch(state)?.let {
+            "Player of the match: ${it.name}, ${it.teamName}. ${it.summary}."
+        },
         state.firstInningsData?.let { "First innings: ${ScorecardLines.inningsHeader(it)}" },
         "Second innings: ${ScorecardLines.inningsHeader(state.currentInningsData)}"
     ) + SuperOver.summaryLines(state)

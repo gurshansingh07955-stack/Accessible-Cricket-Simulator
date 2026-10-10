@@ -30,7 +30,10 @@ data class FixtureResult(
     val firstBalls: Int,
     val secondRuns: Int,
     val secondWickets: Int,
-    val secondBalls: Int
+    val secondBalls: Int,
+    /** Player of the Match: the player's id, and "Name (Team), 78 off 45 and 2 for 21" (null on old saves). */
+    val playerOfMatchId: String? = null,
+    val playerOfMatch: String? = null
 )
 
 data class TournamentFixture(
@@ -71,7 +74,10 @@ data class PlayerStats(
     val fiveWickets: Int = 0,
     val bestWickets: Int = 0,
     val bestRuns: Int = 0,
-    val catches: Int = 0
+    val catches: Int = 0,
+    /** Total impact points over the tournament (see PlayerAwards), and Player of the Match awards won. */
+    val impact: Double = 0.0,
+    val awards: Int = 0
 )
 
 data class TournamentState(
@@ -414,7 +420,10 @@ object CplData {
         return listOf(
             StatCategory("Most runs", entries(
                 batters.filter { it.runs > 0 }.sortedWith(compareByDescending<PlayerStats> { it.runs }.thenBy { it.balls })
-            ) { "${it.runs} runs" }),
+            ) {
+                val outs = it.innings - it.notOuts
+                "${it.runs} runs, " + (if (outs > 0) "average ${twoDecimals(it.runs.toDouble() / outs)}" else "not out every innings")
+            }),
             StatCategory("Highest score", entries(
                 batters.filter { it.highScore > 0 }.sortedByDescending { it.highScore }
             ) { "${it.highScore}${if (it.highScoreNotOut) " not out" else ""}" }),
@@ -447,7 +456,13 @@ object CplData {
             ) { "${it.bestWickets} for ${it.bestRuns}" }),
             StatCategory("Most catches", entries(
                 stats.filter { it.catches > 0 }.sortedByDescending { it.catches }
-            ) { "${it.catches}" })
+            ) { "${it.catches}" }),
+            StatCategory("Most Player of the Match awards", entries(
+                stats.filter { it.awards > 0 }.sortedWith(compareByDescending<PlayerStats> { it.awards }.thenByDescending { it.impact })
+            ) { "${it.awards}" }),
+            StatCategory("Most valuable players (impact points)", entries(
+                stats.filter { it.impact > 0.0 }.sortedByDescending { it.impact }
+            ) { "${it.impact.toInt()} points" })
         )
     }
 }

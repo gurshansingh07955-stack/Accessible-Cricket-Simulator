@@ -129,6 +129,9 @@ fun TournamentFlow(onExit: () -> Unit) {
                     played == 1 -> "Simulated 1 match."
                     else -> "Simulated $played matches."
                 }
+                if (CplSimulator.champion(current) == null && CplSimulator.champion(updated) != null) {
+                    CplSimulator.seriesAwardsText(updated)?.let { message = "$message $it" }
+                }
                 busy = false
             }
         }
@@ -283,6 +286,10 @@ fun TournamentFlow(onExit: () -> Unit) {
                         if (state != null) {
                             val updated = CplSimulator.recordPlayedMatch(state, current.fixtureId, finished, current.userXI, current.opponentXI)
                             saved = updated
+                            // After the Final: the match award has just been shown on the result screen; now the series award.
+                            if (CplSimulator.champion(state) == null && CplSimulator.champion(updated) != null) {
+                                message = CplSimulator.seriesAwardsText(updated) ?: ""
+                            }
                             scope.launch { store.save(updated) }
                         }
                     }
@@ -576,6 +583,10 @@ private fun MatchesTab(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.semantics { heading() }
                     )
+                    CplSimulator.seriesAwardsText(state)?.let { awards ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = awards, style = MaterialTheme.typography.bodyLarge)
+                    }
                 } else if (next != null) {
                     val ground = CplData.stadium(next.stadiumId)?.name ?: ""
                     Text(
@@ -672,6 +683,10 @@ private fun FixtureCard(state: TournamentState, f: TournamentFixture, onScorecar
             style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant
         )
+        val potm = f.result?.playerOfMatch
+        if (!potm.isNullOrEmpty()) {
+            Text(text = "Player of the match: $potm", style = MaterialTheme.typography.bodyMedium)
+        }
     }
     if (f.scorecard != null) {
         OutlinedButton(onClick = { onScorecard(f.id) }, modifier = Modifier.fillMaxWidth()) {

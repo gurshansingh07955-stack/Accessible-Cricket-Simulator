@@ -177,6 +177,7 @@ object CplSimulator {
         val summary = "${CplData.shortName(first.battingTeamId)} ${firstScore.runs}/${firstScore.wickets}, " +
             "${CplData.shortName(second.battingTeamId)} ${finished.score.runs}/${finished.score.wickets}. $resultText"
 
+        val award = PlayerAwards.playerOfTheMatch(finished)
         val result = FixtureResult(
             winnerId = winnerId,
             summary = summary,
@@ -186,7 +187,9 @@ object CplSimulator {
             firstBalls = firstScore.overs * 6 + firstScore.balls,
             secondRuns = finished.score.runs,
             secondWickets = finished.score.wickets,
-            secondBalls = finished.score.overs * 6 + finished.score.balls
+            secondBalls = finished.score.overs * 6 + finished.score.balls,
+            playerOfMatchId = award?.playerId,
+            playerOfMatch = award?.let { "${it.name} (${CplData.shortName(it.teamId)}), ${it.summary}" }
         )
         return result
     }
@@ -313,6 +316,11 @@ object CplSimulator {
                 )
             }
         }
+        // Impact points (for Player of the Series) and Player of the Match awards.
+        PlayerAwards.impacts(finished).forEachIndexed { index, a ->
+            val cur = get(a.playerId)
+            m[a.playerId] = cur.copy(impact = cur.impact + a.points, awards = cur.awards + (if (index == 0) 1 else 0))
+        }
         return m
     }
 
@@ -372,6 +380,29 @@ object CplSimulator {
         val finalMatch = state.fixtures.firstOrNull { it.stage == "Final" } ?: return null
         val id = finalMatch.result?.winnerId ?: return null
         return state.teams.find { it.id == id }
+    }
+
+    /** Player of the Series: the most impact over the whole tournament; only once the Final is played. */
+    fun playerOfTheSeries(state: TournamentState): PlayerStats? {
+        if (champion(state) == null) return null
+        val best = state.playerStats.values.maxWithOrNull(
+            compareBy<PlayerStats>({ it.impact }, { it.runs + it.wickets * 20 })
+        ) ?: return null
+        return if (best.impact > 0.0) best else null
+    }
+
+    /** The Final's Player of the Match, then the Player of the Series, as one sentence pair. */
+    fun seriesAwardsText(state: TournamentState): String? {
+        val finalMatch = state.fixtures.firstOrNull { it.stage == "Final" }
+        val finalAward = finalMatch?.result?.playerOfMatch
+        val series = playerOfTheSeries(state)
+        val parts = ArrayList<String>()
+        if (!finalAward.isNullOrEmpty()) parts.add("Player of the match in the Final: $finalAward.")
+        if (series != null) {
+            val team = CplData.shortName(series.teamId)
+            parts.add("Player of the series: ${series.name}, $team, with ${series.runs} runs and ${series.wickets} wickets.")
+        }
+        return if (parts.isEmpty()) null else parts.joinToString(" ")
     }
 
     fun involves(f: TournamentFixture, teamId: String) = f.homeId == teamId || f.awayId == teamId
