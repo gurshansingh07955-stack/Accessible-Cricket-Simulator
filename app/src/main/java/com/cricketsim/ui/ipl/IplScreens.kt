@@ -45,6 +45,7 @@ import com.cricketsim.logic.IplData
 import com.cricketsim.logic.LotState
 import com.cricketsim.persistence.IplSaveStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -126,8 +127,13 @@ fun IplFlow(onExit: () -> Unit) {
             val name = p?.player?.name ?: "The player"
             val leader = l.leaderId
             if (leader != null && l.bidLakhs > 0) {
+                // The auctioneer builds to it, THEN the hammer falls, THEN the sale is read out. The knock must
+                // not play over the speech: a screen reader lowers every other sound while it talks.
+                speak("Going once. Going twice.")
+                delay(2300)
                 services?.sound?.playAuctionHammer()
-                speak("Going once, going twice, sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.")
+                delay(700)
+                speak("Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.")
             } else {
                 speak("No bids. $name goes unsold.")
             }

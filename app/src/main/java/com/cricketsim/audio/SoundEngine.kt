@@ -456,7 +456,8 @@ class SoundEngine(context: Context) {
     fun playAuctionHammer() {
         if (settings.soundEffects) {
             // The real (public-domain) gavel recording when it is in the pack; the synthesized knock otherwise.
-            if (!playRecorded(RecordedAsset.AUCTION_GAVEL, MASTER)) playPcm(Fx.GAVEL, MASTER)
+            // Full volume: a gavel is one short knock, and it must cut through the speech around it.
+            if (!playRecorded(RecordedAsset.AUCTION_GAVEL, 1.0f)) playPcm(Fx.GAVEL, 1.0f)
         }
         vibratePulse(45L)
     }
@@ -1413,7 +1414,8 @@ class SoundEngine(context: Context) {
             RecordedAsset.DRS_FIRECRACKER,
             RecordedAsset.DRS_LOSE,
             RecordedAsset.DRS_UMPIRES_CALL_AGAINST,
-            RecordedAsset.DRINKS_BREAK
+            RecordedAsset.DRINKS_BREAK,
+            RecordedAsset.AUCTION_GAVEL
         )
     }
 }
