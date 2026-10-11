@@ -62,6 +62,7 @@ import com.cricketsim.persistence.MatchSaveStore
 import com.cricketsim.persistence.MatchSnapshot
 import com.cricketsim.persistence.TournamentSaveStore
 import com.cricketsim.persistence.summary
+import com.cricketsim.ui.ipl.IplFlow
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.match.ScorecardScreen
 import com.cricketsim.ui.setup.PlayingXIScreen
@@ -103,6 +104,7 @@ private sealed interface TPage {
     data class Squad(val teamId: String) : TPage
     object Hub : TPage
     object Celebration : TPage
+    object Ipl : TPage
     data class PickXI(val fixtureId: Int, val attempt: Int = 0) : TPage
     data class Toss(val fixtureId: Int, val userXI: Team, val opponentXI: Team) : TPage
     data class PlayMatch(
@@ -184,8 +186,9 @@ fun TournamentFlow(onExit: () -> Unit) {
         is TPage.Leagues -> {
             val back = { page = TPage.Menu }
             BackHandler(onBack = back)
-            LeaguesPage(hasSaved = saved != null, onCpl = { page = TPage.Cpl }, onBack = back)
+            LeaguesPage(hasSaved = saved != null, onCpl = { page = TPage.Cpl }, onIpl = { page = TPage.Ipl }, onBack = back)
         }
+        is TPage.Ipl -> IplFlow(onExit = { page = TPage.Leagues })
         is TPage.Cpl -> {
             val back = { page = TPage.Leagues }
             BackHandler(onBack = back)
@@ -474,7 +477,7 @@ private fun MenuPage(onLeague: () -> Unit, onBack: () -> Unit) {
 }
 
 @Composable
-private fun LeaguesPage(hasSaved: Boolean, onCpl: () -> Unit, onBack: () -> Unit) {
+private fun LeaguesPage(hasSaved: Boolean, onCpl: () -> Unit, onIpl: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         PageTitle("League tournaments")
         Spacer(modifier = Modifier.height(16.dp))
@@ -485,6 +488,13 @@ private fun LeaguesPage(hasSaved: Boolean, onCpl: () -> Unit, onBack: () -> Unit
                     if (hasSaved) " You have a saved tournament." else "",
                 enabled = true,
                 onClick = onCpl
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ChoiceRow(
+                title = "IPL",
+                description = "Indian Premier League: build your own team in a full player auction.",
+                enabled = true,
+                onClick = onIpl
             )
         }
         Spacer(modifier = Modifier.height(8.dp))

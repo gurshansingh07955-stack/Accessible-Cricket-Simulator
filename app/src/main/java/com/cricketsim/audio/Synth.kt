@@ -338,6 +338,31 @@ internal object Synth {
         return toPcm(normalize(out, 0.9f))
     }
 
+    /**
+     * The auctioneer's hammer: one sharp knock of a wooden gavel on its block. A bright click as the
+     * head lands, a few wood resonances that die quickly (the lowest rings longest), and a low thump
+     * of the hammer's weight.
+     */
+    fun gavel(): ShortArray {
+        val out = FloatArray(frames(0.8))
+        val random = Random(33)
+        val click = Filter()
+        for (i in 0 until frames(0.012)) {
+            val t = i.toDouble() / SAMPLE_RATE
+            click.step(noise(random), 3500.0, 0.8)
+            out[i] += (click.high * expRamp(1.0, 0.001, t, 0.01)).toFloat()
+        }
+        val modes = arrayOf(
+            doubleArrayOf(190.0, 0.9, 0.22), doubleArrayOf(430.0, 0.6, 0.14),
+            doubleArrayOf(910.0, 0.4, 0.09), doubleArrayOf(1750.0, 0.25, 0.05)
+        )
+        for (mode in modes) {
+            addTone(out, 0.0, mode[2] * 3, Wave.SINE, { mode[0] }) { t -> mode[1] * 0.6 * expRamp(1.0, 0.001, t, mode[2]) }
+        }
+        addTone(out, 0.0, 0.12, Wave.SINE, { t -> expRamp(120.0, 60.0, t, 0.1) }) { t -> expRamp(0.6, 0.001, t, 0.1) }
+        return toPcm(normalize(out, 0.95f))
+    }
+
     // --- Stand-ins for the recordings the web always has (not in the web) ---
 
     /** A short metallic clink for the coin flip. */

@@ -116,7 +116,7 @@ class SoundEngine(context: Context) {
 
     // --- Synthesized buffers ---
 
-    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN, GLOVES, CELEBRATION }
+    private enum class Fx { TICK, TICK_ACCENT, BAT_HIT, BOUNDARY, WICKET, WHOOSH, CHEER_BIG, CHEER_SMALL, COIN, THUNDER, RAIN, CROWD, AIM_TONE, SIREN, GLOVES, CELEBRATION, GAVEL }
 
     private val synthCache = HashMap<Fx, ShortArray>()
 
@@ -139,6 +139,7 @@ class SoundEngine(context: Context) {
                 Fx.SIREN -> Synth.siren()
                 Fx.GLOVES -> Synth.gloves()
                 Fx.CELEBRATION -> Synth.celebration()
+                Fx.GAVEL -> Synth.gavel()
             }
         }
     }
@@ -449,6 +450,12 @@ class SoundEngine(context: Context) {
             playRecorded(RecordedAsset.BIG_ROAR, 0.7f * MASTER)
         }
         vibrate(0L, 120L, 80L, 120L, 80L, 350L)
+    }
+
+    /** The auctioneer's hammer when a player is sold. */
+    fun playAuctionHammer() {
+        if (settings.soundEffects) playPcm(Fx.GAVEL, MASTER)
+        vibratePulse(45L)
     }
 
     private fun playThunder() {
