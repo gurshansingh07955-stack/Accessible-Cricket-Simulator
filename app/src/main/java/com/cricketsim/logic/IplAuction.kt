@@ -35,7 +35,9 @@ data class LotState(
     val leaderId: String? = null,
     val userOut: Boolean = false,
     val log: List<String> = emptyList(),
-    val closed: Boolean = false
+    val closed: Boolean = false,
+    /** 1 while the auctioneer says "going once", 2 for "going twice"; 0 otherwise. */
+    val countdown: Int = 0
 )
 
 /**
@@ -159,6 +161,12 @@ object IplAuction {
             if (roll <= 0) { pick = team; break }
         }
         return lot.copy(bidLakhs = price, leaderId = pick, log = lot.log + "${IplData.shortName(pick)} bid ${priceText(price)}.")
+    }
+
+    /** One other team raises the bid, or null if none of them will (the timed bidding in the hall uses this). */
+    fun aiBid(state: IplAuctionState, lot: LotState): LotState? {
+        val p = playerOf(state, lot.playerId) ?: return null
+        return aiRespond(state, lot, p)?.copy(countdown = 0)
     }
 
     fun userBid(state: IplAuctionState, lot: LotState): LotState {

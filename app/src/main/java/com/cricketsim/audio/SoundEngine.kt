@@ -456,8 +456,10 @@ class SoundEngine(context: Context) {
     fun playAuctionHammer() {
         if (settings.soundEffects) {
             // The real (public-domain) gavel recording when it is in the pack; the synthesized knock otherwise.
-            // Full volume: a gavel is one short knock, and it must cut through the speech around it.
-            if (!playRecorded(RecordedAsset.AUCTION_GAVEL, 1.0f)) playPcm(Fx.GAVEL, 1.0f)
+            // Both, so there is always a knock: the synthesized one underneath, and the real recording
+            // on top when it has loaded. Full volume: it is one short sound and must cut through speech.
+            playPcm(Fx.GAVEL, 0.7f)
+            playRecorded(RecordedAsset.AUCTION_GAVEL, 1.0f)
         }
         vibratePulse(45L)
     }

@@ -1,5 +1,7 @@
 package com.cricketsim.ui.ipl
 
+import android.content.Context
+import android.speech.tts.TextToSpeech
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +51,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
+import java.util.UUID
 
 /**
  * The IPL section, reached from Tournament > League tournaments > IPL.
@@ -59,10 +64,56 @@ import kotlinx.coroutines.withContext
  *
  * The auction saves itself after every player, so leaving and coming back resumes it.
  *
- * ACCESSIBILITY: the auctioneer's calls are spoken (the same speech the rest of the game uses, so
- * it waits for commentary), the buttons say exactly what they do and what it costs, and the hammer
- * sounds when a player is sold. The player card and the bidding are plain text, in reading order.
+ * THE BIDDING RUNS ON ITS OWN, like a real auction. After every bid there is a pause (BID_WAIT_MS)
+ * in which you can bid; then another team bids if it wants the player, and the pause starts again.
+ * When nobody wants to go higher the auctioneer counts "Going once ... going twice ..." and the hammer
+ * falls. You can bid at any moment, including during the count; a bid stops the count. "Pass on this
+ * player" sits you out and the other teams finish it quickly.
+ *
+ * ACCESSIBILITY: the auctioneer's calls are spoken by the phone's own speech engine in a British
+ * voice (until recorded auctioneer clips replace it), independent of the screen reader and of the
+ * commentary setting, so they are always heard. The buttons say what they do and what it costs.
  */
+/** How long the hall waits after a bid for you to bid before another team may, and between the count's steps. */
+private const val BID_WAIT_MS = 3200L
+private const val COUNT_STEP_MS = 2400L
+
+/**
+ * The auctioneer's speech: the phone's text-to-speech in a British voice, queued so calls never cut
+ * each other off. It is the game's own speech, not the screen reader's, so it works with or without TalkBack.
+ */
+private class Auctioneer(context: Context) {
+    private var tts: TextToSpeech? = null
+    private var ready = false
+
+    init {
+        tts = TextToSpeech(context.applicationContext) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val engine = tts
+                if (engine != null) {
+                    val result = engine.setLanguage(Locale.UK)
+                    if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        engine.setLanguage(Locale.getDefault())
+                    }
+                    engine.setSpeechRate(1.0f)
+                    engine.setPitch(0.9f)
+                    ready = true
+                }
+            }
+        }
+    }
+
+    fun say(text: String) {
+        if (!ready || text.isEmpty()) return
+        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, UUID.randomUUID().toString())
+    }
+
+    fun shutdown() {
+        runCatching { tts?.stop() }
+        runCatching { tts?.shutdown() }
+    }
+}
+
 private sealed interface IPage {
     object Menu : IPage
     object TeamSelect : IPage
@@ -76,6 +127,8 @@ fun IplFlow(onExit: () -> Unit) {
     val store = remember { IplSaveStore(context) }
     val scope = rememberCoroutineScope()
     val services = LocalGameServices.current
+    val auctioneer = remember { Auctioneer(context) }
+    DisposableEffect(Unit) { onDispose { auctioneer.shutdown() } }
 
     var page by remember { mutableStateOf<IPage>(IPage.Menu) }
     var auction by remember { mutableStateOf<IplAuctionState?>(null) }
@@ -84,7 +137,7 @@ fun IplFlow(onExit: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    val speak: (String) -> Unit = { text -> if (text.isNotEmpty()) services?.announceSpoken(text) }
+    val speak: (String) -> Unit = { text -> auctioneer.say(text) }
 
     // Opens the bidding on the next player, with the first bid from another team if there is one.
     val beginLot: (IplAuctionState) -> Unit = { s ->
@@ -94,12 +147,10 @@ fun IplFlow(onExit: () -> Unit) {
             lot = null
             page = IPage.Summary
         } else {
-            val opened = IplAuction.advance(s, LotState(id))
-            lot = opened
-            val first = opened.log.takeLast(2).joinToString(" ")
+            lot = LotState(id)
             speak(
                 "Next up: ${p.player.name}, ${IplAuction.roleText(p)} from ${IplAuction.countryName(p.country)}. " +
-                    "Base price ${IplAuction.priceText(p.baseLakhs)}. $first"
+                    "Base price ${IplAuction.priceText(p.baseLakhs)}."
             )
         }
     }
@@ -116,6 +167,32 @@ fun IplFlow(onExit: () -> Unit) {
         loaded = true
     }
 
+    // THE BIDDING LOOP. Runs again whenever the bid, the leader, or your decision changes, so a bid
+    // from you (or from a team) restarts the wait. Wait; then either another team bids, or the count
+    // begins; if nobody bids during the count the lot closes.
+    val inHall = page is IPage.Hall
+    LaunchedEffect(inHall, busy, lot?.playerId, lot?.bidLakhs, lot?.userOut, lot?.closed) {
+        val l = lot
+        val s = auction
+        if (!inHall || busy || l == null || s == null || l.closed) return@LaunchedEffect
+        val p = IplAuction.playerOf(s, l.playerId) ?: return@LaunchedEffect
+        val quick = l.userOut || !IplAuction.userCanBid(s, l, p)
+        delay(if (quick) 800L else BID_WAIT_MS)
+        val bid = IplAuction.aiBid(s, l)
+        if (bid != null) {
+            update(bid)
+            return@LaunchedEffect
+        }
+        val step = if (quick) 700L else COUNT_STEP_MS
+        lot = l.copy(countdown = 1)
+        speak("Going once.")
+        delay(step)
+        lot = l.copy(countdown = 2)
+        speak("Going twice.")
+        delay(step)
+        lot = l.copy(countdown = 0, closed = true)
+    }
+
     // The hammer falls: knock, then the auctioneer says what happened.
     val closed = lot?.closed == true
     val closedId = lot?.playerId
@@ -127,10 +204,6 @@ fun IplFlow(onExit: () -> Unit) {
             val name = p?.player?.name ?: "The player"
             val leader = l.leaderId
             if (leader != null && l.bidLakhs > 0) {
-                // The auctioneer builds to it, THEN the hammer falls, THEN the sale is read out. The knock must
-                // not play over the speech: a screen reader lowers every other sound while it talks.
-                speak("Going once. Going twice.")
-                delay(2300)
                 services?.sound?.playAuctionHammer()
                 delay(700)
                 speak("Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.")
@@ -203,8 +276,8 @@ fun IplFlow(onExit: () -> Unit) {
                     state = s,
                     lot = l,
                     busy = busy,
-                    onBid = { update(IplAuction.advance(s, IplAuction.userBid(s, l))) },
-                    onPass = { update(IplAuction.advance(s, l.copy(userOut = true))) },
+                    onBid = { update(IplAuction.userBid(s, l).copy(countdown = 0)) },
+                    onPass = { update(l.copy(userOut = true, countdown = 0)) },
                     onNext = {
                         val next = IplAuction.finishLot(s, l)
                         auction = next
@@ -412,6 +485,13 @@ private fun AuctionHall(
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
+        if (!lot.closed && lot.countdown > 0) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (lot.countdown == 1) "Going once..." else "Going twice...",
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "${mine?.name}: purse ${IplAuction.priceText(purse)}, squad ${squad.size} of ${IplData.MAX_SQUAD}, overseas $overseas of ${IplData.MAX_OVERSEAS}.",
@@ -429,7 +509,13 @@ private fun AuctionHall(
                     Text(if (lot.bidLakhs == 0) "Open the bidding at ${IplAuction.priceText(price)}" else "Bid ${IplAuction.priceText(price)}")
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-            } else if (!lot.userOut && lot.leaderId != state.userTeamId) {
+            } else if (!lot.userOut && lot.leaderId == state.userTeamId) {
+                Text(
+                    text = "You hold the highest bid. Waiting to see if another team goes higher.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            } else if (!lot.userOut) {
                 Text(
                     text = "You cannot bid for this player: squad full, overseas limit reached, or not enough purse.",
                     style = MaterialTheme.typography.bodyMedium
