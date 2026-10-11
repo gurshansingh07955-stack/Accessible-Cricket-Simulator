@@ -57,6 +57,9 @@ data class LotState(
 object IplAuction {
 
     private const val RESERVE_PER_SLOT = 30
+
+    /** No bid goes past this (the real record is 27 crore). */
+    private const val MAX_BID = 2800
     private val DESIRED = mapOf("BA" to 5, "AL" to 4, "WK" to 2, "FA" to 5, "SP" to 3)
 
     fun playerOf(state: IplAuctionState, id: String): AuctionPlayer? = state.players.firstOrNull { it.player.id == id }
@@ -93,11 +96,14 @@ object IplAuction {
     }
 
     fun marketValue(p: AuctionPlayer): Int {
+        // About 16 crore for an overseas star and 26 for an Indian one at the very top, 7 crore for an Indian
+        // player rated 75, 3 crore at 65 (Indian players carry a premium, overseas players a discount, because
+        // only eight overseas players fit in a squad and the real market paid Indian stars the most).
         val x = ((overall(p) - 52.0) / 38.5).coerceIn(0.0, 0.97)
-        var v = -900.0 * ln(1.0 - x)
-        if (!p.overseas) v *= 1.15
+        var v = -650.0 * ln(1.0 - x)
+        v *= if (p.overseas) 0.7 else 1.2
         if (!p.capped) v *= 0.85
-        return maxOf(p.baseLakhs, minOf(3000, v.roundToInt()))
+        return maxOf(p.baseLakhs, minOf(2600, v.roundToInt()))
     }
 
     private fun owned(state: IplAuctionState, teamId: String): List<AuctionPlayer> =
@@ -117,12 +123,12 @@ object IplAuction {
         val want = DESIRED[g] ?: 3
         val have = mine.count { group(it) == g }
         val need = when {
-            have < want -> 1.15
+            have < want -> 1.1
             have >= want + 2 -> 0.65
             else -> 1.0
         }
-        val appetite = 0.8 + 0.5 * Random(state.seed xor teamId.hashCode().toLong() xor (p.player.id.hashCode().toLong() shl 7)).nextDouble()
-        return minOf((marketValue(p) * need * appetite).toInt(), affordable)
+        val appetite = 0.85 + 0.35 * Random(state.seed xor teamId.hashCode().toLong() xor (p.player.id.hashCode().toLong() shl 7)).nextDouble()
+        return minOf((marketValue(p) * need * appetite).toInt(), affordable, MAX_BID)
     }
 
     private fun asking(lot: LotState, p: AuctionPlayer): Int = if (lot.bidLakhs == 0) p.baseLakhs else nextBid(lot.bidLakhs)
@@ -292,9 +298,17 @@ object IplAuction {
         }
         take(pool.filter { it.setCode == "M1" }, "Marquee players 1")
         take(pool.filter { it.setCode == "M2" }, "Marquee players 2")
-        val stars = pool.filter { it.id !in used && it.capped && it.baseLakhs >= 200 }.sortedByDescending { overall(it) }.take(12)
-        take(stars.take(6), "Marquee players 3")
-        take(stars.drop(6), "Marquee players 4")
+        // Marquee 3 to 6: the biggest names the 2025 auction never saw (retained by their teams), so Kohli,
+        // Rohit, Dhoni, Bumrah and the rest come up right after the real marquee sets.
+        val legends = listOf(
+            listOf("Virat Kohli", "Rohit Sharma", "MS Dhoni", "Jasprit Bumrah", "Suryakumar Yadav", "Hardik Pandya"),
+            listOf("Ravindra Jadeja", "Shubman Gill", "Rashid Khan", "Andre Russell", "Sunil Narine", "Heinrich Klaasen"),
+            listOf("Travis Head", "Pat Cummins", "Nicholas Pooran", "Sanju Samson", "Yashasvi Jaiswal", "Axar Patel"),
+            listOf("Kuldeep Yadav", "Trent Boult", "Josh Hazlewood", "Mitchell Marsh", "Rinku Singh", "Ruturaj Gaikwad")
+        )
+        legends.forEachIndexed { i, names ->
+            take(names.mapNotNull { n -> pool.firstOrNull { it.id !in used && it.player.name == n } }, "Marquee players ${i + 3}")
+        }
         val rest = pool.filter { it.id !in used }
         val groups = listOf("BA", "AL", "WK", "FA", "SP")
         val names = mapOf("BA" to "batters", "AL" to "all-rounders", "WK" to "wicketkeepers", "FA" to "fast bowlers", "SP" to "spin bowlers")

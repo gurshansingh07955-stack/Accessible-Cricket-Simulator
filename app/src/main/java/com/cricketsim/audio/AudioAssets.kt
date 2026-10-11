@@ -68,7 +68,10 @@ enum class RecordedAsset(val fileName: String, val path: String, val rawName: St
     DRS_UMPIRES_CALL_AGAINST("drs_umpires_call_against.mp3", "/_cdn/sfx/drs_umpires_call_against.mp3", "drs_umpires_call_against"),
 
     // --- Drinks break ---
-    DRINKS_BREAK("drinks_break_drinking.mp3", "/_cdn/sfx/drinks_break_drinking.mp3", "drinks_break_drinking")
+    DRINKS_BREAK("drinks_break_drinking.mp3", "/_cdn/sfx/drinks_break_drinking.mp3", "drinks_break_drinking"),
+
+    // --- IPL auction: a real gavel (public domain), fetched and trimmed by tools/fetch_audio.sh ---
+    AUCTION_GAVEL("auction_gavel.mp3", "/_cdn/sfx/auction_gavel.mp3", "auction_gavel")
 }
 
 sealed interface AssetSource {

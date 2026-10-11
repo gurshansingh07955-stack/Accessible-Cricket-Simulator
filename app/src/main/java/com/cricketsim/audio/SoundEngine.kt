@@ -454,7 +454,10 @@ class SoundEngine(context: Context) {
 
     /** The auctioneer's hammer when a player is sold. */
     fun playAuctionHammer() {
-        if (settings.soundEffects) playPcm(Fx.GAVEL, MASTER)
+        if (settings.soundEffects) {
+            // The real (public-domain) gavel recording when it is in the pack; the synthesized knock otherwise.
+            if (!playRecorded(RecordedAsset.AUCTION_GAVEL, MASTER)) playPcm(Fx.GAVEL, MASTER)
+        }
         vibratePulse(45L)
     }
 

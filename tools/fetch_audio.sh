@@ -142,6 +142,28 @@ else
   missing+=("all national anthems (ffmpeg is not available)")
 fi
 
+echo
+echo "== Downloading the auction gavel (public domain, CC0) =="
+# "Gavel on wooden desk" by Aerny on Freesound (CC0 1.0): https://freesound.org/people/Aerny/sounds/618138
+# Cut to the first strike after any leading silence, levelled, and faded; stored as auction_gavel.mp3.
+GAVEL_URL="https://cdn.freesound.org/previews/618/618138_1071564-hq.mp3"
+if command -v ffmpeg >/dev/null 2>&1; then
+  if curl -fsSL --retry 3 --retry-delay 3 --max-time 60 -A "$ANTHEM_UA" -o "$SCRATCH_DIR/gavel_src" "$GAVEL_URL" && [ -s "$SCRATCH_DIR/gavel_src" ]; then
+    if ffmpeg -nostdin -loglevel error -y -i "$SCRATCH_DIR/gavel_src" -vn \
+        -af "silenceremove=start_periods=1:start_threshold=-45dB,atrim=0:1.0,loudnorm=I=-14:TP=-1.5:LRA=7,afade=t=out:st=0.8:d=0.2" \
+        -ar 44100 -ac 1 -b:a 128k "$SCRATCH_DIR/auction_gavel.mp3"; then
+      got=$((got + 1))
+    else
+      missing+=("auction_gavel.mp3 (could not convert)")
+    fi
+  else
+    missing+=("auction_gavel.mp3 (could not download)")
+  fi
+  rm -f "$SCRATCH_DIR/gavel_src"
+else
+  missing+=("auction_gavel.mp3 (ffmpeg is not available)")
+fi
+
 fetched_files=$(find "$SCRATCH_DIR" -type f -name '*.mp3' | wc -l)
 if [ "$fetched_files" -eq 0 ]; then
   echo "Nothing was fetched: is $BASE_URL reachable? Leaving existing files untouched." >&2
