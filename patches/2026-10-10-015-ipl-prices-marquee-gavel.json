@@ -1,0 +1,66 @@
+{
+  "name": "ipl-prices-marquee-gavel",
+  "message": "IPL auction: price ceiling and calibrated values, legends in marquee sets, real CC0 gavel recording",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+    "contains": "private const val MAX_BID"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "    private const val RESERVE_PER_SLOT = 30\n",
+      "replace": "    private const val RESERVE_PER_SLOT = 30\n\n    /** No bid goes past this (the real record is 27 crore). */\n    private const val MAX_BID = 2800\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "        val x = ((overall(p) - 52.0) / 38.5).coerceIn(0.0, 0.97)\n        var v = -900.0 * ln(1.0 - x)\n        if (!p.overseas) v *= 1.15\n        if (!p.capped) v *= 0.85\n        return maxOf(p.baseLakhs, minOf(3000, v.roundToInt()))",
+      "replace": "        // About 16 crore for an overseas star and 26 for an Indian one at the very top, 7 crore for an Indian\n        // player rated 75, 3 crore at 65 (Indian players carry a premium, overseas players a discount, because\n        // only eight overseas players fit in a squad and the real market paid Indian stars the most).\n        val x = ((overall(p) - 52.0) / 38.5).coerceIn(0.0, 0.97)\n        var v = -650.0 * ln(1.0 - x)\n        v *= if (p.overseas) 0.7 else 1.2\n        if (!p.capped) v *= 0.85\n        return maxOf(p.baseLakhs, minOf(2600, v.roundToInt()))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "            have < want -> 1.15\n            have >= want + 2 -> 0.65\n",
+      "replace": "            have < want -> 1.1\n            have >= want + 2 -> 0.65\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "        val appetite = 0.8 + 0.5 * Random(state.seed xor teamId.hashCode().toLong() xor (p.player.id.hashCode().toLong() shl 7)).nextDouble()\n        return minOf((marketValue(p) * need * appetite).toInt(), affordable)",
+      "replace": "        val appetite = 0.85 + 0.35 * Random(state.seed xor teamId.hashCode().toLong() xor (p.player.id.hashCode().toLong() shl 7)).nextDouble()\n        return minOf((marketValue(p) * need * appetite).toInt(), affordable, MAX_BID)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "        val stars = pool.filter { it.id !in used && it.capped && it.baseLakhs >= 200 }.sortedByDescending { overall(it) }.take(12)\n        take(stars.take(6), \"Marquee players 3\")\n        take(stars.drop(6), \"Marquee players 4\")\n",
+      "replace": "        // Marquee 3 to 6: the biggest names the 2025 auction never saw (retained by their teams), so Kohli,\n        // Rohit, Dhoni, Bumrah and the rest come up right after the real marquee sets.\n        val legends = listOf(\n            listOf(\"Virat Kohli\", \"Rohit Sharma\", \"MS Dhoni\", \"Jasprit Bumrah\", \"Suryakumar Yadav\", \"Hardik Pandya\"),\n            listOf(\"Ravindra Jadeja\", \"Shubman Gill\", \"Rashid Khan\", \"Andre Russell\", \"Sunil Narine\", \"Heinrich Klaasen\"),\n            listOf(\"Travis Head\", \"Pat Cummins\", \"Nicholas Pooran\", \"Sanju Samson\", \"Yashasvi Jaiswal\", \"Axar Patel\"),\n            listOf(\"Kuldeep Yadav\", \"Trent Boult\", \"Josh Hazlewood\", \"Mitchell Marsh\", \"Rinku Singh\", \"Ruturaj Gaikwad\")\n        )\n        legends.forEachIndexed { i, names ->\n            take(names.mapNotNull { n -> pool.firstOrNull { it.id !in used && it.player.name == n } }, \"Marquee players ${i + 3}\")\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        if (settings.soundEffects) playPcm(Fx.GAVEL, MASTER)\n        vibratePulse(45L)",
+      "replace": "        if (settings.soundEffects) {\n            // The real (public-domain) gavel recording when it is in the pack; the synthesized knock otherwise.\n            if (!playRecorded(RecordedAsset.AUCTION_GAVEL, MASTER)) playPcm(Fx.GAVEL, MASTER)\n        }\n        vibratePulse(45L)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/AudioAssets.kt",
+      "find": "    DRINKS_BREAK(\"drinks_break_drinking.mp3\", \"/_cdn/sfx/drinks_break_drinking.mp3\", \"drinks_break_drinking\")\n}",
+      "replace": "    DRINKS_BREAK(\"drinks_break_drinking.mp3\", \"/_cdn/sfx/drinks_break_drinking.mp3\", \"drinks_break_drinking\"),\n\n    // --- IPL auction: a real gavel (public domain), fetched and trimmed by tools/fetch_audio.sh ---\n    AUCTION_GAVEL(\"auction_gavel.mp3\", \"/_cdn/sfx/auction_gavel.mp3\", \"auction_gavel\")\n}",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "fetched_files=$(find \"$SCRATCH_DIR\" -type f -name '*.mp3' | wc -l)\n",
+      "replace": "echo\necho \"== Downloading the auction gavel (public domain, CC0) ==\"\n# \"Gavel on wooden desk\" by Aerny on Freesound (CC0 1.0): https://freesound.org/people/Aerny/sounds/618138\n# Cut to the first strike after any leading silence, levelled, and faded; stored as auction_gavel.mp3.\nGAVEL_URL=\"https://cdn.freesound.org/previews/618/618138_1071564-hq.mp3\"\nif command -v ffmpeg >/dev/null 2>&1; then\n  if curl -fsSL --retry 3 --retry-delay 3 --max-time 60 -A \"$ANTHEM_UA\" -o \"$SCRATCH_DIR/gavel_src\" \"$GAVEL_URL\" && [ -s \"$SCRATCH_DIR/gavel_src\" ]; then\n    if ffmpeg -nostdin -loglevel error -y -i \"$SCRATCH_DIR/gavel_src\" -vn \\\n        -af \"silenceremove=start_periods=1:start_threshold=-45dB,atrim=0:1.0,loudnorm=I=-14:TP=-1.5:LRA=7,afade=t=out:st=0.8:d=0.2\" \\\n        -ar 44100 -ac 1 -b:a 128k \"$SCRATCH_DIR/auction_gavel.mp3\"; then\n      got=$((got + 1))\n    else\n      missing+=(\"auction_gavel.mp3 (could not convert)\")\n    fi\n  else\n    missing+=(\"auction_gavel.mp3 (could not download)\")\n  fi\n  rm -f \"$SCRATCH_DIR/gavel_src\"\nelse\n  missing+=(\"auction_gavel.mp3 (ffmpeg is not available)\")\nfi\n\nfetched_files=$(find \"$SCRATCH_DIR\" -type f -name '*.mp3' | wc -l)\n",
+      "count": 1
+    }
+  ]
+}
