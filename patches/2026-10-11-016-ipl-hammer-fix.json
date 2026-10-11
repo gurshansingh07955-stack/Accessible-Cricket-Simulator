@@ -1,0 +1,38 @@
+{
+  "name": "ipl-hammer-fix",
+  "message": "IPL auction: the hammer was never loaded and was drowned by the speech; load it, play it at full volume and sequence it after the build-up",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+    "contains": "RecordedAsset.AUCTION_GAVEL\n        )"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            RecordedAsset.DRINKS_BREAK\n        )",
+      "replace": "            RecordedAsset.DRINKS_BREAK,\n            RecordedAsset.AUCTION_GAVEL\n        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            if (!playRecorded(RecordedAsset.AUCTION_GAVEL, MASTER)) playPcm(Fx.GAVEL, MASTER)",
+      "replace": "            // Full volume: a gavel is one short knock, and it must cut through the speech around it.\n            if (!playRecorded(RecordedAsset.AUCTION_GAVEL, 1.0f)) playPcm(Fx.GAVEL, 1.0f)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import kotlinx.coroutines.Dispatchers\n",
+      "replace": "import kotlinx.coroutines.Dispatchers\nimport kotlinx.coroutines.delay\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                services?.sound?.playAuctionHammer()\n                speak(\"Going once, going twice, sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.\")\n",
+      "replace": "                // The auctioneer builds to it, THEN the hammer falls, THEN the sale is read out. The knock must\n                // not play over the speech: a screen reader lowers every other sound while it talks.\n                speak(\"Going once. Going twice.\")\n                delay(2300)\n                services?.sound?.playAuctionHammer()\n                delay(700)\n                speak(\"Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.\")\n",
+      "count": 1
+    }
+  ]
+}
