@@ -1,0 +1,45 @@
+{
+  "name": "ipl-hammer-own-track",
+  "message": "IPL auction: play the hammer on its own audio track from the hall, independent of the sound engine",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+    "contains": "private class Hammer"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import android.content.Context\n",
+      "replace": "import android.content.Context\nimport android.media.AudioAttributes\nimport android.media.AudioFormat\nimport android.media.AudioTrack\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import com.cricketsim.audio.LocalGameServices\n",
+      "replace": "import com.cricketsim.audio.LocalGameServices\nimport com.cricketsim.audio.Synth\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "/** How long the hall waits after a bid for you to bid before another team may, and between the count's steps. */",
+      "replace": "/**\n * The hammer, played straight from here on its own audio track, so it does not depend on the game's\n * sound engine, its settings or its load list. Two raps of the synthesized gavel (the second a little\n * softer), at full volume.\n */\nprivate class Hammer {\n    private var track: AudioTrack? = null\n\n    fun knock() {\n        runCatching {\n            track?.release()\n            val single = Synth.gavel()\n            val gap = ShortArray((Synth.SAMPLE_RATE * 0.22).toInt())\n            val pcm = ShortArray(single.size + gap.size + single.size)\n            single.copyInto(pcm, 0)\n            for (i in single.indices) pcm[single.size + gap.size + i] = (single[i] * 0.8f).toInt().toShort()\n            val attributes = AudioAttributes.Builder()\n                .setUsage(AudioAttributes.USAGE_MEDIA)\n                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)\n                .build()\n            val format = AudioFormat.Builder()\n                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)\n                .setSampleRate(Synth.SAMPLE_RATE)\n                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)\n                .build()\n            val t = AudioTrack.Builder()\n                .setAudioAttributes(attributes)\n                .setAudioFormat(format)\n                .setBufferSizeInBytes(pcm.size * 2)\n                .setTransferMode(AudioTrack.MODE_STATIC)\n                .build()\n            t.write(pcm, 0, pcm.size)\n            t.setVolume(1.0f)\n            t.play()\n            track = t\n        }\n    }\n\n    fun release() {\n        runCatching { track?.stop() }\n        runCatching { track?.release() }\n    }\n}\n\n/** How long the hall waits after a bid for you to bid before another team may, and between the count's steps. */",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    val auctioneer = remember { Auctioneer(context) }\n    DisposableEffect(Unit) { onDispose { auctioneer.shutdown() } }\n",
+      "replace": "    val auctioneer = remember { Auctioneer(context) }\n    val hammer = remember { Hammer() }\n    DisposableEffect(Unit) {\n        onDispose {\n            auctioneer.shutdown()\n            hammer.release()\n        }\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                services?.sound?.playAuctionHammer()\n                delay(700)",
+      "replace": "                hammer.knock()\n                services?.sound?.playAuctionHammer()\n                delay(900)",
+      "count": 1
+    }
+  ]
+}
