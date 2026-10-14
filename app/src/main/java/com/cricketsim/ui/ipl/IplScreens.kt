@@ -1,6 +1,9 @@
 package com.cricketsim.ui.ipl
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import android.speech.tts.TextToSpeech
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
@@ -42,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cricketsim.audio.LocalGameServices
+import com.cricketsim.audio.Synth
 import com.cricketsim.logic.IplAuction
 import com.cricketsim.logic.IplAuctionState
 import com.cricketsim.logic.IplData
@@ -74,6 +78,50 @@ import java.util.UUID
  * voice (until recorded auctioneer clips replace it), independent of the screen reader and of the
  * commentary setting, so they are always heard. The buttons say what they do and what it costs.
  */
+/**
+ * The hammer, played straight from here on its own audio track, so it does not depend on the game's
+ * sound engine, its settings or its load list. Two raps of the synthesized gavel (the second a little
+ * softer), at full volume.
+ */
+private class Hammer {
+    private var track: AudioTrack? = null
+
+    fun knock() {
+        runCatching {
+            track?.release()
+            val single = Synth.gavel()
+            val gap = ShortArray((Synth.SAMPLE_RATE * 0.22).toInt())
+            val pcm = ShortArray(single.size + gap.size + single.size)
+            single.copyInto(pcm, 0)
+            for (i in single.indices) pcm[single.size + gap.size + i] = (single[i] * 0.8f).toInt().toShort()
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            val format = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(Synth.SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build()
+            val t = AudioTrack.Builder()
+                .setAudioAttributes(attributes)
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(pcm.size * 2)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+            t.write(pcm, 0, pcm.size)
+            t.setVolume(1.0f)
+            t.play()
+            track = t
+        }
+    }
+
+    fun release() {
+        runCatching { track?.stop() }
+        runCatching { track?.release() }
+    }
+}
+
 /** How long the hall waits after a bid for you to bid before another team may, and between the count's steps. */
 private const val BID_WAIT_MS = 3200L
 private const val COUNT_STEP_MS = 2400L
@@ -128,7 +176,13 @@ fun IplFlow(onExit: () -> Unit) {
     val scope = rememberCoroutineScope()
     val services = LocalGameServices.current
     val auctioneer = remember { Auctioneer(context) }
-    DisposableEffect(Unit) { onDispose { auctioneer.shutdown() } }
+    val hammer = remember { Hammer() }
+    DisposableEffect(Unit) {
+        onDispose {
+            auctioneer.shutdown()
+            hammer.release()
+        }
+    }
 
     var page by remember { mutableStateOf<IPage>(IPage.Menu) }
     var auction by remember { mutableStateOf<IplAuctionState?>(null) }
@@ -204,8 +258,9 @@ fun IplFlow(onExit: () -> Unit) {
             val name = p?.player?.name ?: "The player"
             val leader = l.leaderId
             if (leader != null && l.bidLakhs > 0) {
+                hammer.knock()
                 services?.sound?.playAuctionHammer()
-                delay(700)
+                delay(900)
                 speak("Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.")
             } else {
                 speak("No bids. $name goes unsold.")
