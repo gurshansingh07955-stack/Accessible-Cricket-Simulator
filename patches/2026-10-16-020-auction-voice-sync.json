@@ -1,0 +1,52 @@
+{
+  "name": "auction-voice-sync",
+  "message": "IPL auction: voice and price stay in step (new bid cuts off the old call, pause starts after speech ends, silence trimmed from clips)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/AuctionVoice.kt",
+    "contains": "val isSpeaking"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/AuctionVoice.kt",
+      "find": "    fun play(ids: List<String>): Boolean {\n        val clips = ArrayList<ByteArray>()\n        for (id in ids) {\n            clips.add(AudioPack.bytesFor(context.applicationContext, \"$id.mp3\") ?: return false)\n        }\n        clips.forEach { queue.addLast(it) }\n",
+      "replace": "    fun play(ids: List<String>, interrupt: Boolean = false): Boolean {\n        val clips = ArrayList<ByteArray>()\n        for (id in ids) {\n            clips.add(AudioPack.bytesFor(context.applicationContext, \"$id.mp3\") ?: return false)\n        }\n        // A new bid must be heard NOW, not after the previous call has finished: stale calls are dropped\n        // so the voice never trails behind the price on screen.\n        if (interrupt) stop()\n        clips.forEach { queue.addLast(it) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/AuctionVoice.kt",
+      "find": "    private var busy = false\n",
+      "replace": "    private var busy = false\n\n    /** True while a call is playing or waiting to play; the auction hall waits for it to end before timing the next step. */\n    val isSpeaking: Boolean get() = busy || queue.isNotEmpty()\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    val call: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips)) speak(fallback) }\n",
+      "replace": "    val call: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips)) speak(fallback) }\n    // A bid call cuts off whatever the auctioneer was still saying, so the spoken price always matches the screen.\n    val callNow: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips, interrupt = true)) speak(fallback) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "            call(\n                listOf(\"au_t_${teamKey(leaderNow)}_short\", \"au_x_bid\", \"au_p_${n.bidLakhs}\"),",
+      "replace": "            callNow(\n                listOf(\"au_t_${teamKey(leaderNow)}_short\", \"au_x_bid\", \"au_p_${n.bidLakhs}\"),"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        delay(if (quick) 800L else BID_WAIT_MS)\n",
+      "replace": "        // The pause starts only once the auctioneer has finished speaking, so the call is never still\n        // being said while the next bid arrives (safety cap 8 s in case a clip stalls).\n        var waited = 0L\n        while (voice.isSpeaking && waited < 8000L) {\n            delay(100L)\n            waited += 100L\n        }\n        delay(if (quick) 800L else BID_WAIT_MS)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "private const val BID_WAIT_MS = 3200L",
+      "replace": "private const val BID_WAIT_MS = 2400L"
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "fetched_files=$(find \"$SCRATCH_DIR\" -type f -name '*.mp3' | wc -l)\n",
+      "replace": "echo\necho \"== Trimming the silence off the auctioneer's clips ==\"\n# ElevenLabs leaves a short silence before and after every clip. A call is a run of clips, so those\n# silences add up to long gaps and the voice trails behind the price on screen. Cut them, keeping 30 ms\n# so word ends are not clipped. A clip that cannot be trimmed is kept as it was.\ntrimmed=0\nif command -v ffmpeg >/dev/null 2>&1; then\n  for f in \"$SCRATCH_DIR\"/au_*.mp3; do\n    [ -f \"$f\" ] || continue\n    if ffmpeg -nostdin -loglevel error -y -i \"$f\" -vn \\\n        -af \"silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.03,areverse,silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.03,areverse\" \\\n        -ar 44100 -ac 1 -b:a 96k \"$f.trim.mp3\" && [ -s \"$f.trim.mp3\" ]; then\n      mv \"$f.trim.mp3\" \"$f\"\n      trimmed=$((trimmed + 1))\n    else\n      rm -f \"$f.trim.mp3\"\n    fi\n  done\nfi\necho \"Auctioneer clips trimmed: $trimmed\"\n\nfetched_files=$(find \"$SCRATCH_DIR\" -type f -name '*.mp3' | wc -l)\n"
+    }
+  ]
+}
