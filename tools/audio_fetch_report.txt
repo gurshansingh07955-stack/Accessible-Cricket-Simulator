@@ -3,6 +3,6 @@ Source: https://5764.floot.app
 Sound recordings expected: 13
 Commentary clips referenced by CommentaryLibrary.kt: 258
 National anthems listed in Anthems.kt: 14
-Files packed into app/src/main/res/raw/audio_pack.bin this run: 287
-Packed file size: 20717840 bytes
+Files packed into app/src/main/res/raw/audio_pack.bin this run: 1137
+Packed file size: 40792336 bytes
 Not available on the web app (skipped): 0
