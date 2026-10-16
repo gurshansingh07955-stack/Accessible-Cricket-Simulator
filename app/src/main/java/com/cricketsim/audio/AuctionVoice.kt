@@ -30,12 +30,18 @@ internal class AuctionVoice(private val context: Context) {
     private var current: MediaPlayer? = null
     private var busy = false
 
+    /** True while a call is playing or waiting to play; the auction hall waits for it to end before timing the next step. */
+    val isSpeaking: Boolean get() = busy || queue.isNotEmpty()
+
     /** Queues the clips for playback, after anything already playing. False if any clip is missing. */
-    fun play(ids: List<String>): Boolean {
+    fun play(ids: List<String>, interrupt: Boolean = false): Boolean {
         val clips = ArrayList<ByteArray>()
         for (id in ids) {
             clips.add(AudioPack.bytesFor(context.applicationContext, "$id.mp3") ?: return false)
         }
+        // A new bid must be heard NOW, not after the previous call has finished: stale calls are dropped
+        // so the voice never trails behind the price on screen.
+        if (interrupt) stop()
         clips.forEach { queue.addLast(it) }
         if (!busy) next()
         return true

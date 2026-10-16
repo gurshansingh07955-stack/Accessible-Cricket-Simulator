@@ -180,6 +180,27 @@ else
   missing+=("auction_gavel.mp3 (ffmpeg is not available)")
 fi
 
+echo
+echo "== Trimming the silence off the auctioneer's clips =="
+# ElevenLabs leaves a short silence before and after every clip. A call is a run of clips, so those
+# silences add up to long gaps and the voice trails behind the price on screen. Cut them, keeping 30 ms
+# so word ends are not clipped. A clip that cannot be trimmed is kept as it was.
+trimmed=0
+if command -v ffmpeg >/dev/null 2>&1; then
+  for f in "$SCRATCH_DIR"/au_*.mp3; do
+    [ -f "$f" ] || continue
+    if ffmpeg -nostdin -loglevel error -y -i "$f" -vn \
+        -af "silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.03,areverse,silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.03,areverse" \
+        -ar 44100 -ac 1 -b:a 96k "$f.trim.mp3" && [ -s "$f.trim.mp3" ]; then
+      mv "$f.trim.mp3" "$f"
+      trimmed=$((trimmed + 1))
+    else
+      rm -f "$f.trim.mp3"
+    fi
+  done
+fi
+echo "Auctioneer clips trimmed: $trimmed"
+
 fetched_files=$(find "$SCRATCH_DIR" -type f -name '*.mp3' | wc -l)
 if [ "$fetched_files" -eq 0 ]; then
   echo "Nothing was fetched: is $BASE_URL reachable? Leaving existing files untouched." >&2

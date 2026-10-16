@@ -125,7 +125,7 @@ private class Hammer {
 }
 
 /** How long the hall waits after a bid for you to bid before another team may, and between the count's steps. */
-private const val BID_WAIT_MS = 3200L
+private const val BID_WAIT_MS = 2400L
 private const val COUNT_STEP_MS = 2400L
 
 /**
@@ -211,6 +211,8 @@ fun IplFlow(onExit: () -> Unit) {
         }
     }
     val call: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips)) speak(fallback) }
+    // A bid call cuts off whatever the auctioneer was still saying, so the spoken price always matches the screen.
+    val callNow: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips, interrupt = true)) speak(fallback) }
 
     // Opens the bidding on the next player, with the first bid from another team if there is one.
     val beginLot: (IplAuctionState) -> Unit = { s ->
@@ -237,7 +239,7 @@ fun IplFlow(onExit: () -> Unit) {
         lot = n
         val leaderNow = n.leaderId
         if (leaderNow != null && n.bidLakhs > 0 && (old?.bidLakhs != n.bidLakhs || old?.leaderId != leaderNow)) {
-            call(
+            callNow(
                 listOf("au_t_${teamKey(leaderNow)}_short", "au_x_bid", "au_p_${n.bidLakhs}"),
                 "${IplData.shortName(leaderNow)} bid ${IplAuction.priceText(n.bidLakhs)}."
             )
@@ -259,6 +261,13 @@ fun IplFlow(onExit: () -> Unit) {
         if (!inHall || busy || l == null || s == null || l.closed) return@LaunchedEffect
         val p = IplAuction.playerOf(s, l.playerId) ?: return@LaunchedEffect
         val quick = l.userOut || !IplAuction.userCanBid(s, l, p)
+        // The pause starts only once the auctioneer has finished speaking, so the call is never still
+        // being said while the next bid arrives (safety cap 8 s in case a clip stalls).
+        var waited = 0L
+        while (voice.isSpeaking && waited < 8000L) {
+            delay(100L)
+            waited += 100L
+        }
         delay(if (quick) 800L else BID_WAIT_MS)
         val bid = IplAuction.aiBid(s, l)
         if (bid != null) {
