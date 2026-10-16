@@ -105,6 +105,22 @@ for path in $clip_paths; do
 done
 
 echo
+echo "== Downloading the IPL auctioneer's calls =="
+# The clip list comes from tools/auction_clip_ids.py (player names, prices, teams, phrases), worked out
+# from the game's own source; each is a short ElevenLabs recording in the auctioneer's British voice on
+# the web app, at /_cdn/auction/<id>.mp3, and is stored in the pack as <id>.mp3.
+auction_count=0
+if command -v python3 >/dev/null 2>&1 && [ -f tools/auction_clip_ids.py ]; then
+  for id in $(python3 tools/auction_clip_ids.py); do
+    auction_count=$((auction_count + 1))
+    fetch "$BASE_URL/_cdn/auction/$id.mp3" "$SCRATCH_DIR/$id.mp3"
+  done
+  echo "Auctioneer clips listed: $auction_count"
+else
+  echo "python3 or tools/auction_clip_ids.py not found; skipping the auctioneer's calls."
+fi
+
+echo
 echo "== Downloading and trimming national anthems =="
 # The recordings are public-domain files on Wikimedia Commons, listed in Anthems.kt. Each is cut to
 # its first ten seconds (after any leading silence), levelled so no anthem is much louder than

@@ -44,8 +44,10 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.cricketsim.audio.AuctionVoice
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.audio.Synth
+import com.cricketsim.logic.AuctionPlayer
 import com.cricketsim.logic.IplAuction
 import com.cricketsim.logic.IplAuctionState
 import com.cricketsim.logic.IplData
@@ -177,10 +179,12 @@ fun IplFlow(onExit: () -> Unit) {
     val services = LocalGameServices.current
     val auctioneer = remember { Auctioneer(context) }
     val hammer = remember { Hammer() }
+    val voice = remember { AuctionVoice(context) }
     DisposableEffect(Unit) {
         onDispose {
             auctioneer.shutdown()
             hammer.release()
+            voice.stop()
         }
     }
 
@@ -193,6 +197,21 @@ fun IplFlow(onExit: () -> Unit) {
 
     val speak: (String) -> Unit = { text -> auctioneer.say(text) }
 
+    // A call is a run of recorded clips (name, team, price ...) in the auctioneer's own voice. If any
+    // clip is not in the pack, the whole call is spoken by the phone's voice instead.
+    val slug: (String) -> String = { s -> s.lowercase().filter { it in 'a'..'z' } }
+    val teamKey: (String) -> String = { id -> id.removePrefix("ipl_") }
+    val roleClip: (AuctionPlayer) -> String = { p ->
+        "au_r_" + when (IplAuction.group(p)) {
+            "WK" -> "wicketkeeper"
+            "AL" -> "allrounder"
+            "FA" -> "fast"
+            "SP" -> "spin"
+            else -> "batter"
+        }
+    }
+    val call: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips)) speak(fallback) }
+
     // Opens the bidding on the next player, with the first bid from another team if there is one.
     val beginLot: (IplAuctionState) -> Unit = { s ->
         val id = IplAuction.currentPlayerId(s)
@@ -202,7 +221,11 @@ fun IplFlow(onExit: () -> Unit) {
             page = IPage.Summary
         } else {
             lot = LotState(id)
-            speak(
+            call(
+                listOf(
+                    "au_x_nextup", "au_n_" + slug(p.player.name), roleClip(p), "au_c_" + p.country.lowercase(),
+                    "au_x_baseprice", "au_p_${p.baseLakhs}"
+                ),
                 "Next up: ${p.player.name}, ${IplAuction.roleText(p)} from ${IplAuction.countryName(p.country)}. " +
                     "Base price ${IplAuction.priceText(p.baseLakhs)}."
             )
@@ -210,10 +233,15 @@ fun IplFlow(onExit: () -> Unit) {
     }
 
     val update: (LotState) -> Unit = { n ->
-        val before = lot?.log?.size ?: 0
+        val old = lot
         lot = n
-        val fresh = n.log.drop(before).takeLast(3)
-        if (fresh.isNotEmpty()) speak(fresh.joinToString(" "))
+        val leaderNow = n.leaderId
+        if (leaderNow != null && n.bidLakhs > 0 && (old?.bidLakhs != n.bidLakhs || old?.leaderId != leaderNow)) {
+            call(
+                listOf("au_t_${teamKey(leaderNow)}_short", "au_x_bid", "au_p_${n.bidLakhs}"),
+                "${IplData.shortName(leaderNow)} bid ${IplAuction.priceText(n.bidLakhs)}."
+            )
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -239,10 +267,10 @@ fun IplFlow(onExit: () -> Unit) {
         }
         val step = if (quick) 700L else COUNT_STEP_MS
         lot = l.copy(countdown = 1)
-        speak("Going once.")
+        call(listOf("au_x_goingonce"), "Going once.")
         delay(step)
         lot = l.copy(countdown = 2)
-        speak("Going twice.")
+        call(listOf("au_x_goingtwice"), "Going twice.")
         delay(step)
         lot = l.copy(countdown = 0, closed = true)
     }
@@ -261,9 +289,12 @@ fun IplFlow(onExit: () -> Unit) {
                 hammer.knock()
                 services?.sound?.playAuctionHammer()
                 delay(900)
-                speak("Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.")
+                call(
+                    listOf("au_x_sold", "au_n_" + slug(name), "au_x_to", "au_t_${teamKey(leader)}_full", "au_x_for", "au_p_${l.bidLakhs}"),
+                    "Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}."
+                )
             } else {
-                speak("No bids. $name goes unsold.")
+                call(listOf("au_x_nobids", "au_n_" + slug(name), "au_x_goesunsold"), "No bids. $name goes unsold.")
             }
         }
     }
