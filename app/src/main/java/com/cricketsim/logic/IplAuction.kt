@@ -249,22 +249,30 @@ object IplAuction {
         return s.copy(setIndex = si, lotIndex = li)
     }
 
-    /** At the very end, other teams still short of 18 take the best unsold players at base price. */
+    /**
+     * At the very end EVERY team (yours too) still short of the minimum squad takes the best unsold
+     * players it can afford at base price, so nobody finishes below IplData.MIN_SQUAD. A team keeps
+     * enough money back for the places still to fill; if even that is impossible it takes the cheapest.
+     * Your team is filled last, so the other nine get first pick of what is left.
+     */
     private fun fillSquads(start: IplAuctionState): IplAuctionState {
         var s = start
-        for (team in IplData.TEAMS) {
-            if (team.id == s.userTeamId) continue
-            while ((s.squads[team.id]?.size ?: 0) < IplData.MIN_SQUAD) {
-                val mine = owned(s, team.id)
-                val purse = s.purse[team.id] ?: 0
-                val pick = s.unsold.mapNotNull { playerOf(s, it) }
+        val order = IplData.TEAMS.map { it.id }.sortedBy { if (it == start.userTeamId) 1 else 0 }
+        for (teamId in order) {
+            while ((s.squads[teamId]?.size ?: 0) < IplData.MIN_SQUAD) {
+                val mine = owned(s, teamId)
+                val purse = s.purse[teamId] ?: 0
+                val placesAfter = IplData.MIN_SQUAD - mine.size - 1
+                val candidates = s.unsold.mapNotNull { playerOf(s, it) }
                     .filter { it.baseLakhs <= purse && !(it.overseas && mine.count { o -> o.overseas } >= IplData.MAX_OVERSEAS) }
-                    .maxByOrNull { overall(it) } ?: break
+                val keepBack = purse - RESERVE_PER_SLOT * placesAfter
+                val pick = candidates.filter { it.baseLakhs <= keepBack }.maxByOrNull { overall(it) }
+                    ?: candidates.minByOrNull { it.baseLakhs } ?: break
                 s = s.copy(
-                    purse = s.purse + (team.id to purse - pick.baseLakhs),
-                    squads = s.squads + (team.id to (s.squads[team.id].orEmpty() + pick.id)),
+                    purse = s.purse + (teamId to purse - pick.baseLakhs),
+                    squads = s.squads + (teamId to (s.squads[teamId].orEmpty() + pick.id)),
                     soldPrice = s.soldPrice + (pick.id to pick.baseLakhs),
-                    soldTo = s.soldTo + (pick.id to team.id),
+                    soldTo = s.soldTo + (pick.id to teamId),
                     unsold = s.unsold - pick.id
                 )
             }

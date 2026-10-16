@@ -36,7 +36,7 @@ object IplData {
     const val SAVE_VERSION = 1
     const val PURSE_LAKHS = 12000
     const val MAX_SQUAD = 25
-    const val MIN_SQUAD = 18
+    const val MIN_SQUAD = 22
     const val MAX_OVERSEAS = 8
 
     val TEAMS: List<IplTeamInfo> = listOf(
