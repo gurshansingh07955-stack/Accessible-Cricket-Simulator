@@ -1,0 +1,124 @@
+{
+  "name": "ipl-squads-share-pass",
+  "message": "IPL auction: Pass resolves the player and moves on, Check squads (ten tabs), results with Check all teams / Share / Copy, every squad 22 to 25",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+    "contains": "private fun AllSquadsPage"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplData.kt",
+      "find": "const val MIN_SQUAD = 18",
+      "replace": "const val MIN_SQUAD = 22"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "    /** At the very end, other teams still short of 18 take the best unsold players at base price. */\n    private fun fillSquads(start: IplAuctionState): IplAuctionState {\n        var s = start\n        for (team in IplData.TEAMS) {\n            if (team.id == s.userTeamId) continue\n            while ((s.squads[team.id]?.size ?: 0) < IplData.MIN_SQUAD) {\n                val mine = owned(s, team.id)\n                val purse = s.purse[team.id] ?: 0\n                val pick = s.unsold.mapNotNull { playerOf(s, it) }\n                    .filter { it.baseLakhs <= purse && !(it.overseas && mine.count { o -> o.overseas } >= IplData.MAX_OVERSEAS) }\n                    .maxByOrNull { overall(it) } ?: break\n                s = s.copy(\n                    purse = s.purse + (team.id to purse - pick.baseLakhs),\n                    squads = s.squads + (team.id to (s.squads[team.id].orEmpty() + pick.id)),\n                    soldPrice = s.soldPrice + (pick.id to pick.baseLakhs),\n                    soldTo = s.soldTo + (pick.id to team.id),\n                    unsold = s.unsold - pick.id\n                )\n            }\n        }\n        return s\n    }\n",
+      "replace": "    /**\n     * At the very end EVERY team (yours too) still short of the minimum squad takes the best unsold\n     * players it can afford at base price, so nobody finishes below IplData.MIN_SQUAD. A team keeps\n     * enough money back for the places still to fill; if even that is impossible it takes the cheapest.\n     * Your team is filled last, so the other nine get first pick of what is left.\n     */\n    private fun fillSquads(start: IplAuctionState): IplAuctionState {\n        var s = start\n        val order = IplData.TEAMS.map { it.id }.sortedBy { if (it == start.userTeamId) 1 else 0 }\n        for (teamId in order) {\n            while ((s.squads[teamId]?.size ?: 0) < IplData.MIN_SQUAD) {\n                val mine = owned(s, teamId)\n                val purse = s.purse[teamId] ?: 0\n                val placesAfter = IplData.MIN_SQUAD - mine.size - 1\n                val candidates = s.unsold.mapNotNull { playerOf(s, it) }\n                    .filter { it.baseLakhs <= purse && !(it.overseas && mine.count { o -> o.overseas } >= IplData.MAX_OVERSEAS) }\n                val keepBack = purse - RESERVE_PER_SLOT * placesAfter\n                val pick = candidates.filter { it.baseLakhs <= keepBack }.maxByOrNull { overall(it) }\n                    ?: candidates.minByOrNull { it.baseLakhs } ?: break\n                s = s.copy(\n                    purse = s.purse + (teamId to purse - pick.baseLakhs),\n                    squads = s.squads + (teamId to (s.squads[teamId].orEmpty() + pick.id)),\n                    soldPrice = s.soldPrice + (pick.id to pick.baseLakhs),\n                    soldTo = s.soldTo + (pick.id to teamId),\n                    unsold = s.unsold - pick.id\n                )\n            }\n        }\n        return s\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import android.content.Context\n",
+      "replace": "import android.content.ClipData\nimport android.content.ClipboardManager\nimport android.content.Context\nimport android.content.Intent\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import android.speech.tts.TextToSpeech\n",
+      "replace": "import android.speech.tts.TextToSpeech\nimport android.widget.Toast\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import androidx.compose.foundation.border\n",
+      "replace": "import androidx.compose.foundation.border\nimport androidx.compose.foundation.horizontalScroll\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import androidx.compose.foundation.layout.Column\n",
+      "replace": "import androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Row\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import androidx.compose.ui.semantics.semantics\n",
+      "replace": "import androidx.compose.ui.semantics.selected\nimport androidx.compose.ui.semantics.semantics\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    object Summary : IPage\n",
+      "replace": "    object Summary : IPage\n    object Squads : IPage\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    var auction by remember { mutableStateOf<IplAuctionState?>(null) }\n",
+      "replace": "    var auction by remember { mutableStateOf<IplAuctionState?>(null) }\n    // Where the squads page was opened from (the hall or the results), so Back returns there.\n    var squadsFrom by remember { mutableStateOf<IPage>(IPage.Hall) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                call(listOf(\"au_x_nobids\", \"au_n_\" + slug(name), \"au_x_goesunsold\"), \"No bids. $name goes unsold.\")\n            }\n",
+      "replace": "                call(listOf(\"au_x_nobids\", \"au_n_\" + slug(name), \"au_x_goesunsold\"), \"No bids. $name goes unsold.\")\n            }\n            if (l.userOut) {\n                // You passed on this player: once the result has been said (sold or unsold) the auction\n                // moves on to the next player by itself. If you left the hall meanwhile, nothing happens.\n                delay(1500L)\n                var waited = 0L\n                while (voice.isSpeaking && waited < 10000L) {\n                    delay(100L)\n                    waited += 100L\n                }\n                delay(600L)\n                val s2 = auction\n                val l2 = lot\n                if (page is IPage.Hall && !busy && s2 != null && l2 != null && l2.closed && l2.playerId == l.playerId) {\n                    val next = IplAuction.finishLot(s2, l2)\n                    auction = next\n                    scope.launch { store.save(next) }\n                    lot = null\n                    beginLot(next)\n                }\n            }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                    onPass = { update(l.copy(userOut = true, countdown = 0)) },\n",
+      "replace": "                    onPass = {\n                        // Pass: the other teams settle this player at once (no bid-by-bid talk), then the\n                        // result is announced and the auction moves on by itself.\n                        busy = true\n                        voice.stop()\n                        scope.launch {\n                            val resolved = withContext(Dispatchers.Default) {\n                                IplAuction.advance(s, l.copy(userOut = true, countdown = 0))\n                            }\n                            lot = resolved.copy(closed = true, countdown = 0)\n                            busy = false\n                        }\n                    },\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                    onLeave = leave\n",
+      "replace": "                    onSquads = {\n                        voice.stop()\n                        squadsFrom = IPage.Hall\n                        page = IPage.Squads\n                    },\n                    onLeave = leave\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "            if (s != null) IplSummaryPage(state = s, onBack = back) else back()\n        }\n    }\n}\n",
+      "replace": "            if (s != null) {\n                IplSummaryPage(\n                    state = s,\n                    onBack = back,\n                    onSquads = {\n                        squadsFrom = IPage.Summary\n                        page = IPage.Squads\n                    },\n                    onShare = { shareTeam(context, s) },\n                    onCopy = { copyTeam(context, s) }\n                )\n            } else back()\n        }\n        is IPage.Squads -> {\n            val back = { page = squadsFrom }\n            BackHandler(onBack = back)\n            val s = auction\n            if (s != null) AllSquadsPage(state = s, onBack = back) else back()\n        }\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "Every team starts with 120 crore and an empty squad. Squads hold 18 to 25 players, at most 8 overseas.\",",
+      "replace": "Every team starts with 120 crore and an empty squad. Every squad ends with ${IplData.MIN_SQUAD} to ${IplData.MAX_SQUAD} players, at most ${IplData.MAX_OVERSEAS} overseas.\","
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    onSimulateAll: () -> Unit,\n    onLeave: () -> Unit\n) {\n",
+      "replace": "    onSimulateAll: () -> Unit,\n    onSquads: () -> Unit,\n    onLeave: () -> Unit\n) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        OutlinedButton(onClick = onSkipSet, enabled = !busy, modifier = Modifier.fillMaxWidth()) {\n",
+      "replace": "        OutlinedButton(onClick = onSquads, enabled = !busy, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Check squads\")\n        }\n        Spacer(modifier = Modifier.height(6.dp))\n        OutlinedButton(onClick = onSkipSet, enabled = !busy, modifier = Modifier.fillMaxWidth()) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "private fun IplSummaryPage(state: IplAuctionState, onBack: () -> Unit) {\n",
+      "replace": "private fun IplSummaryPage(\n    state: IplAuctionState,\n    onBack: () -> Unit,\n    onSquads: () -> Unit,\n    onShare: () -> Unit,\n    onCopy: () -> Unit\n) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        Spacer(modifier = Modifier.height(10.dp))\n        LazyColumn(modifier = Modifier.weight(1f)) {\n            item {\n                Text(\"Your squad\"",
+      "replace": "        Spacer(modifier = Modifier.height(10.dp))\n        Button(onClick = onSquads, modifier = Modifier.fillMaxWidth()) { Text(\"Check all teams\") }\n        Spacer(modifier = Modifier.height(6.dp))\n        Button(onClick = onShare, modifier = Modifier.fillMaxWidth()) { Text(\"Share my team\") }\n        Spacer(modifier = Modifier.height(6.dp))\n        OutlinedButton(onClick = onCopy, modifier = Modifier.fillMaxWidth()) { Text(\"Copy my team\") }\n        Spacer(modifier = Modifier.height(10.dp))\n        LazyColumn(modifier = Modifier.weight(1f)) {\n            item {\n                Text(\"Your squad\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(\"Back to IPL\") }\n    }\n}\n",
+      "replace": "        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(\"Back to IPL\") }\n    }\n}\n\n// ---- Squads of all ten teams, sharing -------------------------------------------------------\n\n/** Your team first, then the other nine in the usual order. */\nprivate fun teamsUserFirst(state: IplAuctionState): List<String> =\n    listOf(state.userTeamId) + IplData.TEAMS.map { it.id }.filter { it != state.userTeamId }\n\nprivate fun paidFor(state: IplAuctionState, p: AuctionPlayer): Int = state.soldPrice[p.id] ?: p.baseLakhs\n\n/** A team's players, the dearest first. */\nprivate fun squadByPrice(state: IplAuctionState, teamId: String): List<AuctionPlayer> =\n    state.squads[teamId].orEmpty()\n        .mapNotNull { IplAuction.playerOf(state, it) }\n        .sortedByDescending { paidFor(state, it) }\n\n/** The team as clear plain text, for sharing and copying. */\nprivate fun teamShareText(state: IplAuctionState, teamId: String): String {\n    val squad = squadByPrice(state, teamId)\n    val sb = StringBuilder()\n    sb.append(\"My IPL auction team: \").append(IplData.team(teamId)?.name ?: teamId).append(\"\\n\")\n    sb.append(\"Players: \").append(squad.size).append(\" (\").append(squad.count { it.overseas }).append(\" overseas)\\n\")\n    sb.append(\"Money spent: \").append(IplAuction.priceText(squad.sumOf { paidFor(state, it) })).append(\"\\n\")\n    sb.append(\"Purse left: \").append(IplAuction.priceText(state.purse[teamId] ?: 0)).append(\"\\n\\n\")\n    squad.forEachIndexed { i, p ->\n        sb.append(i + 1).append(\". \").append(p.player.name)\n            .append(\", \").append(IplAuction.roleText(p))\n            .append(\", \").append(IplAuction.countryName(p.country))\n            .append(\", \").append(IplAuction.priceText(paidFor(state, p)))\n            .append(\"\\n\")\n    }\n    sb.append(\"\\nBuilt in the Accessible Cricket Simulator.\")\n    return sb.toString()\n}\n\nprivate fun shareTeam(context: Context, state: IplAuctionState) {\n    val send = Intent(Intent.ACTION_SEND).apply {\n        type = \"text/plain\"\n        putExtra(Intent.EXTRA_SUBJECT, \"My IPL auction team\")\n        putExtra(Intent.EXTRA_TEXT, teamShareText(state, state.userTeamId))\n    }\n    val chooser = Intent.createChooser(send, \"Share your team\").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }\n    runCatching { context.startActivity(chooser) }\n}\n\nprivate fun copyTeam(context: Context, state: IplAuctionState) {\n    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager\n    clipboard?.setPrimaryClip(ClipData.newPlainText(\"IPL auction team\", teamShareText(state, state.userTeamId)))\n    Toast.makeText(context, \"Your team is copied. You can paste it anywhere.\", Toast.LENGTH_SHORT).show()\n}\n\n/** One tab per team, yours first: every player with his role and the price he was bought for. */\n@Composable\nprivate fun AllSquadsPage(state: IplAuctionState, onBack: () -> Unit) {\n    val teams = teamsUserFirst(state)\n    var tab by remember { mutableStateOf(0) }\n    val teamId = teams.getOrElse(tab) { teams.first() }\n    val squad = squadByPrice(state, teamId)\n    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {\n        Title(\"Squads of all ten teams\")\n        Spacer(modifier = Modifier.height(8.dp))\n        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n            teams.forEachIndexed { i, id ->\n                val label = (if (i == 0) \"Your team: \" else \"\") + IplData.shortName(id)\n                val on = i == tab\n                if (on) {\n                    Button(onClick = { tab = i }, modifier = Modifier.semantics { this.selected = true }) { Text(label) }\n                } else {\n                    OutlinedButton(onClick = { tab = i }, modifier = Modifier.semantics { this.selected = false }) { Text(label) }\n                }\n            }\n        }\n        Spacer(modifier = Modifier.height(10.dp))\n        Text(\n            text = \"${IplData.team(teamId)?.name}: ${squad.size} players, ${squad.count { it.overseas }} overseas, \" +\n                \"spent ${IplAuction.priceText(squad.sumOf { paidFor(state, it) })}, \" +\n                \"purse left ${IplAuction.priceText(state.purse[teamId] ?: 0)}.\",\n            style = MaterialTheme.typography.titleMedium,\n            modifier = Modifier.semantics { heading() }\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        LazyColumn(modifier = Modifier.weight(1f)) {\n            if (squad.isEmpty()) {\n                item { Text(\"No players bought yet.\", style = MaterialTheme.typography.bodyLarge) }\n            }\n            items(squad.size) { i ->\n                val p = squad[i]\n                Text(\n                    text = \"${i + 1}. ${p.player.name}, ${IplAuction.roleText(p)}\" + (if (p.overseas) \", overseas\" else \"\") +\n                        \". Bought for ${IplAuction.priceText(paidFor(state, p))}.\",\n                    style = MaterialTheme.typography.bodyLarge,\n                    modifier = Modifier.padding(vertical = 5.dp)\n                )\n            }\n        }\n        Spacer(modifier = Modifier.height(8.dp))\n        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(\"Back\") }\n    }\n}\n"
+    }
+  ]
+}
