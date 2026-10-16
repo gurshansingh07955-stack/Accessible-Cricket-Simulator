@@ -4,5 +4,5 @@ Sound recordings expected: 13
 Commentary clips referenced by CommentaryLibrary.kt: 258
 National anthems listed in Anthems.kt: 14
 Files packed into app/src/main/res/raw/audio_pack.bin this run: 1137
-Packed file size: 44724032 bytes
+Packed file size: 35698336 bytes
 Not available on the web app (skipped): 0
