@@ -1,0 +1,92 @@
+{
+  "name": "ipl-auctioneer-voice",
+  "message": "IPL auction: recorded British auctioneer calls (names, teams, prices) played as clip runs, with the phone's voice as fallback",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/AuctionVoice.kt",
+    "contains": "class AuctionVoice"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/audio/AuctionVoice.kt",
+      "content": "package com.cricketsim.audio\n\nimport android.content.Context\nimport android.media.AudioAttributes\nimport android.media.MediaDataSource\nimport android.media.MediaPlayer\nimport android.os.Handler\nimport android.os.Looper\n\n/**\n * The IPL auctioneer's recorded voice. The calls are NOT one clip per sentence: there would be\n * far too many (every player x every price). Instead the app plays a short run of clips that\n * together make the call, for example\n *\n *     \"Sold!\"  +  \"Virat Kohli\"  +  \"to\"  +  \"Chennai Super Kings\"  +  \"for\"  +  \"12 crore 50 lakh\"\n *\n * where each part is a separate recording (a player's name, a team, a price, a fixed phrase), all in\n * the same British voice and played back to back with a very small gap. Clip ids are built by the\n * IPL screen; the clips live in the audio pack as \"<id>.mp3\" (see tools/auction_clip_ids.py for how\n * the full list is worked out, and tools/fetch_audio.sh for how they are fetched).\n *\n * If ANY clip of a call is missing from the pack, [play] returns false and plays nothing at all, so\n * the caller can speak the whole call with the phone's own voice instead; the two voices are never\n * mixed inside one call.\n */\ninternal class AuctionVoice(private val context: Context) {\n\n    private val handler = Handler(Looper.getMainLooper())\n    private val queue = ArrayDeque<ByteArray>()\n    private var current: MediaPlayer? = null\n    private var busy = false\n\n    /** Queues the clips for playback, after anything already playing. False if any clip is missing. */\n    fun play(ids: List<String>): Boolean {\n        val clips = ArrayList<ByteArray>()\n        for (id in ids) {\n            clips.add(AudioPack.bytesFor(context.applicationContext, \"$id.mp3\") ?: return false)\n        }\n        clips.forEach { queue.addLast(it) }\n        if (!busy) next()\n        return true\n    }\n\n    private fun next() {\n        val bytes = queue.removeFirstOrNull()\n        if (bytes == null) {\n            busy = false\n            return\n        }\n        busy = true\n        val player = MediaPlayer()\n        current = player\n        try {\n            player.setAudioAttributes(\n                AudioAttributes.Builder()\n                    .setUsage(AudioAttributes.USAGE_MEDIA)\n                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)\n                    .build()\n            )\n            player.setDataSource(BytesSource(bytes))\n            player.setOnPreparedListener { it.start() }\n            player.setOnCompletionListener {\n                it.release()\n                if (current === it) current = null\n                handler.postDelayed({ next() }, GAP_MS)\n            }\n            player.setOnErrorListener { p, _, _ ->\n                runCatching { p.release() }\n                if (current === p) current = null\n                handler.post { next() }\n                true\n            }\n            player.prepareAsync()\n        } catch (e: Exception) {\n            runCatching { player.release() }\n            if (current === player) current = null\n            handler.post { next() }\n        }\n    }\n\n    /** Stops whatever is playing and forgets everything queued. */\n    fun stop() {\n        queue.clear()\n        handler.removeCallbacksAndMessages(null)\n        runCatching { current?.stop() }\n        runCatching { current?.release() }\n        current = null\n        busy = false\n    }\n\n    private class BytesSource(private val data: ByteArray) : MediaDataSource() {\n        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {\n            if (position >= data.size) return -1\n            val count = minOf(size, data.size - position.toInt())\n            System.arraycopy(data, position.toInt(), buffer, offset, count)\n            return count\n        }\n\n        override fun getSize(): Long = data.size.toLong()\n\n        override fun close() {}\n    }\n\n    private companion object {\n        /** A breath between the parts of one call, short so the call still sounds like one sentence. */\n        const val GAP_MS = 40L\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "tools/auction_clip_ids.py",
+      "content": "#!/usr/bin/env python3\n\"\"\"Prints, one per line, the id of every recorded auctioneer clip the IPL auction can ask for.\n\nIt is worked out from the game's own source, so it cannot drift from the code:\n  - one clip per player in the IPL pool (au_n_<name with only letters, lower case>), exactly as\n    IplData.buildPool() names them (a player already in the game uses the roster's spelling);\n  - one per price the bidding can reach (au_p_<lakhs>), from nextBid() in IplAuction.kt;\n  - the ten teams (full and short name), the five roles, the countries and the fixed phrases.\ntools/fetch_audio.sh downloads exactly these from the web app and packs them with the other audio.\n\"\"\"\nimport re\n\nBASE = \"app/src/main/java/com/cricketsim/logic/\"\n\n\ndef norm(s):\n    return re.sub(r\"[^a-z]\", \"\", s.lower())\n\n\ndata = open(BASE + \"IplData.kt\", encoding=\"utf-8\").read()\nroster_src = open(BASE + \"CricketData.kt\", encoding=\"utf-8\").read()\n\nroster = {}\nfor m in re.finditer(r'createPlayer\\((\\w+),\\s*\"([^\"]+)\"', roster_src):\n    roster[norm(m.group(2))] = m.group(2)\n\nstart = data.index('POOL_DATA = \"\"\"') + len('POOL_DATA = \"\"\"')\npool_data = data[start:data.index('\"\"\".trimIndent()')]\nextras = re.search(r'ROSTER_EXTRAS =\\s*\"([^\"]+)\"', data).group(1)\n\nseen = set()\nnames = []\n\n\ndef add(name):\n    key = norm(name)\n    if key in seen:\n        return\n    seen.add(key)\n    names.append(name)\n\n\nfor line in pool_data.splitlines():\n    f = line.strip().split(\"|\")\n    if len(f) < 7:\n        continue\n    if f[0] == \"e\":\n        add(roster.get(norm(f[1]), f[1]))\n    elif len(f) >= 10:\n        add(f[1])\nfor n in extras.split(\"|\"):\n    hit = roster.get(norm(n))\n    if hit:\n        add(hit)\n\n\ndef next_bid(c):\n    if c < 100:\n        return c + 5\n    if c < 200:\n        return c + 10\n    if c < 500:\n        return c + 20\n    return c + 25\n\n\nprices = set()\nfor base in (30, 50, 75, 100, 125, 150, 200):\n    p = base\n    while p <= 2800:\n        prices.add(p)\n        p = next_bid(p)\n\nids = [\n    \"au_x_nextup\", \"au_x_bid\", \"au_x_baseprice\", \"au_x_goingonce\", \"au_x_goingtwice\", \"au_x_sold\",\n    \"au_x_to\", \"au_x_for\", \"au_x_nobids\", \"au_x_goesunsold\",\n    \"au_r_batter\", \"au_r_allrounder\", \"au_r_wicketkeeper\", \"au_r_fast\", \"au_r_spin\",\n]\nids += [\"au_c_\" + c for c in \"ind aus eng rsa nz sl wi ban afg zim ire ned sco nep uae oma usa\".split()]\nfor t in \"csk dc gt kkr lsg mi pbks rr rcb srh\".split():\n    ids += [\"au_t_%s_full\" % t, \"au_t_%s_short\" % t]\nids += [\"au_p_%d\" % p for p in sorted(prices)]\nids += [\"au_n_\" + norm(n) for n in names]\nprint(\"\\n\".join(ids))\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import com.cricketsim.audio.LocalGameServices\n",
+      "replace": "import com.cricketsim.audio.AuctionVoice\nimport com.cricketsim.audio.LocalGameServices\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "import com.cricketsim.logic.IplAuction\n",
+      "replace": "import com.cricketsim.logic.AuctionPlayer\nimport com.cricketsim.logic.IplAuction\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    val hammer = remember { Hammer() }\n    DisposableEffect(Unit) {\n        onDispose {\n            auctioneer.shutdown()\n            hammer.release()\n        }\n    }\n",
+      "replace": "    val hammer = remember { Hammer() }\n    val voice = remember { AuctionVoice(context) }\n    DisposableEffect(Unit) {\n        onDispose {\n            auctioneer.shutdown()\n            hammer.release()\n            voice.stop()\n        }\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    val speak: (String) -> Unit = { text -> auctioneer.say(text) }\n",
+      "replace": "    val speak: (String) -> Unit = { text -> auctioneer.say(text) }\n\n    // A call is a run of recorded clips (name, team, price ...) in the auctioneer's own voice. If any\n    // clip is not in the pack, the whole call is spoken by the phone's voice instead.\n    val slug: (String) -> String = { s -> s.lowercase().filter { it in 'a'..'z' } }\n    val teamKey: (String) -> String = { id -> id.removePrefix(\"ipl_\") }\n    val roleClip: (AuctionPlayer) -> String = { p ->\n        \"au_r_\" + when (IplAuction.group(p)) {\n            \"WK\" -> \"wicketkeeper\"\n            \"AL\" -> \"allrounder\"\n            \"FA\" -> \"fast\"\n            \"SP\" -> \"spin\"\n            else -> \"batter\"\n        }\n    }\n    val call: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips)) speak(fallback) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "            speak(\n                \"Next up: ${p.player.name}, ${IplAuction.roleText(p)} from ${IplAuction.countryName(p.country)}. \" +\n                    \"Base price ${IplAuction.priceText(p.baseLakhs)}.\"\n            )",
+      "replace": "            call(\n                listOf(\n                    \"au_x_nextup\", \"au_n_\" + slug(p.player.name), roleClip(p), \"au_c_\" + p.country.lowercase(),\n                    \"au_x_baseprice\", \"au_p_${p.baseLakhs}\"\n                ),\n                \"Next up: ${p.player.name}, ${IplAuction.roleText(p)} from ${IplAuction.countryName(p.country)}. \" +\n                    \"Base price ${IplAuction.priceText(p.baseLakhs)}.\"\n            )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        val before = lot?.log?.size ?: 0\n        lot = n\n        val fresh = n.log.drop(before).takeLast(3)\n        if (fresh.isNotEmpty()) speak(fresh.joinToString(\" \"))",
+      "replace": "        val old = lot\n        lot = n\n        val leaderNow = n.leaderId\n        if (leaderNow != null && n.bidLakhs > 0 && (old?.bidLakhs != n.bidLakhs || old?.leaderId != leaderNow)) {\n            call(\n                listOf(\"au_t_${teamKey(leaderNow)}_short\", \"au_x_bid\", \"au_p_${n.bidLakhs}\"),\n                \"${IplData.shortName(leaderNow)} bid ${IplAuction.priceText(n.bidLakhs)}.\"\n            )\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        speak(\"Going once.\")\n",
+      "replace": "        call(listOf(\"au_x_goingonce\"), \"Going once.\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        speak(\"Going twice.\")\n",
+      "replace": "        call(listOf(\"au_x_goingtwice\"), \"Going twice.\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                speak(\"Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.\")\n            } else {\n                speak(\"No bids. $name goes unsold.\")",
+      "replace": "                call(\n                    listOf(\"au_x_sold\", \"au_n_\" + slug(name), \"au_x_to\", \"au_t_${teamKey(leader)}_full\", \"au_x_for\", \"au_p_${l.bidLakhs}\"),\n                    \"Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}.\"\n                )\n            } else {\n                call(listOf(\"au_x_nobids\", \"au_n_\" + slug(name), \"au_x_goesunsold\"), \"No bids. $name goes unsold.\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "echo\necho \"== Downloading and trimming national anthems ==\"",
+      "replace": "echo\necho \"== Downloading the IPL auctioneer's calls ==\"\n# The clip list comes from tools/auction_clip_ids.py (player names, prices, teams, phrases), worked out\n# from the game's own source; each is a short ElevenLabs recording in the auctioneer's British voice on\n# the web app, at /_cdn/auction/<id>.mp3, and is stored in the pack as <id>.mp3.\nauction_count=0\nif command -v python3 >/dev/null 2>&1 && [ -f tools/auction_clip_ids.py ]; then\n  for id in $(python3 tools/auction_clip_ids.py); do\n    auction_count=$((auction_count + 1))\n    fetch \"$BASE_URL/_cdn/auction/$id.mp3\" \"$SCRATCH_DIR/$id.mp3\"\n  done\n  echo \"Auctioneer clips listed: $auction_count\"\nelse\n  echo \"python3 or tools/auction_clip_ids.py not found; skipping the auctioneer's calls.\"\nfi\n\necho\necho \"== Downloading and trimming national anthems ==\"",
+      "count": 1
+    }
+  ]
+}
