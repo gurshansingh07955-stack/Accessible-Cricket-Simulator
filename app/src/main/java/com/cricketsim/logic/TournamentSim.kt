@@ -341,9 +341,10 @@ object CplSimulator {
     fun xiProblem(xi: Team, tags: Map<String, SquadTag>): String? {
         val overseas = xi.players.count { tags[it.id] == SquadTag.OVERSEAS }
         if (overseas > MAX_OVERSEAS) {
-            return "Your XI has $overseas overseas players. The CPL allows at most $MAX_OVERSEAS. Please change your team."
+            return "Your XI has $overseas overseas players. The rules allow at most $MAX_OVERSEAS. Please change your team."
         }
-        if (xi.players.none { tags[it.id] == SquadTag.BREAKOUT }) {
+        // The breakout-player rule belongs to the CPL: it applies only when the squads have breakout players.
+        if (tags.containsValue(SquadTag.BREAKOUT) && xi.players.none { tags[it.id] == SquadTag.BREAKOUT }) {
             return "Your XI needs at least one breakout player. Please change your team."
         }
         return null
@@ -401,6 +402,15 @@ object CplSimulator {
         if (series != null) {
             val team = CplData.shortName(series.teamId)
             parts.add("Player of the series: ${series.name}, $team, with ${series.runs} runs and ${series.wickets} wickets.")
+        }
+        // The IPL also crowns the Orange Cap (most runs) and the Purple Cap (most wickets).
+        if (state.tournamentId == IplSeason.TOURNAMENT_ID && champion(state) != null) {
+            IplSeason.orangeCap(state.playerStats.values)?.let {
+                parts.add("Orange Cap: ${it.name}, ${CplData.shortName(it.teamId)}, with ${it.runs} runs.")
+            }
+            IplSeason.purpleCap(state.playerStats.values)?.let {
+                parts.add("Purple Cap: ${it.name}, ${CplData.shortName(it.teamId)}, with ${it.wickets} wickets.")
+            }
         }
         return if (parts.isEmpty()) null else parts.joinToString(" ")
     }
@@ -463,7 +473,7 @@ object CplSimulator {
     fun run(state: TournamentState, mode: SimMode, random: Random): TournamentState {
         var s = state
         var guard = 0
-        while (guard < 60) {
+        while (guard < 250) { // a 74-match season needs more than the CPL's 39
             guard++
             val next = nextFixture(s) ?: break
             if (mode == SimMode.UNTIL_MINE && involves(next, s.userTeamId)) break

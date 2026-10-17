@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.CplData
+import com.cricketsim.logic.IplSeason
 import com.cricketsim.logic.CplSimulator
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.PlayerRole
@@ -121,9 +122,16 @@ private sealed interface TPage {
 @Composable
 fun TournamentFlow(onExit: () -> Unit) {
     val context = LocalContext.current
-    val store = remember { TournamentSaveStore(context) }
-    // A tournament match saves itself part-way into its OWN slot, so the normal Resume match is never touched.
-    val matchStore = remember { MatchSaveStore(context, "saved_tournament_match.json") }
+    // Two tournaments share this whole flow: the CPL and the IPL season. Each has its own saved
+    // tournament and its own part-played-match slot, so neither can touch the other (or the normal Resume match).
+    var kind by remember { mutableStateOf("cpl") } // "cpl" or "ipl"
+    var iplSeason by remember { mutableStateOf(false) } // is there a saved IPL season?
+    val cplStore = remember { TournamentSaveStore(context) }
+    val iplStore = remember { TournamentSaveStore(context, "saved_tournament_ipl2027.json") }
+    val cplMatchStore = remember { MatchSaveStore(context, "saved_tournament_match.json") }
+    val iplMatchStore = remember { MatchSaveStore(context, "saved_ipl_match.json") }
+    val store = if (kind == "ipl") iplStore else cplStore
+    val matchStore = if (kind == "ipl") iplMatchStore else cplMatchStore
     val scope = rememberCoroutineScope()
     val built = remember { CplData.buildTeams() }
 
@@ -165,7 +173,8 @@ fun TournamentFlow(onExit: () -> Unit) {
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) { iplSeason = iplStore.load() != null }
+    LaunchedEffect(kind) {
         val tournament = store.load()
         saved = tournament
         // A saved match counts only if there is a tournament it belongs to.
@@ -188,7 +197,48 @@ fun TournamentFlow(onExit: () -> Unit) {
             BackHandler(onBack = back)
             LeaguesPage(hasSaved = saved != null, onCpl = { page = TPage.Cpl }, onIpl = { page = TPage.Ipl }, onBack = back)
         }
-        is TPage.Ipl -> IplFlow(onExit = { page = TPage.Leagues })
+        is TPage.Ipl -> IplFlow(
+            onExit = {
+                // Back to the league list: the CPL is the tournament in hand again.
+                if (kind != "cpl") {
+                    saved = null
+                    pendingMatch = null
+                    kind = "cpl"
+                }
+                page = TPage.Leagues
+            },
+            seasonSaved = iplSeason,
+            onStartSeason = { auction ->
+                val season = IplSeason.newTournament(auction, Random.Default)
+                scope.launch {
+                    iplStore.save(season)
+                    iplMatchStore.clear()
+                    iplSeason = true
+                    saved = season
+                    pendingMatch = null
+                    kind = "ipl"
+                    page = TPage.Hub
+                }
+            },
+            onOpenSeason = {
+                scope.launch {
+                    val season = iplStore.load()
+                    if (season != null) {
+                        saved = season
+                        pendingMatch = null
+                        kind = "ipl"
+                        page = TPage.Hub
+                    }
+                }
+            },
+            onDeleteSeason = {
+                scope.launch {
+                    iplStore.delete()
+                    iplMatchStore.clear()
+                    iplSeason = false
+                }
+            }
+        )
         is TPage.Cpl -> {
             val back = { page = TPage.Leagues }
             BackHandler(onBack = back)
@@ -255,7 +305,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             if (team != null) SquadPage(team = team, tags = built.second, onBack = back) else back()
         }
         is TPage.Hub -> {
-            val back = { page = TPage.Cpl }
+            val back = { page = if (kind == "ipl") TPage.Ipl else TPage.Cpl }
             BackHandler(onBack = back)
             val state = saved
             if (state != null) {
@@ -492,7 +542,7 @@ private fun LeaguesPage(hasSaved: Boolean, onCpl: () -> Unit, onIpl: () -> Unit,
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
                 title = "IPL",
-                description = "Indian Premier League: build your own team in a full player auction.",
+                description = "Indian Premier League: build your own team in a full player auction, then play the 74-match season.",
                 enabled = true,
                 onClick = onIpl
             )
@@ -659,6 +709,12 @@ private fun CelebrationScreen(state: TournamentState, onContinue: () -> Unit) {
         "Player of the series: ${series.name}, ${CplData.shortName(series.teamId)}, with ${series.runs} runs and ${series.wickets} wickets." +
             if (series.teamId == state.userTeamId) " One of your own players!" else ""
     } else ""
+    // The IPL also gives the Orange Cap (most runs) and the Purple Cap (most wickets).
+    val isIpl = state.tournamentId == IplSeason.TOURNAMENT_ID
+    val orange = if (isIpl) IplSeason.orangeCap(state.playerStats.values) else null
+    val purple = if (isIpl) IplSeason.purpleCap(state.playerStats.values) else null
+    val orangeLine = if (orange != null) "Orange Cap, most runs: ${orange.name}, ${CplData.shortName(orange.teamId)}, with ${orange.runs} runs." else ""
+    val purpleLine = if (purple != null) "Purple Cap, most wickets: ${purple.name}, ${CplData.shortName(purple.teamId)}, with ${purple.wickets} wickets." else ""
     val services = LocalGameServices.current
     BackHandler(onBack = onContinue)
 
@@ -676,6 +732,12 @@ private fun CelebrationScreen(state: TournamentState, onContinue: () -> Unit) {
             delay(600)
             while (sound?.isCommentaryBusy() == true) delay(300)
             services?.announceSpoken(seriesLine)
+        }
+        val capsSpoken = listOf(orangeLine, purpleLine).filter { it.isNotEmpty() }.joinToString(" ")
+        if (capsSpoken.isNotEmpty()) {
+            delay(1500)
+            while (sound?.isCommentaryBusy() == true) delay(300)
+            services?.announceSpoken(capsSpoken)
         }
     }
 
@@ -712,6 +774,14 @@ private fun CelebrationScreen(state: TournamentState, onContinue: () -> Unit) {
             if (seriesLine.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(text = seriesLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)
+            }
+            if (orangeLine.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = orangeLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)
+            }
+            if (purpleLine.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = purpleLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)
             }
         }
         Spacer(modifier = Modifier.height(20.dp))
@@ -969,7 +1039,7 @@ private fun TableTab(state: TournamentState) {
 @Composable
 private fun VenuesTab(state: TournamentState) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(CplData.stadiums, key = { it.id }) { s ->
+        items(if (state.tournamentId == IplSeason.TOURNAMENT_ID) IplSeason.stadiums else CplData.stadiums, key = { it.id }) { s ->
             val homeOf = state.teams.filter { CplData.homeStadiumId(it.id) == s.id }.joinToString(", ") { it.name }
             val matches = state.fixtures.count { it.stadiumId == s.id }
             Column(
@@ -1005,7 +1075,11 @@ private fun StatsTab(state: TournamentState) {
         if (scope == 0) all.filter { it.teamId == state.userTeamId } else all.toList()
     }
     val categories = remember(stats) {
-        CplData.statCategories(stats, teamNameOf = { id -> CplData.shortName(id) })
+        CplData.statCategories(
+            stats,
+            teamNameOf = { id -> CplData.shortName(id) },
+            caps = state.tournamentId == IplSeason.TOURNAMENT_ID
+        )
     }
     Column(modifier = Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = scope) {

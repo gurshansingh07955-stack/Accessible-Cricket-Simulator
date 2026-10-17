@@ -156,7 +156,7 @@ object CplData {
         ).mapNotNull { StadiumData.getStadiumById(it) } + BRIAN_LARA
     }
 
-    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }
+    fun stadium(id: String): Stadium? = stadiums.find { it.id == id } ?: IplSeason.stadium(id)
 
     /** Grounds that are nobody's home: a few league matches are played there, as the real CPL tours. */
     private val NEUTRAL_VENUES = listOf("arnos-vale-st-vincent", "queens-park-oval", "national-stadium-grenada")
@@ -238,9 +238,10 @@ object CplData {
         )
     }
 
-    fun shortName(teamId: String): String = DEFS.find { it.id == teamId }?.shortName ?: teamId
+    fun shortName(teamId: String): String = DEFS.find { it.id == teamId }?.shortName ?: IplData.shortName(teamId)
 
-    fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId ?: "kensington-oval"
+    fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId
+        ?: if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else "kensington-oval"
 
     private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }
 
@@ -413,14 +414,14 @@ object CplData {
     private fun twoDecimals(x: Double): String = String.format(java.util.Locale.US, "%.2f", x)
 
     /** Leaders for the Stats tab, from whichever players are passed in ("my team" or "all"). */
-    fun statCategories(stats: Collection<PlayerStats>, teamNameOf: (String) -> String, top: Int = 5): List<StatCategory> {
+    fun statCategories(stats: Collection<PlayerStats>, teamNameOf: (String) -> String, top: Int = 5, caps: Boolean = false): List<StatCategory> {
         fun entries(list: List<PlayerStats>, value: (PlayerStats) -> String): List<LeaderEntry> =
             list.take(top).map { LeaderEntry(it.name, teamNameOf(it.teamId), value(it)) }
 
         val batters = stats.filter { it.innings > 0 }
         val bowlers = stats.filter { it.ballsBowled > 0 }
         return listOf(
-            StatCategory("Most runs", entries(
+            StatCategory(if (caps) "Orange Cap: most runs" else "Most runs", entries(
                 batters.filter { it.runs > 0 }.sortedWith(compareByDescending<PlayerStats> { it.runs }.thenBy { it.balls })
             ) {
                 val outs = it.innings - it.notOuts
@@ -444,7 +445,7 @@ object CplData {
             StatCategory("Best strike rate (30 balls or more)", entries(
                 batters.filter { it.balls >= 30 }.sortedByDescending { it.runs * 100.0 / it.balls }
             ) { twoDecimals(it.runs * 100.0 / it.balls) }),
-            StatCategory("Most wickets", entries(
+            StatCategory(if (caps) "Purple Cap: most wickets" else "Most wickets", entries(
                 bowlers.filter { it.wickets > 0 }.sortedWith(compareByDescending<PlayerStats> { it.wickets }.thenBy { it.runsConceded })
             ) { "${it.wickets} wickets" }),
             StatCategory("Most five-wicket hauls", entries(

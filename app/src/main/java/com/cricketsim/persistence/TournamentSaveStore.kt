@@ -18,9 +18,9 @@ import java.io.File
  * Same approach as MatchSaveStore. Bump CplData.SAVE_VERSION if a saved class changes shape in a
  * way a default value cannot cover.
  */
-class TournamentSaveStore(context: Context) {
+class TournamentSaveStore(context: Context, fileName: String = "saved_tournament_cpl2026.json") {
 
-    private val file = File(context.applicationContext.filesDir, "saved_tournament_cpl2026.json")
+    private val file = File(context.applicationContext.filesDir, fileName)
     private val lock = Mutex()
     private val gson = Gson()
 

@@ -180,7 +180,14 @@ private sealed interface IPage {
 }
 
 @Composable
-fun IplFlow(onExit: () -> Unit) {
+fun IplFlow(
+    onExit: () -> Unit,
+    /** Is there a saved IPL season (played with the auctioned squads)? */
+    seasonSaved: Boolean = false,
+    onStartSeason: (IplAuctionState) -> Unit = {},
+    onOpenSeason: () -> Unit = {},
+    onDeleteSeason: () -> Unit = {}
+) {
     val context = LocalContext.current
     val store = remember { IplSaveStore(context) }
     val scope = rememberCoroutineScope()
@@ -355,6 +362,12 @@ fun IplFlow(onExit: () -> Unit) {
                     }
                 },
                 onDelete = { confirmDelete = true },
+                seasonSaved = seasonSaved,
+                onSeason = {
+                    val s = auction
+                    if (seasonSaved) onOpenSeason() else if (s != null) onStartSeason(s)
+                },
+                onDeleteSeason = onDeleteSeason,
                 onBack = onExit
             )
             if (confirmDelete) {
@@ -474,7 +487,9 @@ fun IplFlow(onExit: () -> Unit) {
                         page = IPage.Squads
                     },
                     onShare = { shareTeam(context, s) },
-                    onCopy = { copyTeam(context, s) }
+                    onCopy = { copyTeam(context, s) },
+                    seasonSaved = seasonSaved,
+                    onSeason = { if (seasonSaved) onOpenSeason() else onStartSeason(s) }
                 )
             } else back()
         }
@@ -524,13 +539,17 @@ private fun IplMenuPage(
     onNew: () -> Unit,
     onResume: () -> Unit,
     onDelete: () -> Unit,
+    seasonSaved: Boolean,
+    onSeason: () -> Unit,
+    onDeleteSeason: () -> Unit,
     onBack: () -> Unit
 ) {
+    var confirmSeasonDelete by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Title("IPL")
         Spacer(modifier = Modifier.height(16.dp))
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            OptionRow("IPL 2027", "Coming soon.", enabled = false, onClick = {})
+            OptionRow("IPL 2027", "Run the auction, then play the full 74-match season with your squad.", enabled = false, onClick = {})
             Spacer(modifier = Modifier.height(12.dp))
             if (!loaded) {
                 Text("Looking for a saved auction...", style = MaterialTheme.typography.bodyLarge)
@@ -548,6 +567,18 @@ private fun IplMenuPage(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Delete saved auction") }
+                if (saved.finished) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = onSeason, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (seasonSaved) "Resume the IPL season" else "Start the IPL season")
+                    }
+                    if (seasonSaved) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(onClick = { confirmSeasonDelete = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Delete the IPL season")
+                        }
+                    }
+                }
             } else {
                 OptionRow(
                     "Build your own team",
@@ -559,6 +590,20 @@ private fun IplMenuPage(
         }
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
+        if (confirmSeasonDelete) {
+            AlertDialog(
+                onDismissRequest = { confirmSeasonDelete = false },
+                title = { Text("Delete the IPL season?") },
+                text = { Text("Your saved IPL season, with its results and stats, will be removed. The auction stays. This cannot be undone.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmSeasonDelete = false
+                        onDeleteSeason()
+                    }) { Text("Delete season") }
+                },
+                dismissButton = { TextButton(onClick = { confirmSeasonDelete = false }) { Text("Keep it") } }
+            )
+        }
     }
 }
 
@@ -722,7 +767,9 @@ private fun IplSummaryPage(
     onBack: () -> Unit,
     onSquads: () -> Unit,
     onShare: () -> Unit,
-    onCopy: () -> Unit
+    onCopy: () -> Unit,
+    seasonSaved: Boolean,
+    onSeason: () -> Unit
 ) {
     val mine = state.squads[state.userTeamId].orEmpty().mapNotNull { IplAuction.playerOf(state, it) }
     Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
@@ -740,6 +787,10 @@ private fun IplSummaryPage(
         Button(onClick = onShare, modifier = Modifier.fillMaxWidth()) { Text("Share my team") }
         Spacer(modifier = Modifier.height(6.dp))
         OutlinedButton(onClick = onCopy, modifier = Modifier.fillMaxWidth()) { Text("Copy my team") }
+        Spacer(modifier = Modifier.height(6.dp))
+        Button(onClick = onSeason, modifier = Modifier.fillMaxWidth()) {
+            Text(if (seasonSaved) "Resume the IPL season" else "Start the IPL season")
+        }
         Spacer(modifier = Modifier.height(10.dp))
         LazyColumn(modifier = Modifier.weight(1f)) {
             item {
