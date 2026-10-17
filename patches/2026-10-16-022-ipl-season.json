@@ -1,0 +1,196 @@
+{
+  "name": "ipl-season",
+  "message": "IPL season: 10 teams from the auction, real format (70 league matches + play-offs), real grounds, Orange and Purple Caps",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/IplSeason.kt",
+    "contains": "object IplSeason"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/IplSeason.kt",
+      "mustNotExist": true,
+      "content": "package com.cricketsim.logic\n\nimport kotlin.random.Random\n\n/**\n * The IPL season, played with the squads built in the IPL auction (IplAuction).\n *\n * It reuses the CPL tournament machinery as it is (TournamentState, CplSimulator, the Matches / Table /\n * Venues / Stats tabs, saving, scorecards, Player of the Match, the celebration). What is IPL-only is here:\n *\n *  - THE FORMAT, as the real IPL: ten teams in two groups of five. Every team plays the four others\n *    in its group twice, its \"rival\" in the other group twice and the other four once: 14 matches each,\n *    70 league matches in all. The top four go to the play-offs: Qualifier 1 (1st v 2nd), the Eliminator\n *    (3rd v 4th), Qualifier 2 and the Final. 74 matches. The order of play is different every season.\n *  - THE GROUNDS of the real IPL: each team plays at home (seven home matches each), Punjab also at\n *    Dharamshala, Delhi also at Visakhapatnam and Rajasthan also at Guwahati, as in recent seasons. The\n *    play-offs are at Mullanpur and Ahmedabad. Mullanpur is the only ground the game did not have.\n *  - THE CAPS: the Orange Cap (most runs) and the Purple Cap (most wickets).\n *\n * The squads are copied from the auction (nobody is recreated). Overseas players are tagged so the\n * \"at most four overseas in the XI\" rule applies; there is no breakout-player rule in the IPL.\n */\nobject IplSeason {\n\n    const val TOURNAMENT_ID = \"ipl2027\"\n    const val TOURNAMENT_NAME = \"IPL 2027\"\n\n    private const val NEW_PCA = \"new-pca-mullanpur\"\n    private const val FINAL_GROUND = \"narendra-modi-ahmedabad\"\n\n    /** The one IPL ground the game did not have (Punjab Kings' home since 2024). */\n    private val NEW_PCA_STADIUM = Stadium(\n        id = NEW_PCA, name = \"Maharaja Yadavindra Singh Stadium\", city = \"New Chandigarh, Mullanpur\", country = \"India\",\n        homeTeamIds = listOf(\"ipl_pbks\"),\n        pitchType = PitchType.BALANCED, pitchDescription = \"A fair surface with some bounce; batters score freely once set, and the spinners get a little help.\",\n        boundarySize = BoundarySize.MEDIUM, altitudeM = 320, dewFactor = 0.4,\n        avgT20FirstInningsScore = 172,\n        climate = StadiumClimate(0.1, 40, 33, 14, \"Hot and dry, with a low chance of rain.\")\n    )\n\n    private val VENUE_IDS = listOf(\n        \"chepauk\", \"wankhede\", \"eden-gardens\", \"chinnaswamy\", \"uppal\", FINAL_GROUND, \"arun-jaitley\",\n        \"sawai-mansingh-jaipur\", \"ekana-lucknow\", NEW_PCA, \"hpca-dharamsala\", \"barsapara-guwahati\", \"aca-vdca-vizag\"\n    )\n\n    /** Every ground of the real IPL. */\n    val stadiums: List<Stadium> by lazy {\n        VENUE_IDS.mapNotNull { id -> if (id == NEW_PCA) NEW_PCA_STADIUM else StadiumData.getStadiumById(id) }\n    }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    /** A team's main ground (Punjab now play at Mullanpur, not Mohali). */\n    fun homeStadiumId(teamId: String): String =\n        if (teamId == \"ipl_pbks\") NEW_PCA else IplData.team(teamId)?.homeStadiumId ?: \"wankhede\"\n\n    // ---- Format -------------------------------------------------------------------------------\n\n    private val GROUP_A = listOf(\"ipl_mi\", \"ipl_kkr\", \"ipl_rr\", \"ipl_dc\", \"ipl_lsg\")\n    private val GROUP_B = listOf(\"ipl_csk\", \"ipl_rcb\", \"ipl_pbks\", \"ipl_gt\", \"ipl_srh\")\n    private val RIVALS = listOf(\n        \"ipl_mi\" to \"ipl_csk\", \"ipl_kkr\" to \"ipl_rcb\", \"ipl_rr\" to \"ipl_pbks\", \"ipl_dc\" to \"ipl_gt\", \"ipl_lsg\" to \"ipl_srh\"\n    )\n\n    /** A second ground for some teams' home matches: team, ground, how many of the seven home matches. */\n    private val SECOND_GROUNDS = listOf(\n        Triple(\"ipl_pbks\", \"hpca-dharamsala\", 3),\n        Triple(\"ipl_dc\", \"aca-vdca-vizag\", 2),\n        Triple(\"ipl_rr\", \"barsapara-guwahati\", 2)\n    )\n\n    /** All 70 league matches as home-to-away pairs. */\n    private fun buildPairs(random: Random): List<Pair<String, String>> {\n        val pairs = ArrayList<Pair<String, String>>()\n        val homes = HashMap<String, Int>()\n        fun add(home: String, away: String) {\n            pairs.add(home to away)\n            homes[home] = (homes[home] ?: 0) + 1\n        }\n        // The four others in the group: home and away.\n        for (group in listOf(GROUP_A, GROUP_B)) {\n            for (i in group.indices) for (j in i + 1 until group.size) {\n                add(group[i], group[j])\n                add(group[j], group[i])\n            }\n        }\n        // The rival in the other group: home and away.\n        for ((a, b) in RIVALS) {\n            add(a, b)\n            add(b, a)\n        }\n        // The other four in the other group: once. The home side goes to whoever has had fewer home matches.\n        val cross = ArrayList<Pair<String, String>>()\n        for (a in GROUP_A) for (b in GROUP_B) {\n            if (RIVALS.none { (x, y) -> (x == a && y == b) || (x == b && y == a) }) cross.add(a to b)\n        }\n        for ((a, b) in cross.shuffled(random)) {\n            val ha = homes[a] ?: 0\n            val hb = homes[b] ?: 0\n            if (ha < hb || (ha == hb && random.nextBoolean())) add(a, b) else add(b, a)\n        }\n        return pairs\n    }\n\n    /**\n     * 70 league matches in a random order that keeps teams from playing back to back and finishes\n     * every team's fixtures at about the same time, then the four play-off matches.\n     */\n    fun buildSchedule(random: Random): List<TournamentFixture> {\n        val remaining = buildPairs(random).shuffled(random).toMutableList()\n        val left = HashMap<String, Int>()\n        for ((a, b) in remaining) {\n            left[a] = (left[a] ?: 0) + 1\n            left[b] = (left[b] ?: 0) + 1\n        }\n        val ordered = ArrayList<Pair<String, String>>()\n        var last: Pair<String, String>? = null\n        while (remaining.isNotEmpty()) {\n            val previous = last\n            val fresh = remaining.filter {\n                previous == null || (it.first != previous.first && it.first != previous.second &&\n                    it.second != previous.first && it.second != previous.second)\n            }\n            val pool = if (fresh.isEmpty()) remaining else fresh\n            val pick = pool.maxByOrNull { (left[it.first] ?: 0) + (left[it.second] ?: 0) + random.nextDouble() * 1.5 } ?: break\n            remaining.remove(pick)\n            left[pick.first] = (left[pick.first] ?: 1) - 1\n            left[pick.second] = (left[pick.second] ?: 1) - 1\n            ordered.add(pick)\n            last = pick\n        }\n        val venues = ordered.map { homeStadiumId(it.first) }.toMutableList()\n        for ((team, ground, count) in SECOND_GROUNDS) {\n            ordered.indices.filter { ordered[it].first == team }.shuffled(random).take(count).forEach { venues[it] = ground }\n        }\n        val fixtures = ArrayList<TournamentFixture>()\n        ordered.forEachIndexed { index, pair ->\n            fixtures.add(TournamentFixture(index, index + 1, CplData.LEAGUE, pair.first, pair.second, venues[index]))\n        }\n        var next = fixtures.size\n        fun playoff(stage: String, note: String, ground: String) {\n            fixtures.add(TournamentFixture(next, next + 1, stage, null, null, ground, placeholder = note))\n            next++\n        }\n        playoff(\"Qualifier 1\", \"1st v 2nd in the table\", NEW_PCA)\n        playoff(\"Eliminator\", \"3rd v 4th in the table\", NEW_PCA)\n        playoff(\"Qualifier 2\", \"Loser of Qualifier 1 v winner of the Eliminator\", FINAL_GROUND)\n        playoff(\"Final\", \"Winners of Qualifier 1 and Qualifier 2\", FINAL_GROUND)\n        return fixtures\n    }\n\n    // ---- Teams from the auction ---------------------------------------------------------------\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** The ten squads exactly as the auction ended, and who is overseas. */\n    fun buildTeams(auction: IplAuctionState): Pair<List<Team>, Map<String, SquadTag>> {\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = IplData.TEAMS.map { info ->\n            val bought = auction.squads[info.id].orEmpty().mapNotNull { IplAuction.playerOf(auction, it) }\n            val players = bought.mapIndexed { index, ap ->\n                val id = \"${info.id}_${index + 1}\"\n                tags[id] = if (ap.overseas) SquadTag.OVERSEAS else SquadTag.DOMESTIC\n                ap.player.copy(id = id, teamId = info.id)\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = info.id, name = info.name, countryCode = info.id.removePrefix(\"ipl_\").uppercase(),\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Pair(teams, tags)\n    }\n\n    fun newTournament(auction: IplAuctionState, random: Random): TournamentState {\n        val built = buildTeams(auction)\n        return TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = auction.userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(random),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n    }\n\n    // ---- The caps -----------------------------------------------------------------------------\n\n    /** Orange Cap: the most runs (fewer balls faced wins a tie). */\n    fun orangeCap(stats: Collection<PlayerStats>): PlayerStats? =\n        stats.filter { it.runs > 0 }.maxWithOrNull(compareBy<PlayerStats>({ it.runs }, { -it.balls }))\n\n    /** Purple Cap: the most wickets (fewer runs conceded wins a tie). */\n    fun purpleCap(stats: Collection<PlayerStats>): PlayerStats? =\n        stats.filter { it.wickets > 0 }.maxWithOrNull(compareBy<PlayerStats>({ it.wickets }, { -it.runsConceded }))\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "    fun shortName(teamId: String): String = DEFS.find { it.id == teamId }?.shortName ?: teamId\n",
+      "replace": "    fun shortName(teamId: String): String = DEFS.find { it.id == teamId }?.shortName ?: IplData.shortName(teamId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "    fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId ?: \"kensington-oval\"\n",
+      "replace": "    fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId\n        ?: if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else \"kensington-oval\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n",
+      "replace": "    fun stadium(id: String): Stadium? = stadiums.find { it.id == id } ?: IplSeason.stadium(id)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "    fun statCategories(stats: Collection<PlayerStats>, teamNameOf: (String) -> String, top: Int = 5): List<StatCategory> {\n",
+      "replace": "    fun statCategories(stats: Collection<PlayerStats>, teamNameOf: (String) -> String, top: Int = 5, caps: Boolean = false): List<StatCategory> {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "            StatCategory(\"Most runs\", entries(\n",
+      "replace": "            StatCategory(if (caps) \"Orange Cap: most runs\" else \"Most runs\", entries(\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "            StatCategory(\"Most wickets\", entries(\n",
+      "replace": "            StatCategory(if (caps) \"Purple Cap: most wickets\" else \"Most wickets\", entries(\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        while (guard < 60) {\n",
+      "replace": "        while (guard < 250) { // a 74-match season needs more than the CPL's 39\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            return \"Your XI has $overseas overseas players. The CPL allows at most $MAX_OVERSEAS. Please change your team.\"\n        }\n        if (xi.players.none { tags[it.id] == SquadTag.BREAKOUT }) {",
+      "replace": "            return \"Your XI has $overseas overseas players. The rules allow at most $MAX_OVERSEAS. Please change your team.\"\n        }\n        // The breakout-player rule belongs to the CPL: it applies only when the squads have breakout players.\n        if (tags.containsValue(SquadTag.BREAKOUT) && xi.players.none { tags[it.id] == SquadTag.BREAKOUT }) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            parts.add(\"Player of the series: ${series.name}, $team, with ${series.runs} runs and ${series.wickets} wickets.\")\n        }\n        return if (parts.isEmpty()) null else parts.joinToString(\" \")",
+      "replace": "            parts.add(\"Player of the series: ${series.name}, $team, with ${series.runs} runs and ${series.wickets} wickets.\")\n        }\n        // The IPL also crowns the Orange Cap (most runs) and the Purple Cap (most wickets).\n        if (state.tournamentId == IplSeason.TOURNAMENT_ID && champion(state) != null) {\n            IplSeason.orangeCap(state.playerStats.values)?.let {\n                parts.add(\"Orange Cap: ${it.name}, ${CplData.shortName(it.teamId)}, with ${it.runs} runs.\")\n            }\n            IplSeason.purpleCap(state.playerStats.values)?.let {\n                parts.add(\"Purple Cap: ${it.name}, ${CplData.shortName(it.teamId)}, with ${it.wickets} wickets.\")\n            }\n        }\n        return if (parts.isEmpty()) null else parts.joinToString(\" \")"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/TournamentSaveStore.kt",
+      "find": "class TournamentSaveStore(context: Context) {\n\n    private val file = File(context.applicationContext.filesDir, \"saved_tournament_cpl2026.json\")\n",
+      "replace": "class TournamentSaveStore(context: Context, fileName: String = \"saved_tournament_cpl2026.json\") {\n\n    private val file = File(context.applicationContext.filesDir, fileName)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.CplData\n",
+      "replace": "import com.cricketsim.logic.CplData\nimport com.cricketsim.logic.IplSeason\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val store = remember { TournamentSaveStore(context) }\n    // A tournament match saves itself part-way into its OWN slot, so the normal Resume match is never touched.\n    val matchStore = remember { MatchSaveStore(context, \"saved_tournament_match.json\") }\n",
+      "replace": "    // Two tournaments share this whole flow: the CPL and the IPL season. Each has its own saved\n    // tournament and its own part-played-match slot, so neither can touch the other (or the normal Resume match).\n    var kind by remember { mutableStateOf(\"cpl\") } // \"cpl\" or \"ipl\"\n    var iplSeason by remember { mutableStateOf(false) } // is there a saved IPL season?\n    val cplStore = remember { TournamentSaveStore(context) }\n    val iplStore = remember { TournamentSaveStore(context, \"saved_tournament_ipl2027.json\") }\n    val cplMatchStore = remember { MatchSaveStore(context, \"saved_tournament_match.json\") }\n    val iplMatchStore = remember { MatchSaveStore(context, \"saved_ipl_match.json\") }\n    val store = if (kind == \"ipl\") iplStore else cplStore\n    val matchStore = if (kind == \"ipl\") iplMatchStore else cplMatchStore\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    LaunchedEffect(Unit) {\n        val tournament = store.load()\n",
+      "replace": "    LaunchedEffect(Unit) { iplSeason = iplStore.load() != null }\n    LaunchedEffect(kind) {\n        val tournament = store.load()\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        is TPage.Ipl -> IplFlow(onExit = { page = TPage.Leagues })\n",
+      "replace": "        is TPage.Ipl -> IplFlow(\n            onExit = {\n                // Back to the league list: the CPL is the tournament in hand again.\n                if (kind != \"cpl\") {\n                    saved = null\n                    pendingMatch = null\n                    kind = \"cpl\"\n                }\n                page = TPage.Leagues\n            },\n            seasonSaved = iplSeason,\n            onStartSeason = { auction ->\n                val season = IplSeason.newTournament(auction, Random.Default)\n                scope.launch {\n                    iplStore.save(season)\n                    iplMatchStore.clear()\n                    iplSeason = true\n                    saved = season\n                    pendingMatch = null\n                    kind = \"ipl\"\n                    page = TPage.Hub\n                }\n            },\n            onOpenSeason = {\n                scope.launch {\n                    val season = iplStore.load()\n                    if (season != null) {\n                        saved = season\n                        pendingMatch = null\n                        kind = \"ipl\"\n                        page = TPage.Hub\n                    }\n                }\n            },\n            onDeleteSeason = {\n                scope.launch {\n                    iplStore.delete()\n                    iplMatchStore.clear()\n                    iplSeason = false\n                }\n            }\n        )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        is TPage.Hub -> {\n            val back = { page = TPage.Cpl }\n",
+      "replace": "        is TPage.Hub -> {\n            val back = { page = if (kind == \"ipl\") TPage.Ipl else TPage.Cpl }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"Indian Premier League: build your own team in a full player auction.\"",
+      "replace": "\"Indian Premier League: build your own team in a full player auction, then play the 74-match season.\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val services = LocalGameServices.current\n    BackHandler(onBack = onContinue)\n",
+      "replace": "    // The IPL also gives the Orange Cap (most runs) and the Purple Cap (most wickets).\n    val isIpl = state.tournamentId == IplSeason.TOURNAMENT_ID\n    val orange = if (isIpl) IplSeason.orangeCap(state.playerStats.values) else null\n    val purple = if (isIpl) IplSeason.purpleCap(state.playerStats.values) else null\n    val orangeLine = if (orange != null) \"Orange Cap, most runs: ${orange.name}, ${CplData.shortName(orange.teamId)}, with ${orange.runs} runs.\" else \"\"\n    val purpleLine = if (purple != null) \"Purple Cap, most wickets: ${purple.name}, ${CplData.shortName(purple.teamId)}, with ${purple.wickets} wickets.\" else \"\"\n    val services = LocalGameServices.current\n    BackHandler(onBack = onContinue)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            services?.announceSpoken(seriesLine)\n        }\n    }\n",
+      "replace": "            services?.announceSpoken(seriesLine)\n        }\n        val capsSpoken = listOf(orangeLine, purpleLine).filter { it.isNotEmpty() }.joinToString(\" \")\n        if (capsSpoken.isNotEmpty()) {\n            delay(1500)\n            while (sound?.isCommentaryBusy() == true) delay(300)\n            services?.announceSpoken(capsSpoken)\n        }\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            if (seriesLine.isNotEmpty()) {\n                Spacer(modifier = Modifier.height(12.dp))\n                Text(text = seriesLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)\n            }\n",
+      "replace": "            if (seriesLine.isNotEmpty()) {\n                Spacer(modifier = Modifier.height(12.dp))\n                Text(text = seriesLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)\n            }\n            if (orangeLine.isNotEmpty()) {\n                Spacer(modifier = Modifier.height(12.dp))\n                Text(text = orangeLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)\n            }\n            if (purpleLine.isNotEmpty()) {\n                Spacer(modifier = Modifier.height(12.dp))\n                Text(text = purpleLine, style = MaterialTheme.typography.bodyLarge, color = colors.onPrimaryContainer)\n            }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        items(CplData.stadiums, key = { it.id }) { s ->\n",
+      "replace": "        items(if (state.tournamentId == IplSeason.TOURNAMENT_ID) IplSeason.stadiums else CplData.stadiums, key = { it.id }) { s ->\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        CplData.statCategories(stats, teamNameOf = { id -> CplData.shortName(id) })\n",
+      "replace": "        CplData.statCategories(\n            stats,\n            teamNameOf = { id -> CplData.shortName(id) },\n            caps = state.tournamentId == IplSeason.TOURNAMENT_ID\n        )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "fun IplFlow(onExit: () -> Unit) {\n",
+      "replace": "fun IplFlow(\n    onExit: () -> Unit,\n    /** Is there a saved IPL season (played with the auctioned squads)? */\n    seasonSaved: Boolean = false,\n    onStartSeason: (IplAuctionState) -> Unit = {},\n    onOpenSeason: () -> Unit = {},\n    onDeleteSeason: () -> Unit = {}\n) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                onDelete = { confirmDelete = true },\n                onBack = onExit\n            )\n",
+      "replace": "                onDelete = { confirmDelete = true },\n                seasonSaved = seasonSaved,\n                onSeason = {\n                    val s = auction\n                    if (seasonSaved) onOpenSeason() else if (s != null) onStartSeason(s)\n                },\n                onDeleteSeason = onDeleteSeason,\n                onBack = onExit\n            )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    onDelete: () -> Unit,\n    onBack: () -> Unit\n) {\n    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {\n        Title(\"IPL\")",
+      "replace": "    onDelete: () -> Unit,\n    seasonSaved: Boolean,\n    onSeason: () -> Unit,\n    onDeleteSeason: () -> Unit,\n    onBack: () -> Unit\n) {\n    var confirmSeasonDelete by remember { mutableStateOf(false) }\n    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {\n        Title(\"IPL\")"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "OptionRow(\"IPL 2027\", \"Coming soon.\", enabled = false, onClick = {})",
+      "replace": "OptionRow(\"IPL 2027\", \"Run the auction, then play the full 74-match season with your squad.\", enabled = false, onClick = {})"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text(\"Delete saved auction\") }\n",
+      "replace": "                OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text(\"Delete saved auction\") }\n                if (saved.finished) {\n                    Spacer(modifier = Modifier.height(8.dp))\n                    Button(onClick = onSeason, modifier = Modifier.fillMaxWidth()) {\n                        Text(if (seasonSaved) \"Resume the IPL season\" else \"Start the IPL season\")\n                    }\n                    if (seasonSaved) {\n                        Spacer(modifier = Modifier.height(8.dp))\n                        OutlinedButton(onClick = { confirmSeasonDelete = true }, modifier = Modifier.fillMaxWidth()) {\n                            Text(\"Delete the IPL season\")\n                        }\n                    }\n                }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(\"Back\") }\n    }\n}\n\n@Composable\nprivate fun IplTeamSelectPage(",
+      "replace": "        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(\"Back\") }\n        if (confirmSeasonDelete) {\n            AlertDialog(\n                onDismissRequest = { confirmSeasonDelete = false },\n                title = { Text(\"Delete the IPL season?\") },\n                text = { Text(\"Your saved IPL season, with its results and stats, will be removed. The auction stays. This cannot be undone.\") },\n                confirmButton = {\n                    TextButton(onClick = {\n                        confirmSeasonDelete = false\n                        onDeleteSeason()\n                    }) { Text(\"Delete season\") }\n                },\n                dismissButton = { TextButton(onClick = { confirmSeasonDelete = false }) { Text(\"Keep it\") } }\n            )\n        }\n    }\n}\n\n@Composable\nprivate fun IplTeamSelectPage("
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "                    onShare = { shareTeam(context, s) },\n                    onCopy = { copyTeam(context, s) }\n                )\n",
+      "replace": "                    onShare = { shareTeam(context, s) },\n                    onCopy = { copyTeam(context, s) },\n                    seasonSaved = seasonSaved,\n                    onSeason = { if (seasonSaved) onOpenSeason() else onStartSeason(s) }\n                )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    onShare: () -> Unit,\n    onCopy: () -> Unit\n) {\n",
+      "replace": "    onShare: () -> Unit,\n    onCopy: () -> Unit,\n    seasonSaved: Boolean,\n    onSeason: () -> Unit\n) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "        OutlinedButton(onClick = onCopy, modifier = Modifier.fillMaxWidth()) { Text(\"Copy my team\") }\n",
+      "replace": "        OutlinedButton(onClick = onCopy, modifier = Modifier.fillMaxWidth()) { Text(\"Copy my team\") }\n        Spacer(modifier = Modifier.height(6.dp))\n        Button(onClick = onSeason, modifier = Modifier.fillMaxWidth()) {\n            Text(if (seasonSaved) \"Resume the IPL season\" else \"Start the IPL season\")\n        }\n"
+    }
+  ]
+}
