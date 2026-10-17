@@ -523,7 +523,8 @@ object BattingSystem {
                 // compatibility table. This is what makes a Pull Shot
                 // to a full ball a near-certain beating or dismissal.
                 // Left unchanged by this rebalance.
-                multiplyKey(probs, OutcomeProbs::wicket, 17.0)
+                // 17 before the balanced engine; 12 now (a wrong shot is still the worst thing a batter can do).
+                multiplyKey(probs, OutcomeProbs::wicket, if (MatchEngine.BALANCED_ENGINE) 12.0 else 17.0)
                 multiplyKey(probs, OutcomeProbs::dot, 3.5)
                 multiplyKey(probs, OutcomeProbs::one, 0.04)
                 multiplyKey(probs, OutcomeProbs::two, 0.04)
@@ -550,8 +551,9 @@ object BattingSystem {
      * for turning a block into a boundary.
      */
     private fun applyDefensiveShotCap(probs: OutcomeProbs) {
-        multiplyKey(probs, OutcomeProbs::six, 0.01)
-        multiplyKey(probs, OutcomeProbs::four, 0.04)
+        // Balanced engine: a forward or backward defence went for four about 1 ball in 140; now about 1 in 500.
+        multiplyKey(probs, OutcomeProbs::six, if (MatchEngine.BALANCED_ENGINE) 0.002 else 0.01)
+        multiplyKey(probs, OutcomeProbs::four, if (MatchEngine.BALANCED_ENGINE) 0.015 else 0.04)
         multiplyKey(probs, OutcomeProbs::three, 0.08)
         multiplyKey(probs, OutcomeProbs::two, 0.3)
         multiplyKey(probs, OutcomeProbs::one, 1.05)
@@ -709,8 +711,11 @@ object BattingSystem {
         probs: OutcomeProbs,
         decision: BattingDecision,
         actualLength: CompatibleLength,
-        bowlingStyle: BowlingStyle
+        bowlingStyle: BowlingStyle,
+        ballTier: BowlingQualityTier? = null
     ): OutcomeProbs {
+        // Snapshot before the batting layers, so a good delivery can fight back (see applyBallContest).
+        val beforeBatting = if (MatchEngine.BALANCED_ENGINE && ballTier != null) probs.copy() else null
         applyFootworkMatch(probs, computeFootworkMatch(decision.footwork, actualLength))
         applyShotCompatibility(probs, computeShotCompatibility(decision.shot, actualLength, bowlingStyle), decision.shot)
         applyShotCharacter(probs, decision.shot)
@@ -718,6 +723,9 @@ object BattingSystem {
             applyIntentDirection(probs, decision.intent, actualLength, bowlingStyle)
         }
         applyTimingTier(probs, decision.timingTier)
+        if (beforeBatting != null && ballTier != null) {
+            applyBallContest(probs, beforeBatting, ballTier)
+        }
         // Final override for a defensive shot — see
         // applyDefensiveShotCap()'s doc comment for why this has to run
         // LAST, after every other layer (including bowling quality and
@@ -749,6 +757,54 @@ object BattingSystem {
         BowlingLength.HALF_VOLLEY, BowlingLength.GOOD_LENGTH, BowlingLength.BACK_OF_LENGTH, BowlingLength.SHORT,
         MisExecutedLength.LONG_HOP, BowlingLength.BOUNCER
     )
+
+    /**
+     * How hard the delivery's quality fights back. The batting layers (footwork, shot fit, intent, timing)
+     * stack up multipliers that cut the wicket chance to a few percent and double the boundaries, and
+     * nothing in them depended on how good the ball was: a perfect ball met by a perfect shot went for four
+     * or six 41% of the time, barely different from a very bad ball (twin: tools/difficulty_twin.js).
+     * Now, for each key the batting side has IMPROVED (more fours, sixes, dots; fewer wickets), only a
+     * fraction of the improvement survives against a good ball: the improvement ratio is raised to a
+     * power below 1 (a perfect ball keeps about 15% of the exponent for boundaries). Against a bad ball
+     * (power around 1) the batter keeps all of it. Changes in the batter's disfavour (a wrong shot) are untouched.
+     * CONTEST_STRENGTH 0 would switch the effect off, higher is stricter.
+     */
+    private const val CONTEST_STRENGTH = 1.75
+
+    private fun contestScale(base: Double): Double = maxOf(0.15, 1.0 - (1.0 - base) * CONTEST_STRENGTH)
+
+    private fun boostScale(tier: BowlingQualityTier): Double = contestScale(
+        when (tier) {
+            BowlingQualityTier.PERFECT -> 0.5
+            BowlingQualityTier.IDEAL -> 0.62
+            BowlingQualityTier.GOOD -> 0.8
+            BowlingQualityTier.BAD -> 0.95
+            BowlingQualityTier.VERY_BAD -> 1.05
+        }
+    )
+
+    private fun protectScale(tier: BowlingQualityTier): Double = contestScale(
+        when (tier) {
+            BowlingQualityTier.PERFECT -> 0.6
+            BowlingQualityTier.IDEAL -> 0.72
+            BowlingQualityTier.GOOD -> 0.88
+            BowlingQualityTier.BAD -> 1.0
+            BowlingQualityTier.VERY_BAD -> 1.05
+        }
+    )
+
+    private fun tempered(before: Double, after: Double, scale: Double): Double =
+        if (after > before && before > 0.0) before * Math.pow(after / before, scale) else after
+
+    private fun applyBallContest(probs: OutcomeProbs, before: OutcomeProbs, tier: BowlingQualityTier) {
+        val boost = boostScale(tier)
+        probs.four = tempered(before.four, probs.four, boost)
+        probs.six = tempered(before.six, probs.six, boost)
+        probs.dot = tempered(before.dot, probs.dot, boost)
+        if (probs.wicket < before.wicket && before.wicket > 0.0) {
+            probs.wicket = before.wicket * Math.pow(probs.wicket / before.wicket, protectScale(tier))
+        }
+    }
 
     /**
      * Every non-defensive named shot that reaches the given
@@ -834,12 +890,12 @@ object BattingSystem {
 
         // --- What the batter THINKS the length is. He used to see the real length every time and so
         // almost always picked the perfect shot (the "Excellent" tier cuts a wicket chance by 78%).
-        // Now he misjudges some balls (15% for a top batter, up to 45% for a weak one) and reads a
+        // Now he misjudges some balls (20% for a top batter, up to 45% for a weak one) and reads a
         // neighbouring length: wrong footwork, a shot that does not suit the ball. The real length
         // still decides what the ball does (see applyBattingDecisionToProbabilities).
-        val lengthMisreadChance = (maxOf(0.15, (100 - batsman.battingRating) / 100.0 * 0.35 + 0.075)).coerceAtMost(0.45)
+        val lengthMisreadChance = (maxOf(0.20, (100 - batsman.battingRating) / 100.0 * 0.35 + 0.10)).coerceAtMost(0.45)
         val perceivedLength: CompatibleLength =
-            if (MatchEngine.BALANCED_USER_BOWLING && Random.nextDouble() < lengthMisreadChance && actualLength in LENGTH_FEEL) {
+            if (MatchEngine.BALANCED_ENGINE && Random.nextDouble() < lengthMisreadChance && actualLength in LENGTH_FEEL) {
                 val at = LENGTH_FEEL.indexOf(actualLength)
                 LENGTH_FEEL[(at + if (Random.nextBoolean()) -1 else 1).coerceIn(0, LENGTH_FEEL.size - 1)]
             } else {
@@ -962,7 +1018,15 @@ object BattingSystem {
         // rate. Negative bias (pulling back, protecting wickets) very
         // slightly loosens focus too, mirroring the existing footwork
         // pressurePenalty above.
-        val timingScore = (32 + batsman.battingRating * 0.48 + bias * 10 + (Random.nextDouble() * 84 - 42)).coerceIn(0.0, 100.0)
+        // Balanced engine: the timing luck is a triangular spread (extremes rarer) around a slightly lower
+        // base, so a top batter is no longer near-certain to time everything.
+        val timingScore = (
+            if (MatchEngine.BALANCED_ENGINE) {
+                26 + batsman.battingRating * 0.48 + bias * 10 + (Random.nextDouble() + Random.nextDouble() - 1.0) * 42
+            } else {
+                32 + batsman.battingRating * 0.48 + bias * 10 + (Random.nextDouble() * 84 - 42)
+            }
+            ).coerceIn(0.0, 100.0)
         val timingTier = BowlingSystem.qualityTierFromScore(timingScore)
         // Representative delta fraction for this tier — used only for
         // display/debug parity with a real gesture's BattingDecision,

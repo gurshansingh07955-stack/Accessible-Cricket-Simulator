@@ -60,28 +60,39 @@ object MatchEngine {
      * recomputing this fixed value.
      */
     fun getFormatOvers(format: MatchFormat): Int = FORMAT_OVERS.getValue(format)
-
     /**
-     * Master switch for the bowling-balance fix (set to false to get the old behaviour back exactly).
+     * Master switch for the engine-balance fixes (false = the original rules, exactly).
+     * Measurements: DIFFICULTY_NOTES.md and tools/difficulty_twin.js (a twin of this engine; run it with node).
      *
-     * Why it exists: measured on a twin of this engine (tools/difficulty_twin.js), a T20 innings against
-     * the USER'S bowling gave the computer side ~245 runs for ~3.4 wickets on Medium, ~1.9 wickets on
-     * Hard and ~1 on Hardest. Three loopholes did that:
-     *  1. Difficulty was ADDED to the wicket chance (0.05 - 0.06 on Hardest = below zero, i.e. floored
-     *     at 0.1% a ball): on Hard/Hardest wickets almost stopped existing.
-     *  2. The computer batter saw the real length and the real quality of every ball before choosing
-     *     footwork and shot, and nearly always picked a shot rated "Excellent" for it (wicket chance x0.22,
-     *     boundaries x1.9). A real batter misreads some deliveries.
-     *  3. The batting side's multipliers (footwork 0.7 x shot 0.22 x timing 0.4 = 0.06) outweigh the
-     *     bowling side's best (about 2.4), so even a perfect ball was usually safe.
-     * Only the computer batter against the user's bowling changes; the user's batting, the computer's
-     * bowling and computer-v-computer matches (AiBallModel) are untouched.
+     * Before, in a T20 the computer batters made ~234 runs for ~3.5 wickets even against computer bowlers of
+     * their own level, and the user's difficulty setting made it worse. What this changes, for the user
+     * AND the computer alike:
+     *  1. Difficulty is multiplicative. It used to be ADDED, which on Hard/Hardest pushed the wicket chance
+     *     (user bowling) or the boundary chances (user batting) below zero, where they were floored at 0.1%:
+     *     no wickets for the bowler, no boundaries for the batter.
+     *  2. A good delivery fights back (BattingSystem.applyBallContest): the better the ball, the more of the
+     *     batting bonuses are cancelled. A perfect shot against a perfect ball used to be a boundary 41% of the
+     *     time; now it is about 14%.
+     *  3. Defensive shots almost never reach the boundary, and a plainly wrong shot is punished a little less.
+     *  4. The computer bowler's quality follows his rating (a 78 used to bowl 40% bad or very bad balls, now
+     *     about 20%); the computer batter misjudges some deliveries and mistimes some shots.
+     * Computer-v-computer matches in a tournament use AiBallModel and are untouched.
      */
-    const val BALANCED_USER_BOWLING = true
+    const val BALANCED_ENGINE = true
 
-    /** The computer batter is not a perfect batter: his wickets are more likely, his boundaries fewer. */
-    private const val AI_BATTER_WICKET_FACTOR = 1.9
-    private const val AI_BATTER_BOUNDARY_FACTOR = 0.6
+    private fun difficultyWicketFactor(d: Difficulty): Double = when (d) {
+        Difficulty.EASY -> 1.25
+        Difficulty.MEDIUM -> 1.0
+        Difficulty.HARD -> 0.8
+        Difficulty.HARDEST -> 0.62
+    }
+
+    private fun difficultyBoundaryFactor(d: Difficulty): Double = when (d) {
+        Difficulty.EASY -> 0.9
+        Difficulty.MEDIUM -> 1.0
+        Difficulty.HARD -> 1.12
+        Difficulty.HARDEST -> 1.25
+    }
 
     private fun bumpProb(probs: OutcomeProbs, key: KMutableProperty1<OutcomeProbs, Double>, factor: Double) {
         key.set(probs, maxOf(0.001, key.get(probs) * factor))
@@ -350,13 +361,21 @@ object MatchEngine {
         // If modifier is positive (User advantage): Increase runs, decrease wickets.
         // If modifier is negative (User disadvantage): Decrease runs, increase wickets.
         if (isUserBatting) {
-            probs.four += difficultyModifier * 0.5
-            probs.six += difficultyModifier * 0.3
-            probs.wicket -= difficultyModifier * 0.3
+            if (BALANCED_ENGINE) {
+                // The same scale as the user-bowling side below, inverted: what makes the bowler's job
+                // harder makes the batter's job harder by the same factor. Never reaches zero.
+                probs.wicket /= difficultyWicketFactor(difficulty)
+                probs.four /= difficultyBoundaryFactor(difficulty)
+                probs.six /= difficultyBoundaryFactor(difficulty)
+            } else {
+                probs.four += difficultyModifier * 0.5
+                probs.six += difficultyModifier * 0.3
+                probs.wicket -= difficultyModifier * 0.3
+            }
         } else {
             // User is bowling. Positive modifier means user advantage ->
             // opponent (batsman) scores less, gets out more.
-            if (BALANCED_USER_BOWLING) {
+            if (BALANCED_ENGINE) {
                 // Multiplicative, so no level can push the wicket chance to zero (the old additive
                 // version floored it at 0.1% on Hardest). Measured: roughly 7.5 / 6.6 / 5.7 / 4.7
                 // wickets a T20 innings for an average bowler on Easy / Medium / Hard / Hardest.
@@ -397,7 +416,8 @@ object MatchEngine {
         // A leave plays no shot, so none of the shot adjustments apply to it.
         if (battingDecision != null && battingDecision.shot != NamedShot.LEAVE) {
             BattingSystem.applyBattingDecisionToProbabilities(
-                probs, battingDecision, bowlingDecision.actualLength, bowlingDecision.bowlingStyle
+                probs, battingDecision, bowlingDecision.actualLength, bowlingDecision.bowlingStyle,
+                bowlingDecision.qualityTier
             )
             // Field placement layered on last — see
             // applyFieldPlacementToProbabilities' doc comment. Uses
@@ -407,12 +427,6 @@ object MatchEngine {
             fieldingCatchOpportunity = applyFieldPlacementToProbabilities(
                 probs, battingDecision, matchState.fieldPlacements, matchState.bowlingTeam.players
             )
-            // See BALANCED_USER_BOWLING: the computer batter against the user's bowling.
-            if (BALANCED_USER_BOWLING && !isUserBatting) {
-                probs.wicket *= AI_BATTER_WICKET_FACTOR
-                probs.four *= AI_BATTER_BOUNDARY_FACTOR
-                probs.six *= AI_BATTER_BOUNDARY_FACTOR
-            }
         }
 
         // The no-ball itself was decided up front, so it is not an outcome to sample; a

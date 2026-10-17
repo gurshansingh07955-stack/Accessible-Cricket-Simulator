@@ -649,10 +649,17 @@ object BowlingSystem {
         // no longer approaches certainty at either end. Randomness
         // widens when attacking (higher-variance, all-out effort) and
         // tightens when containing (a controlled, disciplined spell).
-        val baselineScore = 25 + bowler.bowlingRating * 0.45
+        // Balanced engine: the rating now matters. Before, 25 + rating*0.45 with a flat +/-48 spread made a
+        // 90-rated bowler bowl 34% bad or very bad balls and a 75 bowl 41%. Now the score is 13 + rating*0.70
+        // with a triangular spread (extremes rarer): about 20% bad or very bad at 78, 10% at 90, 40% at 60.
+        val baselineScore = if (MatchEngine.BALANCED_ENGINE) 13 + bowler.bowlingRating * 0.70 else 25 + bowler.bowlingRating * 0.45
         val randomSpread = 48 + attackFactor * 12 - containFactor * 10
-        val simulatedScore = (baselineScore + (Random.nextDouble() * randomSpread * 2 - randomSpread))
-            .coerceIn(0.0, 100.0)
+        val spreadRoll = if (MatchEngine.BALANCED_ENGINE) {
+            (Random.nextDouble() + Random.nextDouble() - 1.0) * randomSpread
+        } else {
+            Random.nextDouble() * randomSpread * 2 - randomSpread
+        }
+        val simulatedScore = (baselineScore + spreadRoll).coerceIn(0.0, 100.0)
         val tier = qualityTierFromScore(simulatedScore)
         val quality = QualityBreakdown(
             // No real drag path exists for an AI ball, so there's
