@@ -1,0 +1,16 @@
+{
+  "name": "user-sounds-folder",
+  "message": "Create the folder for your own sound files (tools/user_sounds)",
+  "alreadyAppliedIf": {
+    "file": "tools/user_sounds/README.md",
+    "contains": "Your own sound files"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "tools/user_sounds/README.md",
+      "mustNotExist": true,
+      "content": "# Your own sound files\n\nUpload your sound files here (GitHub: Add file > Upload files). Any common format works (mp3, wav, ogg, m4a): the\n\"Fetch audio into the app\" step converts them to mp3 and packs them into the app.\n\nTips\n- Short effects (under 5 seconds) are best. Normalise the loudness so they match each other.\n- Name each file after what it is, for example `bat_hit_1.mp3`, `stumps_hit.wav`, `four_crowd.mp3`.\n  Several files with the same name and a different number (`bat_hit_1`, `bat_hit_2`) can be played at random.\n- Then tell the assistant which game moment each sound is for.\n\nNothing in this folder is used until the next patch connects it to the game.\n"
+    }
+  ]
+}
