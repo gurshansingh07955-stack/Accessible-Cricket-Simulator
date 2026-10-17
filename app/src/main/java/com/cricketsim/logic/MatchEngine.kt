@@ -61,6 +61,28 @@ object MatchEngine {
      */
     fun getFormatOvers(format: MatchFormat): Int = FORMAT_OVERS.getValue(format)
 
+    /**
+     * Master switch for the bowling-balance fix (set to false to get the old behaviour back exactly).
+     *
+     * Why it exists: measured on a twin of this engine (tools/difficulty_twin.js), a T20 innings against
+     * the USER'S bowling gave the computer side ~245 runs for ~3.4 wickets on Medium, ~1.9 wickets on
+     * Hard and ~1 on Hardest. Three loopholes did that:
+     *  1. Difficulty was ADDED to the wicket chance (0.05 - 0.06 on Hardest = below zero, i.e. floored
+     *     at 0.1% a ball): on Hard/Hardest wickets almost stopped existing.
+     *  2. The computer batter saw the real length and the real quality of every ball before choosing
+     *     footwork and shot, and nearly always picked a shot rated "Excellent" for it (wicket chance x0.22,
+     *     boundaries x1.9). A real batter misreads some deliveries.
+     *  3. The batting side's multipliers (footwork 0.7 x shot 0.22 x timing 0.4 = 0.06) outweigh the
+     *     bowling side's best (about 2.4), so even a perfect ball was usually safe.
+     * Only the computer batter against the user's bowling changes; the user's batting, the computer's
+     * bowling and computer-v-computer matches (AiBallModel) are untouched.
+     */
+    const val BALANCED_USER_BOWLING = true
+
+    /** The computer batter is not a perfect batter: his wickets are more likely, his boundaries fewer. */
+    private const val AI_BATTER_WICKET_FACTOR = 1.9
+    private const val AI_BATTER_BOUNDARY_FACTOR = 0.6
+
     private fun bumpProb(probs: OutcomeProbs, key: KMutableProperty1<OutcomeProbs, Double>, factor: Double) {
         key.set(probs, maxOf(0.001, key.get(probs) * factor))
     }
@@ -334,9 +356,30 @@ object MatchEngine {
         } else {
             // User is bowling. Positive modifier means user advantage ->
             // opponent (batsman) scores less, gets out more.
-            probs.four -= difficultyModifier * 0.5
-            probs.six -= difficultyModifier * 0.3
-            probs.wicket += difficultyModifier * 0.3
+            if (BALANCED_USER_BOWLING) {
+                // Multiplicative, so no level can push the wicket chance to zero (the old additive
+                // version floored it at 0.1% on Hardest). Measured: roughly 7.5 / 6.6 / 5.7 / 4.7
+                // wickets a T20 innings for an average bowler on Easy / Medium / Hard / Hardest.
+                val wicketFactor = when (difficulty) {
+                    Difficulty.EASY -> 1.25
+                    Difficulty.MEDIUM -> 1.0
+                    Difficulty.HARD -> 0.8
+                    Difficulty.HARDEST -> 0.62
+                }
+                val boundaryFactor = when (difficulty) {
+                    Difficulty.EASY -> 0.9
+                    Difficulty.MEDIUM -> 1.0
+                    Difficulty.HARD -> 1.12
+                    Difficulty.HARDEST -> 1.25
+                }
+                probs.wicket *= wicketFactor
+                probs.four *= boundaryFactor
+                probs.six *= boundaryFactor
+            } else {
+                probs.four -= difficultyModifier * 0.5
+                probs.six -= difficultyModifier * 0.3
+                probs.wicket += difficultyModifier * 0.3
+            }
         }
 
         // Layer the bowling decision (line, actual length, variation,
@@ -364,6 +407,12 @@ object MatchEngine {
             fieldingCatchOpportunity = applyFieldPlacementToProbabilities(
                 probs, battingDecision, matchState.fieldPlacements, matchState.bowlingTeam.players
             )
+            // See BALANCED_USER_BOWLING: the computer batter against the user's bowling.
+            if (BALANCED_USER_BOWLING && !isUserBatting) {
+                probs.wicket *= AI_BATTER_WICKET_FACTOR
+                probs.four *= AI_BATTER_BOUNDARY_FACTOR
+                probs.six *= AI_BATTER_BOUNDARY_FACTOR
+            }
         }
 
         // The no-ball itself was decided up front, so it is not an outcome to sample; a

@@ -743,6 +743,13 @@ object BattingSystem {
 
     private val NON_DEFENSIVE_SHOTS: List<NamedShot> = SHOT_OPTIONS.filter { !it.isDefensive }.map { it.value }
 
+    /** Deliveries from fullest to shortest: a batter who misjudges a ball reads a NEIGHBOUR of its real length. */
+    private val LENGTH_FEEL: List<CompatibleLength> = listOf(
+        MisExecutedLength.FULL_TOSS, MisExecutedLength.LOW_FULL_TOSS, BowlingLength.YORKER, BowlingLength.FULL,
+        BowlingLength.HALF_VOLLEY, BowlingLength.GOOD_LENGTH, BowlingLength.BACK_OF_LENGTH, BowlingLength.SHORT,
+        MisExecutedLength.LONG_HOP, BowlingLength.BOUNCER
+    )
+
     /**
      * Every non-defensive named shot that reaches the given
      * compatibility tier against this actual length/bowling style —
@@ -825,9 +832,23 @@ object BattingSystem {
     ): BattingDecision {
         val bias = situationalAggressionBias.coerceIn(-1.0, 1.0)
 
-        // --- Footwork: react to the actual length, with rating-dependent accuracy ---
-        val isFullIsh = actualLength in FULL_ISH
-        val isShortIsh = actualLength in SHORT_ISH
+        // --- What the batter THINKS the length is. He used to see the real length every time and so
+        // almost always picked the perfect shot (the "Excellent" tier cuts a wicket chance by 78%).
+        // Now he misjudges some balls (15% for a top batter, up to 45% for a weak one) and reads a
+        // neighbouring length: wrong footwork, a shot that does not suit the ball. The real length
+        // still decides what the ball does (see applyBattingDecisionToProbabilities).
+        val lengthMisreadChance = (maxOf(0.15, (100 - batsman.battingRating) / 100.0 * 0.35 + 0.075)).coerceAtMost(0.45)
+        val perceivedLength: CompatibleLength =
+            if (MatchEngine.BALANCED_USER_BOWLING && Random.nextDouble() < lengthMisreadChance && actualLength in LENGTH_FEEL) {
+                val at = LENGTH_FEEL.indexOf(actualLength)
+                LENGTH_FEEL[(at + if (Random.nextBoolean()) -1 else 1).coerceIn(0, LENGTH_FEEL.size - 1)]
+            } else {
+                actualLength
+            }
+
+        // --- Footwork: react to the length he read, with rating-dependent accuracy ---
+        val isFullIsh = perceivedLength in FULL_ISH
+        val isShortIsh = perceivedLength in SHORT_ISH
         val idealFootwork = when {
             isFullIsh -> FootworkType.FRONT_FOOT
             isShortIsh -> FootworkType.BACK_FOOT
@@ -882,8 +903,8 @@ object BattingSystem {
             // then Good, then a safe generic fallback if neither tier
             // has any options for this particular length/style
             // combination.
-            val excellentOptions = shotsAtCompatibility(actualLength, bowlingStyle, ShotCompatibilityTier.EXCELLENT)
-            val goodOptions = shotsAtCompatibility(actualLength, bowlingStyle, ShotCompatibilityTier.GOOD)
+            val excellentOptions = shotsAtCompatibility(perceivedLength, bowlingStyle, ShotCompatibilityTier.EXCELLENT)
+            val goodOptions = shotsAtCompatibility(perceivedLength, bowlingStyle, ShotCompatibilityTier.GOOD)
             val sensiblePool = when {
                 excellentOptions.isNotEmpty() -> excellentOptions
                 goodOptions.isNotEmpty() -> goodOptions
