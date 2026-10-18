@@ -71,7 +71,24 @@ enum class RecordedAsset(val fileName: String, val path: String, val rawName: St
     DRINKS_BREAK("drinks_break_drinking.mp3", "/_cdn/sfx/drinks_break_drinking.mp3", "drinks_break_drinking"),
 
     // --- IPL auction: a real gavel (public domain), fetched and trimmed by tools/fetch_audio.sh ---
-    AUCTION_GAVEL("auction_gavel.mp3", "/_cdn/sfx/auction_gavel.mp3", "auction_gavel")
+    AUCTION_GAVEL("auction_gavel.mp3", "/_cdn/sfx/auction_gavel.mp3", "auction_gavel"),
+
+    // --- Your own sounds: tools/user_sounds/<name>.<any format>, packed by tools/fetch_audio.sh as us_<name>.mp3.
+    // They exist only in the pack (the path is a placeholder that is never downloaded), and every one is
+    // optional: if a file is missing the game uses the sound it used before. See USER_SOUNDS.md. ---
+    US_BACKGROUND_LOOP("us_background_loop.mp3", "/_cdn/user/us_background_loop.mp3", "us_background_loop"),
+    US_MAIN_MENU("us_mainmenu.mp3", "/_cdn/user/us_mainmenu.mp3", "us_mainmenu"),
+    US_BAT_SWING("us_bat_swing.mp3", "/_cdn/user/us_bat_swing.mp3", "us_bat_swing"),
+    US_BOWLER_STEPS("us_bowler_steps.mp3", "/_cdn/user/us_bowler_steps.mp3", "us_bowler_steps"),
+    US_BOWL_RELEASE("us_bowl_release.mp3", "/_cdn/user/us_bowl_release.mp3", "us_bowl_release"),
+    US_BOWLED("us_bowled.mp3", "/_cdn/user/us_bowled.mp3", "us_bowled"),
+    US_DEFENSIVE_SHOT("us_defensive_shot.mp3", "/_cdn/user/us_defensive_shot.mp3", "us_defensive_shot"),
+    US_EDGE_OF_BAT("us_edge_of_bat.mp3", "/_cdn/user/us_edge_of_bat.mp3", "us_edge_of_bat"),
+    US_FOUR_RUNS("us_four_runs.mp3", "/_cdn/user/us_four_runs.mp3", "us_four_runs"),
+    US_MENU_OPEN("us_menuopen.mp3", "/_cdn/user/us_menuopen.mp3", "us_menuopen"),
+    US_NOBALL("us_noball.mp3", "/_cdn/user/us_noball.mp3", "us_noball"),
+    US_RUNS_1_2_3("us_runs_1_2_3.mp3", "/_cdn/user/us_runs_1_2_3.mp3", "us_runs_1_2_3"),
+    US_SIX_RUNS("us_six_runs.mp3", "/_cdn/user/us_six_runs.mp3", "us_six_runs")
 }
 
 sealed interface AssetSource {

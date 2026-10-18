@@ -204,6 +204,17 @@ fun IplFlow(
     }
 
     var page by remember { mutableStateOf<IPage>(IPage.Menu) }
+    // The "menu open" sound for each IPL menu page (not the auction hall itself).
+    val menuSoundServices = LocalGameServices.current
+    LaunchedEffect(page::class) {
+        if (page is IPage.Hall) {
+            // The auctioneer speaks here: no music under him.
+            menuSoundServices?.sound?.stopMenuMusic()
+        } else {
+            menuSoundServices?.sound?.playMenuOpen()
+            menuSoundServices?.sound?.startMenuMusic()
+        }
+    }
     var auction by remember { mutableStateOf<IplAuctionState?>(null) }
     // Where the squads page was opened from (the hall or the results), so Back returns there.
     var squadsFrom by remember { mutableStateOf<IPage>(IPage.Hall) }

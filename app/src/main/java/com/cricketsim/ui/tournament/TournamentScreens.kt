@@ -136,6 +136,15 @@ fun TournamentFlow(onExit: () -> Unit) {
     val built = remember { CplData.buildTeams() }
 
     var page by remember { mutableStateOf<TPage>(TPage.Menu) }
+    // The "menu open" sound for each menu-type page (not the toss, the match, the celebration or the IPL
+    // pages, which play it themselves).
+    val menuSoundServices = LocalGameServices.current
+    LaunchedEffect(page::class) {
+        val opened = page
+        if (opened !is TPage.PlayMatch && opened !is TPage.Toss && opened !is TPage.Celebration && opened !is TPage.Ipl) {
+            menuSoundServices?.sound?.playMenuOpen()
+        }
+    }
     var saved by remember { mutableStateOf<TournamentState?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }

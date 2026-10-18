@@ -168,6 +168,17 @@ fun CricketSimApp() {
         }
     }
 
+    // The "menu open" sound, as a menu-type screen opens. (Not Home, the toss, the anthems or the match itself;
+    // the tournament plays it itself, page by page.)
+    val menuScreenKey = screen::class
+    LaunchedEffect(menuScreenKey) {
+        val opened = screen
+        val isMenu = opened is Screen.FormatSelection || opened is Screen.StadiumSelection ||
+            opened is Screen.TeamSelection || opened is Screen.PlayingXISelection ||
+            opened is Screen.Settings || opened is Screen.About
+        if (isMenu) services?.sound?.playMenuOpen()
+    }
+
     when (val current = screen) {
         is Screen.Home -> HomeScreen(
             savedMatchSummary = savedMatch?.summary(),

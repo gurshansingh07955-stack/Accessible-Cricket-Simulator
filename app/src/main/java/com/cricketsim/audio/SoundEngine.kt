@@ -183,6 +183,7 @@ class SoundEngine(context: Context) {
         val old = settings
         settings = new
         if (old.soundEffects && !new.soundEffects) {
+            stopMenuMusic()
             stopCrowdAmbience()
             stopRainAmbience()
             stopAimTone()
@@ -192,6 +193,7 @@ class SoundEngine(context: Context) {
             stopCommentary()
         }
         if (old.crowdVolume != new.crowdVolume) applyCrowdGain(0.3f)
+        if (old.musicVolume != new.musicVolume) musicRamp?.rampTo(musicTarget(), 0.3f)
     }
 
     /**
@@ -204,6 +206,7 @@ class SoundEngine(context: Context) {
             if (tickTrack == null) tickTrack = buildTrack(pcmFor(Fx.TICK), looping = false, lowLatency = true)
             if (accentTickTrack == null) accentTickTrack = buildTrack(pcmFor(Fx.TICK_ACCENT), looping = false, lowLatency = true)
             for (asset in ONE_SHOT_ASSETS) launch { loadOneShot(asset) }
+            if (USE_USER_SOUNDS) for (asset in USER_ONE_SHOTS) launch { loadOneShot(asset, allowDownload = false) }
             launch { AudioAssets.ensure(appContext, RecordedAsset.CROWD_BED) }
             launch { AudioAssets.ensure(appContext, RecordedAsset.RAIN) }
         }
@@ -219,6 +222,7 @@ class SoundEngine(context: Context) {
     fun onAppBackgrounded() {
         paused = true
         crowdChannel?.pause()
+        musicChannel?.pause()
         rainChannel?.pause()
         retiringChannels.toList().forEach { it.pause() }
         stopAimTone()
@@ -230,6 +234,7 @@ class SoundEngine(context: Context) {
     fun onAppForegrounded() {
         paused = false
         crowdChannel?.resume()
+        musicChannel?.resume()
         rainChannel?.resume()
     }
 
@@ -282,8 +287,9 @@ class SoundEngine(context: Context) {
         }
     }
 
-    private suspend fun loadOneShot(asset: RecordedAsset) {
-        val source = AudioAssets.ensure(appContext, asset) ?: return
+    /** allowDownload = false for your own sounds: they live only in the pack, so never go to the network for one. */
+    private suspend fun loadOneShot(asset: RecordedAsset, allowDownload: Boolean = true) {
+        val source = (if (allowDownload) AudioAssets.ensure(appContext, asset) else AudioAssets.find(appContext, asset)) ?: return
         val id = when (source) {
             is AssetSource.Raw -> soundPool.load(appContext, source.resId, 1)
             is AssetSource.Local -> soundPool.load(source.file.absolutePath, 1)
@@ -358,7 +364,26 @@ class SoundEngine(context: Context) {
 
     fun playBallDelivery() {
         if (!settings.soundEffects) return
-        playPcm(Fx.WHOOSH, MASTER)
+        // The bowler's run-up, as the delivery starts and the batter's choices open. The old whoosh if there is none.
+        if (!playRecorded(RecordedAsset.US_BOWLER_STEPS, USER_SOUND_GAIN)) playPcm(Fx.WHOOSH, MASTER)
+    }
+
+    /** The bat swinging, as the batter chooses his intent. */
+    fun playBatSwing() {
+        if (!settings.soundEffects) return
+        playRecorded(RecordedAsset.US_BAT_SWING, USER_SOUND_GAIN)
+    }
+
+    /** The ball leaving the bowler's hand: the moment the shot, its intent and its timing are all done. */
+    fun playBowlRelease() {
+        if (!settings.soundEffects) return
+        playRecorded(RecordedAsset.US_BOWL_RELEASE, USER_SOUND_GAIN)
+    }
+
+    /** A menu opening. */
+    fun playMenuOpen() {
+        if (!settings.soundEffects) return
+        playRecorded(RecordedAsset.US_MENU_OPEN, USER_SOUND_GAIN)
     }
 
     // True from the moment the no-ball siren sounds until the ball it was for has been
@@ -374,7 +399,8 @@ class SoundEngine(context: Context) {
     fun playNoBallSiren() {
         if (!settings.soundEffects) return
         sirenSounded = true
-        playPcm(Fx.SIREN, MASTER * 1.4f)
+        // Your no-ball recording and the old siren take turns at random (both are liked).
+        if (!(Math.random() < 0.5 && playRecorded(RecordedAsset.US_NOBALL, USER_SOUND_GAIN))) playPcm(Fx.SIREN, MASTER * 1.4f)
         duckFor(1700)
         vibrate(120, 80, 120)
     }
@@ -390,25 +416,37 @@ class SoundEngine(context: Context) {
     }
 
     /** The sound of what just happened on the ball, with the crowd's reaction. Web mapping, see the class comment. */
-    fun playOutcomeSounds(isWicket: Boolean, runs: Int, leftAlone: Boolean = false) {
+    fun playOutcomeSounds(
+        isWicket: Boolean,
+        runs: Int,
+        leftAlone: Boolean = false,
+        isEdge: Boolean = false,
+        stumpsHit: Boolean = false,
+        isWide: Boolean = false
+    ) {
         if (!settings.soundEffects) return
         when {
             isWicket -> {
-                playPcm(Fx.WICKET, MASTER)
+                // Bowled, stumped and run out use your "bowled" recording; caught and lbw keep the old wicket sound.
+                if (!(stumpsHit && playRecorded(RecordedAsset.US_BOWLED, USER_SOUND_GAIN))) playPcm(Fx.WICKET, MASTER)
                 crowdReact(CrowdEngine.Reaction.WICKET)
                 duckFor(300)
                 swellCrowd(2200)
                 schedule(800) { playCheer(big = true) }
             }
             runs == 6 -> {
-                playPcm(Fx.BOUNDARY, MASTER)
+                // A clean six has its own sound; a six off the edge plays the edge sound.
+                val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_SIX_RUNS
+                if (!playRecorded(ownSound, USER_SOUND_GAIN)) playPcm(Fx.BOUNDARY, MASTER)
                 crowdReact(CrowdEngine.Reaction.SIX)
                 duckFor(180)
                 swellCrowd(2400)
                 schedule(500) { playCheer(big = true) }
             }
             runs >= 4 -> {
-                playPcm(Fx.BOUNDARY, MASTER)
+                // A four that is not off the edge has its own sound; an edged four plays the edge sound.
+                val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_FOUR_RUNS
+                if (!playRecorded(ownSound, USER_SOUND_GAIN)) playPcm(Fx.BOUNDARY, MASTER)
                 crowdReact(CrowdEngine.Reaction.FOUR)
                 duckFor(180)
                 swellCrowd(2400)
@@ -419,8 +457,20 @@ class SoundEngine(context: Context) {
                 playPcm(Fx.GLOVES, MASTER)
                 duckFor(150)
             }
+            isWide -> {
+                // Nothing touched the ball: no bat sound.
+                duckFor(150)
+            }
             else -> {
-                if (!playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) playPcm(Fx.BAT_HIT, MASTER)
+                // An edge, a dot ball (defensive shot) or 1, 2 or 3 runs each have their own sound; the old bat hit if missing.
+                val ownSound = when {
+                    isEdge -> RecordedAsset.US_EDGE_OF_BAT
+                    runs == 0 -> RecordedAsset.US_DEFENSIVE_SHOT
+                    else -> RecordedAsset.US_RUNS_1_2_3
+                }
+                if (!playRecorded(ownSound, USER_SOUND_GAIN) && !playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) {
+                    playPcm(Fx.BAT_HIT, MASTER)
+                }
                 // A dot ball in a tense moment draws a group "ooh" now and then.
                 if (runs == 0 && tension > 0.55f && Math.random() < 0.3) crowdReact(CrowdEngine.Reaction.GASP)
                 duckFor(250)
@@ -587,7 +637,7 @@ class SoundEngine(context: Context) {
         override fun setRate(rate: Float) { runCatching { track.setPlaybackRate((baseRate * rate).toInt()) } }
     }
 
-    private class MediaLoop(private val player: MediaPlayer) : LoopChannel {
+    private class MediaLoop(private val player: MediaPlayer, private val allowRate: Boolean = true) : LoopChannel {
         private var prepared = false
         private var wantPlaying = false
 
@@ -614,7 +664,8 @@ class SoundEngine(context: Context) {
         override fun setRate(rate: Float) {
             // Setting a non-zero speed on a MediaPlayer also STARTS it, so
             // only touch it while it is genuinely playing.
-            if (prepared) runCatching {
+            // (A music loop keeps its tempo: allowRate = false.)
+            if (allowRate && prepared) runCatching {
                 if (player.isPlaying) player.playbackParams = player.playbackParams.setSpeed(rate)
             }
         }
@@ -675,6 +726,64 @@ class SoundEngine(context: Context) {
         return if (engine.start()) EngineLoop(engine) else null
     }
 
+    /** True while your background loop is the crowd channel: it has its own gain (see crowdTarget). */
+    private var backgroundLoopActive = false
+    private var backgroundLoopFailed = false
+
+    /**
+     * Your background loop (tools/user_sounds/background_loop), played as a plain looping track at its normal
+     * speed and volume-controlled by the "Background music volume" setting. Null if the file is not in the pack,
+     * so the old crowd plays; if it cannot be played the old crowd takes over (see backgroundLoopFailed).
+     */
+    private fun startBackgroundLoop(): LoopChannel? {
+        if (!USE_USER_SOUNDS || !USE_BACKGROUND_LOOP || backgroundLoopFailed) return null
+        val source = AudioAssets.find(appContext, RecordedAsset.US_BACKGROUND_LOOP) ?: return null
+        var channel: LoopChannel? = null
+        channel = mediaLoop(source, allowRate = false) {
+            scope.launch {
+                if (crowdChannel === channel) {
+                    backgroundLoopFailed = true
+                    stopCrowdNow()
+                    launchCrowd(useSynth = false)
+                }
+            }
+        }
+        backgroundLoopActive = channel != null
+        return channel
+    }
+
+    // --- The main-menu music (tools/user_sounds/mainmenu): plays wherever there is no crowd, i.e. in the menus,
+    // and fades out when the crowd starts (toss, anthems, a match) and back in when the crowd stops. ---
+    private var musicChannel: LoopChannel? = null
+    private var musicRamp: Ramper? = null
+
+    private fun musicTarget(): Float = MENU_MUSIC_GAIN * settings.musicVolume
+
+    fun startMenuMusic() {
+        if (!USE_USER_SOUNDS || !USE_MENU_MUSIC || !settings.soundEffects || musicChannel != null || crowdChannel != null) return
+        val source = AudioAssets.find(appContext, RecordedAsset.US_MAIN_MENU) ?: return
+        var channel: LoopChannel? = null
+        channel = mediaLoop(source, allowRate = false) {
+            scope.launch { if (musicChannel === channel) stopMenuMusic() }
+        }
+        val active = channel ?: return
+        val ramp = Ramper(scope) { active.setVolume(it) }
+        musicChannel = active
+        musicRamp = ramp
+        ramp.set(0f)
+        if (!paused) active.start()
+        ramp.rampTo(musicTarget(), 2f)
+    }
+
+    fun stopMenuMusic() {
+        val channel = musicChannel ?: return
+        val ramp = musicRamp
+        musicChannel = null
+        musicRamp = null
+        ramp?.rampTo(0f, 0.8f)
+        retire(channel, 900)
+    }
+
     /** Lets the live crowd react to something that just happened (no effect on the old recorded bed). */
     private fun crowdReact(reaction: CrowdEngine.Reaction) {
         (crowdChannel as? EngineLoop)?.engine?.react(reaction)
@@ -684,7 +793,7 @@ class SoundEngine(context: Context) {
     private fun synthLoop(fx: Fx): LoopChannel? =
         buildTrack(pcmFor(fx), looping = true, lowLatency = false)?.let { SynthLoop(it) }
 
-    private fun mediaLoop(source: AssetSource, onError: () -> Unit): LoopChannel? {
+    private fun mediaLoop(source: AssetSource, allowRate: Boolean = true, onError: () -> Unit): LoopChannel? {
         val player = MediaPlayer()
         return try {
             player.setAudioAttributes(effectAttributes)
@@ -697,7 +806,7 @@ class SoundEngine(context: Context) {
             }
             player.isLooping = true
             player.setVolume(0f, 0f)
-            val loop = MediaLoop(player)
+            val loop = MediaLoop(player, allowRate)
             player.setOnPreparedListener { loop.onPrepared() }
             player.setOnErrorListener { _, _, _ ->
                 onError()
@@ -772,6 +881,10 @@ class SoundEngine(context: Context) {
     private var swellJob: Job? = null
 
     private fun crowdTarget(): Float {
+        if (backgroundLoopActive) {
+            // The music loop: a steady level set by the slider, dipping under speech and the no-ball sound.
+            return BACKGROUND_LOOP_GAIN * settings.crowdVolume * (if (duckHolds > 0) BACKGROUND_DUCK_FACTOR else 1f)
+        }
         val inSwell = SystemClock.elapsedRealtime() < swellUntilMs
         val baseline = CROWD_BASE_GAIN_CALM + (CROWD_BASE_GAIN_TENSE - CROWD_BASE_GAIN_CALM) * tension
         val gain = if (inSwell) CROWD_SWELL_GAIN else baseline * (if (duckHolds > 0) CROWD_DUCK_FACTOR else 1f)
@@ -783,6 +896,7 @@ class SoundEngine(context: Context) {
     }
 
     fun startCrowdAmbience() {
+        stopMenuMusic() // the crowd takes over from the menu music
         if (!settings.soundEffects || crowdChannel != null) return
         launchCrowd(useSynth = false)
     }
@@ -793,7 +907,8 @@ class SoundEngine(context: Context) {
 
         // First choice: the live stereo crowd. The recording and the old synthesized bed
         // are kept as fallbacks for a phone that refuses a stereo stream.
-        val live = if (useSynth) null else (if (allowBed) startBedCrowd() else null) ?: startLiveCrowd()
+        backgroundLoopActive = false
+        val live = if (useSynth) null else (startBackgroundLoop() ?: (if (allowBed) startBedCrowd() else null) ?: startLiveCrowd())
         val source = if (useSynth || live != null) null else AudioAssets.find(appContext, RecordedAsset.CROWD_BED)
         var channel: LoopChannel? = null
         if (source != null) {
@@ -825,7 +940,11 @@ class SoundEngine(context: Context) {
     }
 
     fun stopCrowdAmbience() {
-        val channel = crowdChannel ?: return
+        // With no crowd to stop, make sure the menu music is playing (menus, setup screens, the tournament lists).
+        val channel = crowdChannel ?: run {
+            startMenuMusic()
+            return
+        }
         val ramp = crowdRamp
         crowdChannel = null
         crowdRamp = null
@@ -833,6 +952,7 @@ class SoundEngine(context: Context) {
         swellUntilMs = 0L
         ramp?.rampTo(0f, 1f)
         retire(channel, 1100)
+        startMenuMusic() // the crowd has gone: the menu music comes back
     }
 
     /** 0 = a decided, one-sided match; 1 = a nail-biter. Ramped slowly, like a crowd's mood. */
@@ -1418,6 +1538,41 @@ class SoundEngine(context: Context) {
             RecordedAsset.DRS_UMPIRES_CALL_AGAINST,
             RecordedAsset.DRINKS_BREAK,
             RecordedAsset.AUCTION_GAVEL
+        )
+
+        // --- Your own sounds (tools/user_sounds, see USER_SOUNDS.md) ---
+
+        /** Switch off to get every sound the game had before your own ones. */
+        const val USE_USER_SOUNDS = true
+
+        /** Switch off to get the old crowd back instead of your background_loop crowd sound. */
+        const val USE_BACKGROUND_LOOP = true
+
+        /** Switch off to have no main-menu music. */
+        const val USE_MENU_MUSIC = true
+
+        /** The main-menu music's full level at 100% on the "Background music volume" slider. */
+        const val MENU_MUSIC_GAIN = 0.7f
+
+        /** Loudness of your short sounds (the old effects are 0.5 x 0.9); lower it if they are louder than the rest. */
+        const val USER_SOUND_GAIN = 0.9f
+
+        /** The crowd loop's full level at 100% on the "Crowd volume" slider, and how far it dips under speech and the no-ball sound. */
+        const val BACKGROUND_LOOP_GAIN = 0.8f
+        const val BACKGROUND_DUCK_FACTOR = 0.3f
+
+        val USER_ONE_SHOTS = listOf(
+            RecordedAsset.US_BAT_SWING,
+            RecordedAsset.US_BOWLER_STEPS,
+            RecordedAsset.US_BOWL_RELEASE,
+            RecordedAsset.US_BOWLED,
+            RecordedAsset.US_DEFENSIVE_SHOT,
+            RecordedAsset.US_EDGE_OF_BAT,
+            RecordedAsset.US_FOUR_RUNS,
+            RecordedAsset.US_MENU_OPEN,
+            RecordedAsset.US_NOBALL,
+            RecordedAsset.US_RUNS_1_2_3,
+            RecordedAsset.US_SIX_RUNS
         )
     }
 }

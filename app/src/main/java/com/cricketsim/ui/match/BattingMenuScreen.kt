@@ -103,6 +103,7 @@ internal fun BatMenuStep(
         Column(modifier = Modifier.selectableGroup()) {
             listOf(IntentDirection.UP, IntentDirection.LEFT, IntentDirection.DOWN, IntentDirection.RIGHT).forEach { option ->
                 MenuRadioRow(BattingSystem.intentLabel(option), intent == option) {
+                    services?.sound?.playBatSwing()
                     intent = option
                     problem = null
                 }

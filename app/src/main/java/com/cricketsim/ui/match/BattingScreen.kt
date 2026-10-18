@@ -735,6 +735,7 @@ private fun BatIntentStep(shotName: String, onSelected: (IntentDirection) -> Uni
                     detectFourWayGesture { direction ->
                         if (!fired) {
                             fired = true
+                            currentServices?.sound?.playBatSwing()
                             currentServices?.announceSpoken(BattingSystem.intentLabel(direction))
                             currentOnSelected(direction)
                         }

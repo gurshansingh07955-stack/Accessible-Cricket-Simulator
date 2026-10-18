@@ -201,6 +201,37 @@ if command -v ffmpeg >/dev/null 2>&1; then
 fi
 echo "Auctioneer clips trimmed: $trimmed"
 
+echo
+echo "== Packing your own sounds from tools/user_sounds =="
+# Each file, in any format, becomes us_<name>.mp3 (the name lower-cased, spaces to underscores), so a name can
+# never clash with one of the game's own clips. mp3 files are copied as they are; anything else is converted.
+user_count=0
+if [ -d tools/user_sounds ]; then
+  for src in tools/user_sounds/*; do
+    [ -f "$src" ] || continue
+    user_file="$(basename "$src")"
+    case "$user_file" in README*|.*) continue ;; esac
+    user_name="$(echo "${user_file%.*}" | tr 'A-Z ' 'a-z_' | tr -cd 'a-z0-9_')"
+    user_dest="$SCRATCH_DIR/us_${user_name}.mp3"
+    case "${user_file##*.}" in
+      mp3|MP3)
+        if cp "$src" "$user_dest"; then user_count=$((user_count + 1)); fi
+        ;;
+      *)
+        if command -v ffmpeg >/dev/null 2>&1 \
+            && ffmpeg -nostdin -loglevel error -y -i "$src" -vn -ar 44100 -b:a 128k "$user_dest" \
+            && [ -s "$user_dest" ]; then
+          user_count=$((user_count + 1))
+        else
+          rm -f "$user_dest"
+          missing+=("us_${user_name}.mp3 (could not convert $user_file)")
+        fi
+        ;;
+    esac
+  done
+fi
+echo "Your own sounds packed: $user_count"
+
 fetched_files=$(find "$SCRATCH_DIR" -type f -name '*.mp3' | wc -l)
 if [ "$fetched_files" -eq 0 ]; then
   echo "Nothing was fetched: is $BASE_URL reachable? Leaving existing files untouched." >&2

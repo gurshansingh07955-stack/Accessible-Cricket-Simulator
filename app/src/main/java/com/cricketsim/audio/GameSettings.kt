@@ -32,6 +32,8 @@ data class GameSettings(
     // crowd ambience's own tension/duck/swell gain, so the crowd can be
     // turned down without touching the sound effects.
     val crowdVolume: Float = 0.7f,
+    // The main-menu music (your mainmenu sound), 0 to 1, independent of the crowd.
+    val musicVolume: Float = 0.6f,
     // Batting without gestures: footwork, shot and intent chosen from lists (see BatMenuStep).
     val menuBatting: Boolean = false,
     // "Face next ball" button (on = tap / long-press as before; off = the ball comes by itself after
@@ -52,6 +54,7 @@ class SettingsStore(context: Context) {
             spokenCommentary = prefs.getBoolean(KEY_SPOKEN_COMMENTARY, defaults.spokenCommentary),
             aiCommentaryMode = readEnum(KEY_AI_COMMENTARY, defaults.aiCommentaryMode),
             crowdVolume = prefs.getFloat(KEY_CROWD_VOLUME, defaults.crowdVolume).coerceIn(0f, 1f),
+            musicVolume = prefs.getFloat(KEY_MUSIC_VOLUME, defaults.musicVolume).coerceIn(0f, 1f),
             menuBatting = prefs.getBoolean(KEY_MENU_BATTING, defaults.menuBatting),
             faceNextBall = prefs.getBoolean(KEY_FACE_NEXT_BALL, defaults.faceNextBall),
             autoBowlSeconds = prefs.getInt(KEY_AUTO_BOWL_SECONDS, defaults.autoBowlSeconds).coerceIn(5, 30)
@@ -66,6 +69,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_SPOKEN_COMMENTARY, settings.spokenCommentary)
             .putString(KEY_AI_COMMENTARY, settings.aiCommentaryMode.name)
             .putFloat(KEY_CROWD_VOLUME, settings.crowdVolume)
+            .putFloat(KEY_MUSIC_VOLUME, settings.musicVolume)
             .putBoolean(KEY_MENU_BATTING, settings.menuBatting)
             .putBoolean(KEY_FACE_NEXT_BALL, settings.faceNextBall)
             .putInt(KEY_AUTO_BOWL_SECONDS, settings.autoBowlSeconds)
@@ -87,6 +91,7 @@ class SettingsStore(context: Context) {
         const val KEY_SPOKEN_COMMENTARY = "spoken_commentary"
         const val KEY_AI_COMMENTARY = "ai_commentary_mode"
         const val KEY_CROWD_VOLUME = "crowd_volume"
+        const val KEY_MUSIC_VOLUME = "music_volume"
         const val KEY_MENU_BATTING = "menu_batting"
         const val KEY_FACE_NEXT_BALL = "face_next_ball"
         const val KEY_AUTO_BOWL_SECONDS = "auto_bowl_seconds"

@@ -92,7 +92,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         SectionHeading("Sound and feel")
         SwitchRow(
             label = "Sound effects",
-            description = "Crowd, bat and ball, rain, and the timing ticks for batting and bowling.",
+            description = "Background music, crowd, bat and ball, rain, and the timing ticks for batting and bowling.",
             checked = settings.soundEffects,
             onChange = { on -> services.update { it.copy(soundEffects = on) } }
         )
@@ -120,6 +120,20 @@ fun SettingsScreen(onBack: () -> Unit) {
             modifier = Modifier.semantics {
                 contentDescription = "Crowd volume"
                 stateDescription = "$crowdPercent percent"
+            }
+        )
+
+        val musicPercent = (settings.musicVolume * 100).roundToInt()
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Background music volume: $musicPercent percent", style = MaterialTheme.typography.titleMedium)
+        Slider(
+            value = settings.musicVolume,
+            onValueChange = { value -> services.update { it.copy(musicVolume = value) } },
+            valueRange = 0f..1f,
+            steps = 9,
+            modifier = Modifier.semantics {
+                contentDescription = "Background music volume"
+                stateDescription = "$musicPercent percent"
             }
         )
 

@@ -102,6 +102,8 @@ class MatchAudioDirector(private val services: GameServices) {
         // sounded as the delivery was revealed (BattingScreen) and is not repeated. The flag is
         // taken for EVERY ball so one left over from a ball abandoned part-way can never
         // silence a later siren.
+        // The ball leaves the bowler's hand the moment the batter's shot, intent and timing are done.
+        sound.playBowlRelease()
         val sirenAlreadySounded = sound.takeSirenSounded()
         if (outcome.isNoBall && !sirenAlreadySounded) sound.playNoBallSiren()
         // Playing it marked it sounded; clear that again so it only ever covers this one ball.
@@ -172,7 +174,16 @@ class MatchAudioDirector(private val services: GameServices) {
         val category = CommentaryLibrary.categorizeBallOutcome(outcome)
         // The outcome sound and voice commentary wait for the siren to finish on a no-ball.
         sound.schedule(if (outcome.isNoBall) 1500L else 400L) {
-            sound.playOutcomeSounds(outcome.isWicket, outcome.runs, outcome.leftAlone)
+            sound.playOutcomeSounds(
+                outcome.isWicket,
+                outcome.runs,
+                outcome.leftAlone,
+                isEdge = outcome.isEdge == true,
+                stumpsHit = outcome.dismissalType == DismissalType.BOWLED ||
+                    outcome.dismissalType == DismissalType.STUMPED ||
+                    outcome.dismissalType == DismissalType.RUN_OUT,
+                isWide = outcome.isWide
+            )
             if (outcome.isWicket) sound.vibrate(200, 100, 200) else if (outcome.runs >= 4) sound.vibrate(100)
 
             sound.enqueueCommentary(category)
