@@ -4,6 +4,8 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaDataSource
 import android.media.MediaPlayer
+import android.media.PlaybackParams
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 
@@ -29,6 +31,14 @@ internal class AuctionVoice(private val context: Context) {
     private val queue = ArrayDeque<ByteArray>()
     private var current: MediaPlayer? = null
     private var busy = false
+
+    /**
+     * How fast the voice speaks: 1 = as recorded, more = quicker at the same pitch (the fast auction).
+     * The caller sets it before each call; the gap between the parts shrinks with it too, so a fast call
+     * still sounds like one sentence.
+     */
+    @Volatile
+    var speed: Float = 1f
 
     /** True while a call is playing or waiting to play; the auction hall waits for it to end before timing the next step. */
     val isSpeaking: Boolean get() = busy || queue.isNotEmpty()
@@ -64,11 +74,16 @@ internal class AuctionVoice(private val context: Context) {
                     .build()
             )
             player.setDataSource(BytesSource(bytes))
-            player.setOnPreparedListener { it.start() }
+            player.setOnPreparedListener { prepared ->
+                if (speed != 1f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    runCatching { prepared.playbackParams = PlaybackParams().setSpeed(speed) }
+                }
+                prepared.start()
+            }
             player.setOnCompletionListener {
                 it.release()
                 if (current === it) current = null
-                handler.postDelayed({ next() }, GAP_MS)
+                handler.postDelayed({ next() }, (GAP_MS / speed).toLong())
             }
             player.setOnErrorListener { p, _, _ ->
                 runCatching { p.release() }

@@ -136,6 +136,15 @@ private const val BID_WAIT_MS = 2400L
 private const val COUNT_STEP_MS = 2400L
 
 /**
+ * The FAST auction (chosen after the team): the same rhythm, quicker. The pauses are about 2.4 times shorter and the
+ * auctioneer's recorded voice plays at 1.35 times speed (same pitch). The hall still waits for him to finish each call
+ * before timing the next step, so the voice and the bidding stay in step exactly as in the normal speed.
+ */
+private const val FAST_BID_WAIT_MS = 1000L
+private const val FAST_COUNT_STEP_MS = 1100L
+private const val FAST_VOICE_SPEED = 1.35f
+
+/**
  * The auctioneer's speech: the phone's text-to-speech in a British voice, queued so calls never cut
  * each other off. It is the game's own speech, not the screen reader's, so it works with or without TalkBack.
  */
@@ -177,6 +186,8 @@ private sealed interface IPage {
     object Hall : IPage
     object Summary : IPage
     object Squads : IPage
+    /** After choosing a team: the speed of the auction. */
+    class Speed(val teamId: String) : IPage
 }
 
 @Composable
@@ -238,9 +249,15 @@ fun IplFlow(
             else -> "batter"
         }
     }
-    val call: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips)) speak(fallback) }
+    val call: (List<String>, String) -> Unit = { clips, fallback ->
+        voice.speed = if (auction?.fast == true) FAST_VOICE_SPEED else 1f
+        if (!voice.play(clips)) speak(fallback)
+    }
     // A bid call cuts off whatever the auctioneer was still saying, so the spoken price always matches the screen.
-    val callNow: (List<String>, String) -> Unit = { clips, fallback -> if (!voice.play(clips, interrupt = true)) speak(fallback) }
+    val callNow: (List<String>, String) -> Unit = { clips, fallback ->
+        voice.speed = if (auction?.fast == true) FAST_VOICE_SPEED else 1f
+        if (!voice.play(clips, interrupt = true)) speak(fallback)
+    }
 
     // Opens the bidding on the next player, with the first bid from another team if there is one.
     val beginLot: (IplAuctionState) -> Unit = { s ->
@@ -296,13 +313,13 @@ fun IplFlow(
             delay(100L)
             waited += 100L
         }
-        delay(if (quick) 800L else BID_WAIT_MS)
+        delay(if (quick) (if (s.fast) 350L else 800L) else (if (s.fast) FAST_BID_WAIT_MS else BID_WAIT_MS))
         val bid = IplAuction.aiBid(s, l)
         if (bid != null) {
             update(bid)
             return@LaunchedEffect
         }
-        val step = if (quick) 700L else COUNT_STEP_MS
+        val step = if (quick) (if (s.fast) 350L else 700L) else (if (s.fast) FAST_COUNT_STEP_MS else COUNT_STEP_MS)
         lot = l.copy(countdown = 1)
         call(listOf("au_x_goingonce"), "Going once.")
         delay(step)
@@ -325,7 +342,7 @@ fun IplFlow(
             if (leader != null && l.bidLakhs > 0) {
                 hammer.knock()
                 services?.sound?.playAuctionHammer()
-                delay(900)
+                delay(if (s.fast) 450L else 900L)
                 call(
                     listOf("au_x_sold", "au_n_" + slug(name), "au_x_to", "au_t_${teamKey(leader)}_full", "au_x_for", "au_p_${l.bidLakhs}"),
                     "Sold! $name to ${IplData.team(leader)?.name} for ${IplAuction.priceText(l.bidLakhs)}."
@@ -336,13 +353,13 @@ fun IplFlow(
             if (l.userOut) {
                 // You passed on this player: once the result has been said (sold or unsold) the auction
                 // moves on to the next player by itself. If you left the hall meanwhile, nothing happens.
-                delay(1500L)
+                delay(if (s.fast) 700L else 1500L)
                 var waited = 0L
                 while (voice.isSpeaking && waited < 10000L) {
                     delay(100L)
                     waited += 100L
                 }
-                delay(600L)
+                delay(if (s.fast) 300L else 600L)
                 val s2 = auction
                 val l2 = lot
                 if (page is IPage.Hall && !busy && s2 != null && l2 != null && l2.closed && l2.playerId == l.playerId) {
@@ -398,17 +415,31 @@ fun IplFlow(
                 )
             }
         }
+        is IPage.Speed -> {
+            val chosenTeam = (page as? IPage.Speed)?.teamId
+            val back = { page = IPage.TeamSelect }
+            BackHandler(onBack = back)
+            if (chosenTeam == null) {
+                back()
+            } else {
+                IplSpeedPage(
+                    teamName = IplData.team(chosenTeam)?.name ?: chosenTeam,
+                    onChoose = { fast ->
+                        val fresh = IplAuction.newAuction(chosenTeam, IplData.buildPool(), System.currentTimeMillis()).copy(fast = fast)
+                        auction = fresh
+                        scope.launch { store.save(fresh) }
+                        page = IPage.Hall
+                        beginLot(fresh)
+                    },
+                    onBack = back
+                )
+            }
+        }
         is IPage.TeamSelect -> {
             val back = { page = IPage.Menu }
             BackHandler(onBack = back)
             IplTeamSelectPage(
-                onChoose = { teamId ->
-                    val fresh = IplAuction.newAuction(teamId, IplData.buildPool(), System.currentTimeMillis())
-                    auction = fresh
-                    scope.launch { store.save(fresh) }
-                    page = IPage.Hall
-                    beginLot(fresh)
-                },
+                onChoose = { teamId -> page = IPage.Speed(teamId) },
                 onBack = back
             )
         }
@@ -615,6 +646,22 @@ private fun IplMenuPage(
                 dismissButton = { TextButton(onClick = { confirmSeasonDelete = false }) { Text("Keep it") } }
             )
         }
+    }
+}
+
+@Composable
+private fun IplSpeedPage(teamName: String, onChoose: (Boolean) -> Unit, onBack: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Title("Choose the speed of the auction")
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("You are bidding for $teamName.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.height(16.dp))
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            OptionRow("Normal (default)", "The auctioneer takes his time between bids, as in a real auction.", enabled = true, onClick = { onChoose(false) })
+            Spacer(modifier = Modifier.height(10.dp))
+            OptionRow("Fast", "Bids come quicker and the auctioneer speaks faster, in step with the bidding. A shorter auction.", enabled = true, onClick = { onChoose(true) })
+        }
+        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
     }
 }
 

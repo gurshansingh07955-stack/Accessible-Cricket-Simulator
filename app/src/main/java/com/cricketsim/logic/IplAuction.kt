@@ -25,6 +25,8 @@ data class IplAuctionState(
     val seed: Long = 1L,
     val reoffered: Boolean = false,
     val finished: Boolean = false,
+    /** The speed chosen for this auction: true = fast (quicker bidding, the auctioneer speaks faster). */
+    val fast: Boolean = false,
     val createdAt: Long = 0L
 )
 
@@ -111,8 +113,157 @@ object IplAuction {
     private fun owned(state: IplAuctionState, teamId: String): List<AuctionPlayer> =
         state.squads[teamId].orEmpty().mapNotNull { playerOf(state, it) }
 
+    // ---- How the other nine teams decide ------------------------------------------------------------
+    //
+    // A port of tools/auction_twin.js, which measured it on a pool shaped like the real one. Before, a team's
+    // willingness was market value x a little for need x a random appetite: nobody had a plan, so they spent the
+    // whole purse, left squads lopsided (no keeper, one spinner) and chased every player alike.
+    //
+    // Now a team plans like a real franchise:
+    //  - It knows its CORE: the players it needs for a good XI (6 batters, 4 all-rounders, 2 keepers, 5 fast
+    //    bowlers, 3 spinners, each good enough to play) and which of those places it has not yet filled.
+    //  - It TARGETS: among the players still to come in a kind it needs, the best few (as many as it has places
+    //    to fill, plus two) are targets and it will pay a premium; the next few it will pay the market price
+    //    for; the rest only if cheap. Once the core is full it buys depth cheaply, or an upgrade.
+    //  - It manages the PURSE: it keeps money back for the core places still empty, never puts more than a
+    //    set share of what it has left on one player (stars 22%, good players 21%, depth 8%), and stretches a
+    //    little when it is flush.
+    //  - It manages the SQUAD: a place is kept for every missing core player, no more than 9 batters, 6
+    //    all-rounders, 4 keepers, 9 fast bowlers or 5 spinners, and it does not waste overseas places (only
+    //    elite overseas players once it has four).
+    //  - Each team has its own TASTE (fixed per team: one likes spin, another keepers), and a small
+    //    appetite that varies by player, so the teams do not all behave alike.
+    // SMART_TEAMS = false brings the old rule back.
+    const val SMART_TEAMS = true
+
+    private val GROUPS = listOf("BA", "AL", "WK", "FA", "SP")
+    private val CORE = mapOf("BA" to 6, "AL" to 4, "WK" to 2, "FA" to 5, "SP" to 3)
+    private val GROUP_MAX = mapOf("BA" to 9, "AL" to 6, "WK" to 4, "FA" to 9, "SP" to 5)
+    private const val CORE_BAR = 68
+    private const val EXTRA_TARGETS = 2
+    private const val TARGET = 1.15
+    private const val INTERESTED = 1.08
+    private const val OPPORTUNIST = 0.9
+    private const val UPGRADE = 0.8
+    private const val DEPTH = 0.7
+    private const val UPGRADE_MARGIN = 10
+    private const val OVERSEAS_ELITE = 84
+    private const val DEPTH_CAP = 2.4
+    private const val CORE_RESERVE_MAX = 0.7
+    private const val CORE_SLOT_COST = 180.0
+    private const val STAR_BAR = 86
+    private const val MID_BAR = 76
+    private const val STAR_SHARE = 0.22
+    private const val MID_SHARE = 0.21
+    private const val DEPTH_SHARE = 0.08
+    private const val FLUSH_REF = 500.0
+    private const val FLUSH_MIN = 1.15
+    private const val FLUSH_MAX = 1.6
+
+    /** The players still to come, per kind, best first; and each team's answer for each of them (the state does not change during a lot). */
+    private class Plan(val state: IplAuctionState, val remaining: Map<String, List<AuctionPlayer>>) {
+        val memo = HashMap<String, Int>()
+    }
+
+    private var plan: Plan? = null
+    private val tasteCache = HashMap<String, Map<String, Double>>()
+
+    private fun planFor(state: IplAuctionState): Plan {
+        val cached = plan
+        if (cached != null && cached.state === state) return cached
+        val byId = state.players.associateBy { it.player.id }
+        val remaining = GROUPS.associateWith { ArrayList<AuctionPlayer>() }
+        for (si in state.setIndex until state.sets.size) {
+            val ids = state.sets[si].playerIds
+            for (li in (if (si == state.setIndex) state.lotIndex else 0) until ids.size) {
+                val pl = byId[ids[li]] ?: continue
+                remaining.getValue(group(pl)).add(pl)
+            }
+        }
+        val sorted = remaining.mapValues { (_, list) -> list.sortedByDescending { overall(it) } }
+        val fresh = Plan(state, sorted)
+        plan = fresh
+        return fresh
+    }
+
+    private fun taste(teamId: String, g: String): Double {
+        val all = tasteCache.getOrPut(teamId) {
+            val r = Random(teamId.hashCode().toLong() * 7919L)
+            GROUPS.associateWith { 0.9 + 0.25 * r.nextDouble() }
+        }
+        return all.getValue(g)
+    }
+
     /** The most this team will pay; 0 if it will not bid at all. */
     fun maxBid(state: IplAuctionState, teamId: String, p: AuctionPlayer): Int {
+        if (!SMART_TEAMS) return maxBidClassic(state, teamId, p)
+        return synchronized(this) {
+            val current = planFor(state)
+            current.memo.getOrPut("$teamId|${p.player.id}") { computeMaxBid(state, current, teamId, p) }
+        }
+    }
+
+    private fun computeMaxBid(state: IplAuctionState, plan: Plan, teamId: String, p: AuctionPlayer): Int {
+        val squad = state.squads[teamId].orEmpty()
+        if (squad.size >= IplData.MAX_SQUAD) return 0
+        val mine = owned(state, teamId)
+        val overseasHave = mine.count { it.overseas }
+        if (p.overseas && overseasHave >= IplData.MAX_OVERSEAS) return 0
+        val purse = state.purse[teamId] ?: return 0
+        val reserveMin = RESERVE_PER_SLOT * maxOf(0, IplData.MIN_SQUAD - squad.size - 1)
+        if (purse - reserveMin < p.baseLakhs) return 0
+        val g = group(p)
+        // The core places this team has not filled yet, in total and in this kind.
+        var totalDeficit = 0
+        var deficit = 0
+        for (gg in GROUPS) {
+            val d = maxOf(0, CORE.getValue(gg) - mine.count { group(it) == gg && overall(it) >= CORE_BAR })
+            totalDeficit += d
+            if (gg == g) deficit = d
+        }
+        val otherDeficit = totalDeficit - deficit
+        val inGroup = mine.filter { group(it) == g }
+        // Keep a place for every core player still missing in the other kinds, and do not hoard one kind.
+        if (squad.size + 1 + otherDeficit > IplData.MAX_SQUAD) return 0
+        if (deficit == 0 && inGroup.size >= GROUP_MAX.getValue(g)) return 0
+        val rank = plan.remaining.getValue(g).indexOfFirst { it.player.id == p.player.id }
+        val r = if (rank < 0) 99 else rank
+        val targetCount = deficit + EXTRA_TARGETS
+        val worst = inGroup.minOfOrNull { overall(it) } ?: 0
+        val (factor, kind) = when {
+            deficit > 0 && r < targetCount -> TARGET to 'T'
+            deficit > 0 && r < targetCount * 2 + 3 -> INTERESTED to 'I'
+            deficit > 0 -> OPPORTUNIST to 'O'
+            overall(p) >= worst + UPGRADE_MARGIN -> UPGRADE to 'U'
+            else -> DEPTH to 'D'
+        }
+        var value = marketValue(p) * factor * taste(teamId, g)
+        if (g == "WK" && inGroup.isEmpty()) value *= 1.2
+        if (p.overseas && overall(p) < OVERSEAS_ELITE) {
+            if (overseasHave >= 6) value *= 0.55 else if (overseasHave >= 4) value *= 0.8
+        }
+        // Depth is cheap: a player who will not make the XI is worth little more than his base price.
+        if (kind == 'D') value = minOf(value, maxOf(p.baseLakhs * DEPTH_CAP, p.baseLakhs + 25.0))
+        // The purse: money back for the core places still empty, and a cap on how much of it one player can take.
+        val coreStillNeeded = maxOf(0, totalDeficit - (if (deficit > 0) 1 else 0))
+        val coreReserve = minOf((purse - reserveMin) * CORE_RESERVE_MAX, coreStillNeeded * CORE_SLOT_COST)
+        val spendable = purse - reserveMin - coreReserve
+        val share = when {
+            overall(p) >= STAR_BAR -> STAR_SHARE
+            overall(p) >= MID_BAR -> MID_SHARE
+            else -> DEPTH_SHARE
+        }
+        val ceiling = maxOf(p.baseLakhs.toDouble(), minOf(spendable, purse * share))
+        // A team with plenty of money per empty core place stretches a little.
+        val perCore = (purse - reserveMin).toDouble() / maxOf(1, totalDeficit)
+        val flush = (perCore / FLUSH_REF).coerceIn(FLUSH_MIN, FLUSH_MAX)
+        val appetite = 0.92 + 0.16 * Random(state.seed xor teamId.hashCode().toLong() xor (p.player.id.hashCode().toLong() shl 7)).nextDouble()
+        val most = minOf(value * (if (kind == 'D') 1.0 else flush) * appetite, ceiling, (purse - reserveMin).toDouble(), MAX_BID.toDouble())
+        return maxOf(0.0, most).toInt()
+    }
+
+    /** The old rule (SMART_TEAMS = false): market value x need x a fixed random appetite. */
+    private fun maxBidClassic(state: IplAuctionState, teamId: String, p: AuctionPlayer): Int {
         val squad = state.squads[teamId].orEmpty()
         if (squad.size >= IplData.MAX_SQUAD) return 0
         val mine = owned(state, teamId)
