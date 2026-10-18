@@ -1,0 +1,243 @@
+{
+  "name": "user-sounds",
+  "message": "Your own sounds: crowd loop, main-menu music with its own volume setting, bat swing, bowler steps, release, bowled, defensive, edge, four, six, 1-2-3, no-ball, menu open",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/AudioAssets.kt",
+    "contains": "US_BACKGROUND_LOOP"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/AudioAssets.kt",
+      "find": "    AUCTION_GAVEL(\"auction_gavel.mp3\", \"/_cdn/sfx/auction_gavel.mp3\", \"auction_gavel\")\n}\n",
+      "replace": "    AUCTION_GAVEL(\"auction_gavel.mp3\", \"/_cdn/sfx/auction_gavel.mp3\", \"auction_gavel\"),\n\n    // --- Your own sounds: tools/user_sounds/<name>.<any format>, packed by tools/fetch_audio.sh as us_<name>.mp3.\n    // They exist only in the pack (the path is a placeholder that is never downloaded), and every one is\n    // optional: if a file is missing the game uses the sound it used before. See USER_SOUNDS.md. ---\n    US_BACKGROUND_LOOP(\"us_background_loop.mp3\", \"/_cdn/user/us_background_loop.mp3\", \"us_background_loop\"),\n    US_MAIN_MENU(\"us_mainmenu.mp3\", \"/_cdn/user/us_mainmenu.mp3\", \"us_mainmenu\"),\n    US_BAT_SWING(\"us_bat_swing.mp3\", \"/_cdn/user/us_bat_swing.mp3\", \"us_bat_swing\"),\n    US_BOWLER_STEPS(\"us_bowler_steps.mp3\", \"/_cdn/user/us_bowler_steps.mp3\", \"us_bowler_steps\"),\n    US_BOWL_RELEASE(\"us_bowl_release.mp3\", \"/_cdn/user/us_bowl_release.mp3\", \"us_bowl_release\"),\n    US_BOWLED(\"us_bowled.mp3\", \"/_cdn/user/us_bowled.mp3\", \"us_bowled\"),\n    US_DEFENSIVE_SHOT(\"us_defensive_shot.mp3\", \"/_cdn/user/us_defensive_shot.mp3\", \"us_defensive_shot\"),\n    US_EDGE_OF_BAT(\"us_edge_of_bat.mp3\", \"/_cdn/user/us_edge_of_bat.mp3\", \"us_edge_of_bat\"),\n    US_FOUR_RUNS(\"us_four_runs.mp3\", \"/_cdn/user/us_four_runs.mp3\", \"us_four_runs\"),\n    US_MENU_OPEN(\"us_menuopen.mp3\", \"/_cdn/user/us_menuopen.mp3\", \"us_menuopen\"),\n    US_NOBALL(\"us_noball.mp3\", \"/_cdn/user/us_noball.mp3\", \"us_noball\"),\n    US_RUNS_1_2_3(\"us_runs_1_2_3.mp3\", \"/_cdn/user/us_runs_1_2_3.mp3\", \"us_runs_1_2_3\"),\n    US_SIX_RUNS(\"us_six_runs.mp3\", \"/_cdn/user/us_six_runs.mp3\", \"us_six_runs\")\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "fetched_files=$(find \"$SCRATCH_DIR\" -type f -name '*.mp3' | wc -l)\n",
+      "replace": "echo\necho \"== Packing your own sounds from tools/user_sounds ==\"\n# Each file, in any format, becomes us_<name>.mp3 (the name lower-cased, spaces to underscores), so a name can\n# never clash with one of the game's own clips. mp3 files are copied as they are; anything else is converted.\nuser_count=0\nif [ -d tools/user_sounds ]; then\n  for src in tools/user_sounds/*; do\n    [ -f \"$src\" ] || continue\n    user_file=\"$(basename \"$src\")\"\n    case \"$user_file\" in README*|.*) continue ;; esac\n    user_name=\"$(echo \"${user_file%.*}\" | tr 'A-Z ' 'a-z_' | tr -cd 'a-z0-9_')\"\n    user_dest=\"$SCRATCH_DIR/us_${user_name}.mp3\"\n    case \"${user_file##*.}\" in\n      mp3|MP3)\n        if cp \"$src\" \"$user_dest\"; then user_count=$((user_count + 1)); fi\n        ;;\n      *)\n        if command -v ffmpeg >/dev/null 2>&1 \\\n            && ffmpeg -nostdin -loglevel error -y -i \"$src\" -vn -ar 44100 -b:a 128k \"$user_dest\" \\\n            && [ -s \"$user_dest\" ]; then\n          user_count=$((user_count + 1))\n        else\n          rm -f \"$user_dest\"\n          missing+=(\"us_${user_name}.mp3 (could not convert $user_file)\")\n        fi\n        ;;\n    esac\n  done\nfi\necho \"Your own sounds packed: $user_count\"\n\nfetched_files=$(find \"$SCRATCH_DIR\" -type f -name '*.mp3' | wc -l)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    private suspend fun loadOneShot(asset: RecordedAsset) {\n        val source = AudioAssets.ensure(appContext, asset) ?: return\n",
+      "replace": "    /** allowDownload = false for your own sounds: they live only in the pack, so never go to the network for one. */\n    private suspend fun loadOneShot(asset: RecordedAsset, allowDownload: Boolean = true) {\n        val source = (if (allowDownload) AudioAssets.ensure(appContext, asset) else AudioAssets.find(appContext, asset)) ?: return\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            for (asset in ONE_SHOT_ASSETS) launch { loadOneShot(asset) }\n",
+      "replace": "            for (asset in ONE_SHOT_ASSETS) launch { loadOneShot(asset) }\n            if (USE_USER_SOUNDS) for (asset in USER_ONE_SHOTS) launch { loadOneShot(asset, allowDownload = false) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            RecordedAsset.AUCTION_GAVEL\n        )\n    }\n}\n",
+      "replace": "            RecordedAsset.AUCTION_GAVEL\n        )\n\n        // --- Your own sounds (tools/user_sounds, see USER_SOUNDS.md) ---\n\n        /** Switch off to get every sound the game had before your own ones. */\n        const val USE_USER_SOUNDS = true\n\n        /** Switch off to get the old crowd back instead of your background_loop crowd sound. */\n        const val USE_BACKGROUND_LOOP = true\n\n        /** Switch off to have no main-menu music. */\n        const val USE_MENU_MUSIC = true\n\n        /** The main-menu music's full level at 100% on the \"Background music volume\" slider. */\n        const val MENU_MUSIC_GAIN = 0.7f\n\n        /** Loudness of your short sounds (the old effects are 0.5 x 0.9); lower it if they are louder than the rest. */\n        const val USER_SOUND_GAIN = 0.9f\n\n        /** The crowd loop's full level at 100% on the \"Crowd volume\" slider, and how far it dips under speech and the no-ball sound. */\n        const val BACKGROUND_LOOP_GAIN = 0.8f\n        const val BACKGROUND_DUCK_FACTOR = 0.3f\n\n        val USER_ONE_SHOTS = listOf(\n            RecordedAsset.US_BAT_SWING,\n            RecordedAsset.US_BOWLER_STEPS,\n            RecordedAsset.US_BOWL_RELEASE,\n            RecordedAsset.US_BOWLED,\n            RecordedAsset.US_DEFENSIVE_SHOT,\n            RecordedAsset.US_EDGE_OF_BAT,\n            RecordedAsset.US_FOUR_RUNS,\n            RecordedAsset.US_MENU_OPEN,\n            RecordedAsset.US_NOBALL,\n            RecordedAsset.US_RUNS_1_2_3,\n            RecordedAsset.US_SIX_RUNS\n        )\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    fun playBallDelivery() {\n        if (!settings.soundEffects) return\n        playPcm(Fx.WHOOSH, MASTER)\n    }\n",
+      "replace": "    fun playBallDelivery() {\n        if (!settings.soundEffects) return\n        // The bowler's run-up, as the delivery starts and the batter's choices open. The old whoosh if there is none.\n        if (!playRecorded(RecordedAsset.US_BOWLER_STEPS, USER_SOUND_GAIN)) playPcm(Fx.WHOOSH, MASTER)\n    }\n\n    /** The bat swinging, as the batter chooses his intent. */\n    fun playBatSwing() {\n        if (!settings.soundEffects) return\n        playRecorded(RecordedAsset.US_BAT_SWING, USER_SOUND_GAIN)\n    }\n\n    /** The ball leaving the bowler's hand: the moment the shot, its intent and its timing are all done. */\n    fun playBowlRelease() {\n        if (!settings.soundEffects) return\n        playRecorded(RecordedAsset.US_BOWL_RELEASE, USER_SOUND_GAIN)\n    }\n\n    /** A menu opening. */\n    fun playMenuOpen() {\n        if (!settings.soundEffects) return\n        playRecorded(RecordedAsset.US_MENU_OPEN, USER_SOUND_GAIN)\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        playPcm(Fx.SIREN, MASTER * 1.4f)\n        duckFor(1700)\n",
+      "replace": "        // Your no-ball recording and the old siren take turns at random (both are liked).\n        if (!(Math.random() < 0.5 && playRecorded(RecordedAsset.US_NOBALL, USER_SOUND_GAIN))) playPcm(Fx.SIREN, MASTER * 1.4f)\n        duckFor(1700)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    fun playOutcomeSounds(isWicket: Boolean, runs: Int, leftAlone: Boolean = false) {\n        if (!settings.soundEffects) return\n        when {\n            isWicket -> {\n                playPcm(Fx.WICKET, MASTER)\n",
+      "replace": "    fun playOutcomeSounds(\n        isWicket: Boolean,\n        runs: Int,\n        leftAlone: Boolean = false,\n        isEdge: Boolean = false,\n        stumpsHit: Boolean = false,\n        isWide: Boolean = false\n    ) {\n        if (!settings.soundEffects) return\n        when {\n            isWicket -> {\n                // Bowled, stumped and run out use your \"bowled\" recording; caught and lbw keep the old wicket sound.\n                if (!(stumpsHit && playRecorded(RecordedAsset.US_BOWLED, USER_SOUND_GAIN))) playPcm(Fx.WICKET, MASTER)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            runs == 6 -> {\n                playPcm(Fx.BOUNDARY, MASTER)\n                crowdReact(CrowdEngine.Reaction.SIX)",
+      "replace": "            runs == 6 -> {\n                // A clean six has its own sound; a six off the edge plays the edge sound.\n                val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_SIX_RUNS\n                if (!playRecorded(ownSound, USER_SOUND_GAIN)) playPcm(Fx.BOUNDARY, MASTER)\n                crowdReact(CrowdEngine.Reaction.SIX)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            runs >= 4 -> {\n                playPcm(Fx.BOUNDARY, MASTER)\n                crowdReact(CrowdEngine.Reaction.FOUR)",
+      "replace": "            runs >= 4 -> {\n                // A four that is not off the edge has its own sound; an edged four plays the edge sound.\n                val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_FOUR_RUNS\n                if (!playRecorded(ownSound, USER_SOUND_GAIN)) playPcm(Fx.BOUNDARY, MASTER)\n                crowdReact(CrowdEngine.Reaction.FOUR)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            else -> {\n                if (!playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) playPcm(Fx.BAT_HIT, MASTER)\n",
+      "replace": "            isWide -> {\n                // Nothing touched the ball: no bat sound.\n                duckFor(150)\n            }\n            else -> {\n                // An edge, a dot ball (defensive shot) or 1, 2 or 3 runs each have their own sound; the old bat hit if missing.\n                val ownSound = when {\n                    isEdge -> RecordedAsset.US_EDGE_OF_BAT\n                    runs == 0 -> RecordedAsset.US_DEFENSIVE_SHOT\n                    else -> RecordedAsset.US_RUNS_1_2_3\n                }\n                if (!playRecorded(ownSound, USER_SOUND_GAIN) && !playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) {\n                    playPcm(Fx.BAT_HIT, MASTER)\n                }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    private class MediaLoop(private val player: MediaPlayer) : LoopChannel {\n",
+      "replace": "    private class MediaLoop(private val player: MediaPlayer, private val allowRate: Boolean = true) : LoopChannel {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            if (prepared) runCatching {\n                if (player.isPlaying) player.playbackParams = player.playbackParams.setSpeed(rate)\n",
+      "replace": "            // (A music loop keeps its tempo: allowRate = false.)\n            if (allowRate && prepared) runCatching {\n                if (player.isPlaying) player.playbackParams = player.playbackParams.setSpeed(rate)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    private fun mediaLoop(source: AssetSource, onError: () -> Unit): LoopChannel? {\n",
+      "replace": "    private fun mediaLoop(source: AssetSource, allowRate: Boolean = true, onError: () -> Unit): LoopChannel? {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "            val loop = MediaLoop(player)\n",
+      "replace": "            val loop = MediaLoop(player, allowRate)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    /** Lets the live crowd react to something that just happened (no effect on the old recorded bed). */\n",
+      "replace": "    /** True while your background loop is the crowd channel: it has its own gain (see crowdTarget). */\n    private var backgroundLoopActive = false\n    private var backgroundLoopFailed = false\n\n    /**\n     * Your background loop (tools/user_sounds/background_loop), played as a plain looping track at its normal\n     * speed and volume-controlled by the \"Background music volume\" setting. Null if the file is not in the pack,\n     * so the old crowd plays; if it cannot be played the old crowd takes over (see backgroundLoopFailed).\n     */\n    private fun startBackgroundLoop(): LoopChannel? {\n        if (!USE_USER_SOUNDS || !USE_BACKGROUND_LOOP || backgroundLoopFailed) return null\n        val source = AudioAssets.find(appContext, RecordedAsset.US_BACKGROUND_LOOP) ?: return null\n        var channel: LoopChannel? = null\n        channel = mediaLoop(source, allowRate = false) {\n            scope.launch {\n                if (crowdChannel === channel) {\n                    backgroundLoopFailed = true\n                    stopCrowdNow()\n                    launchCrowd(useSynth = false)\n                }\n            }\n        }\n        backgroundLoopActive = channel != null\n        return channel\n    }\n\n    // --- The main-menu music (tools/user_sounds/mainmenu): plays wherever there is no crowd, i.e. in the menus,\n    // and fades out when the crowd starts (toss, anthems, a match) and back in when the crowd stops. ---\n    private var musicChannel: LoopChannel? = null\n    private var musicRamp: Ramper? = null\n\n    private fun musicTarget(): Float = MENU_MUSIC_GAIN * settings.musicVolume\n\n    fun startMenuMusic() {\n        if (!USE_USER_SOUNDS || !USE_MENU_MUSIC || !settings.soundEffects || musicChannel != null || crowdChannel != null) return\n        val source = AudioAssets.find(appContext, RecordedAsset.US_MAIN_MENU) ?: return\n        var channel: LoopChannel? = null\n        channel = mediaLoop(source, allowRate = false) {\n            scope.launch { if (musicChannel === channel) stopMenuMusic() }\n        }\n        val active = channel ?: return\n        val ramp = Ramper(scope) { active.setVolume(it) }\n        musicChannel = active\n        musicRamp = ramp\n        ramp.set(0f)\n        if (!paused) active.start()\n        ramp.rampTo(musicTarget(), 2f)\n    }\n\n    fun stopMenuMusic() {\n        val channel = musicChannel ?: return\n        val ramp = musicRamp\n        musicChannel = null\n        musicRamp = null\n        ramp?.rampTo(0f, 0.8f)\n        retire(channel, 900)\n    }\n\n    /** Lets the live crowd react to something that just happened (no effect on the old recorded bed). */\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    private fun crowdTarget(): Float {\n        val inSwell",
+      "replace": "    private fun crowdTarget(): Float {\n        if (backgroundLoopActive) {\n            // The music loop: a steady level set by the slider, dipping under speech and the no-ball sound.\n            return BACKGROUND_LOOP_GAIN * settings.crowdVolume * (if (duckHolds > 0) BACKGROUND_DUCK_FACTOR else 1f)\n        }\n        val inSwell"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        val live = if (useSynth) null else (if (allowBed) startBedCrowd() else null) ?: startLiveCrowd()\n",
+      "replace": "        backgroundLoopActive = false\n        val live = if (useSynth) null else (startBackgroundLoop() ?: (if (allowBed) startBedCrowd() else null) ?: startLiveCrowd())\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/MatchAudioDirector.kt",
+      "find": "        val sirenAlreadySounded = sound.takeSirenSounded()\n",
+      "replace": "        // The ball leaves the bowler's hand the moment the batter's shot, intent and timing are done.\n        sound.playBowlRelease()\n        val sirenAlreadySounded = sound.takeSirenSounded()\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/MatchAudioDirector.kt",
+      "find": "            sound.playOutcomeSounds(outcome.isWicket, outcome.runs, outcome.leftAlone)\n",
+      "replace": "            sound.playOutcomeSounds(\n                outcome.isWicket,\n                outcome.runs,\n                outcome.leftAlone,\n                isEdge = outcome.isEdge == true,\n                stumpsHit = outcome.dismissalType == DismissalType.BOWLED ||\n                    outcome.dismissalType == DismissalType.STUMPED ||\n                    outcome.dismissalType == DismissalType.RUN_OUT,\n                isWide = outcome.isWide\n            )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt",
+      "find": "                            currentServices?.announceSpoken(BattingSystem.intentLabel(direction))\n                            currentOnSelected(direction)\n",
+      "replace": "                            currentServices?.sound?.playBatSwing()\n                            currentServices?.announceSpoken(BattingSystem.intentLabel(direction))\n                            currentOnSelected(direction)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/BattingMenuScreen.kt",
+      "find": "                MenuRadioRow(BattingSystem.intentLabel(option), intent == option) {\n                    intent = option\n",
+      "replace": "                MenuRadioRow(BattingSystem.intentLabel(option), intent == option) {\n                    services?.sound?.playBatSwing()\n                    intent = option\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/settings/SettingsScreen.kt",
+      "find": "description = \"Crowd, bat and ball, rain, and the timing ticks for batting and bowling.\",",
+      "replace": "description = \"Background music, crowd, bat and ball, rain, and the timing ticks for batting and bowling.\","
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/settings/SettingsScreen.kt",
+      "find": "                contentDescription = \"Crowd volume\"\n                stateDescription = \"$crowdPercent percent\"\n            }\n        )\n",
+      "replace": "                contentDescription = \"Crowd volume\"\n                stateDescription = \"$crowdPercent percent\"\n            }\n        )\n\n        val musicPercent = (settings.musicVolume * 100).roundToInt()\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\"Background music volume: $musicPercent percent\", style = MaterialTheme.typography.titleMedium)\n        Slider(\n            value = settings.musicVolume,\n            onValueChange = { value -> services.update { it.copy(musicVolume = value) } },\n            valueRange = 0f..1f,\n            steps = 9,\n            modifier = Modifier.semantics {\n                contentDescription = \"Background music volume\"\n                stateDescription = \"$musicPercent percent\"\n            }\n        )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "    when (val current = screen) {\n",
+      "replace": "    // The \"menu open\" sound, as a menu-type screen opens. (Not Home, the toss, the anthems or the match itself;\n    // the tournament plays it itself, page by page.)\n    val menuScreenKey = screen::class\n    LaunchedEffect(menuScreenKey) {\n        val opened = screen\n        val isMenu = opened is Screen.FormatSelection || opened is Screen.StadiumSelection ||\n            opened is Screen.TeamSelection || opened is Screen.PlayingXISelection ||\n            opened is Screen.Settings || opened is Screen.About\n        if (isMenu) services?.sound?.playMenuOpen()\n    }\n\n    when (val current = screen) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    var page by remember { mutableStateOf<TPage>(TPage.Menu) }\n",
+      "replace": "    var page by remember { mutableStateOf<TPage>(TPage.Menu) }\n    // The \"menu open\" sound for each menu-type page (not the toss, the match, the celebration or the IPL\n    // pages, which play it themselves).\n    val menuSoundServices = LocalGameServices.current\n    LaunchedEffect(page::class) {\n        val opened = page\n        if (opened !is TPage.PlayMatch && opened !is TPage.Toss && opened !is TPage.Celebration && opened !is TPage.Ipl) {\n            menuSoundServices?.sound?.playMenuOpen()\n        }\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt",
+      "find": "    var page by remember { mutableStateOf<IPage>(IPage.Menu) }\n",
+      "replace": "    var page by remember { mutableStateOf<IPage>(IPage.Menu) }\n    // The \"menu open\" sound for each IPL menu page (not the auction hall itself).\n    val menuSoundServices = LocalGameServices.current\n    LaunchedEffect(page::class) {\n        if (page is IPage.Hall) {\n            // The auctioneer speaks here: no music under him.\n            menuSoundServices?.sound?.stopMenuMusic()\n        } else {\n            menuSoundServices?.sound?.playMenuOpen()\n            menuSoundServices?.sound?.startMenuMusic()\n        }\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    fun startCrowdAmbience() {\n        if (!settings.soundEffects || crowdChannel != null) return\n",
+      "replace": "    fun startCrowdAmbience() {\n        stopMenuMusic() // the crowd takes over from the menu music\n        if (!settings.soundEffects || crowdChannel != null) return\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        val channel = crowdChannel ?: return\n",
+      "replace": "        // With no crowd to stop, make sure the menu music is playing (menus, setup screens, the tournament lists).\n        val channel = crowdChannel ?: run {\n            startMenuMusic()\n            return\n        }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        swellUntilMs = 0L\n        ramp?.rampTo(0f, 1f)\n        retire(channel, 1100)\n    }\n",
+      "replace": "        swellUntilMs = 0L\n        ramp?.rampTo(0f, 1f)\n        retire(channel, 1100)\n        startMenuMusic() // the crowd has gone: the menu music comes back\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        if (old.crowdVolume != new.crowdVolume) applyCrowdGain(0.3f)\n",
+      "replace": "        if (old.crowdVolume != new.crowdVolume) applyCrowdGain(0.3f)\n        if (old.musicVolume != new.musicVolume) musicRamp?.rampTo(musicTarget(), 0.3f)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        if (old.soundEffects && !new.soundEffects) {\n            stopCrowdAmbience()\n",
+      "replace": "        if (old.soundEffects && !new.soundEffects) {\n            stopMenuMusic()\n            stopCrowdAmbience()\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        crowdChannel?.pause()\n        rainChannel?.pause()\n",
+      "replace": "        crowdChannel?.pause()\n        musicChannel?.pause()\n        rainChannel?.pause()\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        crowdChannel?.resume()\n        rainChannel?.resume()\n",
+      "replace": "        crowdChannel?.resume()\n        musicChannel?.resume()\n        rainChannel?.resume()\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "    val crowdVolume: Float = 0.7f,\n",
+      "replace": "    val crowdVolume: Float = 0.7f,\n    // The main-menu music (your mainmenu sound), 0 to 1, independent of the crowd.\n    val musicVolume: Float = 0.6f,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "            crowdVolume = prefs.getFloat(KEY_CROWD_VOLUME, defaults.crowdVolume).coerceIn(0f, 1f),\n",
+      "replace": "            crowdVolume = prefs.getFloat(KEY_CROWD_VOLUME, defaults.crowdVolume).coerceIn(0f, 1f),\n            musicVolume = prefs.getFloat(KEY_MUSIC_VOLUME, defaults.musicVolume).coerceIn(0f, 1f),\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "            .putFloat(KEY_CROWD_VOLUME, settings.crowdVolume)\n",
+      "replace": "            .putFloat(KEY_CROWD_VOLUME, settings.crowdVolume)\n            .putFloat(KEY_MUSIC_VOLUME, settings.musicVolume)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "        const val KEY_CROWD_VOLUME = \"crowd_volume\"\n",
+      "replace": "        const val KEY_CROWD_VOLUME = \"crowd_volume\"\n        const val KEY_MUSIC_VOLUME = \"music_volume\"\n"
+    },
+    {
+      "op": "write",
+      "file": "USER_SOUNDS.md",
+      "content": "# Your own sounds\n\nPut them in `tools/user_sounds/` (any format: mp3, wav, ogg, m4a). \"Fetch audio into the app\" converts each to\nmp3 and packs it as `us_<name>.mp3`; \"Build APK\" then ships it. Every sound is optional: if a file is missing the\ngame plays the sound it played before.\n\n| File name | Plays when |\n|---|---|\n| `background_loop` | The crowd sound, from the toss to the end of the match (instead of the old crowd recording). Volume: Settings > \"Crowd volume\", as before |\n| `mainmenu` | The background music of the menus: the home screen, setup screens, Settings, the tournament and IPL lists. It fades out when the crowd starts (toss, anthems, match) and back in after, and stays off in the auction hall. Volume: Settings > \"Background music volume\" |\n| `bat_swing` | The batter chooses his intent (the two-finger swipe, or the Intent list in menu batting) |\n| `bowler_steps` | A delivery starts: the bowler runs in, as the batter's choices open (replaces the old whoosh) |\n| `bowl_release` | The shot, its intent and its timing are all done: the ball is released and played |\n| `bowled` | Bowled, stumped or run out (caught and lbw keep the old wicket sound) |\n| `defensive_shot` | A dot ball with no edge |\n| `edge_of_bat` | Any ball that takes an edge (including an edged four or six) |\n| `four_runs` | A four that is not off the edge |\n| `six_runs` | A six that is not off the edge |\n| `runs_1_2_3` | 1, 2 or 3 runs with no edge |\n| `noball` | A no-ball: it takes turns at random with the old siren |\n| `menuopen` | A menu or settings screen opens |\n\nDials, all in `SoundEngine.kt`: `USER_SOUND_GAIN` (loudness of the short sounds), `BACKGROUND_LOOP_GAIN` and\n`BACKGROUND_DUCK_FACTOR` (the crowd loop at 100% and how far it dips under speech), `MENU_MUSIC_GAIN` (the music at 100%),\n`USE_USER_SOUNDS`, `USE_BACKGROUND_LOOP` and `USE_MENU_MUSIC` (switches that bring the old sounds back).\n\nThe loop and the music are played as normal looping tracks, so a tiny gap at the loop point is possible on some\nphones; a file whose end flows into its start sounds best.\n"
+    }
+  ]
+}
