@@ -73,6 +73,14 @@ enum class RecordedAsset(val fileName: String, val path: String, val rawName: St
     // --- IPL auction: a real gavel (public domain), fetched and trimmed by tools/fetch_audio.sh ---
     AUCTION_GAVEL("auction_gavel.mp3", "/_cdn/sfx/auction_gavel.mp3", "auction_gavel"),
 
+    // --- The fielders' appeal for an out (ElevenLabs sound effects, /_cdn/sfx/appeal_<n>.mp3): one is played at random. ---
+    APPEAL_1("appeal_1.mp3", "/_cdn/sfx/appeal_1.mp3", "appeal_1"),
+    APPEAL_2("appeal_2.mp3", "/_cdn/sfx/appeal_2.mp3", "appeal_2"),
+    APPEAL_3("appeal_3.mp3", "/_cdn/sfx/appeal_3.mp3", "appeal_3"),
+    APPEAL_4("appeal_4.mp3", "/_cdn/sfx/appeal_4.mp3", "appeal_4"),
+    APPEAL_5("appeal_5.mp3", "/_cdn/sfx/appeal_5.mp3", "appeal_5"),
+    APPEAL_6("appeal_6.mp3", "/_cdn/sfx/appeal_6.mp3", "appeal_6"),
+
     // --- Your own sounds: tools/user_sounds/<name>.<any format>, packed by tools/fetch_audio.sh as us_<name>.mp3.
     // They exist only in the pack (the path is a placeholder that is never downloaded), and every one is
     // optional: if a file is missing the game uses the sound it used before. See USER_SOUNDS.md. ---

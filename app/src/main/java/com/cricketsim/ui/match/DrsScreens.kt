@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.audio.LocalGameServices
+import com.cricketsim.audio.UmpireLines
 import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.DrsCase
 import com.cricketsim.logic.DrsReport
@@ -302,19 +303,25 @@ private fun DrsProcessStage(
         currentServices?.sound?.startDrsReviewAudio()
         currentServices?.sound?.enqueueCommentary(CommentaryCategory.REVIEW_REQUESTED)
 
-        val start = SystemClock.elapsedRealtime()
-        var announced = 0
-        while (true) {
-            val elapsed = SystemClock.elapsedRealtime() - start
-            elapsedMs = elapsed.coerceAtMost(DrsSystem.REVIEW_DURATION_MS)
-            val revealed = report.steps.count { it.atMs <= elapsed }
-            while (announced < revealed) {
-                currentServices?.announceSpoken(report.steps[announced].spoken)
-                announced++
+        // The on-field umpire refers the decision, then the third umpire speaks each check in his own voice, one after
+        // the other: a step appears as its line begins and the next waits until he has finished (so the voice and the
+        // screen never fall out of step). With no recording the phone's voice reads the line, 1.5 seconds apart.
+        currentServices?.umpireSay(listOf("um_review"), "The decision has been referred to the third umpire.")
+        currentServices?.awaitUmpire()
+        val steps = report.steps
+        for ((index, step) in steps.withIndex()) {
+            elapsedMs = (index + 1) * DrsSystem.REVIEW_DURATION_MS / steps.size
+            val clip = UmpireLines.thirdClipFor(step.spoken)
+            val services = currentServices
+            if (services != null && clip != null && services.sound.playUmpire(clip)) {
+                services.awaitUmpire()
+                delay(350)
+            } else {
+                services?.announceSpoken(step.spoken)
+                delay(1500)
             }
-            if (elapsed >= DrsSystem.REVIEW_DURATION_MS) break
-            delay(100)
         }
+        elapsedMs = DrsSystem.REVIEW_DURATION_MS
         currentServices?.sound?.stopDrsReviewAudio()
         currentOnComplete()
     }
@@ -406,7 +413,19 @@ private fun DrsResultStage(
             DrsVerdict.STANDS -> if (userIsReviewing) sound?.playDrsLose() else sound?.playDrsFirecracker()
             DrsVerdict.UMPIRES_CALL -> if (userIsReviewing) sound?.playDrsUmpiresCallAgainst() else sound?.playDrsFirecracker()
         }
-        currentServices?.announceSpoken("${report.headline} ${report.explanation} $reviewLine")
+        // The third umpire gives the verdict in his own voice; the explanation and the review count follow in the phone's voice.
+        val verdictClip = when (report.verdict) {
+            DrsVerdict.OVERTURNED -> "tu_overturned"
+            DrsVerdict.UMPIRES_CALL -> "tu_umpires_call"
+            DrsVerdict.STANDS -> "tu_stands"
+        }
+        val verdictServices = currentServices
+        if (verdictServices != null && verdictServices.sound.playUmpire(verdictClip)) {
+            verdictServices.awaitUmpire()
+            verdictServices.announceSpoken("${report.explanation} $reviewLine")
+        } else {
+            verdictServices?.announceSpoken("${report.headline} ${report.explanation} $reviewLine")
+        }
     }
 
     Column(

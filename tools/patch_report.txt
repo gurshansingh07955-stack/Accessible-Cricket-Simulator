@@ -1,6 +1,6 @@
-Patch run: 39183228582
-Timestamp (UTC): 2026-10-19T00:59:27Z
+Patch run: 39238655070
+Timestamp (UTC): 2026-10-19T10:36:35Z
 Result: OK
 -----
-Patch 2026-10-19-030-fix-impact-build.json
-  applied 1 operation(s) to 1 file(s)
+Patch 2026-10-19-031-umpires-appeals.json
+  applied 49 operation(s) to 12 file(s)

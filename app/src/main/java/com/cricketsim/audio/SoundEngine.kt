@@ -386,6 +386,29 @@ class SoundEngine(context: Context) {
         playRecorded(RecordedAsset.US_MENU_OPEN, USER_SOUND_GAIN)
     }
 
+    /** Many fielders appealing for an out together (a different recording each time). */
+    fun playAppeal() {
+        if (!settings.soundEffects) return
+        for (asset in APPEAL_ASSETS.shuffled()) {
+            if (playRecorded(asset, 0.95f)) {
+                duckFor(1800)
+                return
+            }
+        }
+    }
+
+    /**
+     * The umpires' recorded voices (see audio/UmpireLines.kt): one queue on its own player, so a line never cuts off
+     * another. Different voices from the commentators and the auctioneer.
+     */
+    val umpireVoice: AuctionVoice by lazy { AuctionVoice(appContext) }
+
+    /** Says the clips in order in the umpire's voice. False if any is missing (or sound effects are off): the caller then speaks the text itself. */
+    fun playUmpire(vararg clipIds: String): Boolean {
+        if (!settings.soundEffects) return false
+        return umpireVoice.play(clipIds.toList())
+    }
+
     // True from the moment the no-ball siren sounds until the ball it was for has been
     // resolved, so the same no-ball is never given two sirens (see takeSirenSounded).
     private var sirenSounded = false
@@ -1537,7 +1560,23 @@ class SoundEngine(context: Context) {
             RecordedAsset.DRS_LOSE,
             RecordedAsset.DRS_UMPIRES_CALL_AGAINST,
             RecordedAsset.DRINKS_BREAK,
-            RecordedAsset.AUCTION_GAVEL
+            RecordedAsset.AUCTION_GAVEL,
+            RecordedAsset.APPEAL_1,
+            RecordedAsset.APPEAL_2,
+            RecordedAsset.APPEAL_3,
+            RecordedAsset.APPEAL_4,
+            RecordedAsset.APPEAL_5,
+            RecordedAsset.APPEAL_6
+        )
+
+        /** The appeal clips: one is played at random each time. */
+        val APPEAL_ASSETS = listOf(
+            RecordedAsset.APPEAL_1,
+            RecordedAsset.APPEAL_2,
+            RecordedAsset.APPEAL_3,
+            RecordedAsset.APPEAL_4,
+            RecordedAsset.APPEAL_5,
+            RecordedAsset.APPEAL_6
         )
 
         // --- Your own sounds (tools/user_sounds, see USER_SOUNDS.md) ---

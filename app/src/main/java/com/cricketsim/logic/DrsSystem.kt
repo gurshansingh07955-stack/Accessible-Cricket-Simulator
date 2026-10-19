@@ -265,20 +265,20 @@ object DrsSystem {
             "Review requested",
             "${drsCase.reviewingTeamName} have asked for a review of the $label decision against " +
                 "${drsCase.batterName}. On-field decision: out. Delivery: ${describeDelivery(drsCase.delivery)}",
-            "Review requested."
+            "The decision has been referred to the third umpire."
         )
     }
 
     private fun noBallLine(): Line = Line(
         "No-ball check",
         "Front foot checked. It is a legal delivery.",
-        "No-ball check. Legal delivery."
+        "Checking for a no-ball. The front foot is behind the line. Legal delivery."
     )
 
     private fun finalLine(): Line = Line(
         "Third umpire",
         "All the evidence is in. The third umpire is confirming the decision.",
-        "Third umpire confirming."
+        "I have all the evidence. Here is the decision."
     )
 
     // ------------------------------------------------------------
@@ -316,38 +316,38 @@ object DrsSystem {
         val notNeeded = "Not needed. The ball hit the bat first."
 
         val edge = if (batInvolved) {
-            Line("UltraEdge", "A spike shows as the ball passes the bat. The bat is involved.", "UltraEdge. Bat involved.")
+            Line("UltraEdge", "A spike shows as the ball passes the bat. The bat is involved.", "Checking for an edge. There is a spike. The bat is involved.")
         } else {
-            Line("UltraEdge", "No spike. No bat involved.", "UltraEdge. No bat involved.")
+            Line("UltraEdge", "No spike. No bat involved.", "Checking for an edge. No spike. No bat involved.")
         }
 
         val pitching = when {
-            batInvolved -> Line("Ball tracking: pitching", notNeeded, "Pitching. Not needed.")
+            batInvolved -> Line("Ball tracking: pitching", notNeeded, "Ball tracking. Pitching: not needed.")
             reason == LbwReason.PITCHED_OUTSIDE_LEG ->
-                Line("Ball tracking: pitching", "Outside leg stump. A ball pitching outside leg cannot be out LBW.", "Pitching. Outside leg.")
+                Line("Ball tracking: pitching", "Outside leg stump. A ball pitching outside leg cannot be out LBW.", "Ball tracking. Pitching: outside leg.")
             pitchedOutsideOff ->
-                Line("Ball tracking: pitching", "Outside off stump. That is allowed for LBW.", "Pitching. Outside off.")
-            else -> Line("Ball tracking: pitching", "In line with the stumps.", "Pitching. In line.")
+                Line("Ball tracking: pitching", "Outside off stump. That is allowed for LBW.", "Ball tracking. Pitching: outside off.")
+            else -> Line("Ball tracking: pitching", "In line with the stumps.", "Ball tracking. Pitching: in line.")
         }
 
         val impact = when {
-            batInvolved -> Line("Ball tracking: impact", notNeeded, "Impact. Not needed.")
+            batInvolved -> Line("Ball tracking: impact", notNeeded, "Impact: not needed.")
             reason == LbwReason.IMPACT_OUTSIDE_OFF ->
-                Line("Ball tracking: impact", "Outside off stump, and the batter was playing a shot.", "Impact. Outside off.")
+                Line("Ball tracking: impact", "Outside off stump, and the batter was playing a shot.", "Impact: outside off, and the batter was playing a shot.")
             callOnImpact ->
-                Line("Ball tracking: impact", "Umpire's call. Only a small part of the ball is in line.", "Impact. Umpire's call.")
-            else -> Line("Ball tracking: impact", "In line with the stumps.", "Impact. In line.")
+                Line("Ball tracking: impact", "Umpire's call. Only a small part of the ball is in line.", "Impact: umpire's call.")
+            else -> Line("Ball tracking: impact", "In line with the stumps.", "Impact: in line.")
         }
 
         val wickets = when {
-            batInvolved -> Line("Ball tracking: wickets", notNeeded, "Wickets. Not needed.")
+            batInvolved -> Line("Ball tracking: wickets", notNeeded, "Wickets: not needed.")
             reason == LbwReason.MISSING_STUMPS -> {
                 val how = if (rng.nextBoolean()) "going over the top" else "sliding down the leg side"
-                Line("Ball tracking: wickets", "Missing. The ball is $how.", "Wickets. Missing.")
+                Line("Ball tracking: wickets", "Missing. The ball is $how.", "Wickets: missing.")
             }
             callOnWickets ->
-                Line("Ball tracking: wickets", "Umpire's call. The ball is only clipping the stumps.", "Wickets. Umpire's call.")
-            else -> Line("Ball tracking: wickets", "Hitting the stumps.", "Wickets. Hitting.")
+                Line("Ball tracking: wickets", "Umpire's call. The ball is only clipping the stumps.", "Wickets: umpire's call.")
+            else -> Line("Ball tracking: wickets", "Hitting the stumps.", "Wickets: hitting.")
         }
 
         val explanation = when (verdict) {
@@ -380,22 +380,22 @@ object DrsSystem {
             Line(
                 "Batter's ground",
                 "The bat is grounded behind the line, $centimetres centimetres in, when the bails come off.",
-                "Bat grounded. Batter is in."
+                "The bat is grounded behind the line. The batter is in."
             )
         } else {
             Line(
                 "Batter's ground",
                 "The bat is $centimetres centimetres short of the line when the bails come off.",
-                "Bat short. Batter is out."
+                "The bat is short of the line. The batter is out."
             )
         }
         val steps = timeline(
             listOf(
                 requestLine(drsCase),
                 noBallLine(),
-                Line("Replay: side-on", "The fielder collects the ball and the bails are broken.", "Replay. Side-on."),
-                Line("Replay: front-on", "Checking where the bat and body are as the bails come off.", "Replay. Front-on."),
-                Line("Frame by frame", "Stepping through the replay one frame at a time.", "Frame by frame."),
+                Line("Replay: side-on", "The fielder collects the ball and the bails are broken.", "Replay. Side-on view."),
+                Line("Replay: front-on", "Checking where the bat and body are as the bails come off.", "Replay. Front-on view."),
+                Line("Frame by frame", "Stepping through the replay one frame at a time.", "Checking frame by frame."),
                 ground,
                 finalLine()
             )
@@ -417,23 +417,23 @@ object DrsSystem {
         val footBehind = overturned && !collectedInFront
 
         val gloves = if (collectedInFront) {
-            Line("Keeper's gloves", "The keeper took the ball in front of the stumps. That is not a legal stumping.", "Keeper. Ball taken in front.")
+            Line("Keeper's gloves", "The keeper took the ball in front of the stumps. That is not a legal stumping.", "Checking the keeper. The ball was taken in front of the stumps.")
         } else {
-            Line("Keeper's gloves", "The keeper collected the ball behind the stumps.", "Keeper. Behind the stumps.")
+            Line("Keeper's gloves", "The keeper collected the ball behind the stumps.", "Checking the keeper. The ball was collected behind the stumps.")
         }
         val foot = when {
-            collectedInFront -> Line("Batter's foot", "Not needed. The keeper took the ball in front of the stumps.", "Foot. Not needed.")
-            footBehind -> Line("Batter's foot", "The foot is grounded behind the line when the bails come off.", "Foot grounded. Batter is in.")
-            else -> Line("Batter's foot", "The foot is in the air, out of the crease, when the bails come off.", "Foot in the air. Batter is out.")
+            collectedInFront -> Line("Batter's foot", "Not needed. The keeper took the ball in front of the stumps.", "The foot: not needed.")
+            footBehind -> Line("Batter's foot", "The foot is grounded behind the line when the bails come off.", "The foot is grounded behind the line. The batter is in.")
+            else -> Line("Batter's foot", "The foot is in the air, out of the crease, when the bails come off.", "The foot is in the air. The batter is out.")
         }
         val steps = timeline(
             listOf(
                 requestLine(drsCase),
                 noBallLine(),
                 gloves,
-                Line("UltraEdge", "No spike. No bat involved.", "UltraEdge. No bat involved."),
+                Line("UltraEdge", "No spike. No bat involved.", "Checking for an edge. No spike. No bat involved."),
                 foot,
-                Line("Bails", "The keeper removes the bails with the ball in the glove.", "Bails removed."),
+                Line("Bails", "The keeper removes the bails with the ball in the glove.", "The bails are removed with the ball in the keeper's glove."),
                 finalLine()
             )
         )
@@ -454,7 +454,7 @@ object DrsSystem {
                 noBallLine(),
                 Line("Replay: first angle", "Checking the first camera angle.", "Replay. First angle."),
                 Line("Replay: second angle", "Checking the second camera angle.", "Replay. Second angle."),
-                Line("Slow motion", "Checking the slow-motion replay.", "Slow motion."),
+                Line("Slow motion", "Checking the slow-motion replay.", "Slow motion replay."),
                 Line("Evidence check", "Weighing up all the evidence.", "Checking the evidence."),
                 finalLine()
             )

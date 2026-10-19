@@ -93,6 +93,12 @@ drs_firecracker|/_cdn/sfx/drs_firecracker.mp3
 drs_lose|/_cdn/sfx/drs_lose.mp3
 drs_umpires_call_against|/_cdn/sfx/drs_umpires_call_against.mp3
 drinks_break_drinking|/_cdn/sfx/drinks_break_drinking.mp3
+appeal_1|/_cdn/sfx/appeal_1.mp3
+appeal_2|/_cdn/sfx/appeal_2.mp3
+appeal_3|/_cdn/sfx/appeal_3.mp3
+appeal_4|/_cdn/sfx/appeal_4.mp3
+appeal_5|/_cdn/sfx/appeal_5.mp3
+appeal_6|/_cdn/sfx/appeal_6.mp3
 EOF
 
 echo
@@ -118,6 +124,22 @@ if command -v python3 >/dev/null 2>&1 && [ -f tools/auction_clip_ids.py ]; then
   echo "Auctioneer clips listed: $auction_count"
 else
   echo "python3 or tools/auction_clip_ids.py not found; skipping the auctioneer's calls."
+fi
+
+echo
+echo "== Downloading the umpires' voices =="
+# The two umpires (the on-field umpire and the third umpire) each have their own ElevenLabs voice. The list of lines
+# comes from tools/umpire_clip_ids.py, which reads app/.../audio/UmpireLines.kt; each clip is on the web app at
+# /_cdn/umpire/<id>.mp3 and is stored in the pack as <id>.mp3.
+umpire_count=0
+if command -v python3 >/dev/null 2>&1 && [ -f tools/umpire_clip_ids.py ]; then
+  for id in $(python3 tools/umpire_clip_ids.py); do
+    umpire_count=$((umpire_count + 1))
+    fetch "$BASE_URL/_cdn/umpire/$id.mp3" "$SCRATCH_DIR/$id.mp3"
+  done
+  echo "Umpire clips listed: $umpire_count"
+else
+  echo "python3 or tools/umpire_clip_ids.py not found; skipping the umpires' voices."
 fi
 
 echo

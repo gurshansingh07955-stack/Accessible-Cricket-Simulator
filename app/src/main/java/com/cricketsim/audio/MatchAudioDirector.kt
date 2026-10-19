@@ -106,6 +106,9 @@ class MatchAudioDirector(private val services: GameServices) {
         sound.playBowlRelease()
         val sirenAlreadySounded = sound.takeSirenSounded()
         if (outcome.isNoBall && !sirenAlreadySounded) sound.playNoBallSiren()
+        // The umpire's own calls, in his voice: wide ball, and no ball with the free hit that follows it.
+        if (outcome.isWide) sound.playUmpire("um_wide")
+        if (outcome.isNoBall) sound.playUmpire("um_no_ball", "um_free_hit")
         // Playing it marked it sounded; clear that again so it only ever covers this one ball.
         sound.takeSirenSounded()
 

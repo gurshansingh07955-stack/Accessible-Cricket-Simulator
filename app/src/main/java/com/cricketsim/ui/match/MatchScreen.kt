@@ -35,6 +35,7 @@ import com.cricketsim.audio.GameSettings
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.audio.MatchAudioDirector
 import com.cricketsim.logic.BattingDecision
+import com.cricketsim.logic.DismissalType
 import com.cricketsim.logic.DrsCase
 import com.cricketsim.logic.DrsSystem
 import com.cricketsim.logic.DrinksBreak
@@ -248,6 +249,8 @@ fun MatchScreen(
     var bowlingSetupMemory by remember { mutableStateOf<BowlingSetupMemory?>(null) }
 
     // --- The IPL's Impact Player rule (logic/ImpactPlayer.kt) ---
+    // An LBW waiting for the appeal and the umpire's decision (AppealScreens.kt).
+    var pendingAppeal by remember { mutableStateOf<PendingAppeal?>(null) }
     var showImpactUse by remember { mutableStateOf(false) }
     // The wicket (innings x 100 + wickets) for which the user said "not now", so he is asked once per wicket.
     var impactPromptSkippedAt by remember { mutableStateOf(-1) }
@@ -388,20 +391,28 @@ fun MatchScreen(
 
     fun advanceOneBall(
         presetBowlingDecision: ResolvedBowlingDecision? = null,
-        presetBattingDecision: BattingDecision? = null
+        presetBattingDecision: BattingDecision? = null,
+        /** The ball of an LBW appeal that has just been decided: carry on with that ball. */
+        resumed: PendingAppeal? = null
     ) {
         if (matchOver) return
         fieldMessage = ""
         playNotice = ""
-        val before = matchState
-        director?.onDelivery()
-        val result = MatchSimulation.simulateOneBall(
+        // After an LBW appeal the ball has already been bowled and simulated: carry on with that ball.
+        val before = resumed?.before ?: matchState
+        if (resumed == null) director?.onDelivery()
+        val result = resumed?.result ?: MatchSimulation.simulateOneBall(
             before,
             stadium,
             settings.difficulty,
             presetBowlingDecision,
             presetBattingDecision
         )
+        // An LBW: the fielding side appeals and the umpire decides before anything else (AppealScreens.kt).
+        if (resumed == null && result.outcome.isWicket && result.outcome.dismissalType == DismissalType.LBW) {
+            pendingAppeal = PendingAppeal(before, result, userBowling = before.bowlingTeam.id == before.userTeam.id)
+            return
+        }
 
         // A dismissal that can be reviewed (LBW today; run out and stumped
         // as soon as the game has them) is HELD BACK rather than applied:
@@ -459,6 +470,33 @@ fun MatchScreen(
             state = matchState,
             startOnFirstInnings = showInningsBreak && !matchOver,
             onBack = { showScorecard = false }
+        )
+        return
+    }
+
+    val appeal = pendingAppeal
+    if (appeal != null) {
+        AppealScreen(
+            userIsBowling = appeal.userBowling,
+            bowlerName = appeal.before.currentBowler.name,
+            batterName = appeal.before.currentBatsmen.first.name,
+            onDecided = { appealed ->
+                pendingAppeal = null
+                if (appealed) {
+                    // Given out: the batter may now review, as for any other dismissal.
+                    advanceOneBall(resumed = appeal)
+                } else {
+                    // No appeal: not out, play goes on (the same ball, without the wicket).
+                    val notOut = MatchSimulation.overturnDismissal(
+                        appeal.before,
+                        appeal.result,
+                        stadium,
+                        settings.difficulty,
+                        "Not out. There was no appeal, so play goes on."
+                    )
+                    commitBall(appeal.before, notOut)
+                }
+            }
         )
         return
     }
@@ -967,6 +1005,9 @@ private class PendingReview(
     val reviewsRemaining: Int,
     val nextBatsmanNeeded: Boolean
 )
+
+/** An LBW that has been bowled and simulated, waiting for the appeal and the umpire's decision. */
+private class PendingAppeal(val before: MatchState, val result: BallResult, val userBowling: Boolean)
 
 /**
  * The single control that both starts the next ball AND commits
