@@ -1,0 +1,16 @@
+{
+  "name": "fix-impact-build",
+  "message": "Fix build: recordPlayedMatch takes teams, not player lists",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+    "contains": "current.userXI.copy(players = ImpactPlayer.participants"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                                ImpactPlayer.participants(finished, current.userXI),\n                                ImpactPlayer.participants(finished, current.opponentXI)\n",
+      "replace": "                                current.userXI.copy(players = ImpactPlayer.participants(finished, current.userXI)),\n                                current.opponentXI.copy(players = ImpactPlayer.participants(finished, current.opponentXI))\n"
+    }
+  ]
+}
