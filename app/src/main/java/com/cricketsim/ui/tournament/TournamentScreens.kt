@@ -469,8 +469,8 @@ fun TournamentFlow(onExit: () -> Unit) {
                             // An Impact Player who came on and the player he replaced both played: both count in the stats.
                             val updated = CplSimulator.recordPlayedMatch(
                                 state, current.fixtureId, finished,
-                                ImpactPlayer.participants(finished, current.userXI),
-                                ImpactPlayer.participants(finished, current.opponentXI)
+                                current.userXI.copy(players = ImpactPlayer.participants(finished, current.userXI)),
+                                current.opponentXI.copy(players = ImpactPlayer.participants(finished, current.opponentXI))
                             )
                             saved = updated
                             // After the Final: the match award has just been shown on the result screen; now the series award.
