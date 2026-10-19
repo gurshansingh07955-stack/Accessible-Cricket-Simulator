@@ -325,7 +325,8 @@ object MatchSimulation {
             bowlingStyle = bowlingDecision.bowlingStyle,
             bowlingQualityTier = bowlingDecision.qualityTier,
             situationalAggressionBias = AiSituation.battingBias(state, AiSituation.recentOverRuns(state)),
-            bowlingLine = bowlingDecision.line
+            bowlingLine = bowlingDecision.line,
+            allowLeave = state.format == com.cricketsim.logic.MatchFormat.TEST
         )
 
         val isPowerplay = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)

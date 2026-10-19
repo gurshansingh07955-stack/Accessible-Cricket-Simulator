@@ -884,7 +884,9 @@ object BattingSystem {
         bowlingQualityTier: BowlingQualityTier,
         situationalAggressionBias: Double = 0.0,
         // Where the ball is pitched in line; lets the computer batter leave one that is well outside off or leg.
-        bowlingLine: BowlingLine? = null
+        bowlingLine: BowlingLine? = null,
+        // Limited-overs formats: the computer batter never leaves a ball alone (only a Test batter does).
+        allowLeave: Boolean = true
     ): BattingDecision {
         val bias = situationalAggressionBias.coerceIn(-1.0, 1.0)
 
@@ -950,7 +952,7 @@ object BattingSystem {
                 else -> 0.25
             }
             shot = when {
-                Random.nextDouble() < leaveChance -> NamedShot.LEAVE
+                allowLeave && Random.nextDouble() < leaveChance -> NamedShot.LEAVE
                 footwork == FootworkType.FRONT_FOOT -> NamedShot.FORWARD_DEFENSE
                 else -> NamedShot.BACKWARD_DEFENSE
             }

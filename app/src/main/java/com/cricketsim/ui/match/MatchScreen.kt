@@ -42,6 +42,9 @@ import com.cricketsim.logic.SuperOver
 import com.cricketsim.logic.DrsVerdict
 import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.FootworkType
+import com.cricketsim.logic.ImpactPlayer
+import com.cricketsim.logic.ImpactSetup
+import com.cricketsim.logic.ImpactState
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.MatchStateMachine
@@ -186,7 +189,9 @@ fun MatchScreen(
     // Called once with the finished match (after any Super Over); the tournament records the result.
     onMatchComplete: ((MatchState) -> Unit)? = null,
     // Where this match saves itself; null means the normal Resume match slot. The tournament passes its own.
-    saveStore: MatchSaveStore? = null
+    saveStore: MatchSaveStore? = null,
+    /** The IPL's Impact Player rule: each side's five named substitutes. Null = no Impact Players in this match. */
+    impact: ImpactSetup? = null
 ) {
     val services = LocalGameServices.current
     val settings = services?.settings ?: GameSettings()
@@ -202,7 +207,8 @@ fun MatchScreen(
                 tossWinnerId = toss.winnerId,
                 tossDecision = toss.decision,
                 stadiumId = stadium.id,
-                weather = WeatherSystem.generateWeatherForStadium(stadium)
+                weather = WeatherSystem.generateWeatherForStadium(stadium),
+                impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) }
             )
         )
     }
@@ -240,6 +246,25 @@ fun MatchScreen(
     var playNotice by remember { mutableStateOf("") }
     // See the class doc comment's "BOWLING SETUP MEMORY".
     var bowlingSetupMemory by remember { mutableStateOf<BowlingSetupMemory?>(null) }
+
+    // --- The IPL's Impact Player rule (logic/ImpactPlayer.kt) ---
+    var showImpactUse by remember { mutableStateOf(false) }
+    // The wicket (innings x 100 + wickets) for which the user said "not now", so he is asked once per wicket.
+    var impactPromptSkippedAt by remember { mutableStateOf(-1) }
+    // The computer side looks at every moment the rule allows. A short pause first, so the ball's own announcement is said first.
+    LaunchedEffect(matchState.score, matchState.currentInnings, matchState.pendingDismissal, matchState.needsBowlerSelection, matchState.needsOpenerSelection) {
+        if (matchOver || matchState.impact == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(1200)
+        val now = matchState
+        val aiId = now.opponentTeam.id
+        val choice = ImpactPlayer.aiChoose(now, aiId) ?: return@LaunchedEffect
+        val next = ImpactPlayer.apply(now, aiId, choice.first.id, choice.second.id) ?: return@LaunchedEffect
+        val swap = next.impact?.swaps?.lastOrNull { it.teamId == aiId } ?: return@LaunchedEffect
+        matchState = next
+        val line = ImpactPlayer.announcement(swap)
+        recentCommentary = (recentCommentary + line).takeLast(6)
+        services?.announceSpoken(line)
+    }
 
     // The crowd bed runs while the match is live and sound effects are on;
     // it stops when the match ends, sound is turned off, or this screen is
@@ -491,7 +516,7 @@ fun MatchScreen(
         // by intercepting back into a redundant path.
         MatchResultScreen(
             resultText = resultText ?: "Match complete.",
-            summaryLines = MatchLines.resultSummaryLines(matchState),
+            summaryLines = MatchLines.resultSummaryLines(matchState) + ImpactPlayer.summaryLines(matchState),
             lastBall = recentCommentary.lastOrNull(),
             onScorecard = { showScorecard = true },
             onHome = onMatchFinished
@@ -567,6 +592,32 @@ fun MatchScreen(
         return
     }
 
+    // The Impact Player screen, opened from the match screen or from the wicket prompt.
+    if (showImpactUse) {
+        BackHandler(onBack = { showImpactUse = false })
+        ImpactUseScreen(
+            state = matchState,
+            teamId = userTeam.id,
+            onConfirm = { inId, outId ->
+                val next = ImpactPlayer.apply(matchState, userTeam.id, outId, inId)
+                if (next != null) {
+                    matchState = next
+                    val swap = next.impact?.swaps?.lastOrNull { it.teamId == userTeam.id }
+                    if (swap != null) {
+                        val line = ImpactPlayer.announcement(swap)
+                        recentCommentary = (recentCommentary + line).takeLast(6)
+                        services?.announceSpoken(line)
+                    }
+                } else {
+                    services?.announceSpoken("That change is not allowed right now.")
+                }
+                showImpactUse = false
+            },
+            onBack = { showImpactUse = false }
+        )
+        return
+    }
+
     // Picks the user's own side owes. These replace the whole screen,
     // like the gesture surfaces do. No BackHandler: a pending pick isn't
     // optional (the match cannot proceed without it), so there's nothing
@@ -584,6 +635,16 @@ fun MatchScreen(
 
     val dismissal = matchState.pendingDismissal
     if (dismissal != null) {
+        // A wicket is a moment the Impact Player rule allows: ask once per wicket, before the next batter is chosen.
+        val wicketKey = matchState.currentInnings * 100 + matchState.score.wickets
+        if (ImpactPlayer.canUse(matchState, userTeam.id) && impactPromptSkippedAt != wicketKey) {
+            ImpactPromptScreen(
+                scoreLine = MatchLines.scoreLine(matchState),
+                onUse = { showImpactUse = true },
+                onSkip = { impactPromptSkippedAt = wicketKey }
+            )
+            return
+        }
         NewBatsmanScreen(
             dismissal = dismissal,
             scoreLine = MatchLines.scoreLine(matchState),
@@ -735,6 +796,16 @@ fun MatchScreen(
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = { showScorecard = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Scorecard")
+        }
+        if (matchState.impact != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            if (ImpactPlayer.canUse(matchState, userTeam.id)) {
+                Button(onClick = { showImpactUse = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Impact Player")
+                }
+            } else {
+                Text(ImpactPlayer.statusLine(matchState, userTeam.id), style = MaterialTheme.typography.bodyMedium)
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
 

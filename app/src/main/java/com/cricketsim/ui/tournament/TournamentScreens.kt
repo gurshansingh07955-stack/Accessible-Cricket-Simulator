@@ -50,6 +50,8 @@ import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.IplSeason
+import com.cricketsim.logic.ImpactPlayer
+import com.cricketsim.logic.ImpactSetup
 import com.cricketsim.logic.CplSimulator
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.PlayerRole
@@ -64,6 +66,7 @@ import com.cricketsim.persistence.MatchSnapshot
 import com.cricketsim.persistence.TournamentSaveStore
 import com.cricketsim.persistence.summary
 import com.cricketsim.ui.ipl.IplFlow
+import com.cricketsim.ui.match.ImpactSelectionScreen
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.match.ScorecardScreen
 import com.cricketsim.ui.setup.PlayingXIScreen
@@ -107,14 +110,18 @@ private sealed interface TPage {
     object Celebration : TPage
     object Ipl : TPage
     data class PickXI(val fixtureId: Int, val attempt: Int = 0) : TPage
-    data class Toss(val fixtureId: Int, val userXI: Team, val opponentXI: Team) : TPage
+    /** IPL only: naming the five Impact Player substitutes, between the Playing XI and the toss. */
+    data class Impact(val fixtureId: Int, val userXI: Team, val opponentXI: Team) : TPage
+    data class Toss(val fixtureId: Int, val userXI: Team, val opponentXI: Team, val impact: ImpactSetup? = null) : TPage
     data class PlayMatch(
         val fixtureId: Int,
         val userXI: Team,
         val opponentXI: Team,
         val toss: TossResult,
         /** Set when picking a saved match back up. */
-        val resume: MatchSnapshot? = null
+        val resume: MatchSnapshot? = null,
+        /** IPL: the Impact Player substitutes of both sides (a resumed match carries them in its own state). */
+        val impact: ImpactSetup? = null
     ) : TPage
     data class Scorecard(val fixtureId: Int) : TPage
 }
@@ -378,7 +385,12 @@ fun TournamentFlow(onExit: () -> Unit) {
                                 page = TPage.PickXI(current.fixtureId, current.attempt + 1)
                             } else {
                                 val opponentXI = CplSimulator.pickXI(opponentSquad, state.tags, stadium)
-                                page = TPage.Toss(current.fixtureId, xi, opponentXI)
+                                // The IPL has the Impact Player rule: its five substitutes are named before the toss.
+                                page = if (state.tournamentId == IplSeason.TOURNAMENT_ID) {
+                                    TPage.Impact(current.fixtureId, xi, opponentXI)
+                                } else {
+                                    TPage.Toss(current.fixtureId, xi, opponentXI)
+                                }
                             }
                         },
                         onBack = back
@@ -395,13 +407,37 @@ fun TournamentFlow(onExit: () -> Unit) {
                 }
             } else back()
         }
-        is TPage.Toss -> {
+        is TPage.Impact -> {
             val back = { page = TPage.PickXI(current.fixtureId) }
+            BackHandler(onBack = back)
+            val state = saved
+            val userSquad = state?.teams?.find { it.id == current.userXI.id }
+            val opponentSquad = state?.teams?.find { it.id == current.opponentXI.id }
+            if (state != null && userSquad != null && opponentSquad != null) {
+                val overseas = state.tags.filterValues { it == SquadTag.OVERSEAS }.keys.toList()
+                val reserves = userSquad.players.filter { p -> current.userXI.players.none { it.id == p.id } }
+                ImpactSelectionScreen(
+                    teamName = userSquad.name,
+                    reserves = reserves,
+                    xi = current.userXI.players,
+                    overseasIds = overseas,
+                    onConfirm = { subs ->
+                        val opponentSubs = ImpactPlayer.aiSubstitutes(opponentSquad.players, current.opponentXI.players, overseas.toSet())
+                        page = TPage.Toss(current.fixtureId, current.userXI, current.opponentXI, ImpactSetup(subs, opponentSubs, overseas))
+                    },
+                    onBack = back
+                )
+            } else back()
+        }
+        is TPage.Toss -> {
+            val back = {
+                page = if (current.impact != null) TPage.Impact(current.fixtureId, current.userXI, current.opponentXI) else TPage.PickXI(current.fixtureId)
+            }
             BackHandler(onBack = back)
             TossScreen(
                 userTeam = current.userXI,
                 opponentTeam = current.opponentXI,
-                onTossComplete = { toss -> page = TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, toss) },
+                onTossComplete = { toss -> page = TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, toss, impact = current.impact) },
                 onBack = back
             )
         }
@@ -425,11 +461,17 @@ fun TournamentFlow(onExit: () -> Unit) {
                     onMatchFinished = { page = TPage.Hub },
                     resume = current.resume,
                     saveStore = matchStore,
+                    impact = current.impact,
                     onMatchComplete = { finished ->
                         pendingMatch = null
                         val state = saved
                         if (state != null) {
-                            val updated = CplSimulator.recordPlayedMatch(state, current.fixtureId, finished, current.userXI, current.opponentXI)
+                            // An Impact Player who came on and the player he replaced both played: both count in the stats.
+                            val updated = CplSimulator.recordPlayedMatch(
+                                state, current.fixtureId, finished,
+                                ImpactPlayer.participants(finished, current.userXI),
+                                ImpactPlayer.participants(finished, current.opponentXI)
+                            )
                             saved = updated
                             // After the Final: the match award has just been shown on the result screen; now the series award.
                             if (CplSimulator.champion(state) == null && CplSimulator.champion(updated) != null) {

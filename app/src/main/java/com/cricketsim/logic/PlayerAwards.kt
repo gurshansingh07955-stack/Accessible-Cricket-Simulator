@@ -46,7 +46,8 @@ object PlayerAwards {
     /** Everyone who played, best first. */
     fun impacts(state: MatchState): List<MatchAward> {
         val innings = listOfNotNull(state.firstInningsData, state.currentInningsData)
-        val players = (state.userTeam.players + state.opponentTeam.players).associateBy { it.id }
+        // (An Impact Player rule swap removes the player who went off from his team's XI list; he still played.)
+        val players = (state.userTeam.players + state.opponentTeam.players + state.impact?.replacedOut.orEmpty()).associateBy { it.id }
         val teamNames = HashMap<String, String>()
         innings.forEach {
             teamNames[it.battingTeamId] = it.battingTeamName

@@ -179,7 +179,9 @@ data class MatchState(
     // True while the user still has to name their three batters and bowler.
     val superOverNominating: Boolean = false,
     // The finished match (its two innings and scorecards), kept while Super Overs are played.
-    val regulationState: MatchState? = null
+    val regulationState: MatchState? = null,
+    // The IPL's Impact Player rule (logic/ImpactPlayer.kt); null = the match has no Impact Players.
+    val impact: ImpactState? = null
 )
 
 object MatchStateMachine {
@@ -228,7 +230,8 @@ object MatchStateMachine {
         tossWinnerId: String,
         tossDecision: TossDecision,
         stadiumId: String,
-        weather: WeatherSnapshot
+        weather: WeatherSnapshot,
+        impact: ImpactState? = null
     ): MatchState {
         // Determine who bats first
         val battingTeam: Team
@@ -296,7 +299,8 @@ object MatchStateMachine {
             activeRainDelay = null,
             firstInningsInterruption = null,
             secondInningsInterruption = null,
-            dlsRevised = false
+            dlsRevised = false,
+            impact = impact
         )
         // Note: the web source calls saveMatch(newState) here — omitted,
         // persistence not ported yet (see file header).

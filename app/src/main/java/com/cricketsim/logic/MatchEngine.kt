@@ -544,6 +544,12 @@ object MatchEngine {
                     val stumpingWeight = if (bowlingDecision.bowlingStyle == BowlingStyle.SPIN) 5 else 3
                     repeat(stumpingWeight) { dismissalTypes.add(DismissalType.STUMPED) }
                 }
+                // A ball outside off stump or outside leg stump cannot bowl the batter, and cannot be lbw: if he is out
+                // to it, it is caught (or stumped when he has stepped out).
+                if (bowlingDecision.line == BowlingLine.OUTSIDE_OFF || bowlingDecision.line == BowlingLine.OUTSIDE_LEG) {
+                    dismissalTypes.removeAll { it == DismissalType.BOWLED || it == DismissalType.LBW }
+                    if (dismissalTypes.isEmpty()) dismissalTypes.add(DismissalType.CAUGHT)
+                }
                 var pickedKind = dismissalTypes[(Random.nextDouble() * dismissalTypes.size).toInt().coerceAtMost(dismissalTypes.size - 1)]
                 // Caught and bowled is rare: roughly one match in five or six.
                 if (pickedKind == DismissalType.CAUGHT && Random.nextDouble() < caughtAndBowledChance(matchState.format)) {
@@ -690,11 +696,11 @@ object MatchEngine {
     /** How likely a ball that is left alone would have hit the stumps, from its line, length and how well it was bowled. */
     private fun leaveHitsStumpsChance(decision: ResolvedBowlingDecision): Double {
         val lineChance = when (decision.line) {
-            BowlingLine.OUTSIDE_OFF -> 0.04
+            BowlingLine.OUTSIDE_OFF -> 0.0 // outside off stump: a ball that is left cannot hit the stumps
             BowlingLine.OFF_STUMP -> 0.40
             BowlingLine.MIDDLE_STUMP -> 0.65
             BowlingLine.LEG_STUMP -> 0.50
-            BowlingLine.OUTSIDE_LEG -> 0.02
+            BowlingLine.OUTSIDE_LEG -> 0.0 // outside leg stump: likewise
         }
         val lengthFactor = when (decision.actualLength) {
             BowlingLength.YORKER, BowlingLength.FULL, BowlingLength.HALF_VOLLEY -> 1.15
