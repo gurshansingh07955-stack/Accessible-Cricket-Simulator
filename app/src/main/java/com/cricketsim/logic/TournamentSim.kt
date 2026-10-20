@@ -339,14 +339,15 @@ object CplSimulator {
     }
 
     /** Why this XI breaks the CPL rules (at most four overseas players, at least one breakout player), or null if it does not. */
-    fun xiProblem(xi: Team, tags: Map<String, SquadTag>): String? {
+    fun xiProblem(xi: Team, tags: Map<String, SquadTag>, tournamentId: String? = null): String? {
         val overseas = xi.players.count { tags[it.id] == SquadTag.OVERSEAS }
         if (overseas > MAX_OVERSEAS) {
             return "Your XI has $overseas overseas players. The rules allow at most $MAX_OVERSEAS. Please change your team."
         }
         // The breakout-player rule belongs to the CPL: it applies only when the squads have breakout players.
         if (tags.containsValue(SquadTag.BREAKOUT) && xi.players.none { tags[it.id] == SquadTag.BREAKOUT }) {
-            return "Your XI needs at least one breakout player. Please change your team."
+            val kindOfPlayer = if (tournamentId == LankaPremierLeague.TOURNAMENT_ID) "under-23 player" else "breakout player"
+            return "Your XI needs at least one $kindOfPlayer. Please change your team."
         }
         return null
     }
