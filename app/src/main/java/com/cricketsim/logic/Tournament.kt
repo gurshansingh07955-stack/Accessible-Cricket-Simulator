@@ -156,7 +156,7 @@ object CplData {
         ).mapNotNull { StadiumData.getStadiumById(it) } + BRIAN_LARA
     }
 
-    fun stadium(id: String): Stadium? = stadiums.find { it.id == id } ?: IplSeason.stadium(id)
+    fun stadium(id: String): Stadium? = stadiums.find { it.id == id } ?: IplSeason.stadium(id) ?: AbuDhabiT10.stadium(id)
 
     /** Grounds that are nobody's home: a few league matches are played there, as the real CPL tours. */
     private val NEUTRAL_VENUES = listOf("arnos-vale-st-vincent", "queens-park-oval", "national-stadium-grenada")
@@ -238,10 +238,12 @@ object CplData {
         )
     }
 
-    fun shortName(teamId: String): String = DEFS.find { it.id == teamId }?.shortName ?: IplData.shortName(teamId)
+    fun shortName(teamId: String): String =
+        DEFS.find { it.id == teamId }?.shortName ?: AbuDhabiT10.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
 
     fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId
-        ?: if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else "kensington-oval"
+        ?: if (AbuDhabiT10.isTeam(teamId)) AbuDhabiT10.GROUND_ID
+        else if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else "kensington-oval"
 
     private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }
 
@@ -384,8 +386,9 @@ object CplData {
             val firstIsHome = r.firstBattingId == home
             val first = if (firstIsHome) a else b
             val second = if (firstIsHome) b else a
-            val firstBalls = if (r.firstWickets >= 10) 120 else r.firstBalls
-            val secondBalls = if (r.secondWickets >= 10) 120 else r.secondBalls
+            val full = AbuDhabiT10.fullInningsBalls(state.tournamentId) // 120 balls in a T20, 60 in the T10
+            val firstBalls = if (r.firstWickets >= 10) full else r.firstBalls
+            val secondBalls = if (r.secondWickets >= 10) full else r.secondBalls
             first.runsFor += r.firstRuns
             first.ballsFaced += firstBalls
             second.runsAgainst += r.firstRuns

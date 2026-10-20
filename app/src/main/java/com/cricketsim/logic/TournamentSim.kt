@@ -112,7 +112,8 @@ object CplSimulator {
         awaySquad: Team,
         tags: Map<String, SquadTag>,
         stadium: Stadium,
-        random: Random
+        random: Random,
+        format: MatchFormat = MatchFormat.T20
     ): SimResult? {
         val home = pickXI(homeSquad, tags, stadium)
         val away = pickXI(awaySquad, tags, stadium)
@@ -121,7 +122,7 @@ object CplSimulator {
         val decision = tossDecision(stadium, weather)
 
         var s = MatchStateMachine.createNewMatch(
-            MatchFormat.T20, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather
+            format, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather
         )
         // Neither side is "the user": the engine then treats both as AI-controlled everywhere
         // (next batter, bowling changes, fields), and its difficulty setting favours nobody.
@@ -444,6 +445,13 @@ object CplSimulator {
             if (home == null || away == null) return
             fixtures = fixtures.map { if (it.stage == name && it.homeId == null) it.copy(homeId = home, awayId = away) else it }
         }
+        if (state.tournamentId == AbuDhabiT10.TOURNAMENT_ID) {
+            // Abu Dhabi T10: the table leader goes straight to the Final; 2nd v 3rd play the Qualifier for the other place.
+            setTeams("Qualifier", table[1].team.id, table[2].team.id)
+            val qualifier = stage("Qualifier")
+            if (qualifier?.result != null) setTeams("Final", table[0].team.id, winnerOf(qualifier))
+            return state.copy(fixtures = fixtures)
+        }
         setTeams("Qualifier 1", table[0].team.id, table[1].team.id)
         setTeams("Eliminator", table[2].team.id, table[3].team.id)
         val q1 = stage("Qualifier 1")
@@ -459,7 +467,7 @@ object CplSimulator {
         val home = state.teams.find { it.id == fixture.homeId } ?: return state
         val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
-        val sim = simulateMatch(home, away, state.tags, stadium, random) ?: return state
+        val sim = simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId)) ?: return state
         val fixtures = state.fixtures.map {
             if (it.id == fixture.id) it.copy(result = sim.result, scorecard = sim.scorecard) else it
         }

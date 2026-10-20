@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.CplData
+import com.cricketsim.logic.AbuDhabiT10
 import com.cricketsim.logic.IplSeason
 import com.cricketsim.logic.ImpactPlayer
 import com.cricketsim.logic.ImpactSetup
@@ -104,6 +105,8 @@ private sealed interface TPage {
     object Menu : TPage
     object Leagues : TPage
     object Cpl : TPage
+    /** The Abu Dhabi T10 page (the same page as the CPL's, for the T10 tournament). */
+    object Adt : TPage
     object TeamSelect : TPage
     data class Squad(val teamId: String) : TPage
     object Hub : TPage
@@ -135,14 +138,20 @@ fun TournamentFlow(onExit: () -> Unit) {
     // tournament and its own part-played-match slot, so neither can touch the other (or the normal Resume match).
     var kind by remember { mutableStateOf("cpl") } // "cpl" or "ipl"
     var iplSeason by remember { mutableStateOf(false) } // is there a saved IPL season?
+    var adtSaved by remember { mutableStateOf(false) } // is there a saved Abu Dhabi T10 tournament?
     val cplStore = remember { TournamentSaveStore(context) }
     val iplStore = remember { TournamentSaveStore(context, "saved_tournament_ipl2027.json") }
     val cplMatchStore = remember { MatchSaveStore(context, "saved_tournament_match.json") }
     val iplMatchStore = remember { MatchSaveStore(context, "saved_ipl_match.json") }
-    val store = if (kind == "ipl") iplStore else cplStore
-    val matchStore = if (kind == "ipl") iplMatchStore else cplMatchStore
+    val adtStore = remember { TournamentSaveStore(context, "saved_tournament_adt10_2026.json") }
+    val adtMatchStore = remember { MatchSaveStore(context, "saved_adt10_match.json") }
+    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; else -> cplStore }
+    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; else -> cplMatchStore }
     val scope = rememberCoroutineScope()
-    val built = remember { CplData.buildTeams() }
+    val cplBuilt = remember { CplData.buildTeams() }
+    val adtBuilt = remember { AbuDhabiT10.buildTeams() }
+    // The squads of the tournament in hand (team choice, squads, tags).
+    val built = if (kind == "adt10") adtBuilt else cplBuilt
 
     var page by remember { mutableStateOf<TPage>(TPage.Menu) }
     // The "menu open" sound for each menu-type page (not the toss, the match, the celebration or the IPL
@@ -191,7 +200,10 @@ fun TournamentFlow(onExit: () -> Unit) {
         }
     }
 
-    LaunchedEffect(Unit) { iplSeason = iplStore.load() != null }
+    LaunchedEffect(Unit) {
+        iplSeason = iplStore.load() != null
+        adtSaved = adtStore.load() != null
+    }
     LaunchedEffect(kind) {
         val tournament = store.load()
         saved = tournament
@@ -213,7 +225,21 @@ fun TournamentFlow(onExit: () -> Unit) {
         is TPage.Leagues -> {
             val back = { page = TPage.Menu }
             BackHandler(onBack = back)
-            LeaguesPage(hasSaved = saved != null, onCpl = { page = TPage.Cpl }, onIpl = { page = TPage.Ipl }, onBack = back)
+            LeaguesPage(
+                hasSaved = saved != null,
+                adtSaved = adtSaved,
+                onCpl = { page = TPage.Cpl },
+                onAdt = {
+                    // The Abu Dhabi T10 has its own saved tournament and match slot: load them for this kind.
+                    saved = null
+                    pendingMatch = null
+                    loaded = false
+                    kind = "adt10"
+                    page = TPage.Adt
+                },
+                onIpl = { page = TPage.Ipl },
+                onBack = back
+            )
         }
         is TPage.Ipl -> IplFlow(
             onExit = {
@@ -257,10 +283,29 @@ fun TournamentFlow(onExit: () -> Unit) {
                 }
             }
         )
-        is TPage.Cpl -> {
-            val back = { page = TPage.Leagues }
+        is TPage.Cpl, is TPage.Adt -> {
+            val isAdt = kind == "adt10"
+            val tournamentLabel = if (isAdt) AbuDhabiT10.TOURNAMENT_NAME else "CPL 2026"
+            val back = {
+                if (isAdt) {
+                    // Back to the league list: the CPL is the tournament in hand again.
+                    adtSaved = saved != null
+                    saved = null
+                    pendingMatch = null
+                    loaded = false
+                    kind = "cpl"
+                }
+                page = TPage.Leagues
+            }
             BackHandler(onBack = back)
             CplPage(
+                title = tournamentLabel,
+                intro = if (isAdt) {
+                    "The Abu Dhabi T10: the six real teams and their 2026 squads, 10 overs a side, 30 league matches " +
+                        "and then the Qualifier and the Final, all at Sheikh Zayed Stadium."
+                } else {
+                    "The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval."
+                },
                 loaded = loaded,
                 saved = saved,
                 pendingSummary = pendingMatch?.summary(),
@@ -283,7 +328,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                 AlertDialog(
                     onDismissRequest = { confirmDelete = false },
                     title = { Text("Delete this tournament?") },
-                    text = { Text("Your saved CPL 2026 tournament, with its results and stats, will be removed. This cannot be undone.") },
+                    text = { Text("Your saved $tournamentLabel tournament, with its results and stats, will be removed. This cannot be undone.") },
                     confirmButton = {
                         TextButton(onClick = {
                             confirmDelete = false
@@ -302,13 +347,14 @@ fun TournamentFlow(onExit: () -> Unit) {
             }
         }
         is TPage.TeamSelect -> {
-            val back = { page = TPage.Cpl }
+            val back = { page = if (kind == "adt10") TPage.Adt else TPage.Cpl }
             BackHandler(onBack = back)
             TeamSelectPage(
                 teams = built.first,
                 onViewSquad = { teamId -> page = TPage.Squad(teamId) },
                 onChoose = { teamId ->
-                    val state = CplData.newTournament(teamId, built, Random.Default)
+                    val state = if (kind == "adt10") AbuDhabiT10.newTournament(teamId, built, Random.Default)
+                    else CplData.newTournament(teamId, built, Random.Default)
                     saved = state
                     scope.launch { store.save(state) }
                     page = TPage.Hub
@@ -320,10 +366,10 @@ fun TournamentFlow(onExit: () -> Unit) {
             val back = { page = TPage.TeamSelect }
             BackHandler(onBack = back)
             val team = built.first.find { it.id == current.teamId }
-            if (team != null) SquadPage(team = team, tags = built.second, onBack = back) else back()
+            if (team != null) SquadPage(team = team, tags = built.second, showOrigin = kind != "adt10", onBack = back) else back()
         }
         is TPage.Hub -> {
-            val back = { page = if (kind == "ipl") TPage.Ipl else TPage.Cpl }
+            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10" -> TPage.Adt; else -> TPage.Cpl } }
             BackHandler(onBack = back)
             val state = saved
             if (state != null) {
@@ -480,7 +526,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                 ?: saved?.fixtures?.find { it.id == current.fixtureId }?.let { CplData.stadium(it.stadiumId) }
             if (stadium != null) {
                 MatchScreen(
-                    format = MatchFormat.T20,
+                    format = AbuDhabiT10.formatFor(saved?.tournamentId),
                     stadium = stadium,
                     userTeam = current.userXI,
                     opponentTeam = current.opponentXI,
@@ -606,7 +652,7 @@ private fun MenuPage(onLeague: () -> Unit, onBack: () -> Unit) {
 }
 
 @Composable
-private fun LeaguesPage(hasSaved: Boolean, onCpl: () -> Unit, onIpl: () -> Unit, onBack: () -> Unit) {
+private fun LeaguesPage(hasSaved: Boolean, adtSaved: Boolean, onCpl: () -> Unit, onAdt: () -> Unit, onIpl: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         PageTitle("League tournaments")
         Spacer(modifier = Modifier.height(16.dp))
@@ -617,6 +663,14 @@ private fun LeaguesPage(hasSaved: Boolean, onCpl: () -> Unit, onIpl: () -> Unit,
                     if (hasSaved) " You have a saved tournament." else "",
                 enabled = true,
                 onClick = onCpl
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ChoiceRow(
+                title = "Abu Dhabi T10 2026",
+                description = "The real six teams and squads, 10 overs a side: 30 league matches, the Qualifier and the Final." +
+                    if (adtSaved) " You have a saved tournament." else "",
+                enabled = true,
+                onClick = onAdt
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
@@ -640,10 +694,12 @@ private fun CplPage(
     onStart: () -> Unit,
     onResume: () -> Unit,
     onDelete: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    title: String,
+    intro: String
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        PageTitle("CPL 2026")
+        PageTitle(title)
         Spacer(modifier = Modifier.height(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             if (!loaded) {
@@ -671,7 +727,7 @@ private fun CplPage(
                 OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Delete saved tournament") }
             } else {
                 Text(
-                    text = "The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.",
+                    text = intro,
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -731,7 +787,7 @@ private fun TeamSelectPage(
 }
 
 @Composable
-private fun SquadPage(team: Team, tags: Map<String, SquadTag>, onBack: () -> Unit) {
+private fun SquadPage(team: Team, tags: Map<String, SquadTag>, showOrigin: Boolean = true, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         PageTitle("${team.name} squad")
         Spacer(modifier = Modifier.height(4.dp))
@@ -751,7 +807,7 @@ private fun SquadPage(team: Team, tags: Map<String, SquadTag>, onBack: () -> Uni
                 ) {
                     Text(text = p.name, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = "${roleLabel(p.role)}. ${tagLabel(tags[p.id])}. Batting ${p.battingRating}, bowling ${p.bowlingRating}.",
+                        text = "${roleLabel(p.role)}. ${if (showOrigin) tagLabel(tags[p.id]) + ". " else ""}Batting ${p.battingRating}, bowling ${p.bowlingRating}.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1118,7 +1174,14 @@ private fun TableTab(state: TournamentState) {
 @Composable
 private fun VenuesTab(state: TournamentState) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(if (state.tournamentId == IplSeason.TOURNAMENT_ID) IplSeason.stadiums else CplData.stadiums, key = { it.id }) { s ->
+        items(
+            when (state.tournamentId) {
+                IplSeason.TOURNAMENT_ID -> IplSeason.stadiums
+                AbuDhabiT10.TOURNAMENT_ID -> AbuDhabiT10.stadiums
+                else -> CplData.stadiums
+            },
+            key = { it.id }
+        ) { s ->
             val homeOf = state.teams.filter { CplData.homeStadiumId(it.id) == s.id }.joinToString(", ") { it.name }
             val matches = state.fixtures.count { it.stadiumId == s.id }
             Column(

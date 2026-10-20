@@ -50,6 +50,13 @@ object AiBallModel {
     private const val SKILL_WICKET = 1.5
 
     private const val RUN_OUT_CHANCE = 0.012
+
+    // A T10 innings (10 overs or fewer) is hitting from the first ball: more boundaries and wickets, fewer dots.
+    // Measured with tools/t10_twin.js: about 100 runs and 4 to 5 wickets an innings, as in the real Abu Dhabi T10.
+    private const val T10_BOUNDARY = 1.7
+    private const val T10_WICKET = 1.7
+    private const val T10_DOT = 0.78
+    private const val T10_RUNS = 1.05
     private const val MAX_RUN_OUTS = 2
 
     fun sample(state: MatchState, stadium: Stadium, random: Random): BallOutcome {
@@ -95,6 +102,14 @@ object AiBallModel {
             fraction < 0.3 -> { fBoundary *= 1.15; fDot *= 0.95 }
             fraction < 0.75 -> { fBoundary *= 0.85; fRuns *= 1.08; fWicket *= 0.95 }
             else -> { fBoundary *= 1.4; fWicket *= 1.3; fDot *= 0.85 }
+        }
+
+        // The short format: every ball is attacked.
+        if (limit <= 10) {
+            fBoundary *= T10_BOUNDARY
+            fWicket *= T10_WICKET
+            fDot *= T10_DOT
+            fRuns *= T10_RUNS
         }
 
         // The pitch.
