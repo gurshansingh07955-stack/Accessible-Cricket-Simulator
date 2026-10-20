@@ -401,7 +401,7 @@ class SoundEngine(context: Context) {
      * The umpires' recorded voices (see audio/UmpireLines.kt): one queue on its own player, so a line never cuts off
      * another. Different voices from the commentators and the auctioneer.
      */
-    val umpireVoice: AuctionVoice by lazy { AuctionVoice(appContext) }
+    internal val umpireVoice: AuctionVoice by lazy { AuctionVoice(appContext) }
 
     /** Says the clips in order in the umpire's voice. False if any is missing (or sound effects are off): the caller then speaks the text itself. */
     fun playUmpire(vararg clipIds: String): Boolean {

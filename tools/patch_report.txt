@@ -1,6 +1,6 @@
-Patch run: 39238655070
-Timestamp (UTC): 2026-10-19T10:36:35Z
+Patch run: 39349398743
+Timestamp (UTC): 2026-10-20T00:44:23Z
 Result: OK
 -----
-Patch 2026-10-19-031-umpires-appeals.json
-  applied 49 operation(s) to 12 file(s)
+Patch 2026-10-19-032-appeals-all-dismissals.json
+  applied 4 operation(s) to 3 file(s)

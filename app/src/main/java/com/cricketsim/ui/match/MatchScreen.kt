@@ -408,8 +408,8 @@ fun MatchScreen(
             presetBowlingDecision,
             presetBattingDecision
         )
-        // An LBW: the fielding side appeals and the umpire decides before anything else (AppealScreens.kt).
-        if (resumed == null && result.outcome.isWicket && result.outcome.dismissalType == DismissalType.LBW) {
+        // Every dismissal: the fielding side appeals and the umpire decides before anything else (AppealScreens.kt).
+        if (resumed == null && result.outcome.isWicket && result.outcome.dismissalType != null) {
             pendingAppeal = PendingAppeal(before, result, userBowling = before.bowlingTeam.id == before.userTeam.id)
             return
         }
@@ -479,7 +479,9 @@ fun MatchScreen(
         AppealScreen(
             userIsBowling = appeal.userBowling,
             bowlerName = appeal.before.currentBowler.name,
-            batterName = appeal.before.currentBatsmen.first.name,
+            kind = appeal.result.outcome.dismissalType ?: DismissalType.LBW,
+            batterName = appeal.before.currentBatsmen.toList().firstOrNull { it.id == appeal.result.outcome.batsmanId }?.name
+                ?: appeal.before.currentBatsmen.first.name,
             onDecided = { appealed ->
                 pendingAppeal = null
                 if (appealed) {
