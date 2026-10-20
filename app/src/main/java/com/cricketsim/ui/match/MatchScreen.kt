@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -195,6 +196,7 @@ fun MatchScreen(
     impact: ImpactSetup? = null
 ) {
     val services = LocalGameServices.current
+    val matchContext = LocalContext.current
     val settings = services?.settings ?: GameSettings()
     val director = remember(services) { services?.let { MatchAudioDirector(it) } }
 
@@ -234,6 +236,7 @@ fun MatchScreen(
     var pendingReview by remember { mutableStateOf<PendingReview?>(null) }
     var showFieldScreen by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
+    var showMatchInfo by remember { mutableStateOf(false) }
     var showInningsBreak by remember { mutableStateOf(resume?.showInningsBreak ?: false) }
     var showSettings by remember { mutableStateOf(false) }
     var confirmingLeave by remember { mutableStateOf(false) }
@@ -464,6 +467,21 @@ fun MatchScreen(
         return
     }
 
+    if (showMatchInfo) {
+        BackHandler(onBack = { showMatchInfo = false })
+        MatchInfoScreen(
+            state = matchState,
+            stadium = stadium,
+            // The Impact Player choice lives in Match info; it opens the same screen the match screen used to.
+            onUseImpact = {
+                showMatchInfo = false
+                showImpactUse = true
+            },
+            onBack = { showMatchInfo = false }
+        )
+        return
+    }
+
     if (showScorecard) {
         BackHandler(onBack = { showScorecard = false })
         ScorecardScreen(
@@ -559,7 +577,15 @@ fun MatchScreen(
             summaryLines = MatchLines.resultSummaryLines(matchState) + ImpactPlayer.summaryLines(matchState),
             lastBall = recentCommentary.lastOrNull(),
             onScorecard = { showScorecard = true },
-            onHome = onMatchFinished
+            onHome = onMatchFinished,
+            onShare = {
+                ScorecardText.share(
+                    matchContext,
+                    "${userTeam.name} vs ${opponentTeam.name} scorecard",
+                    ScorecardText.build(matchState, stadium, resultText)
+                )
+            },
+            onCopy = { ScorecardText.copy(matchContext, ScorecardText.build(matchState, stadium, resultText)) }
         )
         return
     }
@@ -829,23 +855,18 @@ fun MatchScreen(
             Text("Leave match")
         }
         Spacer(modifier = Modifier.height(8.dp))
-        // Sound, vibration, commentary and difficulty, changeable mid-match.
-        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Settings")
-        }
-        Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = { showScorecard = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Scorecard")
         }
-        if (matchState.impact != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            if (ImpactPlayer.canUse(matchState, userTeam.id)) {
-                Button(onClick = { showImpactUse = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Impact Player")
-                }
-            } else {
-                Text(ImpactPlayer.statusLine(matchState, userTeam.id), style = MaterialTheme.typography.bodyMedium)
-            }
+        Spacer(modifier = Modifier.height(8.dp))
+        // Teams, ground, toss, weather, both XIs and (IPL) the Impact Player choice.
+        Button(onClick = { showMatchInfo = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Match info")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        // Sound, vibration, commentary and difficulty, changeable mid-match.
+        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Settings")
         }
         Spacer(modifier = Modifier.height(16.dp))
 

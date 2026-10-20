@@ -109,9 +109,11 @@ private sealed interface TPage {
     object Hub : TPage
     object Celebration : TPage
     object Ipl : TPage
-    data class PickXI(val fixtureId: Int, val attempt: Int = 0) : TPage
+    /** IPL only: the toss comes first, before the Playing XI. */
+    data class TossFirst(val fixtureId: Int) : TPage
+    data class PickXI(val fixtureId: Int, val attempt: Int = 0, val toss: TossResult? = null) : TPage
     /** IPL only: naming the five Impact Player substitutes, between the Playing XI and the toss. */
-    data class Impact(val fixtureId: Int, val userXI: Team, val opponentXI: Team) : TPage
+    data class Impact(val fixtureId: Int, val userXI: Team, val opponentXI: Team, val toss: TossResult? = null) : TPage
     data class Toss(val fixtureId: Int, val userXI: Team, val opponentXI: Team, val impact: ImpactSetup? = null) : TPage
     data class PlayMatch(
         val fixtureId: Int,
@@ -148,7 +150,7 @@ fun TournamentFlow(onExit: () -> Unit) {
     val menuSoundServices = LocalGameServices.current
     LaunchedEffect(page::class) {
         val opened = page
-        if (opened !is TPage.PlayMatch && opened !is TPage.Toss && opened !is TPage.Celebration && opened !is TPage.Ipl) {
+        if (opened !is TPage.PlayMatch && opened !is TPage.Toss && opened !is TPage.TossFirst && opened !is TPage.Celebration && opened !is TPage.Ipl) {
             menuSoundServices?.sound?.playMenuOpen()
         }
     }
@@ -342,7 +344,8 @@ fun TournamentFlow(onExit: () -> Unit) {
                             pendingMatch = null
                             scope.launch { matchStore.clear() }
                         }
-                        page = TPage.PickXI(id)
+                        // The IPL holds the toss first; the CPL still picks its XI first.
+                        page = if (state.tournamentId == IplSeason.TOURNAMENT_ID) TPage.TossFirst(id) else TPage.PickXI(id)
                     },
                     matchInProgress = pendingMatch != null,
                     onResumeMatch = {
@@ -359,6 +362,24 @@ fun TournamentFlow(onExit: () -> Unit) {
                         scope.launch { matchStore.clear() }
                     },
                     onLeave = back
+                )
+            } else back()
+        }
+        is TPage.TossFirst -> {
+            val back = { page = TPage.Hub }
+            BackHandler(onBack = back)
+            val state = saved
+            val fixture = state?.fixtures?.find { it.id == current.fixtureId }
+            val userId = state?.userTeamId
+            val userSquad = state?.teams?.find { it.id == userId }
+            val opponentId = if (fixture?.homeId == userId) fixture?.awayId else fixture?.homeId
+            val opponentSquad = state?.teams?.find { it.id == opponentId }
+            if (userSquad != null && opponentSquad != null) {
+                TossScreen(
+                    userTeam = userSquad,
+                    opponentTeam = opponentSquad,
+                    onTossComplete = { toss -> page = TPage.PickXI(current.fixtureId, toss = toss) },
+                    onBack = back
                 )
             } else back()
         }
@@ -382,12 +403,13 @@ fun TournamentFlow(onExit: () -> Unit) {
                             val problem = CplSimulator.xiProblem(xi, state.tags)
                             if (problem != null) {
                                 xiProblem = problem
-                                page = TPage.PickXI(current.fixtureId, current.attempt + 1)
+                                page = TPage.PickXI(current.fixtureId, current.attempt + 1, current.toss)
                             } else {
                                 val opponentXI = CplSimulator.pickXI(opponentSquad, state.tags, stadium)
-                                // The IPL has the Impact Player rule: its five substitutes are named before the toss.
-                                page = if (state.tournamentId == IplSeason.TOURNAMENT_ID) {
-                                    TPage.Impact(current.fixtureId, xi, opponentXI)
+                                // The IPL: the toss has been held, so now come the Impact Player substitutes, then the match.
+                                val tossDone = current.toss
+                                page = if (state.tournamentId == IplSeason.TOURNAMENT_ID && tossDone != null) {
+                                    TPage.Impact(current.fixtureId, xi, opponentXI, tossDone)
                                 } else {
                                     TPage.Toss(current.fixtureId, xi, opponentXI)
                                 }
@@ -408,7 +430,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             } else back()
         }
         is TPage.Impact -> {
-            val back = { page = TPage.PickXI(current.fixtureId) }
+            val back = { page = TPage.PickXI(current.fixtureId, 0, current.toss) }
             BackHandler(onBack = back)
             val state = saved
             val userSquad = state?.teams?.find { it.id == current.userXI.id }
@@ -423,7 +445,13 @@ fun TournamentFlow(onExit: () -> Unit) {
                     overseasIds = overseas,
                     onConfirm = { subs ->
                         val opponentSubs = ImpactPlayer.aiSubstitutes(opponentSquad.players, current.opponentXI.players, overseas.toSet())
-                        page = TPage.Toss(current.fixtureId, current.userXI, current.opponentXI, ImpactSetup(subs, opponentSubs, overseas))
+                        val setup = ImpactSetup(subs, opponentSubs, overseas)
+                        val tossDone = current.toss
+                        page = if (tossDone != null) {
+                            TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, tossDone, impact = setup)
+                        } else {
+                            TPage.Toss(current.fixtureId, current.userXI, current.opponentXI, setup)
+                        }
                     },
                     onBack = back
                 )

@@ -151,14 +151,18 @@ fun MatchResultScreen(
     summaryLines: List<String>,
     lastBall: String?,
     onScorecard: () -> Unit,
-    onHome: () -> Unit
+    onHome: () -> Unit,
+    onShare: (() -> Unit)? = null,
+    onCopy: (() -> Unit)? = null
 ) {
     val lines = summaryLines + listOfNotNull(lastBall?.let { "Last ball: $it" })
     InfoScreen(
         title = "Match completed. $resultText",
         lines = lines,
-        actions = listOf(
+        actions = listOfNotNull(
             "View scorecard" to onScorecard,
+            onShare?.let { "Share scorecard" to it },
+            onCopy?.let { "Copy scorecard" to it },
             "Return to home" to onHome
         )
     )

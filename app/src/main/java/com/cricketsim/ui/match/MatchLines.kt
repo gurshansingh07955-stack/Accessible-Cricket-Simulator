@@ -178,7 +178,7 @@ object ScorecardLines {
     fun inningsHeader(innings: InningsData): String =
         "${innings.battingTeamName}, ${innings.totalRuns} for ${innings.totalWickets} in ${innings.totalOvers}.${innings.totalBalls} overs."
 
-    private fun dismissalPhrase(type: DismissalType?, by: String?, caughtBy: String? = null, caughtAt: String? = null): String = when (type) {
+    internal fun dismissalPhrase(type: DismissalType?, by: String?, caughtBy: String? = null, caughtAt: String? = null): String = when (type) {
         DismissalType.BOWLED -> if (by != null) "bowled by $by" else "bowled"
         DismissalType.LBW -> if (by != null) "lbw, bowled by $by" else "lbw"
         DismissalType.CAUGHT -> when {
