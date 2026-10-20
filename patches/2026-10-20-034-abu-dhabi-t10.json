@@ -1,0 +1,208 @@
+{
+  "name": "abu-dhabi-t10",
+  "message": "Abu Dhabi T10 2026 tournament: real teams and squads, 32 matches, T10 engine tuning",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+    "contains": "object AbuDhabiT10"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+      "content": "package com.cricketsim.logic\n\nimport kotlin.random.Random\n\n/**\n * ABU DHABI T10 2026: the tournament as announced for November 2026 (the 10th edition).\n *\n *  - SIX TEAMS, the real ones: UAE Bulls (the defending champions), Yas Lions, Royal Desert Champions,\n *    Emirates Eagles, United Tigers and Arabian Aces. Squads are the 18 players each franchise named\n *    after the 2026 player draft.\n *  - THE FORMAT, as announced: a double round-robin (every team plays the other five twice, 30 league\n *    matches, three a day), then the Qualifier (2nd v 3rd in the table) and the Final (1st in the table v\n *    the Qualifier winner): 32 matches, 10 overs a side, all at Sheikh Zayed Stadium, Abu Dhabi.\n *  - THE PLAYERS: anyone already in the game (its own roster, or a player the CPL added) is COPIED with\n *    his ratings, never recreated. Only the players the game did not have are new, with ratings that are\n *    ESTIMATES on the game's scale (see the nw() lines; change them there). A few names are spelled\n *    differently in the game and are linked with al().\n *  - THE RULES: no overseas cap and no breakout rule are known for this league, so none is applied.\n *\n * It reuses the CPL machinery as it is (TournamentState, CplSimulator, the Matches / Table / Venues /\n * Stats tabs, saving, scorecards, Player of the Match, the celebration). Only what is T10-specific is here.\n */\nobject AbuDhabiT10 {\n\n    const val TOURNAMENT_ID = \"adt10_2026\"\n    const val TOURNAMENT_NAME = \"Abu Dhabi T10 2026\"\n    const val GROUND_ID = \"sheikh-zayed\"\n\n    private class NewSpec(val role: PlayerRole, val bat: Int, val bowl: Int, val style: BowlingStyle)\n\n    /** A squad slot: a player copied from the game (spec null; `lookup` is the game's spelling if it differs) or a new one. */\n    private class Slot(val name: String, val lookup: String?, val spec: NewSpec?)\n\n    private class TeamDef(val id: String, val name: String, val shortName: String, val code: String, val squad: List<Slot>)\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n\n    private fun ex(name: String) = Slot(name, null, null)\n    private fun al(name: String, gameName: String) = Slot(name, gameName, null)\n    private fun nw(name: String, role: PlayerRole, bat: Int, bowl: Int, style: BowlingStyle = PACE) =\n        Slot(name, null, NewSpec(role, bat, bowl, style))\n\n    private val DEFS: List<TeamDef> by lazy {\n        listOf(\n            TeamDef(\"adt_bulls\", \"UAE Bulls\", \"Bulls\", \"BUL\", listOf(\n                ex(\"Kieron Pollard\"), ex(\"Sunil Narine\"), ex(\"Romario Shepherd\"), nw(\"Muhammad Rohid\", BAT, 62, 10),\n                nw(\"Tahir Zaman\", BAT, 55, 30), nw(\"Aneurin Donald\", BAT, 78, 10), al(\"Muhammad Amir\", \"Mohammad Amir\"),\n                ex(\"Andre Fletcher\"), nw(\"Khwaja Nafay\", BAT, 70, 10), ex(\"Nuwan Thushara\"), ex(\"Khushdil Shah\"),\n                ex(\"Mohammad Wasim Jr\"), nw(\"Max Bryant\", BAT, 74, 10), ex(\"Azam Khan\"), nw(\"Wali Muhammad\", AR, 54, 58),\n                nw(\"Uddish Suri\", BWL, 25, 62), ex(\"Bradley Currie\"), ex(\"Shadab Khan\")\n            )),\n            TeamDef(\"adt_lions\", \"Yas Lions\", \"Lions\", \"LIO\", listOf(\n                ex(\"Jason Holder\"), nw(\"David Willey\", AR, 66, 74), ex(\"Andries Gous\"), nw(\"Ajay Kumar\", BWL, 20, 66),\n                nw(\"Ansh Tandon\", BAT, 58, 15), ex(\"James Vince\"), ex(\"Dasun Shanaka\"), nw(\"Eshan Malinga\", BWL, 16, 72),\n                ex(\"Karim Janat\"), nw(\"Sanjay Krishnamurthi\", BAT, 60, 10), nw(\"Tom Moores\", WK, 70, 10),\n                nw(\"Khuzaima Bin Tanveer\", BWL, 20, 66), ex(\"Obed McCoy\"), ex(\"Kamil Pooran\"), nw(\"Haider Ali\", BAT, 66, 10),\n                nw(\"Masood Gurbaz\", WK, 62, 10), ex(\"Aryan Dutt\"), ex(\"Akeal Hosein\")\n            )),\n            TeamDef(\"adt_champions\", \"Royal Desert Champions\", \"Champions\", \"RDC\", listOf(\n                ex(\"Nicholas Pooran\"), ex(\"Phil Salt\"), ex(\"Sherfane Rutherford\"), ex(\"Ali Naseer\"), ex(\"Aayan Afzal Khan\"),\n                ex(\"Muhammad Waseem\"), ex(\"Naseem Shah\"), ex(\"Maheesh Theekshana\"), nw(\"Dushmantha Chameera\", BWL, 16, 78),\n                ex(\"Luke Wood\"), ex(\"Gulbadin Naib\"), ex(\"Brandon King\"), ex(\"Janith Liyanage\"), ex(\"Keemo Paul\"),\n                nw(\"Dhruv Parashar\", AR, 55, 62), nw(\"Raizal Nadir\", BAT, 56, 15), al(\"Tajinder Singh Dhillon\", \"Tajinder Singh\"),\n                ex(\"Chris Jordan\")\n            )),\n            TeamDef(\"adt_eagles\", \"Emirates Eagles\", \"Eagles\", \"EAG\", listOf(\n                ex(\"Rovman Powell\"), ex(\"Shimron Hetmyer\"), ex(\"Trent Boult\"), nw(\"Haider Razzaq\", AR, 56, 60),\n                nw(\"Luqman Faisal\", BWL, 20, 60, SPIN), nw(\"David Wiese\", AR, 70, 72), ex(\"Noor Ahmad\"), ex(\"Alex Hales\"),\n                nw(\"KS Bharat\", WK, 74, 8), nw(\"Akif Javed\", BWL, 18, 70), nw(\"Hassan Nawaz\", BAT, 74, 10), ex(\"Rehan Ahmed\"),\n                nw(\"Ali Raza\", BWL, 20, 68), ex(\"Chris Green\"), nw(\"Harshit Kaushik\", BWL, 20, 60), nw(\"Hilal Afghan\", BAT, 58, 20),\n                nw(\"Toby Albert\", BAT, 68, 10), ex(\"Kusal Perera\")\n            )),\n            TeamDef(\"adt_tigers\", \"United Tigers\", \"Tigers\", \"TIG\", listOf(\n                ex(\"Fakhar Zaman\"), ex(\"Iftikhar Ahmed\"), ex(\"Faheem Ashraf\"), nw(\"Zeeshan Naseer\", AR, 58, 55),\n                nw(\"Awais Ali Shah\", BAT, 55, 15), ex(\"Azmatullah Omarzai\"), al(\"Sufyan Moqim\", \"Sufiyan Muqeem\"),\n                nw(\"Abbas Afridi\", BWL, 20, 76), ex(\"Odean Smith\"), ex(\"Nurul Hasan Sohan\"), nw(\"Shak Mahedi Hasan\", AR, 62, 72, SPIN),\n                nw(\"Habibur Rahman Sohan\", BAT, 58, 10), nw(\"Noor ul Rahman\", BWL, 20, 66, SPIN), ex(\"Shamim Hossain\"),\n                nw(\"Adithya Shetty\", AR, 55, 60), nw(\"Noor Ullah Ayubi\", BWL, 20, 58, SPIN), ex(\"Paul van Meekeren\"),\n                nw(\"Yasin Patel\", BAT, 55, 15)\n            )),\n            TeamDef(\"adt_aces\", \"Arabian Aces\", \"Aces\", \"ACE\", listOf(\n                ex(\"Moeen Ali\"), ex(\"Andre Russell\"), ex(\"Liam Livingstone\"), ex(\"Alishan Sharafu\"), nw(\"Muhammad Arfan\", BWL, 20, 66),\n                nw(\"Tom Kohler-Cadmore\", WK, 80, 10), nw(\"Richard Gleeson\", BWL, 15, 76), nw(\"Sam Billings\", WK, 80, 10),\n                nw(\"Paul Walter\", AR, 66, 62), ex(\"Alzarri Joseph\"), ex(\"Imran Tahir\"), nw(\"Salman Irshad\", BWL, 20, 72),\n                ex(\"Quentin Sampson\"), ex(\"Dwaine Pretorius\"), al(\"Vriitya Arvind\", \"Vriitya Aravind\"),\n                nw(\"Ibrahim Masood\", BAT, 58, 15), ex(\"Amshi De Silva\"), ex(\"Dunith Wellalage\")\n            ))\n        )\n    }\n\n    fun isTeam(teamId: String): Boolean = DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = DEFS.find { it.id == teamId }?.shortName\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    val stadiums: List<Stadium> by lazy { listOfNotNull(StadiumData.getStadiumById(GROUND_ID)) }\n\n    /** 10 overs a side here; the CPL and the IPL are T20. */\n    fun formatFor(tournamentId: String?): MatchFormat = if (tournamentId == TOURNAMENT_ID) MatchFormat.T10 else MatchFormat.T20\n\n    /** Balls in a full innings, for the net run rate (a side bowled out counts the full quota). */\n    fun fullInningsBalls(tournamentId: String): Int = if (tournamentId == TOURNAMENT_ID) 60 else 120\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** The six franchises with their squads (strongest first). Everybody is tagged DOMESTIC: no rule here uses the tags. */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val roster = CricketData.getAllTeams().flatMap { it.players }.associateBy { norm(it.name) }\n        // Players the CPL added (Hales, Pollard, Narine and so on) are in the game too: reuse them as well.\n        val cpl = CplData.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = DEFS.map { def ->\n            val players = def.squad.mapIndexed { index, slot ->\n                val id = \"${def.id}_${index + 1}\"\n                val key = norm(slot.lookup ?: slot.name)\n                val base = if (slot.spec == null) (roster[key] ?: cpl[key]) else null\n                val player = if (base != null) {\n                    base.copy(id = id, teamId = def.id, name = slot.name)\n                } else {\n                    val s = slot.spec ?: NewSpec(PlayerRole.BATSMAN, 60, 20, BowlingStyle.PACE)\n                    Player(\n                        id = id, teamId = def.id, name = slot.name, role = s.role,\n                        battingRating = s.bat, bowlingRating = s.bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(s.role, s.bat, s.bowl),\n                        bowlingStyle = s.style\n                    )\n                }\n                tags[id] = SquadTag.DOMESTIC\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.code,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Pair(teams, tags)\n    }\n\n    /**\n     * The league: every team plays the other five twice, three matches a day (so on a match day every\n     * team plays once): the circle method gives five match days for one meeting of everybody, played\n     * twice with the order of days changed. Different every time. Then the Qualifier and the Final.\n     */\n    fun buildSchedule(teamIds: List<String>, random: Random): List<TournamentFixture> {\n        val order = teamIds.shuffled(random).toMutableList()\n        val n = order.size\n        fun leg(swap: Boolean): List<List<Pair<String, String>>> {\n            val ring = order.toMutableList()\n            val days = ArrayList<List<Pair<String, String>>>()\n            repeat(n - 1) {\n                val day = ArrayList<Pair<String, String>>()\n                for (i in 0 until n / 2) {\n                    val a = ring[i]\n                    val b = ring[n - 1 - i]\n                    day.add(if (swap) b to a else a to b)\n                }\n                days.add(day.shuffled(random))\n                // Keep the first team still and turn the rest of the ring by one place.\n                ring.add(1, ring.removeAt(n - 1))\n            }\n            return days.shuffled(random)\n        }\n        val days = leg(false) + leg(true)\n        val fixtures = ArrayList<TournamentFixture>()\n        var index = 0\n        for (day in days) for ((home, away) in day) {\n            fixtures.add(TournamentFixture(index, index + 1, CplData.LEAGUE, home, away, GROUND_ID))\n            index++\n        }\n        fixtures.add(TournamentFixture(index, index + 1, \"Qualifier\", null, null, GROUND_ID, placeholder = \"2nd v 3rd in the table\"))\n        index++\n        fixtures.add(TournamentFixture(index, index + 1, \"Final\", null, null, GROUND_ID, placeholder = \"1st in the table v the winner of the Qualifier\"))\n        return fixtures\n    }\n\n    fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>, random: Random): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(built.first.map { it.id }, random),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "tools/t10_twin.js",
+      "content": "// A twin of AiBallModel.sample for a whole innings, to calibrate a T10 factor. Assumptions: balanced pitch, medium\n// ground (factors 1.0), bowlers rotate so each bowls max overs/5 bowlers, rating sets are typical of the game.\nfunction rnd(){return Math.random();}\nconst C={WIDE:.026,NO_BALL:.007,DOT:.36,ONE:.325,TWO:.075,THREE:.006,FOUR:.10,SIX:.056,WICKET:.043};\nfunction sample(st, p){ // p: {limit, t10:{b,w,d,r,early}}\n  const {bat,bowl,faced,score,balls,target,runs}=st;\n  const limit=p.limit;\n  const edge=(bat-bowl)/100;\n  let fB=Math.min(1.7,Math.max(.6,1+1.0*edge)), fD=Math.min(1.3,Math.max(.7,1-.5*edge)), fW=Math.min(1.9,Math.max(.45,1-1.5*edge)), fR=1;\n  fW*= score>=75?1.9: score>=45?1.3:1;\n  fW*= faced<6?1.35: faced<15?1.1: faced<30?.9:.75;\n  fB*= faced<6?.8: faced>=20?1.12:1;\n  const fr=balls/(limit*6);\n  if(fr<.3){fB*=1.15;fD*=.95;} else if(fr<.75){fB*=.85;fR*=1.08;fW*=.95;} else {fB*=1.4;fW*=1.3;fD*=.85;}\n  if(p.t10){ fB*=p.t10.b; fW*=p.t10.w; fD*=p.t10.d; fR*=p.t10.r; }\n  if(target!=null){ const need=target-runs, left=Math.max(1,limit*6-balls), req=need*6/left;\n    if(req>12){fB*=1.25;fW*=1.25;} else if(req>9.5){fB*=1.12;fW*=1.1;} else if(req<6){fB*=.9;fW*=.85;} }\n  const w=[C.DOT*fD,C.ONE*fR,C.TWO*fR,C.THREE*fR,C.FOUR*fB,C.SIX*fB,C.WICKET*fW];\n  const x=rnd();\n  if(x<C.WIDE) return {wide:true,runs:0,wk:false};\n  const nb = x<C.WIDE+C.NO_BALL; if(nb) w[6]=0;\n  const tot=w.reduce((a,b)=>a+b,0); let r=rnd()*tot, i=0; for(i=0;i<7;i++){ r-=w[i]; if(r<=0) break; } if(i>6)i=6;\n  const rr=[0,1,2,3,4,6,0][i];\n  return {runs:rr,wk:i===6,nb};\n}\nfunction innings(batters, bowlers, p, target){\n  let runs=0,wk=0,balls=0, a=0,b=1, nextIn=2; const st=batters.map(()=>({faced:0,score:0}));\n  let ballsLegal=0;\n  while(ballsLegal<p.limit*6 && wk<10){\n    const over=Math.floor(ballsLegal/6); const bw=bowlers[over%bowlers.length];\n    const s=sample({bat:batters[a],bowl:bw,faced:st[a].faced,score:st[a].score,balls:ballsLegal,target,runs},p);\n    if(s.wide){runs+=1;continue;}\n    ballsLegal++; st[a].faced++;\n    if(s.nb) runs+=1;\n    if(s.wk){ wk++; if(nextIn<batters.length){a=nextIn++;} else break; }\n    else { runs+=s.runs; st[a].score+=s.runs; if(s.runs%2===1){[a,b]=[b,a];} }\n    if(target!=null && runs>=target) break;\n    if(ballsLegal%6===0){[a,b]=[b,a];}\n  }\n  return {runs,wk,balls:ballsLegal};\n}\nfunction run(label,p,N=20000){\n  const bat=[82,78,76,74,72,68,64,58,48,38,30]; // an average side's order\n  const bowl=[72,70,68,66,62]; // five bowlers' ratings\n  let sr=0,sw=0,chaseWins=0,over100=0,sw0=0;\n  for(let i=0;i<N;i++){\n    const a=innings(bat,bowl,p,null); sr+=a.runs; sw+=a.wk; if(a.runs>=p.hundred) over100++;\n    const c=innings(bat,bowl,p,a.runs+1); if(c.runs>=a.runs+1) chaseWins++;\n  }\n  console.log(label.padEnd(34),\"avg\",(sr/N).toFixed(1),\"wkts\",(sw/N).toFixed(1),\"rpo\",(sr/N/p.limit).toFixed(2),\"chase win\",(chaseWins/N*100).toFixed(0)+\"%\",\"P(>=hundred-mark)\",(over100/N*100).toFixed(0)+\"%\");\n}\nrun(\"T20 as shipped (check ~150, 6w)\",{limit:20,hundred:200});\nfor(const [b,w,d,r] of [[1,1,1,1],[1.3,1,.9,1],[1.5,1,.85,1.0],[1.6,1,.8,1.05],[1.45,.9,.85,1.05],[1.55,.85,.8,1.05]]){\n  run(`T10 b${b} w${w} d${d} r${r}`,{limit:10,hundred:130,t10:{b,w,d,r}});\n}\nconsole.log(\"---- wicket sweep\");\nfor(const [b,w,d,r] of [[1.6,1.4,.8,1.05],[1.6,1.7,.8,1.05],[1.7,1.7,.78,1.05],[1.65,1.9,.8,1.05]]){\n  run(`T10 b${b} w${w} d${d} r${r}`,{limit:10,hundred:130,t10:{b,w,d,r}});\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "ABU_DHABI_T10.md",
+      "mustNotExist": true,
+      "content": "# Abu Dhabi T10 2026 (tournament)\n\nTournament > League tournaments > Abu Dhabi T10 2026. Same pages, saving and tabs as the CPL.\n\n**Real facts used** (announced October 2026): six teams (UAE Bulls, Yas Lions, Royal Desert Champions, Emirates Eagles,\nUnited Tigers, Arabian Aces), 18 players each after the 2026 draft, 10 overs a side, a double round-robin (30 league\nmatches, three a day), then the Qualifier (2nd v 3rd) and the Final (1st v the Qualifier winner): 32 matches, all at\nSheikh Zayed Stadium, Abu Dhabi.\n\n**Players.** Anyone already in the game (roster or CPL) is copied with his game ratings. About 45 players were not in the\ngame and are new; **their ratings are estimates** (the `nw(...)` lines in `logic/AbuDhabiT10.kt`; a handful of the lesser-known\nUAE players have guessed roles). `al(...)` links a name the game spells differently (Muhammad Amir = Mohammad Amir,\nVriitya Arvind = Vriitya Aravind, Sufyan Moqim = Sufiyan Muqeem, Tajinder Singh Dhillon = Tajinder Singh).\n\n**No overseas or breakout rule** is applied (none is known for this league).\n\n**Balance.** Computer-v-computer T10 matches use `AiBallModel` with the T10 dials `T10_BOUNDARY`, `T10_WICKET`, `T10_DOT`,\n`T10_RUNS`. Measured with `node tools/t10_twin.js` (a twin of the ball model with assumed player ratings): about 106 runs and\n4.6 wickets an innings where the same twin gives 165 for T20 against the real model's calibrated ~150, so expect roughly 95-100.\nReal Abu Dhabi T10 innings average about 100 for 5. Live matches you play use the normal engine.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "    fun stadium(id: String): Stadium? = stadiums.find { it.id == id } ?: IplSeason.stadium(id)\n",
+      "replace": "    fun stadium(id: String): Stadium? = stadiums.find { it.id == id } ?: IplSeason.stadium(id) ?: AbuDhabiT10.stadium(id)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "    fun shortName(teamId: String): String = DEFS.find { it.id == teamId }?.shortName ?: IplData.shortName(teamId)\n",
+      "replace": "    fun shortName(teamId: String): String =\n        DEFS.find { it.id == teamId }?.shortName ?: AbuDhabiT10.shortNameOrNull(teamId) ?: IplData.shortName(teamId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "        ?: if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else \"kensington-oval\"\n",
+      "replace": "        ?: if (AbuDhabiT10.isTeam(teamId)) AbuDhabiT10.GROUND_ID\n        else if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else \"kensington-oval\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "            val firstBalls = if (r.firstWickets >= 10) 120 else r.firstBalls\n            val secondBalls = if (r.secondWickets >= 10) 120 else r.secondBalls\n",
+      "replace": "            val full = AbuDhabiT10.fullInningsBalls(state.tournamentId) // 120 balls in a T20, 60 in the T10\n            val firstBalls = if (r.firstWickets >= 10) full else r.firstBalls\n            val secondBalls = if (r.secondWickets >= 10) full else r.secondBalls\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        stadium: Stadium,\n        random: Random\n    ): SimResult? {\n        val home = pickXI(homeSquad, tags, stadium)\n",
+      "replace": "        stadium: Stadium,\n        random: Random,\n        format: MatchFormat = MatchFormat.T20\n    ): SimResult? {\n        val home = pickXI(homeSquad, tags, stadium)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            MatchFormat.T20, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather\n",
+      "replace": "            format, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val sim = simulateMatch(home, away, state.tags, stadium, random) ?: return state\n",
+      "replace": "        val sim = simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId)) ?: return state\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        setTeams(\"Qualifier 1\", table[0].team.id, table[1].team.id)\n",
+      "replace": "        if (state.tournamentId == AbuDhabiT10.TOURNAMENT_ID) {\n            // Abu Dhabi T10: the table leader goes straight to the Final; 2nd v 3rd play the Qualifier for the other place.\n            setTeams(\"Qualifier\", table[1].team.id, table[2].team.id)\n            val qualifier = stage(\"Qualifier\")\n            if (qualifier?.result != null) setTeams(\"Final\", table[0].team.id, winnerOf(qualifier))\n            return state.copy(fixtures = fixtures)\n        }\n        setTeams(\"Qualifier 1\", table[0].team.id, table[1].team.id)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "    private const val RUN_OUT_CHANCE = 0.012\n",
+      "replace": "    private const val RUN_OUT_CHANCE = 0.012\n\n    // A T10 innings (10 overs or fewer) is hitting from the first ball: more boundaries and wickets, fewer dots.\n    // Measured with tools/t10_twin.js: about 100 runs and 4 to 5 wickets an innings, as in the real Abu Dhabi T10.\n    private const val T10_BOUNDARY = 1.7\n    private const val T10_WICKET = 1.7\n    private const val T10_DOT = 0.78\n    private const val T10_RUNS = 1.05\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        // The pitch.\n        when (state.pitchType) {\n",
+      "replace": "        // The short format: every ball is attacked.\n        if (limit <= 10) {\n            fBoundary *= T10_BOUNDARY\n            fWicket *= T10_WICKET\n            fDot *= T10_DOT\n            fRuns *= T10_RUNS\n        }\n\n        // The pitch.\n        when (state.pitchType) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.IplSeason\n",
+      "replace": "import com.cricketsim.logic.AbuDhabiT10\nimport com.cricketsim.logic.IplSeason\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    object Cpl : TPage\n",
+      "replace": "    object Cpl : TPage\n    /** The Abu Dhabi T10 page (the same page as the CPL's, for the T10 tournament). */\n    object Adt : TPage\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    var iplSeason by remember { mutableStateOf(false) } // is there a saved IPL season?\n",
+      "replace": "    var iplSeason by remember { mutableStateOf(false) } // is there a saved IPL season?\n    var adtSaved by remember { mutableStateOf(false) } // is there a saved Abu Dhabi T10 tournament?\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val store = if (kind == \"ipl\") iplStore else cplStore\n    val matchStore = if (kind == \"ipl\") iplMatchStore else cplMatchStore\n    val scope = rememberCoroutineScope()\n    val built = remember { CplData.buildTeams() }\n",
+      "replace": "    val adtStore = remember { TournamentSaveStore(context, \"saved_tournament_adt10_2026.json\") }\n    val adtMatchStore = remember { MatchSaveStore(context, \"saved_adt10_match.json\") }\n    val store = when (kind) { \"ipl\" -> iplStore; \"adt10\" -> adtStore; else -> cplStore }\n    val matchStore = when (kind) { \"ipl\" -> iplMatchStore; \"adt10\" -> adtMatchStore; else -> cplMatchStore }\n    val scope = rememberCoroutineScope()\n    val cplBuilt = remember { CplData.buildTeams() }\n    val adtBuilt = remember { AbuDhabiT10.buildTeams() }\n    // The squads of the tournament in hand (team choice, squads, tags).\n    val built = if (kind == \"adt10\") adtBuilt else cplBuilt\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    LaunchedEffect(Unit) { iplSeason = iplStore.load() != null }\n",
+      "replace": "    LaunchedEffect(Unit) {\n        iplSeason = iplStore.load() != null\n        adtSaved = adtStore.load() != null\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            LeaguesPage(hasSaved = saved != null, onCpl = { page = TPage.Cpl }, onIpl = { page = TPage.Ipl }, onBack = back)\n",
+      "replace": "            LeaguesPage(\n                hasSaved = saved != null,\n                adtSaved = adtSaved,\n                onCpl = { page = TPage.Cpl },\n                onAdt = {\n                    // The Abu Dhabi T10 has its own saved tournament and match slot: load them for this kind.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"adt10\"\n                    page = TPage.Adt\n                },\n                onIpl = { page = TPage.Ipl },\n                onBack = back\n            )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        is TPage.Cpl -> {\n            val back = { page = TPage.Leagues }\n            BackHandler(onBack = back)\n            CplPage(\n",
+      "replace": "        is TPage.Cpl, is TPage.Adt -> {\n            val isAdt = kind == \"adt10\"\n            val tournamentLabel = if (isAdt) AbuDhabiT10.TOURNAMENT_NAME else \"CPL 2026\"\n            val back = {\n                if (isAdt) {\n                    // Back to the league list: the CPL is the tournament in hand again.\n                    adtSaved = saved != null\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"cpl\"\n                }\n                page = TPage.Leagues\n            }\n            BackHandler(onBack = back)\n            CplPage(\n                title = tournamentLabel,\n                intro = if (isAdt) {\n                    \"The Abu Dhabi T10: the six real teams and their 2026 squads, 10 overs a side, 30 league matches \" +\n                        \"and then the Qualifier and the Final, all at Sheikh Zayed Stadium.\"\n                } else {\n                    \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"\n                },\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    text = { Text(\"Your saved CPL 2026 tournament, with its results and stats, will be removed. This cannot be undone.\") },",
+      "replace": "                    text = { Text(\"Your saved $tournamentLabel tournament, with its results and stats, will be removed. This cannot be undone.\") },"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val back = { page = TPage.Cpl }\n            BackHandler(onBack = back)\n            TeamSelectPage(\n",
+      "replace": "            val back = { page = if (kind == \"adt10\") TPage.Adt else TPage.Cpl }\n            BackHandler(onBack = back)\n            TeamSelectPage(\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    val state = CplData.newTournament(teamId, built, Random.Default)\n",
+      "replace": "                    val state = if (kind == \"adt10\") AbuDhabiT10.newTournament(teamId, built, Random.Default)\n                    else CplData.newTournament(teamId, built, Random.Default)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            if (team != null) SquadPage(team = team, tags = built.second, onBack = back) else back()\n",
+      "replace": "            if (team != null) SquadPage(team = team, tags = built.second, showOrigin = kind != \"adt10\", onBack = back) else back()\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val back = { page = if (kind == \"ipl\") TPage.Ipl else TPage.Cpl }\n",
+      "replace": "            val back = { page = when (kind) { \"ipl\" -> TPage.Ipl; \"adt10\" -> TPage.Adt; else -> TPage.Cpl } }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    format = MatchFormat.T20,\n",
+      "replace": "                    format = AbuDhabiT10.formatFor(saved?.tournamentId),\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "private fun LeaguesPage(hasSaved: Boolean, onCpl: () -> Unit, onIpl: () -> Unit, onBack: () -> Unit) {\n",
+      "replace": "private fun LeaguesPage(hasSaved: Boolean, adtSaved: Boolean, onCpl: () -> Unit, onAdt: () -> Unit, onIpl: () -> Unit, onBack: () -> Unit) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"IPL\",\n",
+      "replace": "            ChoiceRow(\n                title = \"Abu Dhabi T10 2026\",\n                description = \"The real six teams and squads, 10 overs a side: 30 league matches, the Qualifier and the Final.\" +\n                    if (adtSaved) \" You have a saved tournament.\" else \"\",\n                enabled = true,\n                onClick = onAdt\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"IPL\",\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    onDelete: () -> Unit,\n    onBack: () -> Unit\n) {\n    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {\n        PageTitle(\"CPL 2026\")\n",
+      "replace": "    onDelete: () -> Unit,\n    onBack: () -> Unit,\n    title: String,\n    intro: String\n) {\n    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {\n        PageTitle(title)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    text = \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\",\n",
+      "replace": "                    text = intro,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "private fun SquadPage(team: Team, tags: Map<String, SquadTag>, onBack: () -> Unit) {\n",
+      "replace": "private fun SquadPage(team: Team, tags: Map<String, SquadTag>, showOrigin: Boolean = true, onBack: () -> Unit) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        text = \"${roleLabel(p.role)}. ${tagLabel(tags[p.id])}. Batting ${p.battingRating}, bowling ${p.bowlingRating}.\",\n",
+      "replace": "                        text = \"${roleLabel(p.role)}. ${if (showOrigin) tagLabel(tags[p.id]) + \". \" else \"\"}Batting ${p.battingRating}, bowling ${p.bowlingRating}.\",\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        items(if (state.tournamentId == IplSeason.TOURNAMENT_ID) IplSeason.stadiums else CplData.stadiums, key = { it.id }) { s ->\n",
+      "replace": "        items(\n            when (state.tournamentId) {\n                IplSeason.TOURNAMENT_ID -> IplSeason.stadiums\n                AbuDhabiT10.TOURNAMENT_ID -> AbuDhabiT10.stadiums\n                else -> CplData.stadiums\n            },\n            key = { it.id }\n        ) { s ->\n"
+    }
+  ]
+}
