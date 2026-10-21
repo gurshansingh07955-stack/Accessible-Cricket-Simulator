@@ -181,7 +181,9 @@ data class MatchState(
     // The finished match (its two innings and scorecards), kept while Super Overs are played.
     val regulationState: MatchState? = null,
     // The IPL's Impact Player rule (logic/ImpactPlayer.kt); null = the match has no Impact Players.
-    val impact: ImpactState? = null
+    val impact: ImpactState? = null,
+    // The Big Bash League's Power Surge (logic/PowerSurge.kt); null = the match has none.
+    val surge: SurgeState? = null
 )
 
 object MatchStateMachine {
@@ -473,8 +475,8 @@ object MatchStateMachine {
     fun selectBowler(state: MatchState, bowler: Player): MatchState {
         val noBallsBowledYet = state.currentInningsData.totalBalls == 0 && state.currentInningsData.totalOvers == 0
 
-        val previousOverWasPowerplay = state.score.overs > 0 && FieldingSystem.isPowerplayOver(state.format, state.score.overs - 1)
-        val thisOverIsPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)
+        val previousOverWasPowerplay = state.score.overs > 0 && FieldingSystem.isRestrictedOver(state, state.score.overs - 1)
+        val thisOverIsPowerplay = FieldingSystem.isRestrictedOver(state, state.score.overs)
         val powerplayJustEnded = previousOverWasPowerplay && !thisOverIsPowerplay
 
         val fieldPlacements = if (noBallsBowledYet || powerplayJustEnded) {
@@ -551,7 +553,7 @@ object MatchStateMachine {
         val fieldPlacements = carryOverFieldPlacements(state.fieldPlacements, state.currentBowler.id, nextBowler.id)
             ?: FieldingSystem.generateAiFieldPlacements(
                 FieldingSystem.getFieldingPlayers(state.bowlingTeam, nextBowler.id),
-                FieldingSystem.isPowerplayOver(state.format, state.score.overs),
+                FieldingSystem.isRestrictedOver(state, state.score.overs),
                 situationalBias
             )
 

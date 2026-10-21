@@ -98,8 +98,12 @@ object AiBallModel {
 
         // Phase of the innings.
         val fraction = balls.toDouble() / (limit * 6)
+        // The Big Bash: a four-over powerplay, and the Power Surge the batting side usually takes (overs 15 and 16).
+        val bigBash = state.surge != null && limit >= 15
+        val powerplayEnd = if (bigBash) 0.2 else 0.3
+        val inSurge = bigBash && balls >= 84 && balls < 96
         when {
-            fraction < 0.3 -> { fBoundary *= 1.15; fDot *= 0.95 }
+            fraction < powerplayEnd || inSurge -> { fBoundary *= 1.15; fDot *= 0.95 }
             fraction < 0.75 -> { fBoundary *= 0.85; fRuns *= 1.08; fWicket *= 0.95 }
             else -> { fBoundary *= 1.4; fWicket *= 1.3; fDot *= 0.85 }
         }

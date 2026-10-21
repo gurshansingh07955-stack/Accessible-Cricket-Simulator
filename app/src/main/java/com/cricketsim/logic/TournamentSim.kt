@@ -129,7 +129,8 @@ object CplSimulator {
         tags: Map<String, SquadTag>,
         stadium: Stadium,
         random: Random,
-        format: MatchFormat = MatchFormat.T20
+        format: MatchFormat = MatchFormat.T20,
+        powerSurge: Boolean = false
     ): SimResult? {
         val home = pickXI(homeSquad, tags, stadium)
         val away = pickXI(awaySquad, tags, stadium)
@@ -144,6 +145,7 @@ object CplSimulator {
         // (next batter, bowling changes, fields), and its difficulty setting favours nobody.
         s = s.copy(
             userTeam = home.copy(id = OBSERVER_ID),
+            surge = if (powerSurge) SurgeState() else null,
             needsOpenerSelection = false,
             needsBowlerSelection = false,
             fieldPlacements = FieldingSystem.generateAiFieldPlacements(
@@ -515,7 +517,8 @@ object CplSimulator {
         val home = state.teams.find { it.id == fixture.homeId } ?: return state
         val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
-        val sim = simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId)) ?: return state
+        val sim = simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
+            state.tournamentId == BigBashLeague.TOURNAMENT_ID) ?: return state
         val fixtures = state.fixtures.map {
             if (it.id == fixture.id) it.copy(result = sim.result, scorecard = sim.scorecard) else it
         }

@@ -155,9 +155,9 @@ object MatchSimulation {
         val bias = AiSituation.bowlingBias(state)
         val bowling = BowlingSystem.generateAiBowlingDecision(state.currentBowler, bias)
         val ballsBowled = state.score.overs * 6 + state.score.balls
-        val isPowerplay = FieldingSystem.isPowerplayBall(state.format, ballsBowled)
+        val isPowerplay = FieldingSystem.isRestrictedBall(state, ballsBowled)
         val powerplayJustEnded = ballsBowled > 0 && !isPowerplay &&
-            FieldingSystem.isPowerplayBall(state.format, ballsBowled - 1)
+            FieldingSystem.isRestrictedBall(state, ballsBowled - 1)
 
         val allowance = FieldingSystem.aiFieldMoveAllowance(
             ballsBowled = ballsBowled,
@@ -329,7 +329,7 @@ object MatchSimulation {
             allowLeave = state.format == com.cricketsim.logic.MatchFormat.TEST
         )
 
-        val isPowerplay = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)
+        val isPowerplay = FieldingSystem.isRestrictedBall(state, state.score.overs * 6 + state.score.balls)
         val illegalField = !FieldingSystem.isFieldLegal(state.fieldPlacements, isPowerplay)
 
         val isSecondInningsUnderLights = state.currentInnings == 2 && state.weather.isDayNight

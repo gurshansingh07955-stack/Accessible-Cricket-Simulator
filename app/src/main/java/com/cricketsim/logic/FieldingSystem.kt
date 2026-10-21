@@ -542,6 +542,19 @@ object FieldingSystem {
      */
     fun isPowerplayOver(format: MatchFormat, oversCompleted: Int): Boolean = isPowerplayBall(format, oversCompleted * 6)
 
+    /**
+     * Whether the delivery with this many balls already bowled is restricted (powerplay field limit) IN THIS MATCH.
+     * An ordinary match: the powerplay of its format. A Big Bash match (it has a Power Surge): a four-over
+     * powerplay, and the two overs of a Power Surge once the batting side has called it.
+     */
+    fun isRestrictedBall(state: MatchState, ballsBowled: Int): Boolean {
+        if (state.surge == null) return isPowerplayBall(state.format, ballsBowled)
+        return ballsBowled < PowerSurge.BBL_POWERPLAY_BALLS || PowerSurge.isActiveAt(state, ballsBowled)
+    }
+
+    /** [isRestrictedBall] for an over that starts now (overs completed so far). */
+    fun isRestrictedOver(state: MatchState, oversCompleted: Int): Boolean = isRestrictedBall(state, oversCompleted * 6)
+
     fun countDeepFielders(placements: List<FieldPlacement>): Int = placements.count { it.depth == FieldingDepth.DEEP }
 
     const val MAX_DEEP_FIELDERS_POWERPLAY = 3

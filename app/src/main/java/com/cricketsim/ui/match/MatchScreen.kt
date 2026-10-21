@@ -40,7 +40,9 @@ import com.cricketsim.logic.DismissalType
 import com.cricketsim.logic.DrsCase
 import com.cricketsim.logic.DrsSystem
 import com.cricketsim.logic.DrinksBreak
+import com.cricketsim.logic.PowerSurge
 import com.cricketsim.logic.SuperOver
+import com.cricketsim.logic.SurgeState
 import com.cricketsim.logic.DrsVerdict
 import com.cricketsim.logic.FieldingSystem
 import com.cricketsim.logic.FootworkType
@@ -193,7 +195,9 @@ fun MatchScreen(
     // Where this match saves itself; null means the normal Resume match slot. The tournament passes its own.
     saveStore: MatchSaveStore? = null,
     /** The IPL's Impact Player rule: each side's five named substitutes. Null = no Impact Players in this match. */
-    impact: ImpactSetup? = null
+    impact: ImpactSetup? = null,
+    /** The Big Bash League's Power Surge is part of this match. */
+    powerSurge: Boolean = false
 ) {
     val services = LocalGameServices.current
     val matchContext = LocalContext.current
@@ -202,7 +206,7 @@ fun MatchScreen(
 
     var matchState by remember {
         mutableStateOf(
-            resume?.state ?: MatchStateMachine.createNewMatch(
+            (resume?.state ?: MatchStateMachine.createNewMatch(
                 format = format,
                 pitchType = stadium.pitchType,
                 userTeam = userTeam,
@@ -212,7 +216,7 @@ fun MatchScreen(
                 stadiumId = stadium.id,
                 weather = WeatherSystem.generateWeatherForStadium(stadium),
                 impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) }
-            )
+            )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }
         )
     }
     var recentCommentary by remember { mutableStateOf<List<String>>(resume?.recentCommentary ?: emptyList()) }
@@ -255,6 +259,8 @@ fun MatchScreen(
     // An LBW waiting for the appeal and the umpire's decision (AppealScreens.kt).
     var pendingAppeal by remember { mutableStateOf<PendingAppeal?>(null) }
     var showImpactUse by remember { mutableStateOf(false) }
+    // The computer's Power Surge (or one that started by itself), shown as a pop-up until the user continues.
+    var surgeNotice by remember { mutableStateOf<String?>(null) }
     // The wicket (innings x 100 + wickets) for which the user said "not now", so he is asked once per wicket.
     var impactPromptSkippedAt by remember { mutableStateOf(-1) }
     // The computer side looks at every moment the rule allows. A short pause first, so the ball's own announcement is said first.
@@ -270,6 +276,25 @@ fun MatchScreen(
         val line = ImpactPlayer.announcement(swap)
         recentCommentary = (recentCommentary + line).takeLast(6)
         services?.announceSpoken(line)
+    }
+
+    // --- The Big Bash League's Power Surge (logic/PowerSurge.kt) ---
+    // The computer batting side chooses its moment at the start of each over from the 11th; one nobody called starts by
+    // itself at the 19th over. The user's own Power Surge is taken from Match info.
+    LaunchedEffect(matchState.score, matchState.currentInnings, matchState.pendingDismissal, matchState.needsBowlerSelection, matchState.needsOpenerSelection, showPitchingScreen, showBattingScreen) {
+        if (matchOver || matchState.surge == null || showPitchingScreen || showBattingScreen) return@LaunchedEffect
+        kotlinx.coroutines.delay(500)
+        val now = matchState
+        val userBatting = now.battingTeam.id == now.userTeam.id
+        val automatic = PowerSurge.mustTakeNow(now)
+        if (!automatic && (userBatting || !PowerSurge.aiShouldTake(now))) return@LaunchedEffect
+        val next = PowerSurge.take(now)
+        matchState = next
+        val line = PowerSurge.announcement(next, userBatting, automatic)
+        recentCommentary = (recentCommentary + line).takeLast(6)
+        services?.announceSpoken(line)
+        // A pop-up the user must read when it is the computer's: it changes how he has to bowl.
+        if (!userBatting || automatic) surgeNotice = line
     }
 
     // The crowd bed runs while the match is live and sound effects are on;
@@ -467,6 +492,13 @@ fun MatchScreen(
         return
     }
 
+    val surgePopup = surgeNotice
+    if (surgePopup != null) {
+        BackHandler(onBack = { surgeNotice = null })
+        PowerSurgeNoticeScreen(text = surgePopup, onContinue = { surgeNotice = null })
+        return
+    }
+
     if (showMatchInfo) {
         BackHandler(onBack = { showMatchInfo = false })
         MatchInfoScreen(
@@ -476,6 +508,14 @@ fun MatchScreen(
             onUseImpact = {
                 showMatchInfo = false
                 showImpactUse = true
+            },
+            onUsePowerSurge = {
+                val taken = PowerSurge.take(matchState)
+                matchState = taken
+                val line = PowerSurge.announcement(taken, userBatting = true, automatic = false)
+                recentCommentary = (recentCommentary + line).takeLast(6)
+                services?.announceSpoken(line)
+                showMatchInfo = false
             },
             onBack = { showMatchInfo = false }
         )
@@ -801,7 +841,7 @@ fun MatchScreen(
         return
     }
 
-    val isPowerplayNow = FieldingSystem.isPowerplayBall(matchState.format, matchState.score.overs * 6 + matchState.score.balls)
+    val isPowerplayNow = FieldingSystem.isRestrictedBall(matchState, matchState.score.overs * 6 + matchState.score.balls)
     val isUserBowling = matchState.bowlingTeam.id == userTeam.id
 
     if (showFieldScreen) {

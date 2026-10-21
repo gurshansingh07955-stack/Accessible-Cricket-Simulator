@@ -16,7 +16,7 @@ package com.cricketsim.logic
  *    The finals grounds were not announced; here each final is played at the home ground of the higher-placed
  *    side (an assumption).
  *  - THE RULES used: at most three overseas players in a squad (so never more than three in the XI).
- *    The Power Surge and the other BBL playing conditions are NOT in this part yet.
+ *    The Power Surge is in (PowerSurge.kt); the designated batter and fielder and the over-rate timer are not.
  *
  * Players already in the game (its roster, a CPL / Abu Dhabi T10 / LPL player) are COPIED with their
  * ratings; the others are new, with ESTIMATED ratings (the nw() lines; change them there). It reuses the CPL

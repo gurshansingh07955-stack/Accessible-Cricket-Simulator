@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.ImpactPlayer
+import com.cricketsim.logic.PowerSurge
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.Stadium
@@ -29,7 +30,13 @@ import com.cricketsim.logic.Stadium
  * wicketkeeper, and the Impact Player substitutes. Every fact is its own line, so each is one swipe stop.
  */
 @Composable
-fun MatchInfoScreen(state: MatchState, stadium: Stadium, onUseImpact: () -> Unit, onBack: () -> Unit) {
+fun MatchInfoScreen(
+    state: MatchState,
+    stadium: Stadium,
+    onUseImpact: () -> Unit,
+    onUsePowerSurge: () -> Unit = {},
+    onBack: () -> Unit
+) {
     val user = state.userTeam
     val opponent = state.opponentTeam
     val impact = state.impact
@@ -46,6 +53,11 @@ fun MatchInfoScreen(state: MatchState, stadium: Stadium, onUseImpact: () -> Unit
         if (canUseImpact) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onUseImpact, modifier = Modifier.fillMaxWidth()) { Text("Impact Player") }
+        }
+        // The Big Bash League's Power Surge: offered only when the user is batting at the start of an over from the 11th.
+        if (state.battingTeam.id == user.id && PowerSurge.canTakeNow(state)) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onUsePowerSurge, modifier = Modifier.fillMaxWidth()) { Text("Power Surge") }
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(

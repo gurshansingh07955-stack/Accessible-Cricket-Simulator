@@ -612,6 +612,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                     resume = current.resume,
                     saveStore = matchStore,
                     impact = current.impact,
+                    powerSurge = saved?.tournamentId == BigBashLeague.TOURNAMENT_ID,
                     onMatchComplete = { finished ->
                         pendingMatch = null
                         val state = saved

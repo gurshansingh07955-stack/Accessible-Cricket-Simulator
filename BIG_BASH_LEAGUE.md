@@ -17,5 +17,12 @@ new with **estimated ratings** (the `nw(...)` lines in `logic/BigBashLeague.kt`)
 
 **Points.** The game's table gives 2 points a win (the real league's points rules were not checked).
 
-**Not built yet (part 2):** the Power Surge (shown in Match info, with a pop-up when the computer takes it), the designated
-batter and fielder, and the over-rate timer rule.
+**Power Surge (part 2).** Big Bash matches have the Power Surge (`logic/PowerSurge.kt`): two overs with the powerplay field limit
+(at most three fielders in the deep). The BATTING side calls it at the start of any over from the 11th, once an innings.
+- You batting: a **Power Surge** button appears on **Match info** (like the Impact Player) at those moments.
+- The computer batting: it decides at the start of each over from the 11th (`PowerSurge.aiShouldTake`) and a **pop-up** tells you,
+  because you must bring your field in before you bowl.
+- Assumption: an uncalled Power Surge starts by itself at the start of the 19th over (the published rule has no deadline).
+- The Big Bash powerplay is four overs (`PowerSurge.BBL_POWERPLAY_BALLS`), not six.
+- Computer-v-computer matches use the usual choice (overs 15 and 16) inside `AiBallModel`.
+**Not built:** the designated batter and fielder, and the over-rate timer rule.
