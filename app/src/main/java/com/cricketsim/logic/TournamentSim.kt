@@ -481,6 +481,25 @@ object CplSimulator {
             if (qualifier?.result != null) setTeams("Final", table[0].team.id, winnerOf(qualifier))
             return state.copy(fixtures = fixtures)
         }
+        if (state.tournamentId == BigBashLeague.TOURNAMENT_ID) {
+            // Big Bash League: Qualifier (1st v 2nd), Knockout (3rd v 4th), Challenger (Qualifier loser v Knockout winner),
+            // Final (Qualifier winner v Challenger winner). Each is played at the higher-placed side's home ground.
+            fun setTeamsAtHome(name: String, home: String?, away: String?) {
+                if (home == null || away == null) return
+                val ground = BigBashLeague.homeGround(home)
+                fixtures = fixtures.map {
+                    if (it.stage == name && it.homeId == null) it.copy(homeId = home, awayId = away, stadiumId = ground) else it
+                }
+            }
+            setTeamsAtHome("Qualifier", table[0].team.id, table[1].team.id)
+            setTeamsAtHome("Knockout", table[2].team.id, table[3].team.id)
+            val qualifier = stage("Qualifier")
+            val knockout = stage("Knockout")
+            if (qualifier?.result != null && knockout?.result != null) setTeamsAtHome("Challenger", loserOf(qualifier), winnerOf(knockout))
+            val challenger = stage("Challenger")
+            if (qualifier?.result != null && challenger?.result != null) setTeamsAtHome("Final", winnerOf(qualifier), winnerOf(challenger))
+            return state.copy(fixtures = fixtures)
+        }
         setTeams("Qualifier 1", table[0].team.id, table[1].team.id)
         setTeams("Eliminator", table[2].team.id, table[3].team.id)
         val q1 = stage("Qualifier 1")

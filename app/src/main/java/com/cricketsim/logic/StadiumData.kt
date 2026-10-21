@@ -181,6 +181,30 @@ object StadiumData {
             climate = StadiumClimate(0.55, 78, 15, 16, "Genuinely rain-prone conditions.")
         ),
         Stadium(
+            id = "sydney-showground", name = "ENGIE Stadium (Sydney Showground)", city = "Sydney", country = "Australia",
+            homeTeamIds = listOf("team_aus"),
+            pitchType = PitchType.BATTING, pitchDescription = "A flat, true surface that generally favors batters.",
+            boundarySize = BoundarySize.SMALL, altitudeM = 20, dewFactor = 0.3,
+            avgT20FirstInningsScore = 175,
+            climate = StadiumClimate(0.3, 65, 24, 14, "Warm and humid with a moderate chance of rain.")
+        ),
+        Stadium(
+            id = "junction-oval", name = "Junction Oval", city = "Melbourne", country = "Australia",
+            homeTeamIds = listOf("team_aus"),
+            pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 10, dewFactor = 0.15,
+            avgT20FirstInningsScore = 165,
+            climate = StadiumClimate(0.4, 60, 18, 20, "Warm conditions with a moderate chance of rain.")
+        ),
+        Stadium(
+            id = "utas-stadium", name = "University of Tasmania Stadium (York Park)", city = "Launceston", country = "Australia",
+            homeTeamIds = listOf("team_aus"),
+            pitchType = PitchType.GREEN, pitchDescription = "A pitch with pace and movement that helps seam bowlers.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 170, dewFactor = 0.2,
+            avgT20FirstInningsScore = 150,
+            climate = StadiumClimate(0.35, 62, 16, 16, "Cool conditions with a moderate chance of rain.")
+        ),
+        Stadium(
             id = "sheikh-zayed", name = "Sheikh Zayed Stadium", city = "Abu Dhabi", country = "UAE",
             homeTeamIds = listOf("team_uae"),
             pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",
