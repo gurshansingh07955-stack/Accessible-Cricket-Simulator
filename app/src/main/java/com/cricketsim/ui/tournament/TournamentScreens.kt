@@ -50,6 +50,7 @@ import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CommentaryCategory
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.AbuDhabiT10
+import com.cricketsim.logic.InternationalLeagueT20
 import com.cricketsim.logic.IplSeason
 import com.cricketsim.logic.LankaPremierLeague
 import com.cricketsim.logic.ImpactPlayer
@@ -141,6 +142,7 @@ fun TournamentFlow(onExit: () -> Unit) {
     var iplSeason by remember { mutableStateOf(false) } // is there a saved IPL season?
     var adtSaved by remember { mutableStateOf(false) } // is there a saved Abu Dhabi T10 tournament?
     var lplSaved by remember { mutableStateOf(false) } // is there a saved Lanka Premier League tournament?
+    var iltSaved by remember { mutableStateOf(false) } // is there a saved International League T20 tournament?
     val cplStore = remember { TournamentSaveStore(context) }
     val iplStore = remember { TournamentSaveStore(context, "saved_tournament_ipl2027.json") }
     val cplMatchStore = remember { MatchSaveStore(context, "saved_tournament_match.json") }
@@ -149,14 +151,17 @@ fun TournamentFlow(onExit: () -> Unit) {
     val adtMatchStore = remember { MatchSaveStore(context, "saved_adt10_match.json") }
     val lplStore = remember { TournamentSaveStore(context, "saved_tournament_lpl2026.json") }
     val lplMatchStore = remember { MatchSaveStore(context, "saved_lpl_match.json") }
-    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; else -> cplStore }
-    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; else -> cplMatchStore }
+    val iltStore = remember { TournamentSaveStore(context, "saved_tournament_ilt20_2026.json") }
+    val iltMatchStore = remember { MatchSaveStore(context, "saved_ilt20_match.json") }
+    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; "ilt" -> iltStore; else -> cplStore }
+    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; "ilt" -> iltMatchStore; else -> cplMatchStore }
     val scope = rememberCoroutineScope()
     val cplBuilt = remember { CplData.buildTeams() }
     val adtBuilt = remember { AbuDhabiT10.buildTeams() }
     val lplBuilt = remember { LankaPremierLeague.buildTeams() }
     // The squads of the tournament in hand (team choice, squads, tags).
-    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; else -> cplBuilt }
+    val iltBuilt = remember { InternationalLeagueT20.buildTeams() }
+    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; "ilt" -> iltBuilt; else -> cplBuilt }
 
     var page by remember { mutableStateOf<TPage>(TPage.Menu) }
     // The "menu open" sound for each menu-type page (not the toss, the match, the celebration or the IPL
@@ -209,6 +214,7 @@ fun TournamentFlow(onExit: () -> Unit) {
         iplSeason = iplStore.load() != null
         adtSaved = adtStore.load() != null
         lplSaved = lplStore.load() != null
+        iltSaved = iltStore.load() != null
     }
     LaunchedEffect(kind) {
         val tournament = store.load()
@@ -235,6 +241,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                 hasSaved = saved != null,
                 adtSaved = adtSaved,
                 lplSaved = lplSaved,
+                iltSaved = iltSaved,
                 onCpl = { page = TPage.Cpl },
                 onAdt = {
                     // The Abu Dhabi T10 has its own saved tournament and match slot: load them for this kind.
@@ -250,6 +257,14 @@ fun TournamentFlow(onExit: () -> Unit) {
                     pendingMatch = null
                     loaded = false
                     kind = "lpl"
+                    page = TPage.Adt
+                },
+                onIlt = {
+                    // The International League T20 has its own saved tournament and match slot too.
+                    saved = null
+                    pendingMatch = null
+                    loaded = false
+                    kind = "ilt"
                     page = TPage.Adt
                 },
                 onIpl = { page = TPage.Ipl },
@@ -301,15 +316,21 @@ fun TournamentFlow(onExit: () -> Unit) {
         is TPage.Cpl, is TPage.Adt -> {
             val isAdt = kind == "adt10"
             val isLpl = kind == "lpl"
+            val isIlt = kind == "ilt"
             val tournamentLabel = when {
                 isAdt -> AbuDhabiT10.TOURNAMENT_NAME
                 isLpl -> LankaPremierLeague.TOURNAMENT_NAME
+                isIlt -> InternationalLeagueT20.TOURNAMENT_NAME
                 else -> "CPL 2026"
             }
             val back = {
-                if (isAdt || isLpl) {
+                if (isAdt || isLpl || isIlt) {
                     // Back to the league list: the CPL is the tournament in hand again.
-                    if (isAdt) adtSaved = saved != null else lplSaved = saved != null
+                    when {
+                        isAdt -> adtSaved = saved != null
+                        isLpl -> lplSaved = saved != null
+                        else -> iltSaved = saved != null
+                    }
                     saved = null
                     pendingMatch = null
                     loaded = false
@@ -325,6 +346,8 @@ fun TournamentFlow(onExit: () -> Unit) {
                         "and then the Qualifier and the Final, all at Sheikh Zayed Stadium."
                     isLpl -> "The Lanka Premier League: the five real teams and their 2026 squads, 20 league matches, then Qualifier 1, " +
                         "the Eliminator, Qualifier 2 and the Final. At most four overseas players, and one under-23 player, in your XI."
+                    isIlt -> "The International League T20: the six real teams and their Season 5 squads, the real fixture list across Dubai, " +
+                        "Sharjah and Abu Dhabi, then the play-offs. Your XI needs two UAE players, two Afghanistan players and one more Associate player."
                     else -> "The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval."
                 },
                 loaded = loaded,
@@ -368,7 +391,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             }
         }
         is TPage.TeamSelect -> {
-            val back = { page = if (kind == "adt10" || kind == "lpl") TPage.Adt else TPage.Cpl }
+            val back = { page = if (kind == "adt10" || kind == "lpl" || kind == "ilt") TPage.Adt else TPage.Cpl }
             BackHandler(onBack = back)
             TeamSelectPage(
                 teams = built.first,
@@ -377,6 +400,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                     val state = when (kind) {
                         "adt10" -> AbuDhabiT10.newTournament(teamId, built, Random.Default)
                         "lpl" -> LankaPremierLeague.newTournament(teamId, built, Random.Default)
+                        "ilt" -> InternationalLeagueT20.newTournament(teamId, built)
                         else -> CplData.newTournament(teamId, built, Random.Default)
                     }
                     saved = state
@@ -400,7 +424,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             } else back()
         }
         is TPage.Hub -> {
-            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10", "lpl" -> TPage.Adt; else -> TPage.Cpl } }
+            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10", "lpl", "ilt" -> TPage.Adt; else -> TPage.Cpl } }
             BackHandler(onBack = back)
             val state = saved
             if (state != null) {
@@ -658,6 +682,9 @@ private fun roleLabel(role: PlayerRole): String = when (role) {
 private fun tagLabelFor(tag: SquadTag?, domestic: String, breakout: String): String = when (tag) {
     SquadTag.OVERSEAS -> "Overseas"
     SquadTag.BREAKOUT -> breakout
+    SquadTag.UAE -> "UAE"
+    SquadTag.AFGHAN -> "Afghanistan"
+    SquadTag.ASSOCIATE -> "Associate nation"
     else -> domestic
 }
 
@@ -693,9 +720,11 @@ private fun LeaguesPage(
     hasSaved: Boolean,
     adtSaved: Boolean,
     lplSaved: Boolean,
+    iltSaved: Boolean,
     onCpl: () -> Unit,
     onAdt: () -> Unit,
     onLpl: () -> Unit,
+    onIlt: () -> Unit,
     onIpl: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -717,6 +746,14 @@ private fun LeaguesPage(
                     if (adtSaved) " You have a saved tournament." else "",
                 enabled = true,
                 onClick = onAdt
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ChoiceRow(
+                title = "International League T20 2026",
+                description = "The six real UAE teams, their Season 5 squads and the real fixture list: 34 matches." +
+                    if (iltSaved) " You have a saved tournament." else "",
+                enabled = true,
+                onClick = onIlt
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
@@ -1240,6 +1277,7 @@ private fun VenuesTab(state: TournamentState) {
                 IplSeason.TOURNAMENT_ID -> IplSeason.stadiums
                 AbuDhabiT10.TOURNAMENT_ID -> AbuDhabiT10.stadiums
                 LankaPremierLeague.TOURNAMENT_ID -> LankaPremierLeague.stadiums
+                InternationalLeagueT20.TOURNAMENT_ID -> InternationalLeagueT20.stadiums
                 else -> CplData.stadiums
             },
             key = { it.id }

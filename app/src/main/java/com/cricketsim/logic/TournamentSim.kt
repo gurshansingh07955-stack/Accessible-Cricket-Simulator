@@ -48,6 +48,14 @@ object CplSimulator {
         fun bowlingOption(p: Player) = p.role == PlayerRole.BOWLER || p.role == PlayerRole.ALL_ROUNDER
         fun overseas(p: Player) = tags[p.id] == SquadTag.OVERSEAS
         fun breakout(p: Player) = tags[p.id] == SquadTag.BREAKOUT
+        fun uae(p: Player) = tags[p.id] == SquadTag.UAE
+        fun afghan(p: Player) = tags[p.id] == SquadTag.AFGHAN
+        fun associate(p: Player) = tags[p.id] == SquadTag.ASSOCIATE
+        // The International League T20 has quotas instead (tags exist only in its squads): at least two UAE, two
+        // Afghanistan and one further Associate player in the XI, and no cap on overseas players.
+        val quotas = tags.containsValue(SquadTag.AFGHAN)
+        val overseasCap = if (quotas) 11 else MAX_OVERSEAS
+        val locked = HashSet<Player>() // players the quotas need: never dropped for a spare bowler
         fun value(p: Player): Double {
             var v = maxOf(p.battingRating, p.bowlingRating) + p.fieldingRating * 0.1
             if (bowlingOption(p)) {
@@ -67,19 +75,27 @@ object CplSimulator {
         val xi = ArrayList<Player>()
         pool.firstOrNull { it.role == PlayerRole.WICKETKEEPER }?.let { xi.add(it) }
         pool.firstOrNull { breakout(it) && it !in xi }?.let { xi.add(it) }
+        if (quotas) {
+            repeat(maxOf(0, 2 - xi.count { uae(it) })) { pool.firstOrNull { uae(it) && it !in xi }?.let { p -> xi.add(p); locked.add(p) } }
+            repeat(maxOf(0, 2 - xi.count { afghan(it) })) { pool.firstOrNull { afghan(it) && it !in xi }?.let { p -> xi.add(p); locked.add(p) } }
+            if (xi.count { uae(it) } - 2 + xi.count { associate(it) } < 1) {
+                pool.firstOrNull { (associate(it) || uae(it)) && it !in xi }?.let { p -> xi.add(p); locked.add(p) }
+            }
+        }
         for (p in pool) {
             if (xi.size >= 11) break
             if (p in xi) continue
-            if (overseas(p) && xi.count { overseas(it) } >= MAX_OVERSEAS) continue
+            if (overseas(p) && xi.count { overseas(it) } >= overseasCap) continue
             xi.add(p)
         }
         // At least five bowling options: a spare bowler replaces the weakest non-bowling batter.
         while (xi.count { bowlingOption(it) } < 5) {
             val spare = pool.firstOrNull {
-                bowlingOption(it) && it !in xi && !(overseas(it) && xi.count { x -> overseas(x) } >= MAX_OVERSEAS)
+                bowlingOption(it) && it !in xi && !(overseas(it) && xi.count { x -> overseas(x) } >= overseasCap)
             } ?: break
             val drop = xi.filter {
-                !bowlingOption(it) && it.role != PlayerRole.WICKETKEEPER && !(breakout(it) && xi.count { x -> breakout(x) } == 1)
+                !bowlingOption(it) && it.role != PlayerRole.WICKETKEEPER && it !in locked &&
+                    !(breakout(it) && xi.count { x -> breakout(x) } == 1)
             }.minByOrNull { value(it) } ?: break
             xi[xi.indexOf(drop)] = spare
         }
@@ -340,6 +356,18 @@ object CplSimulator {
 
     /** Why this XI breaks the CPL rules (at most four overseas players, at least one breakout player), or null if it does not. */
     fun xiProblem(xi: Team, tags: Map<String, SquadTag>, tournamentId: String? = null): String? {
+        if (tags.containsValue(SquadTag.AFGHAN)) {
+            // International League T20: quotas, no overseas cap.
+            val uae = xi.players.count { tags[it.id] == SquadTag.UAE }
+            val afghan = xi.players.count { tags[it.id] == SquadTag.AFGHAN }
+            val associate = xi.players.count { tags[it.id] == SquadTag.ASSOCIATE }
+            if (uae < 2) return "Your XI needs at least two UAE players. Please change your team."
+            if (afghan < 2) return "Your XI needs at least two Afghanistan players. Please change your team."
+            if ((uae - 2) + associate < 1) {
+                return "Your XI needs at least one more Associate player: a third UAE player, or one from another Associate nation. Please change your team."
+            }
+            return null
+        }
         val overseas = xi.players.count { tags[it.id] == SquadTag.OVERSEAS }
         if (overseas > MAX_OVERSEAS) {
             return "Your XI has $overseas overseas players. The rules allow at most $MAX_OVERSEAS. Please change your team."
