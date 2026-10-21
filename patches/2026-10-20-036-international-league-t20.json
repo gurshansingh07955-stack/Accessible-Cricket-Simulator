@@ -1,0 +1,190 @@
+{
+  "name": "international-league-t20",
+  "message": "International League T20 2026 tournament: real teams, squads, fixtures and XI quotas",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/InternationalLeagueT20.kt",
+    "contains": "object InternationalLeagueT20"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/InternationalLeagueT20.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * INTERNATIONAL LEAGUE T20 2026 (DP World ILT20 Season 5, 21 November to 20 December 2026).\n *\n *  - SIX TEAMS, the real ones: Abu Dhabi Knight Riders, Desert Vipers (the defending champions), Dubai\n *    Capitals, Gulf Giants, MI Emirates and Sharjah Warriorz, with the squads (22 or 23 players each)\n *    the franchises ended the October 2026 auction with.\n *  - THE FORMAT, as announced: 30 league matches (a double round-robin, in the REAL fixture order and at\n *    the real grounds: Dubai, Sharjah and Abu Dhabi), then Qualifier 1 (1st v 2nd), the Eliminator (3rd v 4th),\n *    Qualifier 2 and the Final: 34 matches, T20. Franchises have a base ground; the real list sends them around\n *    all three.\n *  - THE RULES used (the 2026 playing conditions): the XI must have at least two UAE players, at least two\n *    Afghanistan players and at least one further Associate player (another UAE player counts). There is no\n *    cap on overseas players. The squad tags UAE / AFGHAN / ASSOCIATE / OVERSEAS carry this; the CPL's\n *    four-overseas and breakout rules do not apply here. NOT built: the ILT20 Super-sub.\n *\n * Players already in the game (its roster, a CPL, Abu Dhabi T10 player) are COPIED with their ratings;\n * the others are new, with ESTIMATED ratings (the nw() lines; change them there). Nationalities are the ones\n * published at the auction (Gulf News list); a few UAE or Associate players' roles are guesses.\n * It reuses the CPL machinery as it is (TournamentState, CplSimulator, the tabs, saving, scorecards).\n */\nobject InternationalLeagueT20 {\n\n    const val TOURNAMENT_ID = \"ilt20_2026\"\n    const val TOURNAMENT_NAME = \"International League T20 2026\"\n\n    private const val DUBAI = \"dubai-international\"\n    private const val SHARJAH = \"sharjah\"\n    private const val ABU_DHABI = \"sheikh-zayed\"\n\n    private class NewSpec(val role: PlayerRole, val bat: Int, val bowl: Int, val style: BowlingStyle)\n    private class Slot(val name: String, val lookup: String?, val tag: SquadTag, val spec: NewSpec?)\n    private class TeamDef(val id: String, val name: String, val shortName: String, val code: String, val home: String, val squad: List<Slot>)\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n    private val X = SquadTag.OVERSEAS   // a player from another Full Member nation\n    private val U = SquadTag.UAE\n    private val F = SquadTag.AFGHAN\n    private val A = SquadTag.ASSOCIATE  // USA, Kuwait, Saudi Arabia, Scotland, Netherlands and so on\n\n    private fun ex(name: String, tag: SquadTag) = Slot(name, null, tag, null)\n    private fun al(name: String, gameName: String, tag: SquadTag) = Slot(name, gameName, tag, null)\n    private fun nw(name: String, tag: SquadTag, role: PlayerRole, bat: Int, bowl: Int, style: BowlingStyle = PACE) =\n        Slot(name, null, tag, NewSpec(role, bat, bowl, style))\n\n    private val DEFS: List<TeamDef> by lazy {\n        listOf(\n            TeamDef(\"ilt_adkr\", \"Abu Dhabi Knight Riders\", \"Knight Riders\", \"ADK\", ABU_DHABI, listOf(\n                nw(\"Abdul Mannan Ali\", A, BAT, 52, 20), nw(\"Abdullah Tarakhail\", F, BWL, 15, 62), ex(\"Ajay Kumar\", U),\n                ex(\"Alishan Sharafu\", U), ex(\"Amshi De Silva\", A), ex(\"Andre Fletcher\", X), nw(\"Arab Gul\", F, BWL, 15, 66),\n                ex(\"Colin Munro\", X), ex(\"Finn Allen\", X), ex(\"Gulbadin Naib\", F), nw(\"Ibrar Ahmed\", U, BWL, 20, 60, SPIN),\n                ex(\"Jakeem Pollard\", X), ex(\"Jason Holder\", X), ex(\"Lorcan Tucker\", X),\n                nw(\"Matthew Tromp\", A, AR, 56, 60), nw(\"Michael Pepper\", X, WK, 66, 10), ex(\"Moeen Ali\", X),\n                ex(\"Muhammad Rohid\", U), ex(\"Qais Ahmad\", F), nw(\"Ravija Sandaruwan\", A, AR, 50, 50),\n                ex(\"Sunil Narine\", X), ex(\"Usman Tariq\", X)\n            )),\n            TeamDef(\"ilt_vipers\", \"Desert Vipers\", \"Vipers\", \"DVI\", DUBAI, listOf(\n                nw(\"Abdullah Ahmadzai\", F, BWL, 20, 62), ex(\"Andries Gous\", A), ex(\"Babar Azam\", X),\n                nw(\"Bilal Tahir\", A, AR, 52, 60, SPIN), nw(\"Dan Lawrence\", X, BAT, 74, 30), nw(\"David Payne\", X, BWL, 25, 76),\n                ex(\"Fakhar Zaman\", X), ex(\"Harry Tector\", X), ex(\"Hassan Nawaz\", X), nw(\"Ishtiaq Ahmed\", A, BWL, 20, 58),\n                nw(\"Joe Clarke\", X, WK, 72, 10), ex(\"Khuzaima Bin Tanveer\", U), ex(\"Mujeeb Ur Rahman\", F),\n                ex(\"Nangeyalia Kharote\", F), ex(\"Naseem Shah\", X), nw(\"Nilansh Keswani\", U, BAT, 56, 15),\n                nw(\"Saleem Safi\", F, BWL, 20, 64), nw(\"Sanjay Pahal\", U, BAT, 52, 20), ex(\"Shadab Khan\", X),\n                ex(\"Shimron Hetmyer\", X), ex(\"Vriitya Aravind\", U), ex(\"Wali Muhammad\", U)\n            )),\n            TeamDef(\"ilt_capitals\", \"Dubai Capitals\", \"Capitals\", \"DUB\", DUBAI, listOf(\n                al(\"Aayan Khan\", \"Aayan Afzal Khan\", U), nw(\"Anudeep Chenthamara\", A, BAT, 52, 20), ex(\"Darwish Rasooli\", F),\n                ex(\"Dasun Shanaka\", X), nw(\"Faf du Plessis\", X, BAT, 82, 10), ex(\"Haider Ali\", U), ex(\"Hassan Khan\", A),\n                ex(\"Karim Janat\", F), ex(\"Luke Wood\", X), ex(\"Marcus Stoinis\", X), ex(\"Mark Adair\", X),\n                al(\"Masood Ul Rahman Gurbaz\", \"Masood Gurbaz\", U), nw(\"Matt Potts\", X, BWL, 20, 76), nw(\"Max Holden\", X, BAT, 70, 10),\n                ex(\"Muhammad Arfan\", U), ex(\"Mustafizur Rahman\", X), ex(\"Noor Ahmad\", F), ex(\"Phil Salt\", X),\n                ex(\"Rovman Powell\", X), ex(\"Sediqullah Atal\", F), ex(\"Tom Moores\", X), nw(\"Usman Najeeb\", A, AR, 50, 50),\n                nw(\"Zuhaib Zubair\", U, BAT, 58, 15)\n            )),\n            TeamDef(\"ilt_giants\", \"Gulf Giants\", \"Giants\", \"GUL\", DUBAI, listOf(\n                ex(\"Alick Athanaze\", X), ex(\"Alzarri Joseph\", X), nw(\"Awais Ahmed\", U, AR, 50, 50), ex(\"Azmatullah Omarzai\", F),\n                ex(\"Blessing Muzarabani\", X), ex(\"Curtis Campher\", X), ex(\"David Miller\", X), ex(\"David Wiese\", X),\n                ex(\"Dhruv Parashar\", U), ex(\"Haider Razzaq\", U), ex(\"Heinrich Klaasen\", X), ex(\"Ibrahim Zadran\", F),\n                nw(\"Imran Mir\", F, AR, 50, 55, SPIN), nw(\"Imtiaz Khan\", A, AR, 50, 52), ex(\"Liam Livingstone\", X),\n                nw(\"Matiullah Khan\", U, BWL, 20, 60), nw(\"Meet Bhavsar\", A, AR, 54, 50), ex(\"Rahmanullah Gurbaz\", F),\n                nw(\"Sagar Kalyan\", U, BAT, 55, 15), ex(\"Shamar Joseph\", X), nw(\"Shubham Ranjane\", A, AR, 60, 52, SPIN),\n                ex(\"Tabraiz Shamsi\", X), nw(\"Wahidullah Zadran\", U, BAT, 55, 15)\n            )),\n            TeamDef(\"ilt_mi\", \"MI Emirates\", \"MI Emirates\", \"MIE\", ABU_DHABI, listOf(\n                al(\"Allah Ghazanfar\", \"Allah Mohammad Ghazanfar\", F), nw(\"Asa Tribe\", X, AR, 56, 60, SPIN), ex(\"Chris Jordan\", X),\n                nw(\"Faridoon Dawoodzai\", F, BWL, 20, 62), ex(\"Fazalhaq Farooqi\", F), nw(\"James Coles\", X, AR, 62, 60, SPIN),\n                ex(\"Jonny Bairstow\", X), nw(\"Jordan Thompson\", X, BWL, 20, 72), ex(\"Kusal Perera\", X), ex(\"Lizaad Williams\", X),\n                nw(\"Mohamed Shafeeq\", A, BAT, 54, 15), ex(\"Muhammad Waseem\", U), ex(\"Nicholas Pooran\", X),\n                al(\"Raizal Nadir Nather Shah\", \"Raizal Nadir\", U), ex(\"Rashid Khan\", F), ex(\"Romario Shepherd\", X),\n                ex(\"Ross Adair\", X), ex(\"Sanjay Krishnamurthi\", A), ex(\"Sherfane Rutherford\", X),\n                nw(\"Wasim Akram\", U, AR, 52, 50), nw(\"Zain Ul Abidin\", A, AR, 50, 52), ex(\"Zahoor Khan\", U)\n            )),\n            TeamDef(\"ilt_warriorz\", \"Sharjah Warriorz\", \"Warriorz\", \"SHA\", SHARJAH, listOf(\n                ex(\"Adam Milne\", X), ex(\"Adil Rashid\", X), al(\"Ali Aamer Naseer\", \"Ali Naseer\", U),\n                nw(\"Arunraj Selvaraj\", A, BAT, 52, 20), ex(\"Brandon McMullen\", A), nw(\"Craig Overton\", X, BWL, 30, 76),\n                nw(\"Fareed Malik\", F, BWL, 20, 62), ex(\"George Dockrell\", X), ex(\"George Linde\", X),\n                nw(\"James Rew\", X, WK, 66, 10), ex(\"James Vince\", X), ex(\"Junaid Siddique\", U),\n                ex(\"Logan van Beek\", A), ex(\"Mohammad Nabi\", F), nw(\"Mohammad Saqib\", A, AR, 50, 52),\n                nw(\"Nabeel Aziz\", U, BAT, 50, 20), ex(\"Paul Walter\", X), ex(\"Richard Gleeson\", X),\n                ex(\"Sharafuddin Ashraf\", F), ex(\"Sikandar Raza\", X), nw(\"Tanish Suri\", U, BAT, 58, 15),\n                nw(\"Tom Banton\", X, WK, 78, 10), ex(\"Waqar Salamkheil\", F)\n            ))\n        )\n    }\n\n    fun isTeam(teamId: String): Boolean = DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = DEFS.find { it.id == teamId }?.shortName\n\n    fun homeGround(teamId: String): String = DEFS.find { it.id == teamId }?.home ?: DUBAI\n\n    val stadiums: List<Stadium> by lazy {\n        listOf(DUBAI, SHARJAH, ABU_DHABI).mapNotNull { StadiumData.getStadiumById(it) }\n    }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** The six franchises (strongest first) with each player's nationality group as his tag. */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val roster = CricketData.getAllTeams().flatMap { it.players }.associateBy { norm(it.name) }\n        val cpl = CplData.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val adt = AbuDhabiT10.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = DEFS.map { def ->\n            val players = def.squad.mapIndexed { index, slot ->\n                val id = \"${def.id}_${index + 1}\"\n                val key = norm(slot.lookup ?: slot.name)\n                val base = if (slot.spec == null) (roster[key] ?: cpl[key] ?: adt[key]) else null\n                val player = if (base != null) {\n                    base.copy(id = id, teamId = def.id, name = slot.name)\n                } else {\n                    val s = slot.spec ?: NewSpec(PlayerRole.BATSMAN, 60, 20, BowlingStyle.PACE)\n                    Player(\n                        id = id, teamId = def.id, name = slot.name, role = s.role,\n                        battingRating = s.bat, bowlingRating = s.bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(s.role, s.bat, s.bowl),\n                        bowlingStyle = s.style\n                    )\n                }\n                tags[id] = slot.tag\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.code,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Pair(teams, tags)\n    }\n\n    // A=Knight Riders, V=Vipers, C=Capitals, G=Giants, M=MI Emirates, W=Warriorz; D=Dubai, S=Sharjah, Z=Abu Dhabi (Zayed).\n    // The 30 league matches in the order of the published fixture list; the first team is listed first.\n    private val LEAGUE_FIXTURES = listOf(\n        \"V M D\", \"W G S\", \"C A D\", \"W V S\", \"G M D\", \"C V D\", \"A M Z\", \"W C S\", \"M V Z\", \"G C D\",\n        \"A W Z\", \"V G D\", \"M A Z\", \"G W S\", \"A V Z\", \"C M D\", \"G A D\", \"V W S\", \"A G Z\", \"M W Z\",\n        \"V C D\", \"M G Z\", \"C W D\", \"W A S\", \"C G D\", \"W M S\", \"V A D\", \"M C Z\", \"G V D\", \"A C Z\"\n    )\n\n    private val TEAM_OF = mapOf(\n        'A' to \"ilt_adkr\", 'V' to \"ilt_vipers\", 'C' to \"ilt_capitals\", 'G' to \"ilt_giants\", 'M' to \"ilt_mi\", 'W' to \"ilt_warriorz\"\n    )\n\n    /** The published league fixtures at their real grounds, then the four play-offs (Zayed, Dubai, Sharjah, Dubai). */\n    fun buildSchedule(): List<TournamentFixture> {\n        val fixtures = ArrayList<TournamentFixture>()\n        LEAGUE_FIXTURES.forEachIndexed { index, code ->\n            val p = code.split(\" \")\n            val ground = when (p[2]) { \"D\" -> DUBAI; \"S\" -> SHARJAH; else -> ABU_DHABI }\n            fixtures.add(TournamentFixture(index, index + 1, CplData.LEAGUE, TEAM_OF.getValue(p[0][0]), TEAM_OF.getValue(p[1][0]), ground))\n        }\n        var next = fixtures.size\n        fun playoff(stage: String, ground: String, note: String) {\n            fixtures.add(TournamentFixture(next, next + 1, stage, null, null, ground, placeholder = note))\n            next++\n        }\n        playoff(\"Qualifier 1\", ABU_DHABI, \"1st v 2nd in the table\")\n        playoff(\"Eliminator\", DUBAI, \"3rd v 4th in the table\")\n        playoff(\"Qualifier 2\", SHARJAH, \"Loser of Qualifier 1 v winner of the Eliminator\")\n        playoff(\"Final\", DUBAI, \"Winners of Qualifier 1 and Qualifier 2\")\n        return fixtures\n    }\n\n    fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "INTERNATIONAL_LEAGUE_T20.md",
+      "mustNotExist": true,
+      "content": "# International League T20 2026 (tournament)\n\nTournament > League tournaments > International League T20 2026 (DP World ILT20 Season 5). Same pages, saving and tabs as the CPL.\n\n**Real facts used** (published October 2026): six teams (Abu Dhabi Knight Riders, Desert Vipers, Dubai Capitals, Gulf Giants,\nMI Emirates, Sharjah Warriorz), the 22 or 23 players each franchise ended the auction with, and the **real fixture list**:\n30 league matches at Dubai, Sharjah and Abu Dhabi in the published order, then Qualifier 1 (Abu Dhabi), the Eliminator (Dubai),\nQualifier 2 (Sharjah) and the Final (Dubai): 34 matches, T20. The league fixtures are the same every time, as in real life.\n\n**Rules used:** the XI needs at least two UAE players, at least two Afghanistan players and at least one further Associate player\n(a third UAE player counts); no limit on overseas players. Squad tags `UAE`, `AFGHAN`, `ASSOCIATE`, `OVERSEAS` carry this\n(`SquadTag` in `Tournament.kt`; `pickXI` and `xiProblem` in `TournamentSim.kt` enforce it, switched on by the presence of\n`AFGHAN` tags). **Not built:** the ILT20 Super-sub, the under-23 squad rule.\n\n**Players.** Anyone already in the game (roster, CPL, Abu Dhabi T10) is copied with his ratings. About 44 were not in the game and are\nnew; **their ratings are estimates** (the `nw(...)` lines in `logic/InternationalLeagueT20.kt`; several UAE and Associate players'\nroles are guesses). Nationalities follow the Gulf News list of the auction. `al(...)` links Aayan Khan = Aayan Afzal Khan,\nMasood Ul Rahman Gurbaz = Masood Gurbaz, Allah Ghazanfar = Allah Mohammad Ghazanfar, Raizal Nadir Nather Shah = Raizal Nadir,\nAli Aamer Naseer = Ali Naseer.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "enum class SquadTag { DOMESTIC, BREAKOUT, OVERSEAS }\n",
+      "replace": "// UAE, AFGHAN and ASSOCIATE are used only by the International League T20 (its XI quotas).\nenum class SquadTag { DOMESTIC, BREAKOUT, OVERSEAS, UAE, AFGHAN, ASSOCIATE }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "        stadiums.find { it.id == id } ?: IplSeason.stadium(id) ?: AbuDhabiT10.stadium(id) ?: LankaPremierLeague.stadium(id)\n",
+      "replace": "        stadiums.find { it.id == id } ?: IplSeason.stadium(id) ?: AbuDhabiT10.stadium(id) ?: LankaPremierLeague.stadium(id)\n            ?: InternationalLeagueT20.stadium(id)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "            ?: LankaPremierLeague.shortNameOrNull(teamId) ?: IplData.shortName(teamId)\n",
+      "replace": "            ?: LankaPremierLeague.shortNameOrNull(teamId) ?: InternationalLeagueT20.shortNameOrNull(teamId) ?: IplData.shortName(teamId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "        else if (LankaPremierLeague.isTeam(teamId)) \"\" // the LPL franchises have no home ground\n",
+      "replace": "        else if (LankaPremierLeague.isTeam(teamId)) \"\" // the LPL franchises have no home ground\n        else if (InternationalLeagueT20.isTeam(teamId)) InternationalLeagueT20.homeGround(teamId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        fun breakout(p: Player) = tags[p.id] == SquadTag.BREAKOUT\n",
+      "replace": "        fun breakout(p: Player) = tags[p.id] == SquadTag.BREAKOUT\n        fun uae(p: Player) = tags[p.id] == SquadTag.UAE\n        fun afghan(p: Player) = tags[p.id] == SquadTag.AFGHAN\n        fun associate(p: Player) = tags[p.id] == SquadTag.ASSOCIATE\n        // The International League T20 has quotas instead (tags exist only in its squads): at least two UAE, two\n        // Afghanistan and one further Associate player in the XI, and no cap on overseas players.\n        val quotas = tags.containsValue(SquadTag.AFGHAN)\n        val overseasCap = if (quotas) 11 else MAX_OVERSEAS\n        val locked = HashSet<Player>() // players the quotas need: never dropped for a spare bowler\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        pool.firstOrNull { breakout(it) && it !in xi }?.let { xi.add(it) }\n        for (p in pool) {\n            if (xi.size >= 11) break\n            if (p in xi) continue\n            if (overseas(p) && xi.count { overseas(it) } >= MAX_OVERSEAS) continue\n            xi.add(p)\n        }\n",
+      "replace": "        pool.firstOrNull { breakout(it) && it !in xi }?.let { xi.add(it) }\n        if (quotas) {\n            repeat(maxOf(0, 2 - xi.count { uae(it) })) { pool.firstOrNull { uae(it) && it !in xi }?.let { p -> xi.add(p); locked.add(p) } }\n            repeat(maxOf(0, 2 - xi.count { afghan(it) })) { pool.firstOrNull { afghan(it) && it !in xi }?.let { p -> xi.add(p); locked.add(p) } }\n            if (xi.count { uae(it) } - 2 + xi.count { associate(it) } < 1) {\n                pool.firstOrNull { (associate(it) || uae(it)) && it !in xi }?.let { p -> xi.add(p); locked.add(p) }\n            }\n        }\n        for (p in pool) {\n            if (xi.size >= 11) break\n            if (p in xi) continue\n            if (overseas(p) && xi.count { overseas(it) } >= overseasCap) continue\n            xi.add(p)\n        }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "                bowlingOption(it) && it !in xi && !(overseas(it) && xi.count { x -> overseas(x) } >= MAX_OVERSEAS)\n",
+      "replace": "                bowlingOption(it) && it !in xi && !(overseas(it) && xi.count { x -> overseas(x) } >= overseasCap)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "                !bowlingOption(it) && it.role != PlayerRole.WICKETKEEPER && !(breakout(it) && xi.count { x -> breakout(x) } == 1)\n",
+      "replace": "                !bowlingOption(it) && it.role != PlayerRole.WICKETKEEPER && it !in locked &&\n                    !(breakout(it) && xi.count { x -> breakout(x) } == 1)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val overseas = xi.players.count { tags[it.id] == SquadTag.OVERSEAS }\n        if (overseas > MAX_OVERSEAS) {\n",
+      "replace": "        if (tags.containsValue(SquadTag.AFGHAN)) {\n            // International League T20: quotas, no overseas cap.\n            val uae = xi.players.count { tags[it.id] == SquadTag.UAE }\n            val afghan = xi.players.count { tags[it.id] == SquadTag.AFGHAN }\n            val associate = xi.players.count { tags[it.id] == SquadTag.ASSOCIATE }\n            if (uae < 2) return \"Your XI needs at least two UAE players. Please change your team.\"\n            if (afghan < 2) return \"Your XI needs at least two Afghanistan players. Please change your team.\"\n            if ((uae - 2) + associate < 1) {\n                return \"Your XI needs at least one more Associate player: a third UAE player, or one from another Associate nation. Please change your team.\"\n            }\n            return null\n        }\n        val overseas = xi.players.count { tags[it.id] == SquadTag.OVERSEAS }\n        if (overseas > MAX_OVERSEAS) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.IplSeason\n",
+      "replace": "import com.cricketsim.logic.InternationalLeagueT20\nimport com.cricketsim.logic.IplSeason\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    var lplSaved by remember { mutableStateOf(false) } // is there a saved Lanka Premier League tournament?\n",
+      "replace": "    var lplSaved by remember { mutableStateOf(false) } // is there a saved Lanka Premier League tournament?\n    var iltSaved by remember { mutableStateOf(false) } // is there a saved International League T20 tournament?\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val store = when (kind) { \"ipl\" -> iplStore; \"adt10\" -> adtStore; \"lpl\" -> lplStore; else -> cplStore }\n    val matchStore = when (kind) { \"ipl\" -> iplMatchStore; \"adt10\" -> adtMatchStore; \"lpl\" -> lplMatchStore; else -> cplMatchStore }\n",
+      "replace": "    val iltStore = remember { TournamentSaveStore(context, \"saved_tournament_ilt20_2026.json\") }\n    val iltMatchStore = remember { MatchSaveStore(context, \"saved_ilt20_match.json\") }\n    val store = when (kind) { \"ipl\" -> iplStore; \"adt10\" -> adtStore; \"lpl\" -> lplStore; \"ilt\" -> iltStore; else -> cplStore }\n    val matchStore = when (kind) { \"ipl\" -> iplMatchStore; \"adt10\" -> adtMatchStore; \"lpl\" -> lplMatchStore; \"ilt\" -> iltMatchStore; else -> cplMatchStore }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val built = when (kind) { \"adt10\" -> adtBuilt; \"lpl\" -> lplBuilt; else -> cplBuilt }\n",
+      "replace": "    val iltBuilt = remember { InternationalLeagueT20.buildTeams() }\n    val built = when (kind) { \"adt10\" -> adtBuilt; \"lpl\" -> lplBuilt; \"ilt\" -> iltBuilt; else -> cplBuilt }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        lplSaved = lplStore.load() != null\n",
+      "replace": "        lplSaved = lplStore.load() != null\n        iltSaved = iltStore.load() != null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                lplSaved = lplSaved,\n",
+      "replace": "                lplSaved = lplSaved,\n                iltSaved = iltSaved,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onIpl = { page = TPage.Ipl },\n",
+      "replace": "                onIlt = {\n                    // The International League T20 has its own saved tournament and match slot too.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"ilt\"\n                    page = TPage.Adt\n                },\n                onIpl = { page = TPage.Ipl },\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val isLpl = kind == \"lpl\"\n",
+      "replace": "            val isLpl = kind == \"lpl\"\n            val isIlt = kind == \"ilt\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isLpl -> LankaPremierLeague.TOURNAMENT_NAME\n",
+      "replace": "                isLpl -> LankaPremierLeague.TOURNAMENT_NAME\n                isIlt -> InternationalLeagueT20.TOURNAMENT_NAME\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                if (isAdt || isLpl) {\n",
+      "replace": "                if (isAdt || isLpl || isIlt) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    if (isAdt) adtSaved = saved != null else lplSaved = saved != null\n",
+      "replace": "                    when {\n                        isAdt -> adtSaved = saved != null\n                        isLpl -> lplSaved = saved != null\n                        else -> iltSaved = saved != null\n                    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    else -> \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"\n",
+      "replace": "                    isIlt -> \"The International League T20: the six real teams and their Season 5 squads, the real fixture list across Dubai, \" +\n                        \"Sharjah and Abu Dhabi, then the play-offs. Your XI needs two UAE players, two Afghanistan players and one more Associate player.\"\n                    else -> \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val back = { page = if (kind == \"adt10\" || kind == \"lpl\") TPage.Adt else TPage.Cpl }\n",
+      "replace": "            val back = { page = if (kind == \"adt10\" || kind == \"lpl\" || kind == \"ilt\") TPage.Adt else TPage.Cpl }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        \"lpl\" -> LankaPremierLeague.newTournament(teamId, built, Random.Default)\n",
+      "replace": "                        \"lpl\" -> LankaPremierLeague.newTournament(teamId, built, Random.Default)\n                        \"ilt\" -> InternationalLeagueT20.newTournament(teamId, built)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"adt10\", \"lpl\" -> TPage.Adt;",
+      "replace": "\"adt10\", \"lpl\", \"ilt\" -> TPage.Adt;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                LankaPremierLeague.TOURNAMENT_ID -> LankaPremierLeague.stadiums\n",
+      "replace": "                LankaPremierLeague.TOURNAMENT_ID -> LankaPremierLeague.stadiums\n                InternationalLeagueT20.TOURNAMENT_ID -> InternationalLeagueT20.stadiums\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    SquadTag.BREAKOUT -> breakout\n    else -> domestic\n}\n",
+      "replace": "    SquadTag.BREAKOUT -> breakout\n    SquadTag.UAE -> \"UAE\"\n    SquadTag.AFGHAN -> \"Afghanistan\"\n    SquadTag.ASSOCIATE -> \"Associate nation\"\n    else -> domestic\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    lplSaved: Boolean,\n    onCpl: () -> Unit,\n    onAdt: () -> Unit,\n    onLpl: () -> Unit,\n",
+      "replace": "    lplSaved: Boolean,\n    iltSaved: Boolean,\n    onCpl: () -> Unit,\n    onAdt: () -> Unit,\n    onLpl: () -> Unit,\n    onIlt: () -> Unit,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"Lanka Premier League 2026\",\n",
+      "replace": "            ChoiceRow(\n                title = \"International League T20 2026\",\n                description = \"The six real UAE teams, their Season 5 squads and the real fixture list: 34 matches.\" +\n                    if (iltSaved) \" You have a saved tournament.\" else \"\",\n                enabled = true,\n                onClick = onIlt\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Lanka Premier League 2026\",\n"
+    }
+  ]
+}
