@@ -1,0 +1,178 @@
+{
+  "name": "power-surge",
+  "message": "Big Bash League part 2: the Power Surge (Match info button, computer's choice with a pop-up, 4-over powerplay)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/PowerSurge.kt",
+    "contains": "object PowerSurge"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/PowerSurge.kt",
+      "content": "package com.cricketsim.logic\n\nimport kotlin.random.Random\n\n/**\n * The Big Bash League's POWER SURGE. [MatchState.surge] is null in every other match.\n *\n * The rule as the league announced it: a two-over period in which the fielding side may have only two\n * fielders outside the inner circle (the same limit as the powerplay, which the Big Bash shortens to four\n * overs). The BATTING side chooses when, at the start of any over from the 11th. The game's own powerplay\n * limit is \"at most three in the deep\" (FieldingSystem.MAX_DEEP_FIELDERS_POWERPLAY), so that is the limit used.\n *\n * Assumption (the rule as published has no deadline): a Power Surge nobody has called starts by itself at\n * the start of the 19th over, so the two overs always fit.\n *\n * Who decides: the user, from Match info (like the Impact Player), while he is batting; the computer, by\n * [aiShouldTake], at the start of every over from the 11th while it is batting. The match screen shows the\n * user a pop-up when the computer takes it, because it changes how he must bowl.\n */\ndata class SurgeState(\n    /** Which innings the surge was taken in (0 = none yet). It can be taken once an innings. */\n    val innings: Int = 0,\n    /** Balls bowled in that innings when it began; it covers the next [PowerSurge.SURGE_BALLS]. */\n    val startBall: Int = -1\n)\n\nobject PowerSurge {\n\n    const val SURGE_BALLS = 12\n    /** The Big Bash powerplay: four overs. */\n    const val BBL_POWERPLAY_BALLS = 24\n    private const val FIRST_OVER_COMPLETED = 10 // the start of the 11th over\n    private const val LATEST_START_OVER = 18 // the start of the 19th over\n\n    fun ballsBowled(s: MatchState): Int = s.score.overs * 6 + s.score.balls\n\n    fun takenThisInnings(s: MatchState): Boolean {\n        val z = s.surge ?: return false\n        return z.innings == s.currentInnings && z.startBall >= 0\n    }\n\n    /** Whether the delivery with this many balls already bowled is inside a Power Surge taken in this innings. */\n    fun isActiveAt(s: MatchState, balls: Int): Boolean {\n        val z = s.surge ?: return false\n        return z.innings == s.currentInnings && z.startBall >= 0 && balls >= z.startBall && balls < z.startBall + SURGE_BALLS\n    }\n\n    /** The only moments it can be called: the start of an over, the 11th onwards, once an innings, play not held up. */\n    fun canTakeNow(s: MatchState): Boolean =\n        s.surge != null &&\n            s.matchStatus == MatchStatus.IN_PROGRESS &&\n            s.superOverRound == 0 &&\n            s.score.balls == 0 &&\n            s.score.overs >= FIRST_OVER_COMPLETED &&\n            s.score.overs + 2 <= s.oversLimit &&\n            !takenThisInnings(s) &&\n            s.activeRainDelay == null &&\n            s.pendingDismissal == null &&\n            !s.needsBowlerSelection &&\n            !s.needsOpenerSelection\n\n    /** An uncalled Power Surge begins at the start of the 19th over (or the last two overs of a shortened match). */\n    fun mustTakeNow(s: MatchState): Boolean =\n        canTakeNow(s) && s.score.overs >= minOf(LATEST_START_OVER, s.oversLimit - 2)\n\n    /**\n     * Starts the Power Surge now. When the computer is bowling it brings its field in at once; the user's own\n     * field is checked against the limit before his next ball (the match screen already does that).\n     */\n    fun take(s: MatchState): MatchState {\n        val next = s.copy(surge = SurgeState(s.currentInnings, ballsBowled(s)))\n        if (s.bowlingTeam.id == s.userTeam.id) return next\n        val field = FieldingSystem.generateAiFieldPlacements(\n            FieldingSystem.getFieldingPlayers(s.bowlingTeam, s.currentBowler.id),\n            true\n        )\n        return next.copy(fieldPlacements = field)\n    }\n\n    /**\n     * The computer batting side's choice, asked at the start of each over from the 11th. A chance that grows\n     * with the overs, higher with wickets in hand, much higher when the chase is getting away, and certain at\n     * the 19th (see [mustTakeNow]).\n     */\n    fun aiShouldTake(s: MatchState, random: Random = Random.Default): Boolean {\n        if (s.battingTeam.id == s.userTeam.id || !canTakeNow(s)) return false\n        val over = s.score.overs\n        var chance = when {\n            over < 12 -> 0.04\n            over < 14 -> 0.12\n            over < 16 -> 0.30\n            else -> 0.55\n        }\n        if (s.score.wickets <= 2) chance *= 1.4\n        if (s.score.wickets >= 5) chance *= 0.4\n        val target = s.target\n        if (s.currentInnings == 2 && target != null) {\n            val ballsLeft = maxOf(1, s.oversLimit * 6 - ballsBowled(s))\n            val required = (target - s.score.runs) * 6.0 / ballsLeft\n            if (required > 10.5) chance = maxOf(chance, 0.5)\n        }\n        return random.nextDouble() < chance.coerceAtMost(0.95)\n    }\n\n    /** What is said (and shown, when the computer takes it) as the Power Surge begins. */\n    fun announcement(s: MatchState, userBatting: Boolean, automatic: Boolean): String {\n        val batting = s.battingTeam.name\n        return when {\n            userBatting && !automatic ->\n                \"Power Surge taken. For the next two overs the fielding side may have at most three fielders in the deep.\"\n            userBatting ->\n                \"The Power Surge starts now. You did not call it, so it begins by itself. For the next two overs the \" +\n                    \"fielding side may have at most three fielders in the deep.\"\n            automatic ->\n                \"The Power Surge starts now. $batting did not call it, so it begins by itself. For the next two overs you \" +\n                    \"may have at most three fielders in the deep. Check your field before you bowl.\"\n            else ->\n                \"Power Surge! $batting have taken it. For the next two overs you may have at most three fielders in the \" +\n                    \"deep. Check your field before you bowl.\"\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/match/PowerSurgeScreens.kt",
+      "content": "package com.cricketsim.ui.match\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\n\n/**\n * The pop-up shown when the computer takes the Power Surge (or one starts by itself): it changes how the\n * user has to bowl, so he must read it before play goes on. The same words are also spoken as it appears\n * (MatchScreen announces them). One Continue button, straight after the heading and the text.\n */\n@Composable\nfun PowerSurgeNoticeScreen(text: String, onContinue: () -> Unit) {\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .verticalScroll(rememberScrollState())\n            .padding(24.dp)\n    ) {\n        Text(\n            text = \"Power Surge\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        Spacer(modifier = Modifier.height(12.dp))\n        Text(text = text, style = MaterialTheme.typography.bodyLarge)\n        Spacer(modifier = Modifier.height(20.dp))\n        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text(\"Continue\") }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "BIG_BASH_LEAGUE.md",
+      "find": "**Not built yet (part 2):** the Power Surge (shown in Match info, with a pop-up when the computer takes it), the designated\nbatter and fielder, and the over-rate timer rule.\n",
+      "replace": "**Power Surge (part 2).** Big Bash matches have the Power Surge (`logic/PowerSurge.kt`): two overs with the powerplay field limit\n(at most three fielders in the deep). The BATTING side calls it at the start of any over from the 11th, once an innings.\n- You batting: a **Power Surge** button appears on **Match info** (like the Impact Player) at those moments.\n- The computer batting: it decides at the start of each over from the 11th (`PowerSurge.aiShouldTake`) and a **pop-up** tells you,\n  because you must bring your field in before you bowl.\n- Assumption: an uncalled Power Surge starts by itself at the start of the 19th over (the published rule has no deadline).\n- The Big Bash powerplay is four overs (`PowerSurge.BBL_POWERPLAY_BALLS`), not six.\n- Computer-v-computer matches use the usual choice (overs 15 and 16) inside `AiBallModel`.\n**Not built:** the designated batter and fielder, and the over-rate timer rule.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BigBashLeague.kt",
+      "find": " *    The Power Surge and the other BBL playing conditions are NOT in this part yet.\n",
+      "replace": " *    The Power Surge is in (PowerSurge.kt); the designated batter and fielder and the over-rate timer are not.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    val impact: ImpactState? = null\n)\n",
+      "replace": "    val impact: ImpactState? = null,\n    // The Big Bash League's Power Surge (logic/PowerSurge.kt); null = the match has none.\n    val surge: SurgeState? = null\n)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        val previousOverWasPowerplay = state.score.overs > 0 && FieldingSystem.isPowerplayOver(state.format, state.score.overs - 1)\n        val thisOverIsPowerplay = FieldingSystem.isPowerplayOver(state.format, state.score.overs)\n",
+      "replace": "        val previousOverWasPowerplay = state.score.overs > 0 && FieldingSystem.isRestrictedOver(state, state.score.overs - 1)\n        val thisOverIsPowerplay = FieldingSystem.isRestrictedOver(state, state.score.overs)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "                FieldingSystem.isPowerplayOver(state.format, state.score.overs),\n",
+      "replace": "                FieldingSystem.isRestrictedOver(state, state.score.overs),\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/FieldingSystem.kt",
+      "find": "    fun isPowerplayOver(format: MatchFormat, oversCompleted: Int): Boolean = isPowerplayBall(format, oversCompleted * 6)\n",
+      "replace": "    fun isPowerplayOver(format: MatchFormat, oversCompleted: Int): Boolean = isPowerplayBall(format, oversCompleted * 6)\n\n    /**\n     * Whether the delivery with this many balls already bowled is restricted (powerplay field limit) IN THIS MATCH.\n     * An ordinary match: the powerplay of its format. A Big Bash match (it has a Power Surge): a four-over\n     * powerplay, and the two overs of a Power Surge once the batting side has called it.\n     */\n    fun isRestrictedBall(state: MatchState, ballsBowled: Int): Boolean {\n        if (state.surge == null) return isPowerplayBall(state.format, ballsBowled)\n        return ballsBowled < PowerSurge.BBL_POWERPLAY_BALLS || PowerSurge.isActiveAt(state, ballsBowled)\n    }\n\n    /** [isRestrictedBall] for an over that starts now (overs completed so far). */\n    fun isRestrictedOver(state: MatchState, oversCompleted: Int): Boolean = isRestrictedBall(state, oversCompleted * 6)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "        val isPowerplay = FieldingSystem.isPowerplayBall(state.format, ballsBowled)\n        val powerplayJustEnded = ballsBowled > 0 && !isPowerplay &&\n            FieldingSystem.isPowerplayBall(state.format, ballsBowled - 1)\n",
+      "replace": "        val isPowerplay = FieldingSystem.isRestrictedBall(state, ballsBowled)\n        val powerplayJustEnded = ballsBowled > 0 && !isPowerplay &&\n            FieldingSystem.isRestrictedBall(state, ballsBowled - 1)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "        val isPowerplay = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)\n        val illegalField",
+      "replace": "        val isPowerplay = FieldingSystem.isRestrictedBall(state, state.score.overs * 6 + state.score.balls)\n        val illegalField"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AiSituation.kt",
+      "find": "        val isPowerplayNow = FieldingSystem.isPowerplayBall(state.format, state.score.overs * 6 + state.score.balls)\n",
+      "replace": "        val isPowerplayNow = FieldingSystem.isRestrictedBall(state, state.score.overs * 6 + state.score.balls)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        when {\n            fraction < 0.3 -> { fBoundary *= 1.15; fDot *= 0.95 }\n",
+      "replace": "        // The Big Bash: a four-over powerplay, and the Power Surge the batting side usually takes (overs 15 and 16).\n        val bigBash = state.surge != null && limit >= 15\n        val powerplayEnd = if (bigBash) 0.2 else 0.3\n        val inSurge = bigBash && balls >= 84 && balls < 96\n        when {\n            fraction < powerplayEnd || inSurge -> { fBoundary *= 1.15; fDot *= 0.95 }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        random: Random,\n        format: MatchFormat = MatchFormat.T20\n    ): SimResult? {\n",
+      "replace": "        random: Random,\n        format: MatchFormat = MatchFormat.T20,\n        powerSurge: Boolean = false\n    ): SimResult? {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            userTeam = home.copy(id = OBSERVER_ID),\n            needsOpenerSelection = false,\n",
+      "replace": "            userTeam = home.copy(id = OBSERVER_ID),\n            surge = if (powerSurge) SurgeState() else null,\n            needsOpenerSelection = false,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "AbuDhabiT10.formatFor(state.tournamentId)) ?: return state\n",
+      "replace": "AbuDhabiT10.formatFor(state.tournamentId),\n            state.tournamentId == BigBashLeague.TOURNAMENT_ID) ?: return state\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "import com.cricketsim.logic.ImpactPlayer\n",
+      "replace": "import com.cricketsim.logic.ImpactPlayer\nimport com.cricketsim.logic.PowerSurge\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "fun MatchInfoScreen(state: MatchState, stadium: Stadium, onUseImpact: () -> Unit, onBack: () -> Unit) {\n",
+      "replace": "fun MatchInfoScreen(\n    state: MatchState,\n    stadium: Stadium,\n    onUseImpact: () -> Unit,\n    onUsePowerSurge: () -> Unit = {},\n    onBack: () -> Unit\n) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "            Button(onClick = onUseImpact, modifier = Modifier.fillMaxWidth()) { Text(\"Impact Player\") }\n        }\n",
+      "replace": "            Button(onClick = onUseImpact, modifier = Modifier.fillMaxWidth()) { Text(\"Impact Player\") }\n        }\n        // The Big Bash League's Power Surge: offered only when the user is batting at the start of an over from the 11th.\n        if (state.battingTeam.id == user.id && PowerSurge.canTakeNow(state)) {\n            Spacer(modifier = Modifier.height(8.dp))\n            Button(onClick = onUsePowerSurge, modifier = Modifier.fillMaxWidth()) { Text(\"Power Surge\") }\n        }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "import com.cricketsim.logic.SuperOver\n",
+      "replace": "import com.cricketsim.logic.PowerSurge\nimport com.cricketsim.logic.SuperOver\nimport com.cricketsim.logic.SurgeState\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    impact: ImpactSetup? = null\n) {\n",
+      "replace": "    impact: ImpactSetup? = null,\n    /** The Big Bash League's Power Surge is part of this match. */\n    powerSurge: Boolean = false\n) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            resume?.state ?: MatchStateMachine.createNewMatch(\n",
+      "replace": "            (resume?.state ?: MatchStateMachine.createNewMatch(\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "                impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) }\n            )\n        )\n    }\n",
+      "replace": "                impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) }\n            )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }\n        )\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    var showImpactUse by remember { mutableStateOf(false) }\n",
+      "replace": "    var showImpactUse by remember { mutableStateOf(false) }\n    // The computer's Power Surge (or one that started by itself), shown as a pop-up until the user continues.\n    var surgeNotice by remember { mutableStateOf<String?>(null) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    // The crowd bed runs while the match is live and sound effects are on;\n",
+      "replace": "    // --- The Big Bash League's Power Surge (logic/PowerSurge.kt) ---\n    // The computer batting side chooses its moment at the start of each over from the 11th; one nobody called starts by\n    // itself at the 19th over. The user's own Power Surge is taken from Match info.\n    LaunchedEffect(matchState.score, matchState.currentInnings, matchState.pendingDismissal, matchState.needsBowlerSelection, matchState.needsOpenerSelection, showPitchingScreen, showBattingScreen) {\n        if (matchOver || matchState.surge == null || showPitchingScreen || showBattingScreen) return@LaunchedEffect\n        kotlinx.coroutines.delay(500)\n        val now = matchState\n        val userBatting = now.battingTeam.id == now.userTeam.id\n        val automatic = PowerSurge.mustTakeNow(now)\n        if (!automatic && (userBatting || !PowerSurge.aiShouldTake(now))) return@LaunchedEffect\n        val next = PowerSurge.take(now)\n        matchState = next\n        val line = PowerSurge.announcement(next, userBatting, automatic)\n        recentCommentary = (recentCommentary + line).takeLast(6)\n        services?.announceSpoken(line)\n        // A pop-up the user must read when it is the computer's: it changes how he has to bowl.\n        if (!userBatting || automatic) surgeNotice = line\n    }\n\n    // The crowd bed runs while the match is live and sound effects are on;\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    if (showMatchInfo) {\n        BackHandler(onBack = { showMatchInfo = false })\n        MatchInfoScreen(\n",
+      "replace": "    val surgePopup = surgeNotice\n    if (surgePopup != null) {\n        BackHandler(onBack = { surgeNotice = null })\n        PowerSurgeNoticeScreen(text = surgePopup, onContinue = { surgeNotice = null })\n        return\n    }\n\n    if (showMatchInfo) {\n        BackHandler(onBack = { showMatchInfo = false })\n        MatchInfoScreen(\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            onUseImpact = {\n                showMatchInfo = false\n                showImpactUse = true\n            },\n",
+      "replace": "            onUseImpact = {\n                showMatchInfo = false\n                showImpactUse = true\n            },\n            onUsePowerSurge = {\n                val taken = PowerSurge.take(matchState)\n                matchState = taken\n                val line = PowerSurge.announcement(taken, userBatting = true, automatic = false)\n                recentCommentary = (recentCommentary + line).takeLast(6)\n                services?.announceSpoken(line)\n                showMatchInfo = false\n            },\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    val isPowerplayNow = FieldingSystem.isPowerplayBall(matchState.format, matchState.score.overs * 6 + matchState.score.balls)\n",
+      "replace": "    val isPowerplayNow = FieldingSystem.isRestrictedBall(matchState, matchState.score.overs * 6 + matchState.score.balls)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    impact = current.impact,\n",
+      "replace": "                    impact = current.impact,\n                    powerSurge = saved?.tournamentId == BigBashLeague.TOURNAMENT_ID,\n"
+    }
+  ]
+}
