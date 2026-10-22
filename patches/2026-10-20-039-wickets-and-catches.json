@@ -1,0 +1,58 @@
+{
+  "name": "bad-shot-wickets-more-catches",
+  "message": "Easy/Medium: bad shots get out more; more catches in every difficulty",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+    "contains": "BAD_SHOT_WICKETS"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "    const val BALANCED_ENGINE = true\n",
+      "replace": "    const val BALANCED_ENGINE = true\n\n    /**\n     * EASY and MEDIUM, the USER bowling: a computer batter who plays a BAD or VERY BAD shot (his timing tier) against a\n     * GOOD, IDEAL or PERFECT ball is much more likely to get out. The chance of that ball being a wicket is raised\n     * (never lowered) to a share that is at most 70% for an attacking shot and 60% for a defensive one, reached by a\n     * VERY BAD shot against a PERFECT ball and scaled down for a merely bad shot or a lesser ball (see\n     * badShotWicketTarget). A bad or very bad ball from the user changes nothing, and Hard and Hardest are untouched.\n     * Measured with tools/difficulty_twin.js (see DIFFICULTY_NOTES.md): about one more wicket an innings on Easy and\n     * Medium. Switch it off here.\n     */\n    const val BAD_SHOT_WICKETS = true\n    private const val BAD_SHOT_CEILING_ATTACK = 0.70\n    private const val BAD_SHOT_CEILING_DEFENCE = 0.60\n\n    /** MORE CATCHES (all difficulties): the dismissal mix is caught 4 : bowled 2 : lbw 1 instead of 1 : 1 : 1. */\n    const val MORE_CATCHES = true\n\n    /** How strongly a well-placed deep fielder turns an aerial shot into a wicket (it was 1.6). */\n    private const val CATCH_BOOST = 2.2\n\n    private fun badShotWicketTarget(difficulty: Difficulty, decision: BattingDecision, ballTier: BowlingQualityTier): Double {\n        if (!BAD_SHOT_WICKETS || (difficulty != Difficulty.EASY && difficulty != Difficulty.MEDIUM)) return 0.0\n        val shotScale = when (decision.timingTier) {\n            BowlingQualityTier.VERY_BAD -> 1.0\n            BowlingQualityTier.BAD -> 0.35\n            else -> return 0.0\n        }\n        val ballScale = when (ballTier) {\n            BowlingQualityTier.PERFECT -> 1.0\n            BowlingQualityTier.IDEAL -> 0.65\n            BowlingQualityTier.GOOD -> 0.4\n            else -> return 0.0\n        }\n        val ceiling = if (BattingSystem.isDefensiveShot(decision.shot)) BAD_SHOT_CEILING_DEFENCE else BAD_SHOT_CEILING_ATTACK\n        return ceiling * shotScale * ballScale\n    }\n\n    private fun dismissalMix(caught: Int, bowled: Int, lbw: Int): List<DismissalType> =\n        List(caught) { DismissalType.CAUGHT } + List(bowled) { DismissalType.BOWLED } + List(lbw) { DismissalType.LBW }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "                bumpProb(probs, OutcomeProbs::wicket, 1 + 1.6 * quality)\n",
+      "replace": "                bumpProb(probs, OutcomeProbs::wicket, 1 + CATCH_BOOST * quality)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        var fieldingCatchOpportunity = false\n",
+      "replace": "        var fieldingCatchOpportunity = false\n        var badShotWicket = false\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        if (freeHit) {\n            probs.four *= 1.5\n            probs.six *= 1.8\n            probs.dot *= 0.7\n        }\n",
+      "replace": "        if (freeHit) {\n            probs.four *= 1.5\n            probs.six *= 1.8\n            probs.dot *= 0.7\n        }\n\n        // Easy / Medium, the user bowling: a bad or very bad shot against a good ball is very likely a wicket.\n        if (!isUserBatting && battingDecision != null && battingDecision.shot != NamedShot.LEAVE && !protectedFromDismissal) {\n            val target = badShotWicketTarget(difficulty, battingDecision, bowlingDecision.qualityTier)\n            if (target > 0.0) {\n                val others = probs.dot + probs.one + probs.two + probs.three + probs.four + probs.six + probs.wide\n                val needed = target / (1.0 - target) * others\n                if (probs.wicket < needed) {\n                    probs.wicket = needed\n                    badShotWicket = true\n                }\n            }\n        }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "                val dismissalTypes = (if (fieldingCatchOpportunity) {\n                    listOf(DismissalType.CAUGHT, DismissalType.CAUGHT, DismissalType.CAUGHT, DismissalType.BOWLED, DismissalType.LBW)\n                } else {\n                    listOf(DismissalType.BOWLED, DismissalType.CAUGHT, DismissalType.LBW)\n                }).toMutableList()\n",
+      "replace": "                // More catches (MORE_CATCHES): the mix used to be 1 : 1 : 1 (3 : 1 : 1 with a placed deep fielder), so only about\n                // a third of the wickets were catches. Now about 57% (80% with a placed fielder, 67% for a mistimed bad shot).\n                val dismissalTypes = (when {\n                    fieldingCatchOpportunity -> if (MORE_CATCHES) dismissalMix(8, 1, 1) else dismissalMix(3, 1, 1)\n                    badShotWicket && MORE_CATCHES -> dismissalMix(6, 2, 1)\n                    MORE_CATCHES -> dismissalMix(4, 2, 1)\n                    else -> dismissalMix(1, 1, 1)\n                }).toMutableList()\n"
+    },
+    {
+      "op": "replace",
+      "file": "tools/difficulty_twin.js",
+      "find": "if(cfg.aiWkt){p.wicket*=cfg.aiWkt;p.four*=cfg.aiBnd;p.six*=cfg.aiBnd;}out=sample(p);}",
+      "replace": "if(cfg.aiWkt){p.wicket*=cfg.aiWkt;p.four*=cfg.aiBnd;p.six*=cfg.aiBnd;}if(cfg.badShot&&(diff===\"EASY\"||diff===\"MEDIUM\")&&(shot.timing===\"B\"||shot.timing===\"V\")&&\"PIG\".includes(ball.tier)){const tgt=(DEFENSIVE.includes(shot.shot)?cfg.badDef:cfg.badAtt)*cfg.sf[shot.timing]*cfg.bf[ball.tier];let oo=0;for(const k of [\"dot\",\"one\",\"two\",\"three\",\"four\",\"six\",\"wide\"])oo+=p[k];const need=tgt/(1-tgt)*oo;if(p.wicket<need)p.wicket=need;}out=sample(p);}"
+    },
+    {
+      "op": "replace",
+      "file": "tools/difficulty_twin.js",
+      "find": "aiBowlNew:true,bowlBase:13,bowlSlope:.70,bowlSpread:48,aiBatNew:true,batSpread:42,timeShift:-6,badW:12};",
+      "replace": "aiBowlNew:true,bowlBase:13,bowlSlope:.70,bowlSpread:48,aiBatNew:true,batSpread:42,timeShift:-6,badW:12,\n    badShot:true,badAtt:.70,badDef:.60,sf:{V:1,B:.35,G:0,I:0,P:0},bf:{P:1,I:.65,G:.4,B:0,V:0}};"
+    },
+    {
+      "op": "replace",
+      "file": "DIFFICULTY_NOTES.md",
+      "find": "## Where to turn the dials\n",
+      "replace": "## Bad shots and more catches (patch 039)\n**Bad shots on Easy and Medium** (`MatchEngine.BAD_SHOT_WICKETS`): when the computer batter's timing is BAD or VERY BAD and the user's\nball is GOOD, IDEAL or PERFECT, the chance of that ball being a wicket is raised to at most 70% (attacking shot) or 60%\n(defensive shot): the full figure for a VERY BAD shot against a PERFECT ball, scaled to 35% for a BAD shot and to 65% / 40% for an\nIDEAL / GOOD ball. A bad or very bad ball changes nothing; Hard and Hardest are untouched. Applying the full 70% / 60% to every\nbad shot was measured first: the computer was bowled out in 96 to 99% of innings for 60 to 100 runs on Easy and Medium (about 1\nball in 6 qualifies), so it is scaled. Measured (user bowling, wickets taken, skilled | average | novice):\n\n| | Before | After |\n|---|---|---|\n| Easy | 7.8 \\| 6.8 \\| 5.5 | 8.8 \\| 7.8 \\| 6.2 |\n| Medium | 6.5 \\| 5.8 \\| 4.7 | 8.0 \\| 6.9 \\| 5.4 |\n\n**More catches, all difficulties** (`MORE_CATCHES`, `CATCH_BOOST`): the mix of bowled / caught / lbw was 1 : 1 : 1, so a third of\nwickets were catches. Now 4 : 2 : 1 (57% caught), 8 : 1 : 1 when a fielder is standing in the right place for an aerial shot, and 6 : 2 : 1\nfor a mistimed bad shot. A placed deep fielder also converts more aerial shots (boost 2.2, was 1.6), which adds a few wickets. The\ntwin does not model fielders, so that last part is not measured.\n\n## Where to turn the dials\n"
+    }
+  ]
+}
