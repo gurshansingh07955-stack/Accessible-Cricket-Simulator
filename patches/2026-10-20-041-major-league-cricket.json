@@ -1,0 +1,184 @@
+{
+  "name": "major-league-cricket",
+  "message": "Major League Cricket 2026 tournament: real teams, squads, fixtures, grounds and XI rule",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/MajorLeagueCricket.kt",
+    "contains": "object MajorLeagueCricket"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/MajorLeagueCricket.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * MAJOR LEAGUE CRICKET 2026 (MLC season 4, 18 June to 18 July 2026; Los Angeles Knight Riders won the title).\n *\n *  - SIX TEAMS, the real ones: Los Angeles Knight Riders, MI New York, San Francisco Unicorns, Seattle Orcas,\n *    Texas Super Kings and Washington Freedom, with the 2026 squads (18 to 21 players each).\n *  - THE FORMAT, as played: a double round-robin (30 league matches, in the published order), then the\n *    Qualifier (1st v 2nd), the Eliminator (3rd v 4th), the Challenger (Qualifier loser v Eliminator winner) and the\n *    Final (Qualifier winner v Challenger winner): 34 matches, T20.\n *  - THE GROUNDS: Grand Prairie Stadium (matches 1 to 7 and 23 to 30), Oakland Coliseum (8 to 15 and all four\n *    play-offs) and the new Knight Riders Cricket Ground at Fairplex, Pomona (16 to 22, which the March\n *    schedule had at Broward County before the move). None was in the game; all three were added to StadiumData\n *    with estimated pitch and weather figures.\n *  - THE RULES used: at most six overseas players in the XI (so at least five US players). Squad tags USA\n *    and OVERSEAS carry this; the CPL's four-overseas rule does not apply. NOT built: the mandatory under-23\n *    US player, and the league's own points rules (the game's table gives 2 points a win).\n *\n * Players already in the game (its roster, or one added by the CPL, Abu Dhabi T10, LPL, ILT20 or the Big Bash)\n * are COPIED with their ratings; the others are new, with ESTIMATED ratings (the nw() lines; change them there).\n * Which players count as US players follows the league's own domestic lists as far as they were published; a\n * few are guesses. It reuses the CPL machinery as it is.\n */\nobject MajorLeagueCricket {\n\n    const val TOURNAMENT_ID = \"mlc2026\"\n    const val TOURNAMENT_NAME = \"Major League Cricket 2026\"\n\n    private const val PRAIRIE = \"grand-prairie\"\n    private const val OAKLAND = \"oakland-coliseum\"\n    private const val POMONA = \"knight-riders-ground\"\n\n    private class NewSpec(val role: PlayerRole, val bat: Int, val bowl: Int, val style: BowlingStyle)\n    private class Slot(val name: String, val lookup: String?, val tag: SquadTag, val spec: NewSpec?)\n    private class TeamDef(val id: String, val name: String, val shortName: String, val code: String, val home: String, val squad: List<Slot>)\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n    private val U = SquadTag.USA        // a US (domestic) player\n    private val X = SquadTag.OVERSEAS   // an overseas player\n\n    private fun ex(name: String, tag: SquadTag) = Slot(name, null, tag, null)\n    private fun al(name: String, gameName: String, tag: SquadTag) = Slot(name, gameName, tag, null)\n    private fun nw(name: String, tag: SquadTag, role: PlayerRole, bat: Int, bowl: Int, style: BowlingStyle = PACE) =\n        Slot(name, null, tag, NewSpec(role, bat, bowl, style))\n\n    private val DEFS: List<TeamDef> by lazy {\n        listOf(\n            TeamDef(\"mlc_lakr\", \"Los Angeles Knight Riders\", \"Knight Riders\", \"LAK\", POMONA, listOf(\n                ex(\"Jason Holder\", X), ex(\"Alex Hales\", X), ex(\"Andre Fletcher\", X), ex(\"Rovman Powell\", X), ex(\"Colin Munro\", X),\n                ex(\"Andre Russell\", X), ex(\"Sunil Narine\", X), ex(\"Lloyd Pope\", X), ex(\"Shadley van Schalkwyk\", X),\n                nw(\"Unmukt Chand\", U, BAT, 66, 10), ex(\"Ali Khan\", U), nw(\"Saif Badar\", U, BAT, 58, 15),\n                nw(\"Kartikh Gatepalli\", U, AR, 56, 30, SPIN), ex(\"Matthew Tromp\", U), nw(\"Carmi le Roux\", U, AR, 62, 62),\n                ex(\"Jahmar Hamilton\", U), ex(\"Nitish Kumar\", U), nw(\"Kristopher Ramsaran\", U, AR, 56, 55)\n            )),\n            TeamDef(\"mlc_miny\", \"MI New York\", \"MI New York\", \"MIN\", PRAIRIE, listOf(\n                ex(\"Nicholas Pooran\", X), ex(\"Kieron Pollard\", X), ex(\"Quinton de Kock\", X), ex(\"Ryan Rickelton\", X),\n                ex(\"Shakib Al Hasan\", X), ex(\"Trent Boult\", X), ex(\"Corbin Bosch\", X), ex(\"Romario Shepherd\", X),\n                nw(\"Tristan Luus\", X, BAT, 60, 40), al(\"Allah Ghazanfar\", \"Allah Mohammad Ghazanfar\", X),\n                ex(\"Corey Anderson\", U), ex(\"Monank Patel\", U), ex(\"Tajinder Singh\", U), nw(\"Ehsan Adil\", U, BWL, 20, 64),\n                ex(\"Nosthush Kenjige\", U), nw(\"Agni Chopra\", U, BAT, 62, 10), nw(\"Rushil Ugarkar\", U, BWL, 20, 68),\n                nw(\"Kunwarjeet Singh\", U, AR, 56, 56), nw(\"Sunny Patel\", U, AR, 54, 56, SPIN), nw(\"Faisal Ahmadzai\", U, BWL, 20, 62)\n            )),\n            TeamDef(\"mlc_sfu\", \"San Francisco Unicorns\", \"Unicorns\", \"SFU\", OAKLAND, listOf(\n                ex(\"Matthew Short\", X), ex(\"Finn Allen\", X), ex(\"Cooper Connolly\", X), ex(\"Aaron Hardie\", X),\n                nw(\"Lhuan-dre Pretorius\", X, BAT, 84, 10), ex(\"Xavier Bartlett\", X), ex(\"Haris Rauf\", X), ex(\"Oliver Peake\", X),\n                ex(\"Ravichandran Ashwin\", X), ex(\"Hassan Khan\", U), ex(\"Brody Couch\", U), ex(\"Sanjay Krishnamurthi\", U),\n                nw(\"Hammad Azam\", U, AR, 55, 60), nw(\"Juanoy Drysdale\", U, BWL, 20, 62), nw(\"Aakarshit Gomel\", U, BAT, 54, 15),\n                nw(\"Zia Ul-Haq\", U, BWL, 20, 62), nw(\"Mohammad Ilyas\", U, BWL, 20, 66), nw(\"Anirudh Immanuel\", U, AR, 52, 52, SPIN),\n                nw(\"Saideep Ganesh\", U, AR, 54, 50, SPIN)\n            )),\n            TeamDef(\"mlc_so\", \"Seattle Orcas\", \"Orcas\", \"SEA\", PRAIRIE, listOf(\n                ex(\"Marcus Stoinis\", X), ex(\"Tim Seifert\", X), ex(\"Shimron Hetmyer\", X), ex(\"Dasun Shanaka\", X),\n                ex(\"Matthew Breetzke\", X), ex(\"Tim Robinson\", X), ex(\"Lungi Ngidi\", X), ex(\"Ottniel Baartman\", X),\n                ex(\"Tanveer Sangha\", X), ex(\"Jason Behrendorff\", X), nw(\"Raymon Reifer\", X, AR, 58, 62),\n                ex(\"Harmeet Singh\", U), nw(\"Ayan Desai\", U, AR, 56, 54, SPIN), nw(\"Rahul Jariwala\", U, WK, 56, 10),\n                ex(\"Shayan Jahangir\", U), ex(\"Jessy Singh\", U), nw(\"Ali Sheikh\", U, BWL, 20, 60), nw(\"Cameron Gannon\", U, BWL, 20, 66),\n                nw(\"Sujit Nayak\", U, BAT, 54, 15), nw(\"Shehan Jayasuriya\", U, BAT, 60, 15), nw(\"Sharad Lumba\", U, BAT, 56, 15)\n            )),\n            TeamDef(\"mlc_tsk\", \"Texas Super Kings\", \"Super Kings\", \"TSK\", PRAIRIE, listOf(\n                ex(\"Faf du Plessis\", X), ex(\"Donovan Ferreira\", X), ex(\"Wiaan Mulder\", X), nw(\"Rilee Rossouw\", X, BAT, 80, 10),\n                ex(\"Adam Milne\", X), ex(\"Nandre Burger\", X), ex(\"Keshav Maharaj\", X), ex(\"Akeal Hosein\", X),\n                nw(\"Hardus Viljoen\", X, BWL, 20, 72), ex(\"Shubham Ranjane\", U), nw(\"Joshua Tromp\", U, AR, 54, 52),\n                ex(\"Milind Kumar\", U), nw(\"Saiteja Mukkamalla\", U, BAT, 66, 10), nw(\"Mohammad Mohsin\", U, BWL, 20, 60),\n                nw(\"Calvin Savage\", U, BAT, 58, 10), nw(\"Smit Patel\", U, WK, 62, 10), ex(\"Amshi de Silva\", U),\n                nw(\"Abhimanyu Lamba\", U, AR, 52, 50, SPIN)\n            )),\n            TeamDef(\"mlc_wf\", \"Washington Freedom\", \"Freedom\", \"WAS\", PRAIRIE, listOf(\n                ex(\"Steve Smith\", X), ex(\"Glenn Maxwell\", X), ex(\"Mitchell Owen\", X), ex(\"Lockie Ferguson\", X), ex(\"Marco Jansen\", X),\n                ex(\"Jack Edwards\", X), ex(\"Rachin Ravindra\", X), ex(\"Mark Chapman\", X), ex(\"Ben Dwarshuis\", X),\n                ex(\"Andries Gous\", U), ex(\"Saurabh Netravalkar\", U), nw(\"Obus Pienaar\", U, BWL, 20, 66), ex(\"Nikhil Chaudhary\", U),\n                nw(\"Mukhtar Ahmed\", U, BAT, 60, 10), nw(\"Ian Holland\", U, AR, 60, 66), nw(\"Lahiru Milantha\", U, WK, 60, 10),\n                nw(\"Amila Aponso\", U, BWL, 20, 64, SPIN), nw(\"Abhishek Paradkar\", U, BWL, 20, 60, SPIN), ex(\"Yasir Mohammad\", U),\n                nw(\"Asif Mehmood\", U, AR, 52, 50)\n            ))\n        )\n    }\n\n    fun isTeam(teamId: String): Boolean = DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = DEFS.find { it.id == teamId }?.shortName\n\n    fun homeGround(teamId: String): String = DEFS.find { it.id == teamId }?.home ?: PRAIRIE\n\n    val stadiums: List<Stadium> by lazy { listOf(PRAIRIE, OAKLAND, POMONA).mapNotNull { StadiumData.getStadiumById(it) } }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** The six franchises (strongest first); US players are tagged USA, everybody else OVERSEAS (at most six play). */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val roster = CricketData.getAllTeams().flatMap { it.players }.associateBy { norm(it.name) }\n        val cpl = CplData.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val adt = AbuDhabiT10.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val lpl = LankaPremierLeague.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val ilt = InternationalLeagueT20.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val bbl = BigBashLeague.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = DEFS.map { def ->\n            val players = def.squad.mapIndexed { index, slot ->\n                val id = \"${def.id}_${index + 1}\"\n                val key = norm(slot.lookup ?: slot.name)\n                val base = if (slot.spec == null) (roster[key] ?: cpl[key] ?: adt[key] ?: lpl[key] ?: ilt[key] ?: bbl[key]) else null\n                val player = if (base != null) {\n                    base.copy(id = id, teamId = def.id, name = slot.name)\n                } else {\n                    val s = slot.spec ?: NewSpec(PlayerRole.BATSMAN, 60, 20, BowlingStyle.PACE)\n                    Player(\n                        id = id, teamId = def.id, name = slot.name, role = s.role,\n                        battingRating = s.bat, bowlingRating = s.bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(s.role, s.bat, s.bowl),\n                        bowlingStyle = s.style\n                    )\n                }\n                tags[id] = slot.tag\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.code,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Pair(teams, tags)\n    }\n\n    // L Knight Riders, M MI New York, S Unicorns, O Orcas, T Super Kings, W Freedom: the 30 league matches in the\n    // published order (the first team listed is the home side). Matches 1-7 and 23-30 at Grand Prairie, 8-15 at Oakland,\n    // 16-22 at Pomona.\n    private val LEAGUE_FIXTURES = listOf(\n        \"T O\", \"L S\", \"O W\", \"T S\", \"W M\", \"O L\", \"T M\", \"S T\", \"W O\", \"M T\",\n        \"S O\", \"M L\", \"W T\", \"L O\", \"S W\", \"L W\", \"O M\", \"L T\", \"W S\", \"L M\",\n        \"O T\", \"S M\", \"M S\", \"W L\", \"M O\", \"S L\", \"T W\", \"O S\", \"M W\", \"T L\"\n    )\n\n    private val TEAM_OF = mapOf(\n        'L' to \"mlc_lakr\", 'M' to \"mlc_miny\", 'S' to \"mlc_sfu\", 'O' to \"mlc_so\", 'T' to \"mlc_tsk\", 'W' to \"mlc_wf\"\n    )\n\n    /** The published league fixtures at their grounds, then Qualifier, Eliminator, Challenger and Final at Oakland. */\n    fun buildSchedule(): List<TournamentFixture> {\n        val fixtures = ArrayList<TournamentFixture>()\n        LEAGUE_FIXTURES.forEachIndexed { index, code ->\n            val p = code.split(\" \")\n            val number = index + 1\n            val ground = when {\n                number <= 7 || number >= 23 -> PRAIRIE\n                number <= 15 -> OAKLAND\n                else -> POMONA\n            }\n            fixtures.add(TournamentFixture(index, number, CplData.LEAGUE, TEAM_OF.getValue(p[0][0]), TEAM_OF.getValue(p[1][0]), ground))\n        }\n        var next = fixtures.size\n        fun playoff(stage: String, note: String) {\n            fixtures.add(TournamentFixture(next, next + 1, stage, null, null, OAKLAND, placeholder = note))\n            next++\n        }\n        playoff(\"Qualifier\", \"1st v 2nd in the table\")\n        playoff(\"Eliminator\", \"3rd v 4th in the table\")\n        playoff(\"Challenger\", \"Loser of the Qualifier v winner of the Eliminator\")\n        playoff(\"Final\", \"Winner of the Qualifier v winner of the Challenger\")\n        return fixtures\n    }\n\n    fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "MAJOR_LEAGUE_CRICKET.md",
+      "mustNotExist": true,
+      "content": "# Major League Cricket 2026 (tournament)\n\nTournament > League tournaments > Major League Cricket 2026 (MLC season 4, 18 June to 18 July 2026). Same pages, saving and tabs as the CPL.\n\n**Real facts used:** six teams (Los Angeles Knight Riders, MI New York, San Francisco Unicorns, Seattle Orcas, Texas Super Kings,\nWashington Freedom), their 2026 squads (18 to 21 players), and the published fixture list: 30 league matches in order, then the\nQualifier (1st v 2nd), the Eliminator (3rd v 4th), the Challenger (Qualifier loser v Eliminator winner) and the Final: 34 matches, T20.\nThe league fixtures are the same every time. Grounds: Grand Prairie Stadium (matches 1-7 and 23-30), Oakland Coliseum (8-15 and all\nfour play-offs) and the new Knight Riders Cricket Ground at Fairplex, Pomona (16-22; the March schedule had these at Broward County before\nthe move). None of the three was in the game: added to `StadiumData` with estimated pitch and weather figures.\n\n**Rules used:** at most six overseas players in the XI (so at least five US players), the league's long-standing XI rule (not\nre-checked for 2026). Tags `USA` and `OVERSEAS` carry it (`SquadTag`; `pickXI` and `xiProblem` use a cap of 6 when the squads have\n`USA` tags). **Not built:** the mandatory under-23 US player; the league's points rules (the game's table gives 2 points a win).\n\n**Players.** Anyone already in the game (roster, CPL, Abu Dhabi T10, LPL, ILT20, Big Bash) is copied with his ratings (73 of 116).\nThe rest are new with **estimated ratings** (the `nw(...)` lines in `logic/MajorLeagueCricket.kt`). Which players count as US players\nfollows the league's published lists where they exist; a few are guesses (for example Brody Couch, listed by his club as domestic).\n`Allah Ghazanfar` is linked to the game's `Allah Mohammad Ghazanfar`.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/StadiumData.kt",
+      "find": "        Stadium(\n            id = \"sheikh-zayed\", name = \"Sheikh Zayed Stadium\", city = \"Abu Dhabi\", country = \"UAE\",\n",
+      "replace": "        Stadium(\n            id = \"grand-prairie\", name = \"Grand Prairie Stadium\", city = \"Grand Prairie, Texas\", country = \"USA\",\n            homeTeamIds = listOf(\"team_usa\"),\n            pitchType = PitchType.BALANCED, pitchDescription = \"A fair, even contest between bat and ball.\",\n            boundarySize = BoundarySize.SMALL, altitudeM = 180, dewFactor = 0.3,\n            avgT20FirstInningsScore = 175,\n            climate = StadiumClimate(0.1, 55, 33, 14, \"Hot and humid with the occasional storm.\")\n        ),\n        Stadium(\n            id = \"oakland-coliseum\", name = \"Oakland Coliseum\", city = \"Oakland, California\", country = \"USA\",\n            homeTeamIds = listOf(\"team_usa\"),\n            pitchType = PitchType.BALANCED, pitchDescription = \"A fair, even contest between bat and ball.\",\n            boundarySize = BoundarySize.MEDIUM, altitudeM = 5, dewFactor = 0.2,\n            avgT20FirstInningsScore = 165,\n            climate = StadiumClimate(0.03, 65, 20, 18, \"Mild and breezy with almost no rain.\")\n        ),\n        Stadium(\n            id = \"knight-riders-ground\", name = \"Knight Riders Cricket Ground (Fairplex)\", city = \"Pomona, California\", country = \"USA\",\n            homeTeamIds = listOf(\"team_usa\"),\n            pitchType = PitchType.BATTING, pitchDescription = \"A flat, true surface that generally favors batters.\",\n            boundarySize = BoundarySize.SMALL, altitudeM = 270, dewFactor = 0.1,\n            avgT20FirstInningsScore = 180,\n            climate = StadiumClimate(0.02, 35, 30, 12, \"Hot and dry with almost no rain.\")\n        ),\n        Stadium(\n            id = \"sheikh-zayed\", name = \"Sheikh Zayed Stadium\", city = \"Abu Dhabi\", country = \"UAE\",\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "enum class SquadTag { DOMESTIC, BREAKOUT, OVERSEAS, UAE, AFGHAN, ASSOCIATE }\n",
+      "replace": "// USA is used only by Major League Cricket (its XI allows six overseas players).\nenum class SquadTag { DOMESTIC, BREAKOUT, OVERSEAS, UAE, AFGHAN, ASSOCIATE, USA }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "            ?: InternationalLeagueT20.stadium(id) ?: BigBashLeague.stadium(id)\n",
+      "replace": "            ?: InternationalLeagueT20.stadium(id) ?: BigBashLeague.stadium(id) ?: MajorLeagueCricket.stadium(id)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "            ?: BigBashLeague.shortNameOrNull(teamId) ?: IplData.shortName(teamId)\n",
+      "replace": "            ?: BigBashLeague.shortNameOrNull(teamId) ?: MajorLeagueCricket.shortNameOrNull(teamId) ?: IplData.shortName(teamId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "        else if (BigBashLeague.isTeam(teamId)) BigBashLeague.homeGround(teamId)\n",
+      "replace": "        else if (BigBashLeague.isTeam(teamId)) BigBashLeague.homeGround(teamId)\n        else if (MajorLeagueCricket.isTeam(teamId)) MajorLeagueCricket.homeGround(teamId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val overseasCap = if (quotas) 11 else MAX_OVERSEAS\n",
+      "replace": "        // Major League Cricket (tags USA exist only in its squads) allows six overseas players in the XI.\n        val overseasCap = when {\n            quotas -> 11\n            tags.containsValue(SquadTag.USA) -> 6\n            else -> MAX_OVERSEAS\n        }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val overseas = xi.players.count { tags[it.id] == SquadTag.OVERSEAS }\n        if (overseas > MAX_OVERSEAS) {\n            return \"Your XI has $overseas overseas players. The rules allow at most $MAX_OVERSEAS. Please change your team.\"\n",
+      "replace": "        val overseas = xi.players.count { tags[it.id] == SquadTag.OVERSEAS }\n        val overseasCap = if (tags.containsValue(SquadTag.USA)) 6 else MAX_OVERSEAS\n        if (overseas > overseasCap) {\n            return \"Your XI has $overseas overseas players. The rules allow at most $overseasCap. Please change your team.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        if (state.tournamentId == BigBashLeague.TOURNAMENT_ID) {\n            // Big Bash League: Qualifier (1st v 2nd), Knockout (3rd v 4th), Challenger (Qualifier loser v Knockout winner),\n",
+      "replace": "        if (state.tournamentId == MajorLeagueCricket.TOURNAMENT_ID) {\n            // Major League Cricket: Qualifier (1st v 2nd), Eliminator (3rd v 4th), Challenger (Qualifier loser v Eliminator\n            // winner), Final (Qualifier winner v Challenger winner); all four at Oakland.\n            setTeams(\"Qualifier\", table[0].team.id, table[1].team.id)\n            setTeams(\"Eliminator\", table[2].team.id, table[3].team.id)\n            val qualifier = stage(\"Qualifier\")\n            val eliminator = stage(\"Eliminator\")\n            if (qualifier?.result != null && eliminator?.result != null) setTeams(\"Challenger\", loserOf(qualifier), winnerOf(eliminator))\n            val challenger = stage(\"Challenger\")\n            if (qualifier?.result != null && challenger?.result != null) setTeams(\"Final\", winnerOf(qualifier), winnerOf(challenger))\n            return state.copy(fixtures = fixtures)\n        }\n        if (state.tournamentId == BigBashLeague.TOURNAMENT_ID) {\n            // Big Bash League: Qualifier (1st v 2nd), Knockout (3rd v 4th), Challenger (Qualifier loser v Knockout winner),\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.LankaPremierLeague\n",
+      "replace": "import com.cricketsim.logic.LankaPremierLeague\nimport com.cricketsim.logic.MajorLeagueCricket\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    var bblSaved by remember { mutableStateOf(false) } // is there a saved Big Bash League tournament?\n",
+      "replace": "    var bblSaved by remember { mutableStateOf(false) } // is there a saved Big Bash League tournament?\n    var mlcSaved by remember { mutableStateOf(false) } // is there a saved Major League Cricket tournament?\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val store = when (kind) { \"ipl\" -> iplStore; \"adt10\" -> adtStore; \"lpl\" -> lplStore; \"ilt\" -> iltStore; \"bbl\" -> bblStore; else -> cplStore }\n    val matchStore = when (kind) { \"ipl\" -> iplMatchStore; \"adt10\" -> adtMatchStore; \"lpl\" -> lplMatchStore; \"ilt\" -> iltMatchStore; \"bbl\" -> bblMatchStore; else -> cplMatchStore }\n",
+      "replace": "    val mlcStore = remember { TournamentSaveStore(context, \"saved_tournament_mlc2026.json\") }\n    val mlcMatchStore = remember { MatchSaveStore(context, \"saved_mlc_match.json\") }\n    val store = when (kind) { \"ipl\" -> iplStore; \"adt10\" -> adtStore; \"lpl\" -> lplStore; \"ilt\" -> iltStore; \"bbl\" -> bblStore; \"mlc\" -> mlcStore; else -> cplStore }\n    val matchStore = when (kind) { \"ipl\" -> iplMatchStore; \"adt10\" -> adtMatchStore; \"lpl\" -> lplMatchStore; \"ilt\" -> iltMatchStore; \"bbl\" -> bblMatchStore; \"mlc\" -> mlcMatchStore; else -> cplMatchStore }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val built = when (kind) { \"adt10\" -> adtBuilt; \"lpl\" -> lplBuilt; \"ilt\" -> iltBuilt; \"bbl\" -> bblBuilt; else -> cplBuilt }\n",
+      "replace": "    val mlcBuilt = remember { MajorLeagueCricket.buildTeams() }\n    val built = when (kind) { \"adt10\" -> adtBuilt; \"lpl\" -> lplBuilt; \"ilt\" -> iltBuilt; \"bbl\" -> bblBuilt; \"mlc\" -> mlcBuilt; else -> cplBuilt }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        bblSaved = bblStore.load() != null\n",
+      "replace": "        bblSaved = bblStore.load() != null\n        mlcSaved = mlcStore.load() != null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                bblSaved = bblSaved,\n",
+      "replace": "                bblSaved = bblSaved,\n                mlcSaved = mlcSaved,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onIpl = { page = TPage.Ipl },\n",
+      "replace": "                onMlc = {\n                    // Major League Cricket has its own saved tournament and match slot too.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"mlc\"\n                    page = TPage.Adt\n                },\n                onIpl = { page = TPage.Ipl },\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val isBbl = kind == \"bbl\"\n",
+      "replace": "            val isBbl = kind == \"bbl\"\n            val isMlc = kind == \"mlc\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isBbl -> BigBashLeague.TOURNAMENT_NAME\n",
+      "replace": "                isBbl -> BigBashLeague.TOURNAMENT_NAME\n                isMlc -> MajorLeagueCricket.TOURNAMENT_NAME\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                if (isAdt || isLpl || isIlt || isBbl) {\n",
+      "replace": "                if (isAdt || isLpl || isIlt || isBbl || isMlc) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        else -> bblSaved = saved != null\n",
+      "replace": "                        isBbl -> bblSaved = saved != null\n                        else -> mlcSaved = saved != null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    else -> \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"\n",
+      "replace": "                    isMlc -> \"Major League Cricket: the six real teams and their 2026 squads, the real fixture list across Texas, \" +\n                        \"California and the new Pomona ground, then the Qualifier, the Eliminator, the Challenger and the Final. \" +\n                        \"At most six overseas players in your XI.\"\n                    else -> \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val back = { page = if (kind == \"adt10\" || kind == \"lpl\" || kind == \"ilt\" || kind == \"bbl\") TPage.Adt else TPage.Cpl }\n",
+      "replace": "            val back = { page = if (kind == \"adt10\" || kind == \"lpl\" || kind == \"ilt\" || kind == \"bbl\" || kind == \"mlc\") TPage.Adt else TPage.Cpl }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        \"bbl\" -> BigBashLeague.newTournament(teamId, built)\n",
+      "replace": "                        \"bbl\" -> BigBashLeague.newTournament(teamId, built)\n                        \"mlc\" -> MajorLeagueCricket.newTournament(teamId, built)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"adt10\", \"lpl\", \"ilt\", \"bbl\" -> TPage.Adt;",
+      "replace": "\"adt10\", \"lpl\", \"ilt\", \"bbl\", \"mlc\" -> TPage.Adt;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                BigBashLeague.TOURNAMENT_ID -> BigBashLeague.stadiums\n",
+      "replace": "                BigBashLeague.TOURNAMENT_ID -> BigBashLeague.stadiums\n                MajorLeagueCricket.TOURNAMENT_ID -> MajorLeagueCricket.stadiums\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    SquadTag.ASSOCIATE -> \"Associate nation\"\n",
+      "replace": "    SquadTag.ASSOCIATE -> \"Associate nation\"\n    SquadTag.USA -> \"USA\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    bblSaved: Boolean,\n    onCpl: () -> Unit,\n    onAdt: () -> Unit,\n    onLpl: () -> Unit,\n    onIlt: () -> Unit,\n    onBbl: () -> Unit,\n",
+      "replace": "    bblSaved: Boolean,\n    mlcSaved: Boolean,\n    onCpl: () -> Unit,\n    onAdt: () -> Unit,\n    onLpl: () -> Unit,\n    onIlt: () -> Unit,\n    onBbl: () -> Unit,\n    onMlc: () -> Unit,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"Big Bash League 2026-27\",\n",
+      "replace": "            ChoiceRow(\n                title = \"Major League Cricket 2026\",\n                description = \"The six real teams and squads, the real fixture list: 34 matches across Texas and California.\" +\n                    if (mlcSaved) \" You have a saved tournament.\" else \"\",\n                enabled = true,\n                onClick = onMlc\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Big Bash League 2026-27\",\n"
+    }
+  ]
+}
