@@ -173,7 +173,7 @@ function inningsUserBowl(skill,diff,cfg,overs=20){
   const ball=humanBall(skill),shot=aiBat(bat,ball,bias,cfg);
   let out;
   if(shot.shot==="LEAVE"){const p=dist(bat,78,diff,"userBowl",ball,{shot:"LEAVE"},cfg);out=sample({...p,wicket:0,dot:0,one:0,two:0,three:0,four:0,six:0,wide:p.wide});if(out!=="wide")out=leaveOutcome(ball);}
-  else{const p=dist(bat,78,diff,"userBowl",ball,shot,cfg);if(cfg.aiWkt){p.wicket*=cfg.aiWkt;p.four*=cfg.aiBnd;p.six*=cfg.aiBnd;}out=sample(p);}
+  else{const p=dist(bat,78,diff,"userBowl",ball,shot,cfg);if(cfg.aiWkt){p.wicket*=cfg.aiWkt;p.four*=cfg.aiBnd;p.six*=cfg.aiBnd;}if(cfg.badShot&&(diff==="EASY"||diff==="MEDIUM")&&(shot.timing==="B"||shot.timing==="V")&&"PIG".includes(ball.tier)){const tgt=(DEFENSIVE.includes(shot.shot)?cfg.badDef:cfg.badAtt)*cfg.sf[shot.timing]*cfg.bf[ball.tier];let oo=0;for(const k of ["dot","one","two","three","four","six","wide"])oo+=p[k];const need=tgt/(1-tgt)*oo;if(p.wicket<need)p.wicket=need;}out=sample(p);}
   if(out==="wide"){runs++;orr++;continue;}
   legal++;
   if(out==="wicket"){w++;bi++;}else{const r={dot:0,one:1,two:2,three:3,four:4,six:6}[out];let rr=r;if(runOutCheck(r,ro,overs)){w++;bi++;ro++;rr=r-1;}runs+=rr;orr+=rr;}
@@ -229,7 +229,8 @@ if (require.main === module) {
   const K=1.75, S0B={P:.5,I:.62,G:.8,B:.95,V:1.05}, S0P={P:.6,I:.72,G:.88,B:1,V:1.05};
   const sc=(S)=>{const o={};for(const t in S)o[t]=Math.max(.15,1-(1-S[t])*K);return o;};
   const NEW = {diffMult:true,wm:WM,bm:BM,contest:true,sB:sc(S0B),sP:sc(S0P),defSix:.002,defFour:.015,readP:.2,
-    aiBowlNew:true,bowlBase:13,bowlSlope:.70,bowlSpread:48,aiBatNew:true,batSpread:42,timeShift:-6,badW:12};
+    aiBowlNew:true,bowlBase:13,bowlSlope:.70,bowlSpread:48,aiBatNew:true,batSpread:42,timeShift:-6,badW:12,
+    badShot:true,badAtt:.70,badDef:.60,sf:{V:1,B:.35,G:0,I:0,P:0},bf:{P:1,I:.65,G:.4,B:0,V:0}};
   const shots={"perfect shot":{fw:"FRONT",shot:"CUT",intent:"LEFT",timing:"P"},"good shot":{fw:"FRONT",shot:"STRAIGHT",intent:"LEFT",timing:"G"},
     "bad shot":{fw:"FRONT",shot:"REVSWEEP",intent:"LEFT",timing:"G"},"defence":{fw:"FRONT",shot:"FWD_DEF",intent:null,timing:"P"}};
   for (const [name,cfg] of [["BEFORE (original rules)",OLD],["AFTER (balanced engine)",NEW]]) {

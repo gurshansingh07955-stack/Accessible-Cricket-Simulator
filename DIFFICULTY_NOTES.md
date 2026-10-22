@@ -55,6 +55,24 @@ will differ. Field placement is not modelled, so the real game gets slightly mor
 7. Not changed: after two early wickets the computer batters defend heavily (`AiSituation.battingBias`), which keeps
    wickets from falling in clusters.
 
+## Bad shots and more catches (patch 039)
+**Bad shots on Easy and Medium** (`MatchEngine.BAD_SHOT_WICKETS`): when the computer batter's timing is BAD or VERY BAD and the user's
+ball is GOOD, IDEAL or PERFECT, the chance of that ball being a wicket is raised to at most 70% (attacking shot) or 60%
+(defensive shot): the full figure for a VERY BAD shot against a PERFECT ball, scaled to 35% for a BAD shot and to 65% / 40% for an
+IDEAL / GOOD ball. A bad or very bad ball changes nothing; Hard and Hardest are untouched. Applying the full 70% / 60% to every
+bad shot was measured first: the computer was bowled out in 96 to 99% of innings for 60 to 100 runs on Easy and Medium (about 1
+ball in 6 qualifies), so it is scaled. Measured (user bowling, wickets taken, skilled | average | novice):
+
+| | Before | After |
+|---|---|---|
+| Easy | 7.8 \| 6.8 \| 5.5 | 8.8 \| 7.8 \| 6.2 |
+| Medium | 6.5 \| 5.8 \| 4.7 | 8.0 \| 6.9 \| 5.4 |
+
+**More catches, all difficulties** (`MORE_CATCHES`, `CATCH_BOOST`): the mix of bowled / caught / lbw was 1 : 1 : 1, so a third of
+wickets were catches. Now 4 : 2 : 1 (57% caught), 8 : 1 : 1 when a fielder is standing in the right place for an aerial shot, and 6 : 2 : 1
+for a mistimed bad shot. A placed deep fielder also converts more aerial shots (boost 2.2, was 1.6), which adds a few wickets. The
+twin does not model fielders, so that last part is not measured.
+
 ## Where to turn the dials
 `MatchEngine.difficultyWicketFactor` / `difficultyBoundaryFactor`, `BattingSystem.CONTEST_STRENGTH`, the `0.70` in
 `BowlingSystem.generateAiBowlingDecision`, and the misread chance and timing base in `generateAiBattingDecision`.

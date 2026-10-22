@@ -80,6 +80,45 @@ object MatchEngine {
      */
     const val BALANCED_ENGINE = true
 
+    /**
+     * EASY and MEDIUM, the USER bowling: a computer batter who plays a BAD or VERY BAD shot (his timing tier) against a
+     * GOOD, IDEAL or PERFECT ball is much more likely to get out. The chance of that ball being a wicket is raised
+     * (never lowered) to a share that is at most 70% for an attacking shot and 60% for a defensive one, reached by a
+     * VERY BAD shot against a PERFECT ball and scaled down for a merely bad shot or a lesser ball (see
+     * badShotWicketTarget). A bad or very bad ball from the user changes nothing, and Hard and Hardest are untouched.
+     * Measured with tools/difficulty_twin.js (see DIFFICULTY_NOTES.md): about one more wicket an innings on Easy and
+     * Medium. Switch it off here.
+     */
+    const val BAD_SHOT_WICKETS = true
+    private const val BAD_SHOT_CEILING_ATTACK = 0.70
+    private const val BAD_SHOT_CEILING_DEFENCE = 0.60
+
+    /** MORE CATCHES (all difficulties): the dismissal mix is caught 4 : bowled 2 : lbw 1 instead of 1 : 1 : 1. */
+    const val MORE_CATCHES = true
+
+    /** How strongly a well-placed deep fielder turns an aerial shot into a wicket (it was 1.6). */
+    private const val CATCH_BOOST = 2.2
+
+    private fun badShotWicketTarget(difficulty: Difficulty, decision: BattingDecision, ballTier: BowlingQualityTier): Double {
+        if (!BAD_SHOT_WICKETS || (difficulty != Difficulty.EASY && difficulty != Difficulty.MEDIUM)) return 0.0
+        val shotScale = when (decision.timingTier) {
+            BowlingQualityTier.VERY_BAD -> 1.0
+            BowlingQualityTier.BAD -> 0.35
+            else -> return 0.0
+        }
+        val ballScale = when (ballTier) {
+            BowlingQualityTier.PERFECT -> 1.0
+            BowlingQualityTier.IDEAL -> 0.65
+            BowlingQualityTier.GOOD -> 0.4
+            else -> return 0.0
+        }
+        val ceiling = if (BattingSystem.isDefensiveShot(decision.shot)) BAD_SHOT_CEILING_DEFENCE else BAD_SHOT_CEILING_ATTACK
+        return ceiling * shotScale * ballScale
+    }
+
+    private fun dismissalMix(caught: Int, bowled: Int, lbw: Int): List<DismissalType> =
+        List(caught) { DismissalType.CAUGHT } + List(bowled) { DismissalType.BOWLED } + List(lbw) { DismissalType.LBW }
+
     private fun difficultyWicketFactor(d: Difficulty): Double = when (d) {
         Difficulty.EASY -> 1.25
         Difficulty.MEDIUM -> 1.0
@@ -246,7 +285,7 @@ object MatchEngine {
                 val quality = ratingOf(deepFielder.playerId) / 100.0
                 bumpProb(probs, OutcomeProbs::six, 1 - 0.55 * quality)
                 bumpProb(probs, OutcomeProbs::four, 1 - 0.3 * quality)
-                bumpProb(probs, OutcomeProbs::wicket, 1 + 1.6 * quality)
+                bumpProb(probs, OutcomeProbs::wicket, 1 + CATCH_BOOST * quality)
                 return true
             }
             // Cleared everyone in that direction — a genuine gap in the
@@ -413,6 +452,7 @@ object MatchEngine {
         // produces the exact same BattingDecision shape a real gesture
         // would.
         var fieldingCatchOpportunity = false
+        var badShotWicket = false
         // A leave plays no shot, so none of the shot adjustments apply to it.
         if (battingDecision != null && battingDecision.shot != NamedShot.LEAVE) {
             BattingSystem.applyBattingDecisionToProbabilities(
@@ -440,6 +480,19 @@ object MatchEngine {
             probs.four *= 1.5
             probs.six *= 1.8
             probs.dot *= 0.7
+        }
+
+        // Easy / Medium, the user bowling: a bad or very bad shot against a good ball is very likely a wicket.
+        if (!isUserBatting && battingDecision != null && battingDecision.shot != NamedShot.LEAVE && !protectedFromDismissal) {
+            val target = badShotWicketTarget(difficulty, battingDecision, bowlingDecision.qualityTier)
+            if (target > 0.0) {
+                val others = probs.dot + probs.one + probs.two + probs.three + probs.four + probs.six + probs.wide
+                val needed = target / (1.0 - target) * others
+                if (probs.wicket < needed) {
+                    probs.wicket = needed
+                    badShotWicket = true
+                }
+            }
         }
 
         // Normalize again and sample. LinkedHashMap preserves this
@@ -533,10 +586,13 @@ object MatchEngine {
                 // (non-fielding) wicket chance the ball already carried
                 // could still have been a genuine bowled/lbw on its own
                 // merits.
-                val dismissalTypes = (if (fieldingCatchOpportunity) {
-                    listOf(DismissalType.CAUGHT, DismissalType.CAUGHT, DismissalType.CAUGHT, DismissalType.BOWLED, DismissalType.LBW)
-                } else {
-                    listOf(DismissalType.BOWLED, DismissalType.CAUGHT, DismissalType.LBW)
+                // More catches (MORE_CATCHES): the mix used to be 1 : 1 : 1 (3 : 1 : 1 with a placed deep fielder), so only about
+                // a third of the wickets were catches. Now about 57% (80% with a placed fielder, 67% for a mistimed bad shot).
+                val dismissalTypes = (when {
+                    fieldingCatchOpportunity -> if (MORE_CATCHES) dismissalMix(8, 1, 1) else dismissalMix(3, 1, 1)
+                    badShotWicket && MORE_CATCHES -> dismissalMix(6, 2, 1)
+                    MORE_CATCHES -> dismissalMix(4, 2, 1)
+                    else -> dismissalMix(1, 1, 1)
                 }).toMutableList()
                 // A stumping is only possible when the batter has stepped out of the crease
                 // (the swipe-right "step out / advance" intent). Spin brings the keeper up to the stumps.
