@@ -1,0 +1,112 @@
+{
+  "name": "crowd-from-toss-and-scorecard-roles",
+  "message": "Crowd starts at the toss in every tournament; captain, vice-captain and wicketkeeper on the scorecard and in shared/copied text",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+    "contains": "fun roleMap("
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            menuSoundServices?.sound?.playMenuOpen()\n        }\n    }\n    var saved by remember { mutableStateOf<TournamentState?>(null) }\n",
+      "replace": "            menuSoundServices?.sound?.playMenuOpen()\n        }\n    }\n    // THE CROWD STARTS AT THE TOSS, as in a normal match (MainActivity): from the toss through the Playing XI and Impact\n    // Player screens that follow it (the IPL holds the toss first) to the end of the match. The match screen's own start\n    // request is then a no-op, and it stops the crowd when the match ends or is left. Backing out of the toss stops it.\n    val shownPage = page\n    val crowdWanted = shownPage is TPage.Toss || shownPage is TPage.TossFirst || shownPage is TPage.PlayMatch ||\n        shownPage is TPage.Impact || (shownPage is TPage.PickXI && shownPage.toss != null)\n    val crowdEffectsOn = menuSoundServices?.settings?.soundEffects ?: false\n    LaunchedEffect(crowdWanted, crowdEffectsOn) {\n        val sound = menuSoundServices?.sound ?: return@LaunchedEffect\n        if (!crowdWanted) {\n            sound.stopCrowdAmbience()\n        } else if (crowdEffectsOn) {\n            sound.startCrowdAmbience()\n        }\n    }\n    var saved by remember { mutableStateOf<TournamentState?>(null) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    fun battingRows(innings: InningsData): List<String> {\n",
+      "replace": "    /** A player's name with his job when he has one: \"Babar Azam (captain and wicketkeeper)\". */\n    fun named(name: String, playerId: String, roles: Map<String, String>): String =\n        roles[playerId]?.let { \"$name ($it)\" } ?: name\n\n    fun battingRows(innings: InningsData, roles: Map<String, String> = emptyMap()): List<String> {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "            \"${stats.playerName}, $status, ${countOf(stats.runs, \"run\")} off ${countOf(stats.ballsFaced, \"ball\")}, \" +\n",
+      "replace": "            \"${named(stats.playerName, stats.playerId, roles)}, $status, ${countOf(stats.runs, \"run\")} off ${countOf(stats.ballsFaced, \"ball\")}, \" +\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    fun bowlingRows(innings: InningsData, currentBowlerId: String?): List<String> =\n",
+      "replace": "    fun bowlingRows(innings: InningsData, currentBowlerId: String?, roles: Map<String, String> = emptyMap()): List<String> =\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "            \"${stats.playerName}$marker, ${stats.overs}.${stats.balls} overs, ${countOf(stats.maidens, \"maiden\")}, \" +\n",
+      "replace": "            \"${named(stats.playerName, stats.playerId, roles)}$marker, ${stats.overs}.${stats.balls} overs, ${countOf(stats.maidens, \"maiden\")}, \" +\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    private fun describe(p: Partnership): String =\n        \"${p.batsman1Name} ${p.batsman1Runs} and ${p.batsman2Name} ${p.batsman2Runs}, \" +\n",
+      "replace": "    private fun describe(p: Partnership, roles: Map<String, String>): String =\n        \"${named(p.batsman1Name, p.batsman1Id, roles)} ${p.batsman1Runs} and ${named(p.batsman2Name, p.batsman2Id, roles)} ${p.batsman2Runs}, \" +\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    fun partnershipRows(innings: InningsData): List<String> {\n",
+      "replace": "    fun partnershipRows(innings: InningsData, roles: Map<String, String> = emptyMap()): List<String> {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "        val current = \"Current partnership: ${describe(innings.currentPartnership)}\"\n        val finished = innings.partnerships.mapIndexed { index, p -> \"Partnership ${index + 1}: ${describe(p)}\" }\n",
+      "replace": "        val current = \"Current partnership: ${describe(innings.currentPartnership, roles)}\"\n        val finished = innings.partnerships.mapIndexed { index, p -> \"Partnership ${index + 1}: ${describe(p, roles)}\" }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    fun wicketRows(innings: InningsData): List<String> {\n",
+      "replace": "    fun wicketRows(innings: InningsData, roles: Map<String, String> = emptyMap()): List<String> {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "            \"Wicket ${w.wicketNumber}: ${w.batsmanName}, ${countOf(w.batsmanRuns, \"run\")} off ${countOf(w.batsmanBalls, \"ball\")}, \" +\n",
+      "replace": "            \"Wicket ${w.wicketNumber}: ${named(w.batsmanName, w.batsmanId, roles)}, ${countOf(w.batsmanRuns, \"run\")} off ${countOf(w.batsmanBalls, \"ball\")}, \" +\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardScreen.kt",
+      "find": "    val rows = when (section) {\n        CardSection.BATTING -> ScorecardLines.battingRows(innings)\n        CardSection.BOWLING -> ScorecardLines.bowlingRows(innings, if (viewingFirst) null else state.currentBowler.id)\n        CardSection.PARTNERSHIPS -> ScorecardLines.partnershipRows(innings)\n        CardSection.WICKETS -> ScorecardLines.wicketRows(innings)\n    }\n",
+      "replace": "    // Who is captain, vice-captain and wicketkeeper, shown beside each name and in a line at the top of each side's table.\n    val roles = remember(state.userTeam, state.opponentTeam) { ScorecardText.roleMap(state) }\n    val battingTeam = if (innings.battingTeamName == state.userTeam.name) state.userTeam else state.opponentTeam\n    val bowlingTeam = if (battingTeam.id == state.userTeam.id) state.opponentTeam else state.userTeam\n    val rows = when (section) {\n        CardSection.BATTING -> listOf(ScorecardText.leadersLine(battingTeam)) + ScorecardLines.battingRows(innings, roles)\n        CardSection.BOWLING -> listOf(ScorecardText.leadersLine(bowlingTeam)) +\n            ScorecardLines.bowlingRows(innings, if (viewingFirst) null else state.currentBowler.id, roles)\n        CardSection.PARTNERSHIPS -> ScorecardLines.partnershipRows(innings, roles)\n        CardSection.WICKETS -> ScorecardLines.wicketRows(innings, roles)\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "    /** The whole finished match: teams, ground, toss, result, then each innings in full. */\n",
+      "replace": "    /** Who is captain, vice-captain and wicketkeeper of each side, by player id (for the tags beside names). */\n    internal fun roleMap(state: MatchState): Map<String, String> {\n        val map = HashMap<String, String>()\n        for (team in listOf(state.userTeam, state.opponentTeam)) {\n            val lead = leaders(team)\n            val jobs = LinkedHashMap<String, MutableList<String>>()\n            lead.captain?.let { jobs.getOrPut(it.id) { mutableListOf() }.add(\"captain\") }\n            lead.vice?.let { jobs.getOrPut(it.id) { mutableListOf() }.add(\"vice-captain\") }\n            lead.keeper?.let { jobs.getOrPut(it.id) { mutableListOf() }.add(\"wicketkeeper\") }\n            jobs.forEach { (id, list) -> map[id] = list.joinToString(\" and \") }\n        }\n        return map\n    }\n\n    /** \"India: captain Rohit Sharma, vice-captain Virat Kohli, wicketkeeper KL Rahul.\" */\n    internal fun leadersLine(team: Team): String {\n        val lead = leaders(team)\n        return \"${team.name}: captain ${lead.captain?.name ?: \"not named\"}, vice-captain ${lead.vice?.name ?: \"not named\"}, \" +\n            \"wicketkeeper ${lead.keeper?.name ?: \"not named\"}.\"\n    }\n\n    /** The whole finished match: teams, ground, toss, result, then each innings in full. */\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "        full.firstInningsData?.let { appendInnings(sb, \"FIRST INNINGS\", it) }\n        appendInnings(sb, \"SECOND INNINGS\", full.currentInningsData)\n",
+      "replace": "        val roles = roleMap(state)\n        sb.append(\"\\nTEAM LEADERS\\n\")\n        sb.append(leadersLine(state.userTeam)).append(\"\\n\")\n        sb.append(leadersLine(state.opponentTeam)).append(\"\\n\")\n\n        full.firstInningsData?.let { appendInnings(sb, \"FIRST INNINGS\", it, roles) }\n        appendInnings(sb, \"SECOND INNINGS\", full.currentInningsData, roles)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "    private fun appendInnings(sb: StringBuilder, title: String, inn: InningsData) {\n",
+      "replace": "    private fun appendInnings(sb: StringBuilder, title: String, inn: InningsData, roles: Map<String, String>) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "            sb.append(i + 1).append(\". \").append(b.playerName).append(\" - \").append(status)\n",
+      "replace": "            sb.append(i + 1).append(\". \").append(ScorecardLines.named(b.playerName, b.playerId, roles)).append(\" - \").append(status)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "            sb.append(i + 1).append(\". \").append(b.playerName).append(\" - \")\n",
+      "replace": "            sb.append(i + 1).append(\". \").append(ScorecardLines.named(b.playerName, b.playerId, roles)).append(\" - \")\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "                sb.append(w.wicketNumber).append(\"-\").append(w.teamRuns).append(\" (\").append(w.batsmanName)\n",
+      "replace": "                sb.append(w.wicketNumber).append(\"-\").append(w.teamRuns).append(\" (\").append(ScorecardLines.named(w.batsmanName, w.batsmanId, roles))\n"
+    }
+  ]
+}
