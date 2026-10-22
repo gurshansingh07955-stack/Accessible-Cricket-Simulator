@@ -54,7 +54,12 @@ object CplSimulator {
         // The International League T20 has quotas instead (tags exist only in its squads): at least two UAE, two
         // Afghanistan and one further Associate player in the XI, and no cap on overseas players.
         val quotas = tags.containsValue(SquadTag.AFGHAN)
-        val overseasCap = if (quotas) 11 else MAX_OVERSEAS
+        // Major League Cricket (tags USA exist only in its squads) allows six overseas players in the XI.
+        val overseasCap = when {
+            quotas -> 11
+            tags.containsValue(SquadTag.USA) -> 6
+            else -> MAX_OVERSEAS
+        }
         val locked = HashSet<Player>() // players the quotas need: never dropped for a spare bowler
         fun value(p: Player): Double {
             var v = maxOf(p.battingRating, p.bowlingRating) + p.fieldingRating * 0.1
@@ -371,8 +376,9 @@ object CplSimulator {
             return null
         }
         val overseas = xi.players.count { tags[it.id] == SquadTag.OVERSEAS }
-        if (overseas > MAX_OVERSEAS) {
-            return "Your XI has $overseas overseas players. The rules allow at most $MAX_OVERSEAS. Please change your team."
+        val overseasCap = if (tags.containsValue(SquadTag.USA)) 6 else MAX_OVERSEAS
+        if (overseas > overseasCap) {
+            return "Your XI has $overseas overseas players. The rules allow at most $overseasCap. Please change your team."
         }
         // The breakout-player rule belongs to the CPL: it applies only when the squads have breakout players.
         if (tags.containsValue(SquadTag.BREAKOUT) && xi.players.none { tags[it.id] == SquadTag.BREAKOUT }) {
@@ -481,6 +487,18 @@ object CplSimulator {
             setTeams("Qualifier", table[1].team.id, table[2].team.id)
             val qualifier = stage("Qualifier")
             if (qualifier?.result != null) setTeams("Final", table[0].team.id, winnerOf(qualifier))
+            return state.copy(fixtures = fixtures)
+        }
+        if (state.tournamentId == MajorLeagueCricket.TOURNAMENT_ID) {
+            // Major League Cricket: Qualifier (1st v 2nd), Eliminator (3rd v 4th), Challenger (Qualifier loser v Eliminator
+            // winner), Final (Qualifier winner v Challenger winner); all four at Oakland.
+            setTeams("Qualifier", table[0].team.id, table[1].team.id)
+            setTeams("Eliminator", table[2].team.id, table[3].team.id)
+            val qualifier = stage("Qualifier")
+            val eliminator = stage("Eliminator")
+            if (qualifier?.result != null && eliminator?.result != null) setTeams("Challenger", loserOf(qualifier), winnerOf(eliminator))
+            val challenger = stage("Challenger")
+            if (qualifier?.result != null && challenger?.result != null) setTeams("Final", winnerOf(qualifier), winnerOf(challenger))
             return state.copy(fixtures = fixtures)
         }
         if (state.tournamentId == BigBashLeague.TOURNAMENT_ID) {

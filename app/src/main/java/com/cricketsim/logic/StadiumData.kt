@@ -205,6 +205,30 @@ object StadiumData {
             climate = StadiumClimate(0.35, 62, 16, 16, "Cool conditions with a moderate chance of rain.")
         ),
         Stadium(
+            id = "grand-prairie", name = "Grand Prairie Stadium", city = "Grand Prairie, Texas", country = "USA",
+            homeTeamIds = listOf("team_usa"),
+            pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",
+            boundarySize = BoundarySize.SMALL, altitudeM = 180, dewFactor = 0.3,
+            avgT20FirstInningsScore = 175,
+            climate = StadiumClimate(0.1, 55, 33, 14, "Hot and humid with the occasional storm.")
+        ),
+        Stadium(
+            id = "oakland-coliseum", name = "Oakland Coliseum", city = "Oakland, California", country = "USA",
+            homeTeamIds = listOf("team_usa"),
+            pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 5, dewFactor = 0.2,
+            avgT20FirstInningsScore = 165,
+            climate = StadiumClimate(0.03, 65, 20, 18, "Mild and breezy with almost no rain.")
+        ),
+        Stadium(
+            id = "knight-riders-ground", name = "Knight Riders Cricket Ground (Fairplex)", city = "Pomona, California", country = "USA",
+            homeTeamIds = listOf("team_usa"),
+            pitchType = PitchType.BATTING, pitchDescription = "A flat, true surface that generally favors batters.",
+            boundarySize = BoundarySize.SMALL, altitudeM = 270, dewFactor = 0.1,
+            avgT20FirstInningsScore = 180,
+            climate = StadiumClimate(0.02, 35, 30, 12, "Hot and dry with almost no rain.")
+        ),
+        Stadium(
             id = "sheikh-zayed", name = "Sheikh Zayed Stadium", city = "Abu Dhabi", country = "UAE",
             homeTeamIds = listOf("team_uae"),
             pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",
