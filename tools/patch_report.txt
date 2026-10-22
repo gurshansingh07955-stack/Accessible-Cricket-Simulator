@@ -1,6 +1,6 @@
-Patch run: 39717049104
-Timestamp (UTC): 2026-10-22T03:28:54Z
+Patch run: 39738071453
+Timestamp (UTC): 2026-10-22T07:05:15Z
 Result: OK
 -----
-Patch 2026-10-20-039-wickets-and-catches.json
-  applied 8 operation(s) to 3 file(s)
+Patch 2026-10-20-040-crowd-and-scorecard-roles.json
+  applied 17 operation(s) to 4 file(s)

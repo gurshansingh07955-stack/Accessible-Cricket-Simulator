@@ -178,6 +178,21 @@ fun TournamentFlow(onExit: () -> Unit) {
             menuSoundServices?.sound?.playMenuOpen()
         }
     }
+    // THE CROWD STARTS AT THE TOSS, as in a normal match (MainActivity): from the toss through the Playing XI and Impact
+    // Player screens that follow it (the IPL holds the toss first) to the end of the match. The match screen's own start
+    // request is then a no-op, and it stops the crowd when the match ends or is left. Backing out of the toss stops it.
+    val shownPage = page
+    val crowdWanted = shownPage is TPage.Toss || shownPage is TPage.TossFirst || shownPage is TPage.PlayMatch ||
+        shownPage is TPage.Impact || (shownPage is TPage.PickXI && shownPage.toss != null)
+    val crowdEffectsOn = menuSoundServices?.settings?.soundEffects ?: false
+    LaunchedEffect(crowdWanted, crowdEffectsOn) {
+        val sound = menuSoundServices?.sound ?: return@LaunchedEffect
+        if (!crowdWanted) {
+            sound.stopCrowdAmbience()
+        } else if (crowdEffectsOn) {
+            sound.startCrowdAmbience()
+        }
+    }
     var saved by remember { mutableStateOf<TournamentState?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }

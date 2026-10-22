@@ -192,10 +192,14 @@ object ScorecardLines {
         else -> "out"
     }
 
-    fun battingRows(innings: InningsData): List<String> {
+    /** A player's name with his job when he has one: "Babar Azam (captain and wicketkeeper)". */
+    fun named(name: String, playerId: String, roles: Map<String, String>): String =
+        roles[playerId]?.let { "$name ($it)" } ?: name
+
+    fun battingRows(innings: InningsData, roles: Map<String, String> = emptyMap()): List<String> {
         val batters = innings.batsmanStats.map { stats ->
             val status = if (stats.isOut) dismissalPhrase(stats.dismissalType, stats.dismissedBy, stats.caughtBy, stats.caughtAt) else "not out"
-            "${stats.playerName}, $status, ${countOf(stats.runs, "run")} off ${countOf(stats.ballsFaced, "ball")}, " +
+            "${named(stats.playerName, stats.playerId, roles)}, $status, ${countOf(stats.runs, "run")} off ${countOf(stats.ballsFaced, "ball")}, " +
                 "${countOf(stats.fours, "four")}, ${countOf(stats.sixes, "six", "sixes")}, " +
                 "strike rate ${formatDecimal(stats.strikeRate, 1)}."
         }
@@ -205,32 +209,32 @@ object ScorecardLines {
         return batters + extrasRow + totalRow
     }
 
-    fun bowlingRows(innings: InningsData, currentBowlerId: String?): List<String> =
+    fun bowlingRows(innings: InningsData, currentBowlerId: String?, roles: Map<String, String> = emptyMap()): List<String> =
         innings.bowlerStats.map { stats ->
             val marker = if (stats.playerId == currentBowlerId) " (currently bowling)" else ""
-            "${stats.playerName}$marker, ${stats.overs}.${stats.balls} overs, ${countOf(stats.maidens, "maiden")}, " +
+            "${named(stats.playerName, stats.playerId, roles)}$marker, ${stats.overs}.${stats.balls} overs, ${countOf(stats.maidens, "maiden")}, " +
                 "${countOf(stats.runsConceded, "run")}, ${countOf(stats.wickets, "wicket")}, " +
                 "economy ${formatDecimal(stats.economy, 2)}, " +
                 "${countOf(stats.wides, "wide")}, ${countOf(stats.noBalls, "no ball")}."
         }
 
-    private fun describe(p: Partnership): String =
-        "${p.batsman1Name} ${p.batsman1Runs} and ${p.batsman2Name} ${p.batsman2Runs}, " +
+    private fun describe(p: Partnership, roles: Map<String, String>): String =
+        "${named(p.batsman1Name, p.batsman1Id, roles)} ${p.batsman1Runs} and ${named(p.batsman2Name, p.batsman2Id, roles)} ${p.batsman2Runs}, " +
             "${countOf(p.totalRuns, "run")} off ${countOf(p.balls, "ball")}."
 
-    fun partnershipRows(innings: InningsData): List<String> {
+    fun partnershipRows(innings: InningsData, roles: Map<String, String> = emptyMap()): List<String> {
         // The live partnership first: it's the one that matters mid-match,
         // and it saves a TalkBack user swiping past every finished one.
-        val current = "Current partnership: ${describe(innings.currentPartnership)}"
-        val finished = innings.partnerships.mapIndexed { index, p -> "Partnership ${index + 1}: ${describe(p)}" }
+        val current = "Current partnership: ${describe(innings.currentPartnership, roles)}"
+        val finished = innings.partnerships.mapIndexed { index, p -> "Partnership ${index + 1}: ${describe(p, roles)}" }
         return listOf(current) + finished
     }
 
     /** In the order the wickets actually fell, with the team score at each. */
-    fun wicketRows(innings: InningsData): List<String> {
+    fun wicketRows(innings: InningsData, roles: Map<String, String> = emptyMap()): List<String> {
         if (innings.fallOfWickets.isEmpty()) return listOf("No wickets have fallen yet.")
         return innings.fallOfWickets.map { w ->
-            "Wicket ${w.wicketNumber}: ${w.batsmanName}, ${countOf(w.batsmanRuns, "run")} off ${countOf(w.batsmanBalls, "ball")}, " +
+            "Wicket ${w.wicketNumber}: ${named(w.batsmanName, w.batsmanId, roles)}, ${countOf(w.batsmanRuns, "run")} off ${countOf(w.batsmanBalls, "ball")}, " +
                 "${dismissalPhrase(w.dismissalType, w.dismissedBy, w.caughtBy, w.caughtAt)}. " +
                 "Team ${w.teamRuns} for ${w.wicketNumber} after ${w.overs}.${w.balls} overs."
         }

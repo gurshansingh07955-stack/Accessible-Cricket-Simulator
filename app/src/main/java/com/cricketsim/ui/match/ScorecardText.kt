@@ -94,6 +94,27 @@ object ScorecardText {
         return MatchLeaders(captain, vice, keeper)
     }
 
+    /** Who is captain, vice-captain and wicketkeeper of each side, by player id (for the tags beside names). */
+    internal fun roleMap(state: MatchState): Map<String, String> {
+        val map = HashMap<String, String>()
+        for (team in listOf(state.userTeam, state.opponentTeam)) {
+            val lead = leaders(team)
+            val jobs = LinkedHashMap<String, MutableList<String>>()
+            lead.captain?.let { jobs.getOrPut(it.id) { mutableListOf() }.add("captain") }
+            lead.vice?.let { jobs.getOrPut(it.id) { mutableListOf() }.add("vice-captain") }
+            lead.keeper?.let { jobs.getOrPut(it.id) { mutableListOf() }.add("wicketkeeper") }
+            jobs.forEach { (id, list) -> map[id] = list.joinToString(" and ") }
+        }
+        return map
+    }
+
+    /** "India: captain Rohit Sharma, vice-captain Virat Kohli, wicketkeeper KL Rahul." */
+    internal fun leadersLine(team: Team): String {
+        val lead = leaders(team)
+        return "${team.name}: captain ${lead.captain?.name ?: "not named"}, vice-captain ${lead.vice?.name ?: "not named"}, " +
+            "wicketkeeper ${lead.keeper?.name ?: "not named"}."
+    }
+
     /** The whole finished match: teams, ground, toss, result, then each innings in full. */
     fun build(state: MatchState, stadium: Stadium, resultText: String?): String {
         // After a Super Over the ordinary match's two innings are kept in regulationState.
@@ -110,8 +131,13 @@ object ScorecardText {
                 .append(it.summary).append(".\n")
         }
 
-        full.firstInningsData?.let { appendInnings(sb, "FIRST INNINGS", it) }
-        appendInnings(sb, "SECOND INNINGS", full.currentInningsData)
+        val roles = roleMap(state)
+        sb.append("\nTEAM LEADERS\n")
+        sb.append(leadersLine(state.userTeam)).append("\n")
+        sb.append(leadersLine(state.opponentTeam)).append("\n")
+
+        full.firstInningsData?.let { appendInnings(sb, "FIRST INNINGS", it, roles) }
+        appendInnings(sb, "SECOND INNINGS", full.currentInningsData, roles)
 
         val superOver = SuperOver.summaryLines(state)
         if (superOver.isNotEmpty()) {
@@ -127,7 +153,7 @@ object ScorecardText {
         return sb.toString()
     }
 
-    private fun appendInnings(sb: StringBuilder, title: String, inn: InningsData) {
+    private fun appendInnings(sb: StringBuilder, title: String, inn: InningsData, roles: Map<String, String>) {
         sb.append("\n").append(title).append("\n")
         sb.append(inn.battingTeamName).append(": ").append(inn.totalRuns).append("/").append(inn.totalWickets)
             .append(" in ").append(inn.totalOvers).append(".").append(inn.totalBalls).append(" overs\n\n")
@@ -135,7 +161,7 @@ object ScorecardText {
         sb.append("Batting\n")
         inn.batsmanStats.forEachIndexed { i, b ->
             val status = if (b.isOut) ScorecardLines.dismissalPhrase(b.dismissalType, b.dismissedBy, b.caughtBy, b.caughtAt) else "not out"
-            sb.append(i + 1).append(". ").append(b.playerName).append(" - ").append(status)
+            sb.append(i + 1).append(". ").append(ScorecardLines.named(b.playerName, b.playerId, roles)).append(" - ").append(status)
                 .append(" - ").append(b.runs).append(" off ").append(countOf(b.ballsFaced, "ball"))
                 .append(", ").append(countOf(b.fours, "four")).append(", ").append(countOf(b.sixes, "six", "sixes"))
                 .append(", strike rate ").append(one(b.strikeRate)).append("\n")
@@ -147,7 +173,7 @@ object ScorecardText {
 
         sb.append("Bowling\n")
         inn.bowlerStats.forEachIndexed { i, b ->
-            sb.append(i + 1).append(". ").append(b.playerName).append(" - ")
+            sb.append(i + 1).append(". ").append(ScorecardLines.named(b.playerName, b.playerId, roles)).append(" - ")
                 .append(b.overs).append(".").append(b.balls).append(" overs, ")
                 .append(countOf(b.maidens, "maiden")).append(", ")
                 .append(countOf(b.runsConceded, "run")).append(", ")
@@ -157,7 +183,7 @@ object ScorecardText {
         if (inn.fallOfWickets.isNotEmpty()) {
             sb.append("\nFall of wickets\n")
             inn.fallOfWickets.forEach { w ->
-                sb.append(w.wicketNumber).append("-").append(w.teamRuns).append(" (").append(w.batsmanName)
+                sb.append(w.wicketNumber).append("-").append(w.teamRuns).append(" (").append(ScorecardLines.named(w.batsmanName, w.batsmanId, roles))
                     .append(", ").append(w.overs).append(".").append(w.balls).append(" overs)\n")
             }
         }

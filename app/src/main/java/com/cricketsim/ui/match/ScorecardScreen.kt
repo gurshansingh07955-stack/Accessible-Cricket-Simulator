@@ -76,11 +76,16 @@ fun ScorecardScreen(state: MatchState, onBack: () -> Unit, startOnFirstInnings: 
     val viewingFirst = showFirstInnings && firstInnings != null
     val innings = if (viewingFirst && firstInnings != null) firstInnings else state.currentInningsData
 
+    // Who is captain, vice-captain and wicketkeeper, shown beside each name and in a line at the top of each side's table.
+    val roles = remember(state.userTeam, state.opponentTeam) { ScorecardText.roleMap(state) }
+    val battingTeam = if (innings.battingTeamName == state.userTeam.name) state.userTeam else state.opponentTeam
+    val bowlingTeam = if (battingTeam.id == state.userTeam.id) state.opponentTeam else state.userTeam
     val rows = when (section) {
-        CardSection.BATTING -> ScorecardLines.battingRows(innings)
-        CardSection.BOWLING -> ScorecardLines.bowlingRows(innings, if (viewingFirst) null else state.currentBowler.id)
-        CardSection.PARTNERSHIPS -> ScorecardLines.partnershipRows(innings)
-        CardSection.WICKETS -> ScorecardLines.wicketRows(innings)
+        CardSection.BATTING -> listOf(ScorecardText.leadersLine(battingTeam)) + ScorecardLines.battingRows(innings, roles)
+        CardSection.BOWLING -> listOf(ScorecardText.leadersLine(bowlingTeam)) +
+            ScorecardLines.bowlingRows(innings, if (viewingFirst) null else state.currentBowler.id, roles)
+        CardSection.PARTNERSHIPS -> ScorecardLines.partnershipRows(innings, roles)
+        CardSection.WICKETS -> ScorecardLines.wicketRows(innings, roles)
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
