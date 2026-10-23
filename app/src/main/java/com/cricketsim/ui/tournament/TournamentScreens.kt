@@ -795,7 +795,8 @@ private fun LeaguesPage(
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         PageTitle("League tournaments")
         Spacer(modifier = Modifier.height(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        // The list is longer than a phone screen now (eight tournaments), so it scrolls; Back stays at the bottom.
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             ChoiceRow(
                 title = "CPL 2026",
                 description = "Caribbean Premier League: seven teams, 35 league matches and the play-offs." +
@@ -872,7 +873,7 @@ private fun CplPage(
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         PageTitle(title)
         Spacer(modifier = Modifier.height(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             if (!loaded) {
                 Text("Looking for a saved tournament...", style = MaterialTheme.typography.bodyLarge)
             } else if (saved != null) {
