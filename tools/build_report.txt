@@ -1,6 +1,6 @@
-Build run: 39776935978 (attempt 1)
-Commit: 9a6aaeae5304914b057c749be203406f56b73340
-Timestamp (UTC): 2026-10-22T12:18:04Z
+Build run: 39879280560 (attempt 1)
+Commit: 4bbd7a427799eb0f5a88a7773f9247467a7b8081
+Timestamp (UTC): 2026-10-23T00:40:05Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -24,9 +24,9 @@ Daemon will be stopped at the end of the build
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
+> Task :app:processDebugManifestForPackage
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
-> Task :app:processDebugManifestForPackage
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
 > Task :app:mergeDebugStartupProfile
@@ -50,7 +50,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/MatchLines.kt:120:62 Elvis operator (?:) always returns the left operand of non-nullable type String?
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt:961:39 Unnecessary safe call on a non-null receiver of type GameServices?
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt:359:17 Name shadowed: striker
-w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt:1163:5 Parameter 'onDiscardMatch' is never used
+w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt:1164:5 Parameter 'onDiscardMatch' is never used
 
 > Task :app:compileDebugJavaWithJavac
 > Task :app:dexBuilderDebug
@@ -61,7 +61,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1792671393156.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1792715917536.json
 
-BUILD SUCCESSFUL in 1m 35s
+BUILD SUCCESSFUL in 1m 33s
 37 actionable tasks: 37 executed
