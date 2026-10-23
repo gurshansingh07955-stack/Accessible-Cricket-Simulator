@@ -1,0 +1,22 @@
+{
+  "name": "leagues-list-scrolls",
+  "message": "League tournaments list: make it scroll so every tournament shows",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+    "contains": "The list is longer than a phone screen now"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        Column(modifier = Modifier.weight(1f)) {\n            ChoiceRow(\n                title = \"CPL 2026\",\n",
+      "replace": "        // The list is longer than a phone screen now (eight tournaments), so it scrolls; Back stays at the bottom.\n        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {\n            ChoiceRow(\n                title = \"CPL 2026\",\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        Column(modifier = Modifier.weight(1f)) {\n            if (!loaded) {\n",
+      "replace": "        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {\n            if (!loaded) {\n"
+    }
+  ]
+}
