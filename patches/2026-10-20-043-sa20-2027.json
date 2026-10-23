@@ -1,0 +1,172 @@
+{
+  "name": "sa20-2027",
+  "message": "SA20 2027 tournament: real teams, squads, fixtures and grounds",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/Sa20.kt",
+    "contains": "object Sa20"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/Sa20.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * SA20 2027 (Betway SA20 Season 5, 17 January to 21 February 2027; Sunrisers Eastern Cape are the champions).\n *\n *  - SIX TEAMS, the real ones: Durban's Super Giants, Joburg Super Kings, MI Cape Town, Paarl Royals, Pretoria\n *    Capitals and Sunrisers Eastern Cape, with the squads they finished the 7 October 2026 auction with\n *    (18 or 19 players each, the wildcard included; Joburg's wildcard was not yet named).\n *  - THE FORMAT, as published: a double round-robin (30 league matches, every team hosting every other once, at its\n *    own ground), then Qualifier 1 (1st v 2nd) at Boland Park, the Eliminator (3rd v 4th) at the Wanderers,\n *    Qualifier 2 (Qualifier 1 loser v Eliminator winner) at the Wanderers and the Final at Newlands: 34 matches, T20.\n *  - THE FIXTURES: who hosts whom is certain (each team hosts each rival once). The ORDER of the first 16 matches\n *    follows the published list; for matches 17 to 30 the sources I could read disagreed on team names, so the\n *    order there is reconstructed from the dates and grounds (the pairings and venues are right, an odd date may\n *    be swapped).\n *  - THE RULES used: at most four overseas players in the XI. NOT built: the league's bonus point (4 for a win\n *    plus 1 for a big run-rate win; the game's table gives 2 a win), and the under-23 rule.\n *\n * All six grounds were already in the game. Players already in the game (roster or one added by an earlier\n * tournament) are COPIED with their ratings; the others are new with ESTIMATED ratings (the nw() lines).\n * It reuses the CPL machinery as it is.\n */\nobject Sa20 {\n\n    const val TOURNAMENT_ID = \"sa20_2027\"\n    const val TOURNAMENT_NAME = \"SA20 2027\"\n\n    private const val KINGSMEAD = \"kingsmead\"\n    private const val WANDERERS = \"wanderers\"\n    private const val NEWLANDS = \"newlands\"\n    private const val BOLAND = \"boland-park\"\n    private const val CENTURION = \"supersport-park\"\n    private const val GQEBERHA = \"st-georges-park\"\n\n    private class NewSpec(val role: PlayerRole, val bat: Int, val bowl: Int, val style: BowlingStyle)\n    private class Slot(val name: String, val lookup: String?, val tag: SquadTag, val spec: NewSpec?)\n    private class TeamDef(val id: String, val name: String, val shortName: String, val code: String, val home: String, val squad: List<Slot>)\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n    private val S = SquadTag.DOMESTIC   // a South African\n    private val X = SquadTag.OVERSEAS   // an overseas player (Gous plays for the USA, so counts as overseas)\n\n    private fun ex(name: String, tag: SquadTag) = Slot(name, null, tag, null)\n    private fun al(name: String, gameName: String, tag: SquadTag) = Slot(name, gameName, tag, null)\n    private fun nw(name: String, tag: SquadTag, role: PlayerRole, bat: Int, bowl: Int, style: BowlingStyle = PACE) =\n        Slot(name, null, tag, NewSpec(role, bat, bowl, style))\n\n    private val DEFS: List<TeamDef> by lazy {\n        listOf(\n            TeamDef(\"sa_dsg\", \"Durban's Super Giants\", \"Super Giants\", \"DSG\", KINGSMEAD, listOf(\n                ex(\"Jos Buttler\", X), ex(\"Devon Conway\", X), ex(\"Sam Curran\", X), ex(\"Liam Livingstone\", X), ex(\"Sunil Narine\", X),\n                ex(\"Kane Williamson\", X), ex(\"Marques Ackerman\", S), nw(\"David Bedingham\", S, BAT, 72, 10),\n                nw(\"Eathan Bosch\", S, AR, 56, 62), ex(\"Gerald Coetzee\", S), ex(\"Tony de Zorzi\", S),\n                nw(\"Daryn Dupavillon\", S, BWL, 20, 66), nw(\"Simon Harmer\", S, BWL, 25, 78, SPIN), nw(\"Evan Jones\", S, BAT, 60, 15),\n                ex(\"Aiden Markram\", S), nw(\"Kyle Simmonds\", S, AR, 56, 58), ex(\"Kwena Maphaka\", S),\n                nw(\"Andile Simelane\", S, BWL, 20, 62), ex(\"Heinrich Klaasen\", S)\n            )),\n            TeamDef(\"sa_jsk\", \"Joburg Super Kings\", \"Joburg\", \"JSK\", WANDERERS, listOf(\n                nw(\"Leus du Plooy\", S, BAT, 70, 25, SPIN), ex(\"Jason Holder\", X), ex(\"Akeal Hosein\", X), ex(\"James Vince\", X),\n                nw(\"Matthew de Villiers\", S, AR, 56, 58), ex(\"Donovan Ferreira\", S), nw(\"Dian Forrester\", S, AR, 62, 60),\n                nw(\"Duan Jansen\", S, BWL, 20, 70), ex(\"Rilee Rossouw\", S), nw(\"Janco Smit\", S, AR, 52, 58),\n                ex(\"Prenelan Subrayen\", S), ex(\"Faf du Plessis\", S), ex(\"Blessing Muzarabani\", X), ex(\"Kieron Pollard\", X),\n                ex(\"Andries Gous\", X), nw(\"Dayyaan Galiem\", S, BAT, 58, 30), nw(\"Jarren Bacher\", S, AR, 50, 52, SPIN),\n                nw(\"Jason Rowles\", S, BAT, 66, 15)\n            )),\n            TeamDef(\"sa_mict\", \"MI Cape Town\", \"MI Cape Town\", \"MIC\", NEWLANDS, listOf(\n                ex(\"Will Jacks\", X), ex(\"Rashid Khan\", X), ex(\"Nicholas Pooran\", X), ex(\"Corbin Bosch\", S), ex(\"Reeza Hendricks\", S),\n                nw(\"Thomas Kaber\", S, WK, 60, 10), ex(\"George Linde\", S), nw(\"Dane Piedt\", S, BWL, 25, 70, SPIN),\n                ex(\"Ryan Rickelton\", S), nw(\"Jason Smith\", S, AR, 62, 56), nw(\"Tiaan van Vuuren\", S, BWL, 20, 64),\n                ex(\"Trent Boult\", X), ex(\"Wiaan Mulder\", S), ex(\"Shimron Hetmyer\", X), nw(\"Lehan Botha\", S, BAT, 52, 15),\n                nw(\"Daniel Smith\", S, BWL, 20, 58), ex(\"Tristan Luus\", S), nw(\"Oliver Whitehead\", S, BAT, 58, 15),\n                ex(\"Kagiso Rabada\", S)\n            )),\n            TeamDef(\"sa_pr\", \"Paarl Royals\", \"Paarl\", \"PAR\", BOLAND, listOf(\n                ex(\"Dan Lawrence\", X), ex(\"Gudakesh Motie\", X), ex(\"Azmatullah Omarzai\", X), ex(\"Sikandar Raza\", X),\n                nw(\"Thomas Rew\", X, WK, 66, 10), ex(\"Asa Tribe\", X), ex(\"Mujeeb Ur Rahman\", X),\n                al(\"Ottneil Baartman\", \"Ottniel Baartman\", S), ex(\"Bjorn Fortuin\", S), ex(\"Rubin Hermann\", S),\n                nw(\"Keagan Lion-Cachet\", S, AR, 56, 62), ex(\"David Miller\", S), nw(\"Delano Potgieter\", S, AR, 54, 58, SPIN),\n                nw(\"Kyle Verreynne\", S, WK, 72, 10), ex(\"Hardus Viljoen\", S), nw(\"Jacob Johannes Basson\", S, AR, 52, 50, SPIN),\n                nw(\"Nqobani Mokoena\", S, BWL, 20, 64), ex(\"Lhuan-dre Pretorius\", S), ex(\"Joe Root\", X)\n            )),\n            TeamDef(\"sa_pc\", \"Pretoria Capitals\", \"Pretoria\", \"PRC\", CENTURION, listOf(\n                ex(\"Sherfane Rutherford\", X), ex(\"Phil Salt\", X), ex(\"Matthew Short\", X), nw(\"Connor Esterhuizen\", S, WK, 66, 10),\n                nw(\"Wihan Lubbe\", S, WK, 62, 10), ex(\"Keshav Maharaj\", S), al(\"Lungisani Ngidi\", \"Lungi Ngidi\", S),\n                nw(\"Bryce Parsons\", S, AR, 60, 62), nw(\"Gideon Peters\", S, BWL, 20, 66), ex(\"Lizaad Williams\", S),\n                nw(\"Codi Yusuf\", S, BWL, 20, 66), ex(\"Rassie van der Dussen\", S), ex(\"Temba Bavuma\", S),\n                nw(\"Josh Breed\", S, AR, 54, 50, SPIN), ex(\"Ackeem Auguste\", X), ex(\"Keemo Paul\", X), ex(\"Dewald Brevis\", S),\n                nw(\"Bayanda Majola\", S, BWL, 20, 60, SPIN), ex(\"Andre Russell\", X)\n            )),\n            TeamDef(\"sa_sec\", \"Sunrisers Eastern Cape\", \"Sunrisers\", \"SEC\", GQEBERHA, listOf(\n                ex(\"Tristan Stubbs\", S), ex(\"Mitchell Marsh\", X), ex(\"Adam Milne\", X), ex(\"Rishad Hossain\", X), ex(\"Quinton de Kock\", S),\n                ex(\"Matthew Breetzke\", S), ex(\"Anrich Nortje\", S), nw(\"Mitchell van Buuren\", S, AR, 58, 56, SPIN),\n                nw(\"Jordan Hermann\", S, BAT, 68, 10), nw(\"Lewis Gregory\", X, AR, 56, 70), nw(\"Senuran Muthusamy\", S, AR, 56, 60, SPIN),\n                nw(\"Patrick Kruger\", S, AR, 58, 60), ex(\"James Coles\", X), nw(\"Lutho Sipamla\", S, BWL, 20, 74),\n                ex(\"Nandre Burger\", S), ex(\"Craig Overton\", X), nw(\"CJ King\", S, AR, 54, 58), nw(\"JP King\", S, AR, 56, 50),\n                ex(\"Marco Jansen\", S)\n            ))\n        )\n    }\n\n    fun isTeam(teamId: String): Boolean = DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = DEFS.find { it.id == teamId }?.shortName\n\n    fun homeGround(teamId: String): String = DEFS.find { it.id == teamId }?.home ?: NEWLANDS\n\n    val stadiums: List<Stadium> by lazy {\n        listOf(GQEBERHA, BOLAND, CENTURION, NEWLANDS, KINGSMEAD, WANDERERS).mapNotNull { StadiumData.getStadiumById(it) }\n    }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** The six franchises (strongest first); South Africans are tagged DOMESTIC, everybody else OVERSEAS (at most four play). */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val roster = CricketData.getAllTeams().flatMap { it.players }.associateBy { norm(it.name) }\n        val cpl = CplData.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val adt = AbuDhabiT10.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val lpl = LankaPremierLeague.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val ilt = InternationalLeagueT20.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val bbl = BigBashLeague.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val mlc = MajorLeagueCricket.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = DEFS.map { def ->\n            val players = def.squad.mapIndexed { index, slot ->\n                val id = \"${def.id}_${index + 1}\"\n                val key = norm(slot.lookup ?: slot.name)\n                val base = if (slot.spec == null) {\n                    roster[key] ?: cpl[key] ?: adt[key] ?: lpl[key] ?: ilt[key] ?: bbl[key] ?: mlc[key]\n                } else null\n                val player = if (base != null) {\n                    base.copy(id = id, teamId = def.id, name = slot.name)\n                } else {\n                    val s = slot.spec ?: NewSpec(PlayerRole.BATSMAN, 60, 20, BowlingStyle.PACE)\n                    Player(\n                        id = id, teamId = def.id, name = slot.name, role = s.role,\n                        battingRating = s.bat, bowlingRating = s.bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(s.role, s.bat, s.bowl),\n                        bowlingStyle = s.style\n                    )\n                }\n                tags[id] = slot.tag\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.code,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Pair(teams, tags)\n    }\n\n    // S Sunrisers EC, P Pretoria, D Durban, J Joburg, M MI Cape Town, R Paarl Royals: \"home away\". The home side's ground is the venue.\n    private val LEAGUE_FIXTURES = listOf(\n        \"S P\", \"R J\", \"P D\", \"M J\", \"D S\", \"M R\", \"D P\", \"J S\", \"R M\", \"P S\",\n        \"D R\", \"S J\", \"R P\", \"S M\", \"J D\", \"P R\", \"M D\", \"J R\", \"M S\", \"P J\",\n        \"D M\", \"R S\", \"J P\", \"S D\", \"J M\", \"R D\", \"P M\", \"D J\", \"S R\", \"M P\"\n    )\n\n    private val TEAM_OF = mapOf('S' to \"sa_sec\", 'P' to \"sa_pc\", 'D' to \"sa_dsg\", 'J' to \"sa_jsk\", 'M' to \"sa_mict\", 'R' to \"sa_pr\")\n\n    /** The league fixtures at the home sides' grounds, then Qualifier 1 (Paarl), the Eliminator and Qualifier 2 (Wanderers) and the Final (Newlands). */\n    fun buildSchedule(): List<TournamentFixture> {\n        val fixtures = ArrayList<TournamentFixture>()\n        LEAGUE_FIXTURES.forEachIndexed { index, code ->\n            val p = code.split(\" \")\n            val home = TEAM_OF.getValue(p[0][0])\n            fixtures.add(TournamentFixture(index, index + 1, CplData.LEAGUE, home, TEAM_OF.getValue(p[1][0]), homeGround(home)))\n        }\n        var next = fixtures.size\n        fun playoff(stage: String, ground: String, note: String) {\n            fixtures.add(TournamentFixture(next, next + 1, stage, null, null, ground, placeholder = note))\n            next++\n        }\n        playoff(\"Qualifier 1\", BOLAND, \"1st v 2nd in the table\")\n        playoff(\"Eliminator\", WANDERERS, \"3rd v 4th in the table\")\n        playoff(\"Qualifier 2\", WANDERERS, \"Loser of Qualifier 1 v winner of the Eliminator\")\n        playoff(\"Final\", NEWLANDS, \"Winners of Qualifier 1 and Qualifier 2\")\n        return fixtures\n    }\n\n    fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "SA20.md",
+      "mustNotExist": true,
+      "content": "# SA20 2027 (tournament)\n\nTournament > League tournaments > SA20 2027 (Betway SA20 Season 5, 17 January to 21 February 2027). Same pages, saving and tabs as the CPL.\n\n**Real facts used** (published July to October 2026): six teams (Durban's Super Giants, Joburg Super Kings, MI Cape Town, Paarl Royals,\nPretoria Capitals, Sunrisers Eastern Cape), the squads they ended the 7 October 2026 auction with (18 or 19 players, wildcards included;\nJoburg's wildcard was not yet named), and the fixture format: 30 league matches (every team hosts every other once, at its own ground), then\nQualifier 1 at Boland Park (Paarl), the Eliminator and Qualifier 2 at the Wanderers, and the Final at Newlands: 34 matches, T20.\n\n**Fixture order.** Who hosts whom is certain. The order of the first 16 matches follows the published list. For matches 17 to 30 the sources\ndisagreed on team names, so the order is reconstructed from dates and grounds: pairings and venues are right, an odd date may be swapped.\n\n**Rules used:** at most four overseas players in the XI. Not built: the league's bonus point (4 for a win, 1 more for a big run-rate win;\nthe game's table gives 2 a win) and the under-23 rule.\n\n**Players.** Anyone already in the game (roster or an earlier tournament) is copied with his ratings (68 of 113). The rest are new with\n**estimated ratings** (the `nw(...)` lines in `logic/Sa20.kt`). South Africans are tagged `DOMESTIC`, everybody else `OVERSEAS`\n(Andries Gous plays for the USA, so he counts as overseas). `al(...)` links Ottneil Baartman = Ottniel Baartman and Lungisani Ngidi = Lungi Ngidi.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: BigBashLeague.stadium(id) ?: MajorLeagueCricket.stadium(id)\n",
+      "replace": "?: BigBashLeague.stadium(id) ?: MajorLeagueCricket.stadium(id)\n            ?: Sa20.stadium(id)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: MajorLeagueCricket.shortNameOrNull(teamId) ?: IplData.shortName(teamId)\n",
+      "replace": "?: MajorLeagueCricket.shortNameOrNull(teamId)\n            ?: Sa20.shortNameOrNull(teamId) ?: IplData.shortName(teamId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "        else if (MajorLeagueCricket.isTeam(teamId)) MajorLeagueCricket.homeGround(teamId)\n",
+      "replace": "        else if (MajorLeagueCricket.isTeam(teamId)) MajorLeagueCricket.homeGround(teamId)\n        else if (Sa20.isTeam(teamId)) Sa20.homeGround(teamId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.MajorLeagueCricket\n",
+      "replace": "import com.cricketsim.logic.MajorLeagueCricket\nimport com.cricketsim.logic.Sa20\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    var mlcSaved by remember { mutableStateOf(false) } // is there a saved Major League Cricket tournament?\n",
+      "replace": "    var mlcSaved by remember { mutableStateOf(false) } // is there a saved Major League Cricket tournament?\n    var saSaved by remember { mutableStateOf(false) } // is there a saved SA20 tournament?\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"mlc\" -> mlcStore; else -> cplStore }\n",
+      "replace": "\"mlc\" -> mlcStore; \"sa20\" -> saStore; else -> cplStore }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"mlc\" -> mlcMatchStore; else -> cplMatchStore }\n",
+      "replace": "\"mlc\" -> mlcMatchStore; \"sa20\" -> saMatchStore; else -> cplMatchStore }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val mlcStore = remember { TournamentSaveStore(context, \"saved_tournament_mlc2026.json\") }\n",
+      "replace": "    val saStore = remember { TournamentSaveStore(context, \"saved_tournament_sa20_2027.json\") }\n    val saMatchStore = remember { MatchSaveStore(context, \"saved_sa20_match.json\") }\n    val mlcStore = remember { TournamentSaveStore(context, \"saved_tournament_mlc2026.json\") }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val mlcBuilt = remember { MajorLeagueCricket.buildTeams() }\n",
+      "replace": "    val mlcBuilt = remember { MajorLeagueCricket.buildTeams() }\n    val saBuilt = remember { Sa20.buildTeams() }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"mlc\" -> mlcBuilt; else -> cplBuilt }\n",
+      "replace": "\"mlc\" -> mlcBuilt; \"sa20\" -> saBuilt; else -> cplBuilt }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        mlcSaved = mlcStore.load() != null\n",
+      "replace": "        mlcSaved = mlcStore.load() != null\n        saSaved = saStore.load() != null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                mlcSaved = mlcSaved,\n",
+      "replace": "                mlcSaved = mlcSaved,\n                saSaved = saSaved,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onIpl = { page = TPage.Ipl },\n",
+      "replace": "                onSa20 = {\n                    // The SA20 has its own saved tournament and match slot too.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"sa20\"\n                    page = TPage.Adt\n                },\n                onIpl = { page = TPage.Ipl },\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val isMlc = kind == \"mlc\"\n",
+      "replace": "            val isMlc = kind == \"mlc\"\n            val isSa = kind == \"sa20\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isMlc -> MajorLeagueCricket.TOURNAMENT_NAME\n",
+      "replace": "                isMlc -> MajorLeagueCricket.TOURNAMENT_NAME\n                isSa -> Sa20.TOURNAMENT_NAME\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                if (isAdt || isLpl || isIlt || isBbl || isMlc) {\n",
+      "replace": "                if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        else -> mlcSaved = saved != null\n",
+      "replace": "                        isMlc -> mlcSaved = saved != null\n                        else -> saSaved = saved != null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    else -> \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"\n",
+      "replace": "                    isSa -> \"The SA20: the six real teams and their Season 5 squads, every team hosting every other at its own ground, \" +\n                        \"then Qualifier 1, the Eliminator, Qualifier 2 and the Final at Newlands. At most four overseas players in your XI.\"\n                    else -> \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"bbl\" || kind == \"mlc\") TPage.Adt else TPage.Cpl }\n",
+      "replace": "kind == \"bbl\" || kind == \"mlc\" || kind == \"sa20\") TPage.Adt else TPage.Cpl }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        \"mlc\" -> MajorLeagueCricket.newTournament(teamId, built)\n",
+      "replace": "                        \"mlc\" -> MajorLeagueCricket.newTournament(teamId, built)\n                        \"sa20\" -> Sa20.newTournament(teamId, built)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"adt10\", \"lpl\", \"ilt\", \"bbl\", \"mlc\" -> TPage.Adt;",
+      "replace": "\"adt10\", \"lpl\", \"ilt\", \"bbl\", \"mlc\", \"sa20\" -> TPage.Adt;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                MajorLeagueCricket.TOURNAMENT_ID -> MajorLeagueCricket.stadiums\n",
+      "replace": "                MajorLeagueCricket.TOURNAMENT_ID -> MajorLeagueCricket.stadiums\n                Sa20.TOURNAMENT_ID -> Sa20.stadiums\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "domesticLabel = when (kind) { \"lpl\" -> \"Sri Lanka\"; \"bbl\" -> \"Australia\"; else -> \"West Indies\" },\n",
+      "replace": "domesticLabel = when (kind) { \"lpl\" -> \"Sri Lanka\"; \"bbl\" -> \"Australia\"; \"sa20\" -> \"South Africa\"; else -> \"West Indies\" },\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    mlcSaved: Boolean,\n    onCpl: () -> Unit,\n    onAdt: () -> Unit,\n    onLpl: () -> Unit,\n    onIlt: () -> Unit,\n    onBbl: () -> Unit,\n    onMlc: () -> Unit,\n",
+      "replace": "    mlcSaved: Boolean,\n    saSaved: Boolean,\n    onCpl: () -> Unit,\n    onAdt: () -> Unit,\n    onLpl: () -> Unit,\n    onIlt: () -> Unit,\n    onBbl: () -> Unit,\n    onMlc: () -> Unit,\n    onSa20: () -> Unit,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"Major League Cricket 2026\",\n",
+      "replace": "            ChoiceRow(\n                title = \"SA20 2027\",\n                description = \"The six real teams and Season 5 squads: 34 matches from Gqeberha to the Final at Newlands.\" +\n                    if (saSaved) \" You have a saved tournament.\" else \"\",\n                enabled = true,\n                onClick = onSa20\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Major League Cricket 2026\",\n"
+    }
+  ]
+}
