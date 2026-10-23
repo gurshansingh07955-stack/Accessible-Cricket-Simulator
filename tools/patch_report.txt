@@ -1,6 +1,6 @@
-Patch run: 39879261684
-Timestamp (UTC): 2026-10-23T00:38:05Z
+Patch run: 39935009312
+Timestamp (UTC): 2026-10-23T09:52:36Z
 Result: OK
 -----
-Patch 2026-10-20-042-leagues-list-scrolls.json
-  applied 2 operation(s) to 1 file(s)
+Patch 2026-10-20-043-sa20-2027.json
+  applied 27 operation(s) to 4 file(s)

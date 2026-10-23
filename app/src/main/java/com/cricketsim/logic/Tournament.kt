@@ -161,6 +161,7 @@ object CplData {
     fun stadium(id: String): Stadium? =
         stadiums.find { it.id == id } ?: IplSeason.stadium(id) ?: AbuDhabiT10.stadium(id) ?: LankaPremierLeague.stadium(id)
             ?: InternationalLeagueT20.stadium(id) ?: BigBashLeague.stadium(id) ?: MajorLeagueCricket.stadium(id)
+            ?: Sa20.stadium(id)
 
     /** Grounds that are nobody's home: a few league matches are played there, as the real CPL tours. */
     private val NEUTRAL_VENUES = listOf("arnos-vale-st-vincent", "queens-park-oval", "national-stadium-grenada")
@@ -245,7 +246,8 @@ object CplData {
     fun shortName(teamId: String): String =
         DEFS.find { it.id == teamId }?.shortName ?: AbuDhabiT10.shortNameOrNull(teamId)
             ?: LankaPremierLeague.shortNameOrNull(teamId) ?: InternationalLeagueT20.shortNameOrNull(teamId)
-            ?: BigBashLeague.shortNameOrNull(teamId) ?: MajorLeagueCricket.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
+            ?: BigBashLeague.shortNameOrNull(teamId) ?: MajorLeagueCricket.shortNameOrNull(teamId)
+            ?: Sa20.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
 
     fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId
         ?: if (AbuDhabiT10.isTeam(teamId)) AbuDhabiT10.GROUND_ID
@@ -253,6 +255,7 @@ object CplData {
         else if (InternationalLeagueT20.isTeam(teamId)) InternationalLeagueT20.homeGround(teamId)
         else if (BigBashLeague.isTeam(teamId)) BigBashLeague.homeGround(teamId)
         else if (MajorLeagueCricket.isTeam(teamId)) MajorLeagueCricket.homeGround(teamId)
+        else if (Sa20.isTeam(teamId)) Sa20.homeGround(teamId)
         else if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else "kensington-oval"
 
     private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }
