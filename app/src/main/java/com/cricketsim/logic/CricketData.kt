@@ -89,11 +89,11 @@ object CricketData {
         id = UUID.randomUUID().toString(),
         teamId = teamId,
         name = name,
-        role = role,
+        role = PlayerProfiles.role(name, role),
         battingRating = battingRating,
         bowlingRating = bowlingRating,
-        fieldingRating = fieldingRatingOverride ?: deriveFieldingRating(role, battingRating, bowlingRating),
-        bowlingStyle = bowlingStyle
+        fieldingRating = fieldingRatingOverride ?: deriveFieldingRating(PlayerProfiles.role(name, role), battingRating, bowlingRating),
+        bowlingStyle = PlayerProfiles.style(name, bowlingStyle)
     )
 
     // Shorthand so the roster table below reads close to one player per

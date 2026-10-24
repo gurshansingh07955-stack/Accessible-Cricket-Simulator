@@ -275,10 +275,10 @@ object CplData {
                 } else {
                     val s = entry.spec ?: NewPlayer(PlayerRole.BATSMAN, 60, 20, BowlingStyle.PACE)
                     Player(
-                        id = id, teamId = def.id, name = entry.name, role = s.role,
+                        id = id, teamId = def.id, name = entry.name, role = PlayerProfiles.role(entry.name, s.role),
                         battingRating = s.bat, bowlingRating = s.bowl,
-                        fieldingRating = CricketData.deriveFieldingRating(s.role, s.bat, s.bowl),
-                        bowlingStyle = s.style
+                        fieldingRating = CricketData.deriveFieldingRating(PlayerProfiles.role(entry.name, s.role), s.bat, s.bowl),
+                        bowlingStyle = PlayerProfiles.style(entry.name, s.style)
                     )
                 }
                 tags[id] = entry.tag

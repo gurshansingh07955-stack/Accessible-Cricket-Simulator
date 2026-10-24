@@ -101,13 +101,13 @@ object IplData {
                 )
                 add(player, f[2], capped, base, f[6])
             } else if (f.size >= 10) {
-                val role = roleOf(f[3])
+                val role = PlayerProfiles.role(f[1], roleOf(f[3]))
                 val bat = f[7].toIntOrNull() ?: 50
                 val bowl = f[8].toIntOrNull() ?: 20
                 val player = Player(
                     id = "", teamId = "", name = f[1], role = role, battingRating = bat, bowlingRating = bowl,
                     fieldingRating = CricketData.deriveFieldingRating(role, bat, bowl),
-                    bowlingStyle = if (f[9] == "S") BowlingStyle.SPIN else BowlingStyle.PACE
+                    bowlingStyle = PlayerProfiles.style(f[1], if (f[9] == "S") BowlingStyle.SPIN else BowlingStyle.PACE)
                 )
                 add(player, f[2], capped, base, f[6])
             }

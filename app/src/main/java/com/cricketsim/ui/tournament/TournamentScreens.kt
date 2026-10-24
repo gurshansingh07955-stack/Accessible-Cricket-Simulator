@@ -60,6 +60,7 @@ import com.cricketsim.logic.ImpactPlayer
 import com.cricketsim.logic.ImpactSetup
 import com.cricketsim.logic.CplSimulator
 import com.cricketsim.logic.MatchFormat
+import com.cricketsim.logic.PlayerProfiles
 import com.cricketsim.logic.PlayerRole
 import com.cricketsim.logic.SimMode
 import com.cricketsim.logic.SquadTag
@@ -1008,19 +1009,30 @@ private fun SquadPage(
         )
         Spacer(modifier = Modifier.height(12.dp))
         LazyColumn(modifier = Modifier.weight(1f)) {
-            items(team.players, key = { it.id }) { p ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                        .semantics(mergeDescendants = true) {}
-                ) {
-                    Text(text = p.name, style = MaterialTheme.typography.titleMedium)
+            PlayerProfiles.grouped(team.players).forEach { (title, groupPlayers) ->
+                item(key = "group_$title") {
                     Text(
-                        text = "${roleLabel(p.role)}. ${if (showOrigin) tagLabelFor(tags[p.id], domesticLabel, breakoutLabel) + ". " else ""}Batting ${p.battingRating}, bowling ${p.bowlingRating}.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "$title (${groupPlayers.size})",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier
+                            .padding(top = 12.dp, bottom = 4.dp)
+                            .semantics { heading() }
                     )
+                }
+                items(groupPlayers, key = { it.id }) { p ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .semantics(mergeDescendants = true) {}
+                    ) {
+                        Text(text = p.name, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "${PlayerProfiles.roleLabel(PlayerProfiles.displayRole(p))}. ${if (showOrigin) tagLabelFor(tags[p.id], domesticLabel, breakoutLabel) + ". " else ""}${PlayerProfiles.battingText(p)} ${PlayerProfiles.bowlingText(p)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

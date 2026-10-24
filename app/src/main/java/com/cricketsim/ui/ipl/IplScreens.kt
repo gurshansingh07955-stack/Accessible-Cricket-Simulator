@@ -59,6 +59,7 @@ import com.cricketsim.logic.IplAuction
 import com.cricketsim.logic.IplAuctionState
 import com.cricketsim.logic.IplData
 import com.cricketsim.logic.LotState
+import com.cricketsim.logic.PlayerProfiles
 import com.cricketsim.persistence.IplSaveStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -964,14 +965,27 @@ private fun AllSquadsPage(state: IplAuctionState, onBack: () -> Unit) {
             if (squad.isEmpty()) {
                 item { Text("No players bought yet.", style = MaterialTheme.typography.bodyLarge) }
             }
-            items(squad.size) { i ->
-                val p = squad[i]
-                Text(
-                    text = "${i + 1}. ${p.player.name}, ${IplAuction.roleText(p)}" + (if (p.overseas) ", overseas" else "") +
-                        ". Bought for ${IplAuction.priceText(paidFor(state, p))}.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 5.dp)
-                )
+            PlayerProfiles.groupedBy(squad) { it.player }.forEach { (title, list) ->
+                item(key = "group_$title") {
+                    Text(
+                        text = "$title (${list.size})",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier
+                            .padding(top = 12.dp, bottom = 4.dp)
+                            .semantics { heading() }
+                    )
+                }
+                items(list.size) { i ->
+                    val p = list[i]
+                    Text(
+                        text = "${p.player.name}, ${PlayerProfiles.roleLabel(PlayerProfiles.displayRole(p.player))}" +
+                            (if (p.overseas) ", overseas" else "") + ". " +
+                            "${PlayerProfiles.battingText(p.player)} ${PlayerProfiles.bowlingText(p.player)} " +
+                            "Bought for ${IplAuction.priceText(paidFor(state, p))}.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(vertical = 5.dp)
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.height(8.dp))

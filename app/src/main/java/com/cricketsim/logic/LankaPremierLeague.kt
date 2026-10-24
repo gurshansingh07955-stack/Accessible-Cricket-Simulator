@@ -133,10 +133,10 @@ object LankaPremierLeague {
                 } else {
                     val s = slot.spec ?: NewSpec(PlayerRole.BATSMAN, 60, 20, BowlingStyle.PACE)
                     Player(
-                        id = id, teamId = def.id, name = slot.name, role = s.role,
+                        id = id, teamId = def.id, name = slot.name, role = PlayerProfiles.role(slot.name, s.role),
                         battingRating = s.bat, bowlingRating = s.bowl,
-                        fieldingRating = CricketData.deriveFieldingRating(s.role, s.bat, s.bowl),
-                        bowlingStyle = s.style
+                        fieldingRating = CricketData.deriveFieldingRating(PlayerProfiles.role(slot.name, s.role), s.bat, s.bowl),
+                        bowlingStyle = PlayerProfiles.style(slot.name, s.style)
                     )
                 }
                 tags[id] = slot.tag

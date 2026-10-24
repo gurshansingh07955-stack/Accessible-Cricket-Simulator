@@ -28,6 +28,7 @@ import com.cricketsim.logic.BowlingStyle
 import com.cricketsim.logic.ImpactPlayer
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.Player
+import com.cricketsim.logic.PlayerProfiles
 import com.cricketsim.logic.PlayerRole
 
 /**
@@ -49,7 +50,7 @@ private fun roleText(p: Player): String = when (p.role) {
 }
 
 private fun playerLine(p: Player, overseas: Boolean): String =
-    "${p.name}, ${roleText(p)}. Batting ${p.battingRating}, bowling ${p.bowlingRating}." + (if (overseas) " Overseas." else "")
+    "${p.name}, ${roleText(p)}. ${PlayerProfiles.battingText(p)} ${PlayerProfiles.bowlingText(p)}" + (if (overseas) " Overseas." else "")
 
 /** Before the toss: the five substitutes. */
 @Composable

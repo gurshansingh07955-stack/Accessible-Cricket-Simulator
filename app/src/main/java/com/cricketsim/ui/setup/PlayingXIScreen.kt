@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.CricketData
 import com.cricketsim.logic.Player
+import com.cricketsim.logic.PlayerProfiles
 import com.cricketsim.logic.PlayerRole
 import com.cricketsim.logic.Team
 
@@ -214,21 +215,32 @@ private fun SquadSelectionStep(
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn(modifier = Modifier.weight(1f)) {
-            items(team.players, key = { it.id }) { player ->
-                val isSelected = player.id in selectedIds
-                // Once 11 are checked, unchecked players are disabled
-                // rather than hidden — a disabled-but-visible row lets a
-                // screen-reader user understand WHY they can't add an
-                // 12th player, instead of the list mysteriously
-                // shrinking around them.
-                val enabled = isSelected || selectedIds.size < PLAYING_XI_SIZE
-                PlayerCheckRow(
-                    player = player,
-                    isSelected = isSelected,
-                    enabled = enabled,
-                    onToggle = { onToggle(player.id) }
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+            // Split under headings (Batsmen, Wicketkeepers, All-rounders, Bowlers), like a squad
+            // page: a screen-reader user can jump from heading to heading.
+            PlayerProfiles.grouped(team.players).forEach { (title, groupPlayers) ->
+                item(key = "group_$title") {
+                    Text(
+                        text = "$title (${groupPlayers.size})",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier
+                            .padding(top = 12.dp, bottom = 4.dp)
+                            .semantics { heading() }
+                    )
+                }
+                items(groupPlayers, key = { it.id }) { player ->
+                    val isSelected = player.id in selectedIds
+                    // Once 11 are checked, unchecked players are disabled
+                    // rather than hidden, so a screen-reader user can tell WHY
+                    // they cannot add a 12th player.
+                    val enabled = isSelected || selectedIds.size < PLAYING_XI_SIZE
+                    PlayerCheckRow(
+                        player = player,
+                        isSelected = isSelected,
+                        enabled = enabled,
+                        onToggle = { onToggle(player.id) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
             }
         }
 
@@ -269,7 +281,11 @@ private fun PlayerCheckRow(player: Player, isSelected: Boolean, enabled: Boolean
         Column {
             Text(text = player.name, style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "${roleLabel(player.role)} \u00b7 Bat ${player.battingRating} \u00b7 Bowl ${player.bowlingRating}",
+                text = "${PlayerProfiles.roleLabel(PlayerProfiles.displayRole(player))}. ${PlayerProfiles.battingText(player)}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                text = PlayerProfiles.bowlingText(player),
                 style = MaterialTheme.typography.bodySmall
             )
         }
