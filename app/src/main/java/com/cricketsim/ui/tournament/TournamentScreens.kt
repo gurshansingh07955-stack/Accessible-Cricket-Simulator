@@ -56,6 +56,7 @@ import com.cricketsim.logic.IplSeason
 import com.cricketsim.logic.LankaPremierLeague
 import com.cricketsim.logic.MajorLeagueCricket
 import com.cricketsim.logic.Sa20
+import com.cricketsim.logic.AsiaCup
 import com.cricketsim.logic.ChampionsTrophy
 import com.cricketsim.logic.T20WorldCup
 import com.cricketsim.logic.ImpactPlayer
@@ -174,8 +175,10 @@ fun TournamentFlow(onExit: () -> Unit) {
     val wcMatchStore = remember { MatchSaveStore(context, "saved_t20wc_match.json") }
     val ctStore = remember { TournamentSaveStore(context, "saved_tournament_ct2025.json") }
     val ctMatchStore = remember { MatchSaveStore(context, "saved_ct2025_match.json") }
-    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; "ilt" -> iltStore; "bbl" -> bblStore; "mlc" -> mlcStore; "sa20" -> saStore; "wc2026" -> wcStore; "ct2025" -> ctStore; else -> cplStore }
-    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; "ilt" -> iltMatchStore; "bbl" -> bblMatchStore; "mlc" -> mlcMatchStore; "sa20" -> saMatchStore; "wc2026" -> wcMatchStore; "ct2025" -> ctMatchStore; else -> cplMatchStore }
+    val acStore = remember { TournamentSaveStore(context, "saved_tournament_asia2025.json") }
+    val acMatchStore = remember { MatchSaveStore(context, "saved_asia2025_match.json") }
+    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; "ilt" -> iltStore; "bbl" -> bblStore; "mlc" -> mlcStore; "sa20" -> saStore; "wc2026" -> wcStore; "ct2025" -> ctStore; "asia2025" -> acStore; else -> cplStore }
+    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; "ilt" -> iltMatchStore; "bbl" -> bblMatchStore; "mlc" -> mlcMatchStore; "sa20" -> saMatchStore; "wc2026" -> wcMatchStore; "ct2025" -> ctMatchStore; "asia2025" -> acMatchStore; else -> cplMatchStore }
     val scope = rememberCoroutineScope()
     val cplBuilt = remember { CplData.buildTeams() }
     val adtBuilt = remember { AbuDhabiT10.buildTeams() }
@@ -187,7 +190,8 @@ fun TournamentFlow(onExit: () -> Unit) {
     val saBuilt = remember { Sa20.buildTeams() }
     val wcBuilt = remember { T20WorldCup.buildTeams() }
     val ctBuilt = remember { ChampionsTrophy.buildTeams() }
-    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; "ilt" -> iltBuilt; "bbl" -> bblBuilt; "mlc" -> mlcBuilt; "sa20" -> saBuilt; "wc2026" -> wcBuilt; "ct2025" -> ctBuilt; else -> cplBuilt }
+    val acBuilt = remember { AsiaCup.buildTeams() }
+    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; "ilt" -> iltBuilt; "bbl" -> bblBuilt; "mlc" -> mlcBuilt; "sa20" -> saBuilt; "wc2026" -> wcBuilt; "ct2025" -> ctBuilt; "asia2025" -> acBuilt; else -> cplBuilt }
 
     var page by remember { mutableStateOf<TPage>(TPage.Menu) }
     // The "menu open" sound for each menu-type page (not the toss, the match, the celebration or the IPL
@@ -299,6 +303,13 @@ fun TournamentFlow(onExit: () -> Unit) {
                     pendingMatch = null
                     loaded = false
                     kind = "ct2025"
+                    page = TPage.Adt
+                },
+                onAsiaCup = {
+                    saved = null
+                    pendingMatch = null
+                    loaded = false
+                    kind = "asia2025"
                     page = TPage.Adt
                 },
                 onBack = back
@@ -419,6 +430,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             val isSa = kind == "sa20"
             val isWc = kind == "wc2026"
             val isCt = kind == "ct2025"
+            val isAc = kind == "asia2025"
             val tournamentLabel = when {
                 isAdt -> AbuDhabiT10.TOURNAMENT_NAME
                 isLpl -> LankaPremierLeague.TOURNAMENT_NAME
@@ -428,10 +440,11 @@ fun TournamentFlow(onExit: () -> Unit) {
                 isSa -> Sa20.TOURNAMENT_NAME
                 isWc -> T20WorldCup.TOURNAMENT_NAME
                 isCt -> ChampionsTrophy.TOURNAMENT_NAME
+                isAc -> AsiaCup.TOURNAMENT_NAME
                 else -> "CPL 2026"
             }
             val back = {
-                if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc || isCt) {
+                if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc || isCt || isAc) {
                     // Back to the league list: the CPL is the tournament in hand again.
                     when {
                         isAdt -> adtSaved = saved != null
@@ -439,7 +452,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                         isIlt -> iltSaved = saved != null
                         isBbl -> bblSaved = saved != null
                         isMlc -> mlcSaved = saved != null
-                        isWc || isCt -> Unit
+                        isWc || isCt || isAc -> Unit
                         else -> saSaved = saved != null
                     }
                     saved = null
@@ -447,7 +460,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                     loaded = false
                     kind = "cpl"
                 }
-                page = if (isWc || isCt) TPage.International else TPage.Leagues
+                page = if (isWc || isCt || isAc) TPage.International else TPage.Leagues
             }
             BackHandler(onBack = back)
             CplPage(
@@ -467,6 +480,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                     isSa -> "The SA20: the six real teams and their Season 5 squads, every team hosting every other at its own ground, " +
                         "then Qualifier 1, the Eliminator, Qualifier 2 and the Final at Newlands. At most four overseas players in your XI."
                     isWc -> "The ICC Men's T20 World Cup 2026: the 20 real teams and squads in their four groups, the real group fixtures across India and Sri Lanka, then the Super 8, the semi-finals and the Final at Ahmedabad."
+                    isAc -> "The men's T20 Asia Cup 2025: the eight real teams and squads in two groups of four, the real group fixtures in Dubai and Abu Dhabi, then the Super 4 and the Final."
                     isCt -> "The ICC Champions Trophy 2025, 50 overs a side: the eight real teams and 15-man squads in two groups of four, the real group fixtures in Pakistan and Dubai, then the semi-finals and the Final."
                     else -> "The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval."
                 },
@@ -511,7 +525,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             }
         }
         is TPage.TeamSelect -> {
-            val back = { page = if (kind == "adt10" || kind == "lpl" || kind == "ilt" || kind == "bbl" || kind == "mlc" || kind == "sa20" || kind == "wc2026" || kind == "ct2025") TPage.Adt else TPage.Cpl }
+            val back = { page = if (kind == "adt10" || kind == "lpl" || kind == "ilt" || kind == "bbl" || kind == "mlc" || kind == "sa20" || kind == "wc2026" || kind == "ct2025" || kind == "asia2025") TPage.Adt else TPage.Cpl }
             BackHandler(onBack = back)
             TeamSelectPage(
                 teams = built.first,
@@ -526,6 +540,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                         "sa20" -> Sa20.newTournament(teamId, built)
                         "wc2026" -> T20WorldCup.newTournament(teamId, built)
                         "ct2025" -> ChampionsTrophy.newTournament(teamId, built)
+                        "asia2025" -> AsiaCup.newTournament(teamId, built)
                         else -> CplData.newTournament(teamId, built, Random.Default)
                     }
                     saved = state
@@ -541,7 +556,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             val team = built.first.find { it.id == current.teamId }
             if (team != null) {
                 SquadPage(
-                    team = team, tags = built.second, showOrigin = kind != "adt10" && kind != "wc2026" && kind != "ct2025",
+                    team = team, tags = built.second, showOrigin = kind != "adt10" && kind != "wc2026" && kind != "ct2025" && kind != "asia2025",
                     domesticLabel = when (kind) { "lpl" -> "Sri Lanka"; "bbl" -> "Australia"; "sa20" -> "South Africa"; else -> "West Indies" },
                     breakoutLabel = if (kind == "lpl") "Sri Lanka, under 23" else "Breakout player",
                     onBack = back
@@ -549,7 +564,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             } else back()
         }
         is TPage.Hub -> {
-            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10", "lpl", "ilt", "bbl", "mlc", "sa20", "wc2026", "ct2025" -> TPage.Adt; else -> TPage.Cpl } }
+            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10", "lpl", "ilt", "bbl", "mlc", "sa20", "wc2026", "ct2025", "asia2025" -> TPage.Adt; else -> TPage.Cpl } }
             BackHandler(onBack = back)
             val state = saved
             if (state != null) {
@@ -829,7 +844,7 @@ private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onBack: 
         PageTitle("Tournament")
         Spacer(modifier = Modifier.height(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            ChoiceRow("International tournament", "The T20 World Cup 2026 and the Champions Trophy 2025, with the real teams, squads and fixtures.", enabled = true, onClick = onInternational)
+            ChoiceRow("International tournament", "The T20 World Cup 2026, the Champions Trophy 2025 and the Asia Cup 2025, with the real teams, squads and fixtures.", enabled = true, onClick = onInternational)
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow("League tournament", "Play a full league season, saved as you go.", enabled = true, onClick = onLeague)
             Spacer(modifier = Modifier.height(12.dp))
@@ -843,7 +858,7 @@ private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onBack: 
 }
 
 @Composable
-private fun InternationalPage(onWorldCup: () -> Unit, onChampionsTrophy: () -> Unit, onBack: () -> Unit) {
+private fun InternationalPage(onWorldCup: () -> Unit, onChampionsTrophy: () -> Unit, onAsiaCup: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         PageTitle("International tournaments")
         Spacer(modifier = Modifier.height(16.dp))
@@ -860,6 +875,13 @@ private fun InternationalPage(onWorldCup: () -> Unit, onChampionsTrophy: () -> U
                 description = "50 overs a side: eight teams in two groups, the real fixtures in Pakistan and Dubai, semi-finals and Final.",
                 enabled = true,
                 onClick = onChampionsTrophy
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ChoiceRow(
+                title = "Asia Cup 2025",
+                description = "T20, the eight real teams in two groups, the Super 4 and the Final, in Dubai and Abu Dhabi.",
+                enabled = true,
+                onClick = onAsiaCup
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -1416,7 +1438,7 @@ private fun FixtureCard(state: TournamentState, f: TournamentFixture, onScorecar
 @Composable
 private fun TableTab(state: TournamentState) {
     // The World Cup has a table for every group, in its own file.
-    if (state.tournamentId == T20WorldCup.TOURNAMENT_ID || state.tournamentId == ChampionsTrophy.TOURNAMENT_ID) {
+    if (state.tournamentId == T20WorldCup.TOURNAMENT_ID || state.tournamentId == ChampionsTrophy.TOURNAMENT_ID || state.tournamentId == AsiaCup.TOURNAMENT_ID) {
         WorldCupTableTab(state)
         return
     }
@@ -1482,6 +1504,7 @@ private fun VenuesTab(state: TournamentState) {
                 Sa20.TOURNAMENT_ID -> Sa20.stadiums
                 T20WorldCup.TOURNAMENT_ID -> T20WorldCup.stadiums
                 ChampionsTrophy.TOURNAMENT_ID -> ChampionsTrophy.stadiums
+                AsiaCup.TOURNAMENT_ID -> AsiaCup.stadiums
                 else -> CplData.stadiums
             },
             key = { it.id }
