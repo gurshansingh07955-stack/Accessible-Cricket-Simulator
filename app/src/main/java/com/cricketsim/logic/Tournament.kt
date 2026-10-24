@@ -161,7 +161,7 @@ object CplData {
     fun stadium(id: String): Stadium? =
         stadiums.find { it.id == id } ?: IplSeason.stadium(id) ?: AbuDhabiT10.stadium(id) ?: LankaPremierLeague.stadium(id)
             ?: InternationalLeagueT20.stadium(id) ?: BigBashLeague.stadium(id) ?: MajorLeagueCricket.stadium(id)
-            ?: Sa20.stadium(id)
+            ?: Sa20.stadium(id) ?: T20WorldCup.stadium(id)
 
     /** Grounds that are nobody's home: a few league matches are played there, as the real CPL tours. */
     private val NEUTRAL_VENUES = listOf("arnos-vale-st-vincent", "queens-park-oval", "national-stadium-grenada")
@@ -247,7 +247,7 @@ object CplData {
         DEFS.find { it.id == teamId }?.shortName ?: AbuDhabiT10.shortNameOrNull(teamId)
             ?: LankaPremierLeague.shortNameOrNull(teamId) ?: InternationalLeagueT20.shortNameOrNull(teamId)
             ?: BigBashLeague.shortNameOrNull(teamId) ?: MajorLeagueCricket.shortNameOrNull(teamId)
-            ?: Sa20.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
+            ?: Sa20.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
 
     fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId
         ?: if (AbuDhabiT10.isTeam(teamId)) AbuDhabiT10.GROUND_ID
@@ -256,6 +256,7 @@ object CplData {
         else if (BigBashLeague.isTeam(teamId)) BigBashLeague.homeGround(teamId)
         else if (MajorLeagueCricket.isTeam(teamId)) MajorLeagueCricket.homeGround(teamId)
         else if (Sa20.isTeam(teamId)) Sa20.homeGround(teamId)
+        else if (T20WorldCup.isTeam(teamId)) "" // national teams have no home ground
         else if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else "kensington-oval"
 
     private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }
@@ -369,7 +370,7 @@ object CplData {
     // ---- Points table -------------------------------------------------------------------------
 
     /** League matches only: 2 points for a win, 1 each for no result; run rate counts a full 20 overs when all out. */
-    fun standings(state: TournamentState): List<StandingRow> {
+    fun standings(state: TournamentState, stage: String = LEAGUE): List<StandingRow> {
         class Acc {
             var played = 0
             var won = 0
@@ -382,7 +383,7 @@ object CplData {
         }
         val acc = state.teams.associate { it.id to Acc() }
         for (f in state.fixtures) {
-            if (f.stage != LEAGUE) continue
+            if (f.stage != stage) continue
             val r = f.result ?: continue
             val home = f.homeId ?: continue
             val away = f.awayId ?: continue

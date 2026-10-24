@@ -472,6 +472,8 @@ object CplSimulator {
 
     /** Fills in the play-offs as their teams become known. Safe to call after every match. */
     fun advancePlayoffs(state: TournamentState): TournamentState {
+        // The T20 World Cup has groups, a Super 8 and semi-finals of its own.
+        if (state.tournamentId == T20WorldCup.TOURNAMENT_ID) return T20WorldCup.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
         val table = CplData.standings(state)

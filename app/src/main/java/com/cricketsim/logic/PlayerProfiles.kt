@@ -27,7 +27,7 @@ object PlayerProfiles {
         "Left-arm fast", "Left-arm fast-medium", "Left-arm medium", "Left-arm medium-fast",
         "Left-arm orthodox", "Left-arm wrist spin", "Right-arm fast", "Right-arm fast-medium",
         "Right-arm leg break", "Right-arm medium", "Right-arm medium-fast", "Right-arm off break",
-        "Right-arm spin"
+        "Right-arm spin", "Left-arm off break", "Left-arm leg break"
     )
 
     private fun key(name: String): String {
@@ -127,6 +127,92 @@ object PlayerProfiles {
     }
 
     private val CHUNKS: List<String> = listOf(
+        """
+Bernard Scholtz|R|b4|-|-
+Gerhard Erasmus|R|b11|-|-
+JJ Smit|R|b3|-|-
+Jan Nicol Loftie-Eaton|L|b2|-|-
+Malan Kruger|R|-|-|-
+Dylan Leicher|R|b9|-|-
+Willem Myburgh|R|b6|-|-
+Jack Brassell|R|b9|-|-
+Louren Steenkamp|R|b11|-|-
+Zane Green|L|-|-|-
+Jan Frylinck|L|b3|-|-
+Max Heingo|R|b9|-|-
+Jan Balt|L|b13|-|-
+Ruben Trumpelmann|R|b1|-|-
+Alexander Volschenk|R|b2|-|-
+Timm van der Gugten|R|b10|-|-
+Zach Lion-Cachet|R|b11|-|-
+Colin Ackermann|R|b11|-|-
+Roelof van der Merwe|R|b4|-|-
+Salman Mirza|R|b2|-|-
+Tim Tector|R|b11|-|-
+Sam Topping|L|-|-|-
+Ben Calitz|L|b12|-|-
+Hammad Mirza|R|-|-|-
+Jay Odedra|R|b11|-|-
+Aamir Kaleem|L|b4|-|-
+Jatinder Singh|R|b11|-|-
+Shah Faisal|L|b3|-|-
+Karan Sonavale|R|b11|-|-
+Sufyan Mehmood|L|b9|-|-
+Ashish Odedara|R|b5|-|-
+Shafiq Jan|R|b9|-|-
+Jiten Ramanandi|L|b2|-|-
+Mohammad Nadeem|R|b10|-|-
+Graeme Cremer|R|b8|-|-
+Ben Curran|L|b11|-|-
+Tinotenda Maposa|R|b9|-|-
+Brad Evans|R|b6|-|-
+Josh Tongue|R|b7|-|-
+Liam Dawson|R|b4|-|-
+Grant Stewart|R|b10|-|-
+Gian-Piero Meade|R|b10|-|-
+Jaspreet Singh|R|b7|-|-
+Anthony Mosca|R|-|-|-
+Syed Naqvi|R|b10|-|-
+Zain Ali|R|b9|-|-
+JJ Smuts|R|b4|-|-
+Marcus Campopiano|R|b11|-|-
+Harry Manenti|R|b10|-|-
+Ali Hasan|L|b1|-|-
+Thomas Draca|R|b9|-|-
+Justin Mosca|L|-|-|-
+Wayne Madsen|R|b11|-|-
+Crishan Kalugamage|R|b8|-|-
+Lokesh Bam|R|b9|-|-
+Nandan Yadav|R|b10|-|-
+Sher Malla|L|b11|-|-
+Basir Ahamad|L|b4|-|-
+Zainullah Ihsan|R|b9|-|-
+Oliver Davidson|L|b4|-|-
+Finlay McCreath|R|b10|-|-
+Tom Bruce|R|b11|-|-
+Jasper Davidson|R|b6|-|-
+Ijaz Ahmad Ahmadzai|R|b9|-|-
+Shreyas Movva|R|-|-|-
+Kaleem Sana|R|b3|-|-
+Ansh Patel|R|b5|-|-
+Ajayveer Hundal|R|b9|-|-
+Jaskaran Singh|R|b10|-|-
+Harsh Thaker|R|b11|-|-
+Dillon Heyliger|R|b10|-|-
+Saad Bin Zafar|L|b4|-|-
+Navneet Dhaliwal|R|b9|-|-
+Ravinderpal Singh|R|b9|-|-
+Shivam Sharma|R|b11|-|-
+Kanwarpal Tathgur|R|-|-|-
+Nicholas Kirton|L|b11|-|-
+Dilpreet Bajwa|R|b11|-|-
+Yuvraj Samra|L|b9|-|-
+Aryansh Sharma|R|-|-|-
+Mayank Kumar|R|-|-|-
+Sohaib Khan|R|-|-|-
+Syed Haider|R|-|-|-
+Muhammad Farooq|R|b8|-|-
+""",
         """
 Rohit Sharma|R|b11|-|-
 Yashasvi Jaiswal|L|b8|-|S
