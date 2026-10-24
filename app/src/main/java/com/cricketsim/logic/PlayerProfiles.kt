@@ -128,6 +128,13 @@ object PlayerProfiles {
 
     private val CHUNKS: List<String> = listOf(
         """
+Mohammad Hasnain|R|b6|-|-
+Tayyab Tahir|R|b8|-|-
+Nahid Rana|R|b6|-|-
+Nathan Smith|R|b10|-|-
+Naveed Zadran|R|b9|-|-
+""",
+        """
 Bernard Scholtz|R|b4|-|-
 Gerhard Erasmus|R|b11|-|-
 JJ Smit|R|b3|-|-

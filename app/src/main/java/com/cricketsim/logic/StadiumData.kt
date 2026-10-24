@@ -229,6 +229,14 @@ object StadiumData {
             climate = StadiumClimate(0.02, 35, 30, 12, "Hot and dry with almost no rain.")
         ),
         Stadium(
+            id = "national-stadium-karachi", name = "National Stadium", city = "Karachi", country = "Pakistan",
+            homeTeamIds = listOf("team_pak"),
+            pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 10, dewFactor = 0.5,
+            avgT20FirstInningsScore = 160,
+            climate = StadiumClimate(0.03, 60, 27, 14, "Mild and mostly dry with a sea breeze.")
+        ),
+        Stadium(
             id = "sheikh-zayed", name = "Sheikh Zayed Stadium", city = "Abu Dhabi", country = "UAE",
             homeTeamIds = listOf("team_uae"),
             pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",

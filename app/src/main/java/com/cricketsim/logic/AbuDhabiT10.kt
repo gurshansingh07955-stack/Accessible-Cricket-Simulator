@@ -102,10 +102,18 @@ object AbuDhabiT10 {
     val stadiums: List<Stadium> by lazy { listOfNotNull(StadiumData.getStadiumById(GROUND_ID)) }
 
     /** 10 overs a side here; the CPL and the IPL are T20. */
-    fun formatFor(tournamentId: String?): MatchFormat = if (tournamentId == TOURNAMENT_ID) MatchFormat.T10 else MatchFormat.T20
+    fun formatFor(tournamentId: String?): MatchFormat = when (tournamentId) {
+        TOURNAMENT_ID -> MatchFormat.T10
+        ChampionsTrophy.TOURNAMENT_ID -> MatchFormat.ODI // the Champions Trophy is 50 overs a side
+        else -> MatchFormat.T20
+    }
 
     /** Balls in a full innings, for the net run rate (a side bowled out counts the full quota). */
-    fun fullInningsBalls(tournamentId: String): Int = if (tournamentId == TOURNAMENT_ID) 60 else 120
+    fun fullInningsBalls(tournamentId: String): Int = when (tournamentId) {
+        TOURNAMENT_ID -> 60
+        ChampionsTrophy.TOURNAMENT_ID -> 300
+        else -> 120
+    }
 
     private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }
 

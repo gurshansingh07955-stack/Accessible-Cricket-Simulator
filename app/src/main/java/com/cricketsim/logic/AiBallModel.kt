@@ -59,6 +59,16 @@ object AiBallModel {
     private const val T10_RUNS = 1.05
     private const val MAX_RUN_OUTS = 2
 
+    // A 50-over innings (limit of 40 overs or more): the powerplay is the first 10 overs, the death the last 10,
+    // and every ball is worth less than in a T20 (fewer boundaries and wickets, more dots). Measured with a node
+    // model of this method: about 295 runs and 7 to 8 wickets a side (the same model gives 165 for the T20 that
+    // plays about 150 here). Turn these four to change ODI scoring: ODI_BOUNDARY and ODI_RUNS for runs,
+    // ODI_WICKET for wickets, ODI_DOT for how quiet the middle overs are.
+    private const val ODI_BOUNDARY = 0.62
+    private const val ODI_WICKET = 0.60
+    private const val ODI_DOT = 1.30
+    private const val ODI_RUNS = 0.98
+
     fun sample(state: MatchState, stadium: Stadium, random: Random): BallOutcome {
         val striker = state.currentBatsmen.first
         val bowler = state.currentBowler
@@ -100,11 +110,13 @@ object AiBallModel {
         val fraction = balls.toDouble() / (limit * 6)
         // The Big Bash: a four-over powerplay, and the Power Surge the batting side usually takes (overs 15 and 16).
         val bigBash = state.surge != null && limit >= 15
-        val powerplayEnd = if (bigBash) 0.2 else 0.3
+        val odi = limit >= 40
+        val powerplayEnd = if (bigBash || odi) 0.2 else 0.3
+        val middleEnd = if (odi) 0.8 else 0.75
         val inSurge = bigBash && balls >= 84 && balls < 96
         when {
             fraction < powerplayEnd || inSurge -> { fBoundary *= 1.15; fDot *= 0.95 }
-            fraction < 0.75 -> { fBoundary *= 0.85; fRuns *= 1.08; fWicket *= 0.95 }
+            fraction < middleEnd -> { fBoundary *= 0.85; fRuns *= 1.08; fWicket *= 0.95 }
             else -> { fBoundary *= 1.4; fWicket *= 1.3; fDot *= 0.85 }
         }
 
@@ -114,6 +126,14 @@ object AiBallModel {
             fWicket *= T10_WICKET
             fDot *= T10_DOT
             fRuns *= T10_RUNS
+        }
+
+        // The 50-over game: the same dice, played over five times as many balls.
+        if (odi) {
+            fBoundary *= ODI_BOUNDARY
+            fWicket *= ODI_WICKET
+            fDot *= ODI_DOT
+            fRuns *= ODI_RUNS
         }
 
         // The pitch.

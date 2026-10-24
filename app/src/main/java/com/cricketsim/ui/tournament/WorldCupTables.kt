@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.cricketsim.logic.ChampionsTrophy
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.T20WorldCup
 import com.cricketsim.logic.TournamentState
@@ -26,12 +27,17 @@ import com.cricketsim.logic.TournamentState
  */
 @Composable
 internal fun WorldCupTableTab(state: TournamentState) {
-    val tables = remember(state) { T20WorldCup.tables(state) }
+    val champions = state.tournamentId == ChampionsTrophy.TOURNAMENT_ID
+    val tables = remember(state) { if (champions) ChampionsTrophy.tables(state) else T20WorldCup.tables(state) }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item(key = "intro") {
             Text(
-                text = "Two points for a win, one each for no result. The top two of each group of five go to the Super 8, " +
-                    "and the top two of each Super 8 group go to the semi-finals.",
+                text = if (champions) {
+                    "Two points for a win, one each for no result. The top two of each group go to the semi-finals."
+                } else {
+                    "Two points for a win, one each for no result. The top two of each group of five go to the Super 8, " +
+                        "and the top two of each Super 8 group go to the semi-finals."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp)
