@@ -1,0 +1,287 @@
+{
+  "name": "Champions Trophy 2025: the first 50-over tournament",
+  "message": "Add the Champions Trophy 2025 and an International tournaments list",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/ChampionsTrophy.kt",
+    "contains": "object ChampionsTrophy"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/ChampionsTrophy.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * The ICC Champions Trophy 2025 (Pakistan and the UAE, 19 February to 9 March 2025): the game's second\n * international tournament and its first 50-over one. Eight teams in two groups of four (every team plays the\n * other three once), the top two of each group go to the semi-finals, then the Final.\n *\n * The 12 group matches are the real fixtures in the real order at the real grounds (India played all their\n * matches in Dubai). The squads are the final 15-man squads, replacements included. Players the game already\n * had keep their ratings; five are new with ESTIMATED ratings.\n *\n * Semi-finals: winner of Group A v runner-up of Group B, and winner of Group B v runner-up of Group A. As in\n * real life any match India play is in Dubai; otherwise the first semi-final is in Karachi, the second and the\n * Final in Lahore (an assumption for the cases the real tournament did not have).\n *\n * The matches are 50 overs a side. Between computer sides the ball model has an ODI setting (see AiBallModel).\n */\nobject ChampionsTrophy {\n    const val TOURNAMENT_ID = \"ct2025\"\n    const val TOURNAMENT_NAME = \"Champions Trophy 2025\"\n    const val SAVE_VERSION = 1\n\n    const val SEMI_1 = \"Semi-final 1\"\n    const val SEMI_2 = \"Semi-final 2\"\n    const val FINAL = \"Final\"\n\n    private val GROUPS = listOf(\n        \"A\" to listOf(\"IND\", \"PAK\", \"BAN\", \"NZ\"),\n        \"B\" to listOf(\"AFG\", \"AUS\", \"ENG\", \"SA\")\n    )\n\n    private val KEY_TO_ID = mapOf(\n        \"IND\" to \"team_ind\", \"PAK\" to \"team_pak\", \"BAN\" to \"team_ban\", \"NZ\" to \"team_nz\",\n        \"AFG\" to \"team_afg\", \"AUS\" to \"team_aus\", \"ENG\" to \"team_eng\", \"SA\" to \"team_sa\"\n    )\n\n    private const val INDIA_ID = \"team_ind\"\n    private const val DUBAI = \"dubai-international\"\n    private const val KARACHI = \"national-stadium-karachi\"\n    private const val LAHORE = \"gaddafi\"\n\n    private const val SEMI_1_ID = 12\n    private const val SEMI_2_ID = 13\n    private const val FINAL_ID = 14\n\n    /** The four grounds (two in Pakistan's Punjab, one in Karachi, one in Dubai). */\n    val stadiums: List<Stadium> by lazy {\n        listOf(LAHORE, KARACHI, \"rawalpindi\", DUBAI).mapNotNull { StadiumData.getStadiumById(it) }\n    }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    fun isTeam(teamId: String): Boolean = KEY_TO_ID.containsValue(teamId)\n\n    fun shortNameOrNull(teamId: String): String? = defs.find { it.id == teamId }?.code\n\n    // ---- Squads -------------------------------------------------------------------------------\n\n    private class Spec(val role: PlayerRole, val bat: Int, val bowl: Int, val style: BowlingStyle)\n\n    /** A squad place: a player copied from the game (spec null) or one with ratings written here (estimated or copied). */\n    private class Slot(val name: String, val spec: Spec?)\n\n    private class Def(val id: String, val name: String, val code: String, val squad: List<Slot>)\n\n    private fun roleOf(s: String): PlayerRole = when (s) {\n        \"BWL\" -> PlayerRole.BOWLER\n        \"AR\" -> PlayerRole.ALL_ROUNDER\n        \"WK\" -> PlayerRole.WICKETKEEPER\n        else -> PlayerRole.BATSMAN\n    }\n\n    private val defs: List<Def> by lazy {\n        DEFS_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n            val f = line.split('|')\n            val slots = f[3].split(';').map { entry ->\n                val p = entry.split('~')\n                if (p.size < 5) Slot(p[0], null)\n                else Slot(p[0], Spec(roleOf(p[1]), p[2].toInt(), p[3].toInt(), if (p[4] == \"S\") BowlingStyle.SPIN else BowlingStyle.PACE))\n            }\n            Def(f[0], f[1], f[2], slots)\n        }\n    }\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** The eight national squads (strongest first). Everyone is a plain squad member: no quotas apply. */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val roster = CricketData.getAllTeams().flatMap { it.players }.associateBy { norm(it.name) }\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = defs.map { def ->\n            val players = def.squad.mapIndexed { index, slot ->\n                val id = \"${def.id}_ct${index + 1}\"\n                val base = roster[norm(slot.name)]\n                val player = if (slot.spec == null && base != null) {\n                    base.copy(id = id, teamId = def.id)\n                } else {\n                    val s = slot.spec ?: Spec(PlayerRole.BATSMAN, 60, 20, BowlingStyle.PACE)\n                    Player(\n                        id = id, teamId = def.id, name = slot.name, role = PlayerProfiles.role(slot.name, s.role),\n                        battingRating = s.bat, bowlingRating = s.bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(PlayerProfiles.role(slot.name, s.role), s.bat, s.bowl),\n                        bowlingStyle = PlayerProfiles.style(slot.name, s.style)\n                    )\n                }\n                tags[id] = SquadTag.DOMESTIC\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            val bat = avg(players.map { it.battingRating }.sortedDescending().take(8))\n            val bowl = avg(players.map { it.bowlingRating }.sortedDescending().take(5))\n            val field = avg(players.map { it.fieldingRating })\n            val national = CricketData.getTeamById(def.id)\n            national?.copy(battingRating = bat, bowlingRating = bowl, fieldingRating = field, players = players)\n                ?: Team(\n                    id = def.id, name = def.name, countryCode = def.code,\n                    battingRating = bat, bowlingRating = bowl, fieldingRating = field, players = players\n                )\n        }\n        return Pair(teams, tags)\n    }\n\n    // ---- Fixtures -----------------------------------------------------------------------------\n\n    private fun idOf(key: String): String = KEY_TO_ID.getValue(key)\n\n    /** 15 matches: 12 group matches (real order), two semi-finals and the Final. */\n    fun buildSchedule(): List<TournamentFixture> {\n        val list = ArrayList<TournamentFixture>()\n        for (line in GROUP_FIXTURES.lines().map { it.trim() }.filter { it.isNotEmpty() }) {\n            val p = line.split(',')\n            val letter = GROUPS.first { p[0] in it.second }.first\n            list.add(TournamentFixture(list.size, list.size + 1, \"Group $letter\", idOf(p[0]), idOf(p[1]), p[2]))\n        }\n        list.add(TournamentFixture(SEMI_1_ID, SEMI_1_ID + 1, SEMI_1, null, null, DUBAI,\n            placeholder = \"Winner of Group A v runner-up of Group B\"))\n        list.add(TournamentFixture(SEMI_2_ID, SEMI_2_ID + 1, SEMI_2, null, null, LAHORE,\n            placeholder = \"Winner of Group B v runner-up of Group A\"))\n        list.add(TournamentFixture(FINAL_ID, FINAL_ID + 1, FINAL, null, null, LAHORE,\n            placeholder = \"Winners of the two semi-finals\"))\n        return list\n    }\n\n    fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n\n    // ---- Tables and progress ------------------------------------------------------------------\n\n    private fun teamsOfStage(state: TournamentState, stage: String): Set<String> =\n        state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()\n\n    private fun stageTable(state: TournamentState, stage: String): List<StandingRow> {\n        val ids = teamsOfStage(state, stage)\n        return CplData.standings(state, stage).filter { it.team.id in ids }\n    }\n\n    /** The two group tables, with their headings. */\n    fun tables(state: TournamentState): List<Pair<String, List<StandingRow>>> =\n        GROUPS.map { \"Group ${it.first}\" }.filter { teamsOfStage(state, it).isNotEmpty() }\n            .map { it to stageTable(state, it) }\n\n    private fun venueFor(home: String?, away: String?, otherwise: String): String =\n        if (home == INDIA_ID || away == INDIA_ID) DUBAI else otherwise\n\n    /** Fills in the semi-finals and the Final (and their grounds) as the teams become known. Safe after every match. */\n    fun advance(state: TournamentState): TournamentState {\n        var fx = state.fixtures\n        fun complete(stage: String): Boolean {\n            val l = fx.filter { it.stage == stage }\n            return l.isNotEmpty() && l.all { it.result != null }\n        }\n        if (complete(\"Group A\") && complete(\"Group B\")) {\n            val a = stageTable(state, \"Group A\").map { it.team.id }\n            val b = stageTable(state, \"Group B\").map { it.team.id }\n            if (a.size >= 2 && b.size >= 2) {\n                fx = fx.map { f ->\n                    when {\n                        f.id == SEMI_1_ID && f.homeId == null ->\n                            f.copy(homeId = a[0], awayId = b[1], stadiumId = venueFor(a[0], b[1], KARACHI))\n                        f.id == SEMI_2_ID && f.homeId == null ->\n                            f.copy(homeId = b[0], awayId = a[1], stadiumId = venueFor(b[0], a[1], LAHORE))\n                        else -> f\n                    }\n                }\n            }\n        }\n        val semi1 = fx.firstOrNull { it.id == SEMI_1_ID }?.result?.winnerId\n        val semi2 = fx.firstOrNull { it.id == SEMI_2_ID }?.result?.winnerId\n        if (semi1 != null && semi2 != null) {\n            fx = fx.map { f ->\n                if (f.id == FINAL_ID && f.homeId == null) {\n                    f.copy(homeId = semi1, awayId = semi2, stadiumId = venueFor(semi1, semi2, LAHORE))\n                } else f\n            }\n        }\n        return state.copy(fixtures = fx)\n    }\n\n    // ---- Data ---------------------------------------------------------------------------------\n\n    private const val GROUP_FIXTURES = \"\"\"\nNZ,PAK,national-stadium-karachi\nBAN,IND,dubai-international\nSA,AFG,national-stadium-karachi\nENG,AUS,gaddafi\nPAK,IND,dubai-international\nBAN,NZ,rawalpindi\nAUS,SA,rawalpindi\nAFG,ENG,gaddafi\nPAK,BAN,rawalpindi\nAFG,AUS,gaddafi\nENG,SA,national-stadium-karachi\nIND,NZ,dubai-international\n\"\"\"\n\n    /** Team id | name | short name | squad. \"Name\" copies a game player; \"Name~ROLE~bat~bowl~S or P\" has its ratings written here. */\n    private const val DEFS_TEXT = \"\"\"\nteam_ind|India|IND|Rohit Sharma;Shubman Gill;Varun Chakravarthy;Shreyas Iyer;Ravindra Jadeja;Virat Kohli;Hardik Pandya;Rishabh Pant;Axar Patel;KL Rahul;Harshit Rana;Mohammed Shami~BWL~20~80~P;Arshdeep Singh;Washington Sundar;Kuldeep Yadav\nteam_pak|Pakistan|PAK|Mohammad Rizwan;Salman Agha;Shaheen Afridi;Abrar Ahmed;Faheem Ashraf;Babar Azam;Kamran Ghulam;Mohammad Hasnain~BWL~15~74~P;Usman Khan;Haris Rauf;Khushdil Shah;Naseem Shah;Saud Shakeel;Tayyab Tahir~BAT~68~10~P;Imam-ul-Haq\nteam_ban|Bangladesh|BAN|Najmul Hossain Shanto;Nasum Ahmed;Taskin Ahmed;Jaker Ali;Parvez Hossain Emon;Tanzid Hasan;Rishad Hossain;Towhid Hridoy;Mahmudullah;Mehidy Hasan Miraz;Mushfiqur Rahim;Mustafizur Rahman;Nahid Rana~BWL~20~78~P;Tanzim Hasan Sakib;Soumya Sarkar\nteam_nz|New Zealand|NZ|Mitchell Santner;Michael Bracewell;Mark Chapman;Devon Conway;Jacob Duffy;Matt Henry;Kyle Jamieson;Tom Latham;Daryl Mitchell;William O'Rourke;Glenn Phillips;Rachin Ravindra;Nathan Smith~AR~45~62~P;Kane Williamson;Will Young\nteam_aus|Australia|AUS|Steve Smith;Sean Abbott;Alex Carey;Cooper Connolly~AR~68~52~S;Ben Dwarshuis;Nathan Ellis;Jake Fraser-McGurk;Aaron Hardie;Travis Head;Josh Inglis;Spencer Johnson;Marnus Labuschagne;Glenn Maxwell;Tanveer Sangha;Adam Zampa\nteam_sa|South Africa|RSA|Temba Bavuma;Corbin Bosch;Tony de Zorzi;Marco Jansen;Heinrich Klaasen;Keshav Maharaj;Aiden Markram;David Miller;Wiaan Mulder;Lungi Ngidi;Kagiso Rabada;Ryan Rickelton;Tabraiz Shamsi;Tristan Stubbs;Rassie van der Dussen\nteam_afg|Afghanistan|AFG|Hashmatullah Shahidi;Fareed Ahmad;Noor Ahmad;Ikram Alikhil;Sediqullah Atal;Fazalhaq Farooqi;Rahmanullah Gurbaz;Rashid Khan;Nangeyalia Kharote;Mohammad Nabi;Gulbadin Naib;Azmatullah Omarzai;Rahmat Shah;Ibrahim Zadran;Naveed Zadran~BAT~60~10~P\nteam_eng|England|ENG|Jos Buttler;Rehan Ahmed;Jofra Archer;Gus Atkinson;Tom Banton~WK~78~10~P;Harry Brook;Ben Duckett;Liam Livingstone;Saqib Mahmood;Jamie Overton~AR~56~76~P;Adil Rashid;Joe Root;Phil Salt;Jamie Smith;Mark Wood\n\"\"\"\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "CHAMPIONS_TROPHY.md",
+      "content": "# Champions Trophy 2025 (patch 046)\n\nTournament > International tournament > Champions Trophy 2025. The first 50-over tournament in the game.\n\n* **8 teams, 2 groups of 4**: Group A India, Pakistan, Bangladesh, New Zealand; Group B Afghanistan, Australia,\n  England, South Africa. Each team plays the other three once (12 group matches, the real fixtures in the real\n  order at the real grounds: Karachi, Lahore, Rawalpindi and Dubai, where India played all their matches).\n* **Semi-finals**: winner of Group A v runner-up of Group B, winner of Group B v runner-up of Group A, then the\n  **Final**. Any match India play is in Dubai; otherwise semi-final 1 is in Karachi, semi-final 2 and the Final\n  in Lahore (an assumption for the cases the real tournament did not have).\n* **Squads**: the final 15-man squads (replacements included). Five players are new to the game with\n  ESTIMATED ratings (Nahid Rana, Nathan Smith, Mohammad Hasnain, Tayyab Tahir, Naveed Zadran); everyone else\n  keeps the rating the game already gave them (the ratings are the game's T20-based ones).\n* **50 overs a side.** A new ground was added: National Stadium, Karachi (ratings estimated).\n* **Computer v computer matches** use an ODI setting in `AiBallModel` (`ODI_*` dials), measured with a node\n  model of the ball dice: about 295 runs (twin scale; the same model puts the T20 at 165 where the game plays\n  about 150) and 7 to 8 wickets a side, a chase won about half the time. These numbers come from a model, not\n  from play: tell me if scores feel too high or low and I will turn the dials.\n* Points: 2 for a win, 1 for no result; ties are settled by a Super Over; the table orders by points, wins, then\n  net run rate over 50 overs (a side bowled out counts the full 50). The ICC's other tie-breakers are not applied.\n* Not built: rain rules and DLS in simulated matches, the real results (the game simulates them).\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/StadiumData.kt",
+      "find": "        Stadium(\n            id = \"sheikh-zayed\",",
+      "replace": "        Stadium(\n            id = \"national-stadium-karachi\", name = \"National Stadium\", city = \"Karachi\", country = \"Pakistan\",\n            homeTeamIds = listOf(\"team_pak\"),\n            pitchType = PitchType.BALANCED, pitchDescription = \"A fair, even contest between bat and ball.\",\n            boundarySize = BoundarySize.MEDIUM, altitudeM = 10, dewFactor = 0.5,\n            avgT20FirstInningsScore = 160,\n            climate = StadiumClimate(0.03, 60, 27, 14, \"Mild and mostly dry with a sea breeze.\")\n        ),\n        Stadium(\n            id = \"sheikh-zayed\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+      "find": "fun formatFor(tournamentId: String?): MatchFormat = if (tournamentId == TOURNAMENT_ID) MatchFormat.T10 else MatchFormat.T20",
+      "replace": "fun formatFor(tournamentId: String?): MatchFormat = when (tournamentId) {\n        TOURNAMENT_ID -> MatchFormat.T10\n        ChampionsTrophy.TOURNAMENT_ID -> MatchFormat.ODI // the Champions Trophy is 50 overs a side\n        else -> MatchFormat.T20\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+      "find": "fun fullInningsBalls(tournamentId: String): Int = if (tournamentId == TOURNAMENT_ID) 60 else 120",
+      "replace": "fun fullInningsBalls(tournamentId: String): Int = when (tournamentId) {\n        TOURNAMENT_ID -> 60\n        ChampionsTrophy.TOURNAMENT_ID -> 300\n        else -> 120\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "    private const val MAX_RUN_OUTS = 2\n",
+      "replace": "    private const val MAX_RUN_OUTS = 2\n\n    // A 50-over innings (limit of 40 overs or more): the powerplay is the first 10 overs, the death the last 10,\n    // and every ball is worth less than in a T20 (fewer boundaries and wickets, more dots). Measured with a node\n    // model of this method: about 295 runs and 7 to 8 wickets a side (the same model gives 165 for the T20 that\n    // plays about 150 here). Turn these four to change ODI scoring: ODI_BOUNDARY and ODI_RUNS for runs,\n    // ODI_WICKET for wickets, ODI_DOT for how quiet the middle overs are.\n    private const val ODI_BOUNDARY = 0.62\n    private const val ODI_WICKET = 0.60\n    private const val ODI_DOT = 1.30\n    private const val ODI_RUNS = 0.98\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        val powerplayEnd = if (bigBash) 0.2 else 0.3\n",
+      "replace": "        val odi = limit >= 40\n        val powerplayEnd = if (bigBash || odi) 0.2 else 0.3\n        val middleEnd = if (odi) 0.8 else 0.75\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "            fraction < 0.75 -> { fBoundary *= 0.85; fRuns *= 1.08; fWicket *= 0.95 }\n",
+      "replace": "            fraction < middleEnd -> { fBoundary *= 0.85; fRuns *= 1.08; fWicket *= 0.95 }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        // The pitch.\n        when (state.pitchType) {\n",
+      "replace": "        // The 50-over game: the same dice, played over five times as many balls.\n        if (odi) {\n            fBoundary *= ODI_BOUNDARY\n            fWicket *= ODI_WICKET\n            fDot *= ODI_DOT\n            fRuns *= ODI_RUNS\n        }\n\n        // The pitch.\n        when (state.pitchType) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: T20WorldCup.stadium(id)\n",
+      "replace": "?: T20WorldCup.stadium(id) ?: ChampionsTrophy.stadium(id)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: T20WorldCup.shortNameOrNull(teamId) ?: IplData.shortName(teamId)",
+      "replace": "?: T20WorldCup.shortNameOrNull(teamId) ?: ChampionsTrophy.shortNameOrNull(teamId) ?: IplData.shortName(teamId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "else if (T20WorldCup.isTeam(teamId)) \"\"",
+      "replace": "else if (T20WorldCup.isTeam(teamId) || ChampionsTrophy.isTeam(teamId)) \"\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        if (state.tournamentId == T20WorldCup.TOURNAMENT_ID) return T20WorldCup.advance(state)\n",
+      "replace": "        if (state.tournamentId == T20WorldCup.TOURNAMENT_ID) return T20WorldCup.advance(state)\n        if (state.tournamentId == ChampionsTrophy.TOURNAMENT_ID) return ChampionsTrophy.advance(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/PlayerProfiles.kt",
+      "find": "    private val CHUNKS: List<String> = listOf(\n",
+      "replace": "    private val CHUNKS: List<String> = listOf(\n        \"\"\"\nMohammad Hasnain|R|b6|-|-\nTayyab Tahir|R|b8|-|-\nNahid Rana|R|b6|-|-\nNathan Smith|R|b10|-|-\nNaveed Zadran|R|b9|-|-\n\"\"\",\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "import com.cricketsim.logic.CplData\n",
+      "replace": "import com.cricketsim.logic.ChampionsTrophy\nimport com.cricketsim.logic.CplData\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "    val tables = remember(state) { T20WorldCup.tables(state) }\n",
+      "replace": "    val champions = state.tournamentId == ChampionsTrophy.TOURNAMENT_ID\n    val tables = remember(state) { if (champions) ChampionsTrophy.tables(state) else T20WorldCup.tables(state) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "                text = \"Two points for a win, one each for no result. The top two of each group of five go to the Super 8, \" +\n                    \"and the top two of each Super 8 group go to the semi-finals.\",\n",
+      "replace": "                text = if (champions) {\n                    \"Two points for a win, one each for no result. The top two of each group go to the semi-finals.\"\n                } else {\n                    \"Two points for a win, one each for no result. The top two of each group of five go to the Super 8, \" +\n                        \"and the top two of each Super 8 group go to the semi-finals.\"\n                },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.T20WorldCup\n",
+      "replace": "import com.cricketsim.logic.ChampionsTrophy\nimport com.cricketsim.logic.T20WorldCup\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val wcMatchStore = remember { MatchSaveStore(context, \"saved_t20wc_match.json\") }\n",
+      "replace": "    val wcMatchStore = remember { MatchSaveStore(context, \"saved_t20wc_match.json\") }\n    val ctStore = remember { TournamentSaveStore(context, \"saved_tournament_ct2025.json\") }\n    val ctMatchStore = remember { MatchSaveStore(context, \"saved_ct2025_match.json\") }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"wc2026\" -> wcStore; else -> cplStore }",
+      "replace": "\"wc2026\" -> wcStore; \"ct2025\" -> ctStore; else -> cplStore }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"wc2026\" -> wcMatchStore; else -> cplMatchStore }",
+      "replace": "\"wc2026\" -> wcMatchStore; \"ct2025\" -> ctMatchStore; else -> cplMatchStore }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val wcBuilt = remember { T20WorldCup.buildTeams() }\n",
+      "replace": "    val wcBuilt = remember { T20WorldCup.buildTeams() }\n    val ctBuilt = remember { ChampionsTrophy.buildTeams() }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"wc2026\" -> wcBuilt; else -> cplBuilt }",
+      "replace": "\"wc2026\" -> wcBuilt; \"ct2025\" -> ctBuilt; else -> cplBuilt }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onInternational = {\n                    // The T20 World Cup has its own saved tournament and match slot: load them for this kind.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"wc2026\"\n                    page = TPage.Adt\n                },\n",
+      "replace": "                onInternational = { page = TPage.International },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    object Leagues : TPage\n",
+      "replace": "    object Leagues : TPage\n    /** The list of international tournaments (the T20 World Cup, the Champions Trophy). */\n    object International : TPage\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        is TPage.Leagues -> {\n            val back = { page = TPage.Menu }\n",
+      "replace": "        is TPage.International -> {\n            val back = { page = TPage.Menu }\n            BackHandler(onBack = back)\n            InternationalPage(\n                onWorldCup = {\n                    // Each international tournament has its own saved tournament and match slot: load them for this kind.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"wc2026\"\n                    page = TPage.Adt\n                },\n                onChampionsTrophy = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"ct2025\"\n                    page = TPage.Adt\n                },\n                onBack = back\n            )\n        }\n        is TPage.Leagues -> {\n            val back = { page = TPage.Menu }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "@Composable\nprivate fun LeaguesPage(\n",
+      "replace": "@Composable\nprivate fun InternationalPage(onWorldCup: () -> Unit, onChampionsTrophy: () -> Unit, onBack: () -> Unit) {\n    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {\n        PageTitle(\"International tournaments\")\n        Spacer(modifier = Modifier.height(16.dp))\n        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {\n            ChoiceRow(\n                title = \"T20 World Cup 2026\",\n                description = \"20 national teams, the real groups and fixtures across India and Sri Lanka, the Super 8, semi-finals and Final.\",\n                enabled = true,\n                onClick = onWorldCup\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Champions Trophy 2025\",\n                description = \"50 overs a side: eight teams in two groups, the real fixtures in Pakistan and Dubai, semi-finals and Final.\",\n                enabled = true,\n                onClick = onChampionsTrophy\n            )\n        }\n        Spacer(modifier = Modifier.height(8.dp))\n        BackButton(onBack = onBack)\n    }\n}\n\n@Composable\nprivate fun LeaguesPage(\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val isWc = kind == \"wc2026\"\n",
+      "replace": "            val isWc = kind == \"wc2026\"\n            val isCt = kind == \"ct2025\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isWc -> T20WorldCup.TOURNAMENT_NAME\n",
+      "replace": "                isWc -> T20WorldCup.TOURNAMENT_NAME\n                isCt -> ChampionsTrophy.TOURNAMENT_NAME\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isMlc || isSa || isWc) {",
+      "replace": "isMlc || isSa || isWc || isCt) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        isWc -> Unit\n",
+      "replace": "                        isWc, isCt -> Unit\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                page = if (isWc) TPage.Menu else TPage.Leagues\n",
+      "replace": "                page = if (isWc || isCt) TPage.International else TPage.Leagues\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    else -> \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"",
+      "replace": "                    isCt -> \"The ICC Champions Trophy 2025, 50 overs a side: the eight real teams and 15-man squads in two groups of four, the real group fixtures in Pakistan and Dubai, then the semi-finals and the Final.\"\n                    else -> \"The Caribbean Premier League: seven franchises, a random fixture list every time, and the play-offs at Kensington Oval.\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"sa20\" || kind == \"wc2026\") TPage.Adt",
+      "replace": "kind == \"sa20\" || kind == \"wc2026\" || kind == \"ct2025\") TPage.Adt",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        \"wc2026\" -> T20WorldCup.newTournament(teamId, built)\n",
+      "replace": "                        \"wc2026\" -> T20WorldCup.newTournament(teamId, built)\n                        \"ct2025\" -> ChampionsTrophy.newTournament(teamId, built)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "showOrigin = kind != \"adt10\" && kind != \"wc2026\",",
+      "replace": "showOrigin = kind != \"adt10\" && kind != \"wc2026\" && kind != \"ct2025\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa20\", \"wc2026\" -> TPage.Adt",
+      "replace": "\"sa20\", \"wc2026\", \"ct2025\" -> TPage.Adt",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    if (state.tournamentId == T20WorldCup.TOURNAMENT_ID) {\n        WorldCupTableTab(state)",
+      "replace": "    if (state.tournamentId == T20WorldCup.TOURNAMENT_ID || state.tournamentId == ChampionsTrophy.TOURNAMENT_ID) {\n        WorldCupTableTab(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                T20WorldCup.TOURNAMENT_ID -> T20WorldCup.stadiums\n",
+      "replace": "                T20WorldCup.TOURNAMENT_ID -> T20WorldCup.stadiums\n                ChampionsTrophy.TOURNAMENT_ID -> ChampionsTrophy.stadiums\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"The T20 World Cup 2026: 20 national teams, the real groups and fixtures, the Super 8, semi-finals and Final.\"",
+      "replace": "\"The T20 World Cup 2026 and the Champions Trophy 2025, with the real teams, squads and fixtures.\"",
+      "count": 1
+    }
+  ]
+}
