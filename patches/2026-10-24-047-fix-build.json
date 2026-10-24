@@ -1,0 +1,13 @@
+{
+  "name": "Fix build: when-condition syntax",
+  "message": "Fix Kotlin when-condition in the tournament back handler",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        isWc, isCt -> Unit\n",
+      "replace": "                        isWc || isCt -> Unit\n",
+      "count": 1
+    }
+  ]
+}
