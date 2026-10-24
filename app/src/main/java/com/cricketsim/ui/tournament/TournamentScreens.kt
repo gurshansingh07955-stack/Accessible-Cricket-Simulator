@@ -439,7 +439,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                         isIlt -> iltSaved = saved != null
                         isBbl -> bblSaved = saved != null
                         isMlc -> mlcSaved = saved != null
-                        isWc, isCt -> Unit
+                        isWc || isCt -> Unit
                         else -> saSaved = saved != null
                     }
                     saved = null
