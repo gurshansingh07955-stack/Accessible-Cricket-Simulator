@@ -1,6 +1,6 @@
-Build run: 40147725451 (attempt 1)
-Commit: f4b86d2bccabc6dd1e38d14f0959ff0a8c1d1bbe
-Timestamp (UTC): 2026-10-25T00:43:58Z
+Build run: 40167036975 (attempt 1)
+Commit: c1ff20bed5f7cff2109f0a0130a314a41fa9f416
+Timestamp (UTC): 2026-10-25T05:53:19Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -15,10 +15,10 @@ Daemon will be stopped at the end of the build
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
 > Task :app:packageDebugResources
-> Task :app:mergeDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
 > Task :app:parseDebugLocalResources
+> Task :app:mergeDebugResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
 > Task :app:processDebugManifestForPackage
@@ -31,13 +31,13 @@ Daemon will be stopped at the end of the build
 > Task :app:desugarDebugFileDependencies
 > Task :app:mergeDebugStartupProfile
 > Task :app:mergeDebugJniLibFolders
+> Task :app:checkDebugDuplicateClasses
 > Task :app:mergeDebugNativeLibs NO-SOURCE
 > Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
-> Task :app:checkDebugDuplicateClasses
-> Task :app:writeDebugSigningConfigVersions
 > Task :app:mergeLibDexDebug
+> Task :app:writeDebugSigningConfigVersions
 > Task :app:processDebugResources
 > Task :app:mergeExtDexDebug
 > Task :app:compileDebugKotlin
@@ -61,7 +61,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1792888966445.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1792907513825.json
 
-BUILD SUCCESSFUL in 1m 16s
+BUILD SUCCESSFUL in 1m 27s
 37 actionable tasks: 37 executed
