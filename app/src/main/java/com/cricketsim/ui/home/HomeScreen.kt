@@ -79,6 +79,7 @@ fun HomeScreen(
     onPlay: () -> Unit,
     onResume: () -> Unit,
     onTournament: () -> Unit,
+    onAdvanced: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit
 ) {
@@ -136,10 +137,18 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(
                 title = "Tournament",
-                description = "Play a full league season. CPL 2026 is ready.",
+                description = "Play a league season or an international tournament.",
                 emphasised = false,
                 enabled = true,
                 onClick = onTournament
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            MenuButton(
+                title = "Advanced Customisation",
+                description = "Create your own match formats. Custom teams and tournaments are coming soon.",
+                emphasised = false,
+                enabled = true,
+                onClick = onAdvanced
             )
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(

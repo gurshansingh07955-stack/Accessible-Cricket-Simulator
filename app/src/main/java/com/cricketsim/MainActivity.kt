@@ -22,6 +22,7 @@ import com.cricketsim.logic.Team
 import com.cricketsim.persistence.MatchSnapshot
 import com.cricketsim.persistence.summary
 import com.cricketsim.ui.Screen
+import com.cricketsim.ui.custom.AdvancedCustomisationFlow
 import com.cricketsim.ui.home.AboutScreen
 import com.cricketsim.ui.home.HomeScreen
 import com.cricketsim.ui.match.AnthemScreen
@@ -175,7 +176,7 @@ fun CricketSimApp() {
         val opened = screen
         val isMenu = opened is Screen.FormatSelection || opened is Screen.StadiumSelection ||
             opened is Screen.TeamSelection || opened is Screen.PlayingXISelection ||
-            opened is Screen.Settings || opened is Screen.About
+            opened is Screen.Settings || opened is Screen.About || opened is Screen.AdvancedCustomisation
         if (isMenu) services?.sound?.playMenuOpen()
     }
 
@@ -196,10 +197,12 @@ fun CricketSimApp() {
                 }
             },
             onTournament = { screen = Screen.Tournament },
+            onAdvanced = { screen = Screen.AdvancedCustomisation },
             onSettings = { screen = Screen.Settings(returnTo = current) },
             onAbout = { screen = Screen.About }
         )
         is Screen.Tournament -> TournamentFlow(onExit = { screen = Screen.Home })
+        is Screen.AdvancedCustomisation -> AdvancedCustomisationFlow(onExit = { screen = Screen.Home })
         is Screen.About -> {
             val onBack = { screen = Screen.Home }
             BackHandler(onBack = onBack)
