@@ -476,6 +476,7 @@ object CplSimulator {
         if (state.tournamentId == T20WorldCup.TOURNAMENT_ID) return T20WorldCup.advance(state)
         if (state.tournamentId == ChampionsTrophy.TOURNAMENT_ID) return ChampionsTrophy.advance(state)
         if (state.tournamentId == AsiaCup.TOURNAMENT_ID) return AsiaCup.advance(state)
+        if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
         val table = CplData.standings(state)

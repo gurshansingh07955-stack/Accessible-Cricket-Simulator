@@ -237,6 +237,14 @@ object StadiumData {
             climate = StadiumClimate(0.03, 60, 27, 14, "Mild and mostly dry with a sea breeze.")
         ),
         Stadium(
+            id = "korogi-sports-park", name = "Kōrogi Sports Park", city = "Nisshin", country = "Japan",
+            homeTeamIds = listOf("team_jpn"),
+            pitchType = PitchType.BALANCED, pitchDescription = "A new pitch: true and even, with a little help for the seamers early.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 20, dewFactor = 0.5,
+            avgT20FirstInningsScore = 150,
+            climate = StadiumClimate(0.35, 75, 22, 10, "Mild and humid with a real chance of rain.")
+        ),
+        Stadium(
             id = "sheikh-zayed", name = "Sheikh Zayed Stadium", city = "Abu Dhabi", country = "UAE",
             homeTeamIds = listOf("team_uae"),
             pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",

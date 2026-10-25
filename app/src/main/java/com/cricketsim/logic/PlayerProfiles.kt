@@ -128,6 +128,24 @@ object PlayerProfiles {
 
     private val CHUNKS: List<String> = listOf(
         """
+Mohammad Akram|R|b7|-|-
+Ismat Alam|R|b7|-|-
+Hassan Eisakhil|R|-|-|-
+Yasir Ali|R|b11|-|-
+Mosaddek Hossain|R|b11|-|-
+Aliss Islam|R|b11|-|-
+Shiv Mathur|R|b9|-|-
+Kendel Kadowaki-Fleming|L|b11|-|-
+Charlie Hara-Hinze|L|b4|-|-
+Ibrahim Takahashi|R|b11|-|-
+Pavandeep Singh|R|b4|-|-
+Muhammad Wafiq|L|b3|-|-
+Aslam Khan|L|b4|-|-
+Ahmed Daniyal|R|b10|-|-
+Arafat Minhas|L|b4|-|-
+Saad Masood|R|b8|-|-
+""",
+        """
 Saif Hassan|R|b11|-|-
 Mohammad Saifuddin|L|b10|-|-
 Babar Hayat|R|b9|-|-

@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.AsiaCup
+import com.cricketsim.logic.AsianGames
 import com.cricketsim.logic.ChampionsTrophy
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.T20WorldCup
@@ -30,17 +31,22 @@ import com.cricketsim.logic.TournamentState
 internal fun WorldCupTableTab(state: TournamentState) {
     val champions = state.tournamentId == ChampionsTrophy.TOURNAMENT_ID
     val asia = state.tournamentId == AsiaCup.TOURNAMENT_ID
+    val games = state.tournamentId == AsianGames.TOURNAMENT_ID
     val tables = remember(state) {
         when {
             champions -> ChampionsTrophy.tables(state)
             asia -> AsiaCup.tables(state)
+            games -> AsianGames.tables(state)
             else -> T20WorldCup.tables(state)
         }
     }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item(key = "intro") {
             Text(
-                text = if (asia) {
+                text = if (games) {
+                    "Two points for a win, one each for no result. The top two of each group of three join India, Pakistan, " +
+                        "Sri Lanka and Bangladesh in the quarter-finals."
+                } else if (asia) {
                     "Two points for a win, one each for no result. The top two of each group go to the Super 4, " +
                         "and the top two of the Super 4 play the Final."
                 } else if (champions) {

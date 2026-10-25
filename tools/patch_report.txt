@@ -1,6 +1,6 @@
-Patch run: 40108340289
-Timestamp (UTC): 2026-10-24T15:44:27Z
+Patch run: 40147707979
+Timestamp (UTC): 2026-10-25T00:42:11Z
 Result: OK
 -----
-Patch 2026-10-24-048-asia-cup-2025.json
-  applied 32 operation(s) to 7 file(s)
+Patch 2026-10-24-049-asian-games-2026.json
+  applied 34 operation(s) to 8 file(s)
