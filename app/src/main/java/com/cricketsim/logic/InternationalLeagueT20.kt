@@ -158,7 +158,7 @@ object InternationalLeagueT20 {
                 players = players
             )
         }
-        return Pair(teams, tags)
+        return Customisation.applyToBuilt(Pair(teams, tags), true)
     }
 
     // A=Knight Riders, V=Vipers, C=Capitals, G=Giants, M=MI Emirates, W=Warriorz; D=Dubai, S=Sharjah, Z=Abu Dhabi (Zayed).

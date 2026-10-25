@@ -150,7 +150,7 @@ object MajorLeagueCricket {
                 players = players
             )
         }
-        return Pair(teams, tags)
+        return Customisation.applyToBuilt(Pair(teams, tags), true)
     }
 
     // L Knight Riders, M MI New York, S Unicorns, O Orcas, T Super Kings, W Freedom: the 30 league matches in the

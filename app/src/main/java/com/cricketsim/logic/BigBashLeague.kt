@@ -167,7 +167,7 @@ object BigBashLeague {
                 players = players
             )
         }
-        return Pair(teams, tags)
+        return Customisation.applyToBuilt(Pair(teams, tags), true)
     }
 
     // The 40 league matches in the published order: home team, visiting team, ground.

@@ -73,7 +73,7 @@ object PlayerProfiles {
         if (USE_PROFILE_ROLES) table[key(name)]?.style ?: gameStyle else gameStyle
 
     /** The role to show: also right for players saved before this table existed. */
-    fun displayRole(p: Player): PlayerRole = role(p.name, p.role)
+    fun displayRole(p: Player): PlayerRole = Customisation.roleFor(p) ?: role(p.name, p.role)
 
     fun roleLabel(r: PlayerRole): String = when (r) {
         PlayerRole.BATSMAN -> "Batsman"
@@ -103,10 +103,17 @@ object PlayerProfiles {
 
     fun grouped(players: List<Player>): List<Pair<String, List<Player>>> = groupedBy(players) { it }
 
+    /** The batting hand to show: the player's own edit first, then the table ('R', 'L' or null when not known). */
+    fun handOf(p: Player): Char? =
+        Customisation.handFor(p) ?: table[key(p.name)]?.hand?.takeIf { it == 'R' || it == 'L' }
+
+    /** The bowling style to show, or null when unknown; "" means the player was set to not bowl. */
+    fun bowlLabelOf(p: Player): String? = Customisation.bowlLabelFor(p) ?: table[key(p.name)]?.bowl
+
     /** "Batting: right-handed, rating 95." (hand left out when it is not known). */
     fun battingText(p: Player): String {
         val rating = p.battingRating
-        return when (table[key(p.name)]?.hand) {
+        return when (handOf(p)) {
             'R' -> "Batting: right-handed, rating $rating."
             'L' -> "Batting: left-handed, rating $rating."
             else -> "Batting: rating $rating."
@@ -116,7 +123,9 @@ object PlayerProfiles {
     /** "Bowling: right-arm off break, rating 22." */
     fun bowlingText(p: Player): String {
         val rating = p.bowlingRating
-        val label = table[key(p.name)]?.bowl
+        val edited = bowlLabelOf(p)
+        if (edited != null && edited.isEmpty()) return "Bowling: does not bowl, rating $rating."
+        val label = edited
         if (label != null) return "Bowling: ${label.replaceFirstChar { it.lowercase() }}, rating $rating."
         val r = displayRole(p)
         if ((r == PlayerRole.BATSMAN || r == PlayerRole.WICKETKEEPER) && rating <= 25) {

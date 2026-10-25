@@ -22,6 +22,7 @@ import com.cricketsim.logic.Team
 import com.cricketsim.persistence.MatchSnapshot
 import com.cricketsim.persistence.summary
 import com.cricketsim.ui.Screen
+import com.cricketsim.logic.Customisation
 import com.cricketsim.ui.custom.AdvancedCustomisationFlow
 import com.cricketsim.ui.home.AboutScreen
 import com.cricketsim.ui.home.HomeScreen
@@ -63,6 +64,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The player's customised teams and players must be loaded before any team is read.
+        Customisation.init(applicationContext)
         val gameServices = GameServices(applicationContext)
         services = gameServices
         setContent {

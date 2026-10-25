@@ -687,9 +687,9 @@ object CricketData {
 
     // --- Exports ---
 
-    fun getAllTeams(): List<Team> = TEAMS_DATA
+    fun getAllTeams(): List<Team> = TEAMS_DATA.map { Customisation.applyTo(it) }
 
-    fun getTeamById(id: String): Team? = TEAMS_DATA.find { it.id == id }
+    fun getTeamById(id: String): Team? = TEAMS_DATA.find { it.id == id }?.let { Customisation.applyTo(it) }
 
     fun getPlayersByTeamId(teamId: String): List<Player> = getTeamById(teamId)?.players ?: emptyList()
 

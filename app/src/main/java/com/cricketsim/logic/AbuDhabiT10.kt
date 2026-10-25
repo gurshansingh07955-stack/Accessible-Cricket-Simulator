@@ -152,7 +152,7 @@ object AbuDhabiT10 {
                 players = players
             )
         }
-        return Pair(teams, tags)
+        return Customisation.applyToBuilt(Pair(teams, tags), true)
     }
 
     /**

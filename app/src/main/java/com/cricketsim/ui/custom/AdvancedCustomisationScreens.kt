@@ -58,17 +58,20 @@ import java.util.UUID
  */
 @Composable
 fun AdvancedCustomisationFlow(onExit: () -> Unit) {
-    var inFormats by remember { mutableStateOf(false) }
-    if (inFormats) {
-        CustomFormatFlow(onExit = { inFormats = false })
-    } else {
-        BackHandler(onBack = onExit)
-        AdvancedMenu(onCreateFormat = { inFormats = true }, onBack = onExit)
+    // 0 = the menu, 1 = Create Custom Format, 2 = Create Custom Teams and Players
+    var section by remember { mutableStateOf(0) }
+    when (section) {
+        1 -> CustomFormatFlow(onExit = { section = 0 })
+        2 -> CustomTeamsFlow(onExit = { section = 0 })
+        else -> {
+            BackHandler(onBack = onExit)
+            AdvancedMenu(onCreateFormat = { section = 1 }, onCreateTeams = { section = 2 }, onBack = onExit)
+        }
     }
 }
 
 @Composable
-private fun AdvancedMenu(onCreateFormat: () -> Unit, onBack: () -> Unit) {
+private fun AdvancedMenu(onCreateFormat: () -> Unit, onCreateTeams: () -> Unit, onBack: () -> Unit) {
     PageColumn {
         BackButton(onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -84,10 +87,10 @@ private fun AdvancedMenu(onCreateFormat: () -> Unit, onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(12.dp))
         OptionButton(
             title = "Create Custom Teams and Players",
-            description = "Coming soon.",
-            enabled = false,
+            description = "Create your own teams and players, and edit the game's teams and players.",
+            enabled = true,
             emphasised = false,
-            onClick = {}
+            onClick = onCreateTeams
         )
         Spacer(modifier = Modifier.height(12.dp))
         OptionButton(
@@ -418,7 +421,7 @@ private fun TextInputPage(
 }
 
 @Composable
-private fun PageColumn(content: @Composable () -> Unit) {
+internal fun PageColumn(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -431,7 +434,7 @@ private fun PageColumn(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun PageHeading(text: String) {
+internal fun PageHeading(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.headlineMedium,
@@ -440,7 +443,7 @@ private fun PageHeading(text: String) {
 }
 
 @Composable
-private fun BackButton(onBack: () -> Unit) {
+internal fun BackButton(onBack: () -> Unit) {
     OutlinedButton(
         onClick = onBack,
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -449,7 +452,7 @@ private fun BackButton(onBack: () -> Unit) {
 
 /** One menu choice that reads its title and description together; switched off, it is reported as unavailable. */
 @Composable
-private fun OptionButton(title: String, description: String, enabled: Boolean, emphasised: Boolean, onClick: () -> Unit) {
+internal fun OptionButton(title: String, description: String, enabled: Boolean, emphasised: Boolean, onClick: () -> Unit) {
     val content: @Composable () -> Unit = {
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             Text(text = title, style = MaterialTheme.typography.titleMedium)

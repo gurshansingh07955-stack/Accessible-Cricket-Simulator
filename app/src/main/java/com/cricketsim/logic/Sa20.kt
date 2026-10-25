@@ -158,7 +158,7 @@ object Sa20 {
                 players = players
             )
         }
-        return Pair(teams, tags)
+        return Customisation.applyToBuilt(Pair(teams, tags), true)
     }
 
     // S Sunrisers EC, P Pretoria, D Durban, J Joburg, M MI Cape Town, R Paarl Royals: "home away". The home side's ground is the venue.

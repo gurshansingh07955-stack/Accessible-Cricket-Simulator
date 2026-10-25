@@ -115,7 +115,7 @@ object AsianGames {
                     battingRating = bat, bowlingRating = bowl, fieldingRating = field, players = players
                 )
         }
-        return Pair(teams, tags)
+        return Customisation.applyToBuilt(Pair(teams, tags), false)
     }
 
     // ---- Fixtures -----------------------------------------------------------------------------

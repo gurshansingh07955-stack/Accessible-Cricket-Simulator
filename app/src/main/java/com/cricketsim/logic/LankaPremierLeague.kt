@@ -150,7 +150,7 @@ object LankaPremierLeague {
                 players = players
             )
         }
-        return Pair(teams, tags)
+        return Customisation.applyToBuilt(Pair(teams, tags), true)
     }
 
     private fun clashes(list: List<Pair<String, String>>): Int {
