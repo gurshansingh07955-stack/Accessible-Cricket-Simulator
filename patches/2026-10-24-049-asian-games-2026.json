@@ -1,0 +1,245 @@
+{
+  "name": "Asian Games 2026",
+  "message": "Add the Asian Games 2026 men's cricket to the international tournaments",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/AsianGames.kt",
+    "contains": "object AsianGames"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/AsianGames.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * The men's cricket event of the 2026 Asian Games (Kōrogi Sports Park, Nisshin, Japan, 24 September to\n * 3 October 2026), Twenty20. Ten teams: the six lowest seeds are drawn into two groups of three (a single\n * round-robin; the top two of each group go on), and the four highest seeds (India, Pakistan, Sri Lanka and\n * Bangladesh) wait in the quarter-finals. Then the semi-finals, the bronze medal match and the gold medal match\n * (the \"Final\" here, so its winner is the champion).\n *\n * Group A: Nepal, Afghanistan, Japan. Group B: Malaysia, Hong Kong, Oman. The quarter-finals are the real draw:\n * Pakistan v the Group B runner-up, India v the Group A runner-up, Bangladesh v the Group B winner, Sri Lanka v\n * the Group A winner. The semi-finals: Pakistan's quarter-final winner v Bangladesh's, India's v Sri Lanka's.\n * Every match is at Kōrogi Sports Park (a new ground in the game, ratings estimated).\n *\n * Squads are the 15-man squads. Players the game already had keep their ratings; 66 are new with ESTIMATED\n * ratings (Japan and Malaysia are new national teams; for the smaller squads the ratings are a tier guess).\n */\nobject AsianGames {\n    const val TOURNAMENT_ID = \"asiangames2026\"\n    const val TOURNAMENT_NAME = \"Asian Games 2026\"\n    const val SAVE_VERSION = 1\n\n    const val BRONZE = \"Bronze medal match\"\n    const val FINAL = \"Final\"\n\n    private const val GROUND = \"korogi-sports-park\"\n\n    private val GROUPS = listOf(\n        \"A\" to listOf(\"NEP\", \"AFG\", \"JPN\"),\n        \"B\" to listOf(\"MAS\", \"HK\", \"OMA\")\n    )\n\n    private val KEY_TO_ID = mapOf(\n        \"NEP\" to \"team_nep\", \"AFG\" to \"team_afg\", \"JPN\" to \"team_jpn\", \"MAS\" to \"team_mas\", \"HK\" to \"team_hk\",\n        \"OMA\" to \"team_oman\", \"IND\" to \"team_ind\", \"PAK\" to \"team_pak\", \"SL\" to \"team_sl\", \"BAN\" to \"team_ban\"\n    )\n\n    private const val QF_1_ID = 6\n    private const val QF_2_ID = 7\n    private const val QF_3_ID = 8\n    private const val QF_4_ID = 9\n    private const val SEMI_1_ID = 10\n    private const val SEMI_2_ID = 11\n    private const val BRONZE_ID = 12\n    private const val FINAL_ID = 13\n\n    val stadiums: List<Stadium> by lazy { listOfNotNull(StadiumData.getStadiumById(GROUND)) }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    fun isTeam(teamId: String): Boolean = KEY_TO_ID.containsValue(teamId)\n\n    fun shortNameOrNull(teamId: String): String? = defs.find { it.id == teamId }?.code\n\n    // ---- Squads -------------------------------------------------------------------------------\n\n    private class Spec(val role: PlayerRole, val bat: Int, val bowl: Int, val style: BowlingStyle)\n\n    private class Slot(val name: String, val spec: Spec?)\n\n    private class Def(val id: String, val name: String, val code: String, val squad: List<Slot>)\n\n    private fun roleOf(s: String): PlayerRole = when (s) {\n        \"BWL\" -> PlayerRole.BOWLER\n        \"AR\" -> PlayerRole.ALL_ROUNDER\n        \"WK\" -> PlayerRole.WICKETKEEPER\n        else -> PlayerRole.BATSMAN\n    }\n\n    private val defs: List<Def> by lazy {\n        DEFS_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n            val f = line.split('|')\n            val slots = f[3].split(';').map { entry ->\n                val p = entry.split('~')\n                if (p.size < 5) Slot(p[0], null)\n                else Slot(p[0], Spec(roleOf(p[1]), p[2].toInt(), p[3].toInt(), if (p[4] == \"S\") BowlingStyle.SPIN else BowlingStyle.PACE))\n            }\n            Def(f[0], f[1], f[2], slots)\n        }\n    }\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** The ten squads (strongest first). Everyone is a plain squad member: no quotas apply. */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val roster = CricketData.getAllTeams().flatMap { it.players }.associateBy { norm(it.name) }\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = defs.map { def ->\n            val players = def.squad.mapIndexed { index, slot ->\n                val id = \"${def.id}_ag${index + 1}\"\n                val base = roster[norm(slot.name)]\n                val player = if (slot.spec == null && base != null) {\n                    base.copy(id = id, teamId = def.id)\n                } else {\n                    val s = slot.spec ?: Spec(PlayerRole.BATSMAN, 55, 15, BowlingStyle.PACE)\n                    Player(\n                        id = id, teamId = def.id, name = slot.name, role = PlayerProfiles.role(slot.name, s.role),\n                        battingRating = s.bat, bowlingRating = s.bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(PlayerProfiles.role(slot.name, s.role), s.bat, s.bowl),\n                        bowlingStyle = PlayerProfiles.style(slot.name, s.style)\n                    )\n                }\n                tags[id] = SquadTag.DOMESTIC\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            val bat = avg(players.map { it.battingRating }.sortedDescending().take(8))\n            val bowl = avg(players.map { it.bowlingRating }.sortedDescending().take(5))\n            val field = avg(players.map { it.fieldingRating })\n            val national = CricketData.getTeamById(def.id)\n            national?.copy(battingRating = bat, bowlingRating = bowl, fieldingRating = field, players = players)\n                ?: Team(\n                    id = def.id, name = def.name, countryCode = def.code,\n                    battingRating = bat, bowlingRating = bowl, fieldingRating = field, players = players\n                )\n        }\n        return Pair(teams, tags)\n    }\n\n    // ---- Fixtures -----------------------------------------------------------------------------\n\n    private fun idOf(key: String): String = KEY_TO_ID.getValue(key)\n\n    /** 14 matches: six group matches, four quarter-finals, two semi-finals, the bronze medal match and the Final. */\n    fun buildSchedule(): List<TournamentFixture> {\n        val list = ArrayList<TournamentFixture>()\n        val groupMatches = listOf(\n            \"AFG\" to \"JPN\", \"HK\" to \"MAS\", \"AFG\" to \"NEP\", \"HK\" to \"OMA\", \"NEP\" to \"JPN\", \"MAS\" to \"OMA\"\n        )\n        for ((a, b) in groupMatches) {\n            val letter = GROUPS.first { a in it.second }.first\n            list.add(TournamentFixture(list.size, list.size + 1, \"Group $letter\", idOf(a), idOf(b), GROUND))\n        }\n        fun knockout(stage: String, note: String) =\n            list.add(TournamentFixture(list.size, list.size + 1, stage, null, null, GROUND, placeholder = note))\n        knockout(\"Quarter-final 1\", \"Pakistan v the Group B runner-up\")\n        knockout(\"Quarter-final 2\", \"India v the Group A runner-up\")\n        knockout(\"Quarter-final 3\", \"Bangladesh v the Group B winner\")\n        knockout(\"Quarter-final 4\", \"Sri Lanka v the Group A winner\")\n        knockout(\"Semi-final 1\", \"Winner of quarter-final 1 v winner of quarter-final 3\")\n        knockout(\"Semi-final 2\", \"Winner of quarter-final 2 v winner of quarter-final 4\")\n        knockout(BRONZE, \"The losers of the two semi-finals\")\n        knockout(FINAL, \"Gold medal match: the winners of the two semi-finals\")\n        return list\n    }\n\n    fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n\n    // ---- Tables and progress ------------------------------------------------------------------\n\n    private fun teamsOfStage(state: TournamentState, stage: String): Set<String> =\n        state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()\n\n    private fun stageTable(state: TournamentState, stage: String): List<StandingRow> {\n        val ids = teamsOfStage(state, stage)\n        return CplData.standings(state, stage).filter { it.team.id in ids }\n    }\n\n    /** The two group tables, with their headings. */\n    fun tables(state: TournamentState): List<Pair<String, List<StandingRow>>> =\n        GROUPS.map { \"Group ${it.first}\" }.filter { teamsOfStage(state, it).isNotEmpty() }\n            .map { it to stageTable(state, it) }\n\n    /** Fills in the quarter-finals, semi-finals, bronze match and Final as the teams become known. Safe after every match. */\n    fun advance(state: TournamentState): TournamentState {\n        var fx = state.fixtures\n        fun complete(stage: String): Boolean {\n            val l = fx.filter { it.stage == stage }\n            return l.isNotEmpty() && l.all { it.result != null }\n        }\n        fun winnerOf(id: Int): String? = fx.firstOrNull { it.id == id }?.result?.winnerId\n        fun loserOf(id: Int): String? {\n            val f = fx.firstOrNull { it.id == id } ?: return null\n            val w = f.result?.winnerId ?: return null\n            return if (f.homeId == w) f.awayId else f.homeId\n        }\n        fun fill(id: Int, home: String?, away: String?) {\n            if (home == null || away == null) return\n            fx = fx.map { f -> if (f.id == id && f.homeId == null) f.copy(homeId = home, awayId = away) else f }\n        }\n        if (complete(\"Group A\") && complete(\"Group B\")) {\n            val a = stageTable(state, \"Group A\").map { it.team.id }\n            val b = stageTable(state, \"Group B\").map { it.team.id }\n            if (a.size >= 2 && b.size >= 2) {\n                fill(QF_1_ID, idOf(\"PAK\"), b[1])\n                fill(QF_2_ID, idOf(\"IND\"), a[1])\n                fill(QF_3_ID, idOf(\"BAN\"), b[0])\n                fill(QF_4_ID, idOf(\"SL\"), a[0])\n            }\n        }\n        fill(SEMI_1_ID, winnerOf(QF_1_ID), winnerOf(QF_3_ID))\n        fill(SEMI_2_ID, winnerOf(QF_2_ID), winnerOf(QF_4_ID))\n        fill(BRONZE_ID, loserOf(SEMI_1_ID), loserOf(SEMI_2_ID))\n        fill(FINAL_ID, winnerOf(SEMI_1_ID), winnerOf(SEMI_2_ID))\n        return state.copy(fixtures = fx)\n    }\n\n    // ---- Data ---------------------------------------------------------------------------------\n\n    /** Team id | name | short name | squad. \"Name\" copies a game player; \"Name~ROLE~bat~bowl~S or P\" has its ratings written here. */\n    private const val DEFS_TEXT = \"\"\"\nteam_afg|Afghanistan|AFG|Darwish Rasooli;Abdullah Ahmadzai~BWL~20~62~P;Mohammad Akram~AR~54~52~P;Ismat Alam~AR~54~52~P;Faridoon Dawoodzai~BWL~20~62~P;Hassan Eisakhil~BAT~60~10~P;Mohammad Ishaq;Karim Janat;Faisal Shinozada~BAT~60~10~P;Nangeyalia Kharote;Imran Mir~AR~50~55~S;Arab Gul Momand~BAT~60~10~P;Farmanullah Safi~BAT~60~10~P;Khalid Taniwal~BAT~60~10~P;Najibullah Zadran\nteam_ban|Bangladesh|BAN|Litton Das;Towhid Hridoy;Nasum Ahmed;Yasir Ali~BAT~66~10~P;Parvez Hossain Emon;Mehidy Hasan Miraz;Tanzid Hasan;Saif Hassan~BAT~66~25~S;Mosaddek Hossain~AR~62~58~S;Rishad Hossain;Aliss Islam~BWL~25~66~P;Shoriful Islam;Hasan Mahmud;Mustafizur Rahman;Najmul Hossain Shanto\nteam_hk|Hong Kong|HKG|Yasim Murtaza~AR~62~55~S;Babar Hayat~BAT~70~20~S;Anas Khan~AR~50~58~S;Anshuman Rath~BAT~68~25~S;Shiv Mathur~BAT~58~16~P;Shahid Wasif~WK~60~10~P;Hafeez Khan~BAT~58~10~P;Nasrulla Rana~BAT~55~20~P;Nizakat Khan~AR~66~52~S;Rajab Hussain~BAT~58~10~P;Ehsan Khan~BWL~25~66~S;Mohammad Ghazanfar~BWL~20~62~P;Mohammad Waheed~BWL~20~58~S;Ayush Shukla~BWL~30~66~S;Mohammad Hassan Khan~BAT~58~10~P\nteam_ind|India|IND|Shreyas Iyer;Tilak Varma;Ravi Bishnoi~BWL~20~79~S;Jasprit Bumrah;Shivam Dube;Ishan Kishan;Vipraj Nigam~AR~51~46~P;Axar Patel;Sanju Samson;Abhishek Sharma;Arshdeep Singh;Washington Sundar;Vaibhav Sooryavanshi~BAT~56~12~P;Yash Thakur~BWL~16~58~P\nteam_jpn|Japan|JPN|Kendel Kadowaki-Fleming~BAT~50~16~S;Charlie Hara-Hinze~AR~44~42~S;Benjamin Ito-Davis~BAT~50~10~P;Alester Kadowaki-Fleming~BAT~50~10~P;Kohei Kubota~BAT~50~10~P;Jake Kusuda-Nairn~BAT~50~10~P;Wataru Miyauchi~WK~50~8~P;Reo Sakurano-Thomas~BAT~50~10~P;Alex Shirai-Patmore~WK~50~8~P;Shoma Sugaya-Slater~BAT~50~10~P;Declan Suzuki~BAT~50~10~P;Tsuyoshi Takada~BAT~50~10~P;Ibrahim Takahashi~AR~44~42~S;Makoto Taniyama~BAT~50~10~P;Lachlan Yamamoto-Lake~BAT~50~10~P\nteam_mas|Malaysia|MAS|Syed Aziz~BAT~55~10~P;Ainool Hafizs~WK~55~8~P;Muhamad Syahadat~BAT~55~10~P;Muhammad Amir~BAT~55~10~P;Virandeep Singh~AR~66~56~S;Pavandeep Singh~AR~49~47~S;Muhammad Haziq Aiman~BAT~55~10~P;Sharvin Muniandy~BAT~55~10~P;Muhammad Akram~BAT~55~10~P;Muhammad Wafiq~AR~49~47~P;Vijay Unni~BAT~55~10~P;Azri Azhar~BAT~55~10~P;Amir Khan~BAT~55~10~P;Aslam Khan~AR~49~47~S;Rahim Khan~BAT~55~10~P\nteam_nep|Nepal|NEP|Dipendra Singh Airee;Lokesh Bam~AR~55~50~P;Kushal Bhurtel;Gulshan Jha;Sundeep Jora;Sompal Kami;Karan KC;Sandeep Lamichhane;Kushal Malla;Sher Malla~AR~58~55~S;Rohit Paudel;Lalit Rajbanshi;Aarif Sheikh;Aasif Sheikh;Nandan Yadav~BWL~20~66~P\nteam_oman|Oman|OMA|Sufyan Mehmood~BWL~20~68~P;Muzaffar Shiralkar~WK~58~8~P;Faris Al Balushi~BAT~58~10~P;Issa Al Balushi~BAT~58~10~P;Mohammed Al Balushi~BAT~58~10~P;Nawed Al Balushi~BAT~58~10~P;Qais Al Balushi~BAT~58~10~P;Shuaib Al Balushi~BAT~58~10~P;Waheed Al Balushi~BAT~58~10~P;Wasim Al Balushi~BAT~58~10~P;Zubair Al Balushi~BAT~58~10~P;Abdul Jalil~WK~58~8~P;Mohammed Othman~BAT~58~10~P;Sameer Othman~BAT~58~10~P;Ahmed Al Zadjali~BAT~58~10~P\nteam_pak|Pakistan|PAK|Sahibzada Farhan~BAT~80~10~P;Abdul Samad~AR~63~58~P;Abrar Ahmed;Haider Ali~BAT~66~10~P;Saim Ayub;Ahmed Daniyal~BWL~15~68~P;Akif Javed~BWL~18~70~P;Usman Khan;Arafat Minhas~BWL~20~70~S;Saad Masood~BAT~64~10~P;Sufiyan Muqeem~BWL~15~78~S;Hassan Nawaz~BAT~74~10~P;Ali Raza~BWL~20~68~P;Maaz Sadaqat~AR~74~55~S;Mohammad Wasim Jr\nteam_sl|Sri Lanka|SL|Sahan Arachchige;Ashen Bandara~BAT~68~15~P;Lasith Croospulle~AR~62~40~S;Keshan de Livera~BAT~60~10~P;Niroshan Dickwella~WK~72~10~P;Binura Fernando~BWL~18~76~P;Nuwanidu Fernando;Tharindu Hansaka~BAT~60~10~P;Dushan Hemantha~AR~58~66~S;Sineth Jayawardena~AR~55~55~S;Chamika Karunaratne;Pramod Madushan;Wanuja Sahan~AR~56~58~P;Nuwan Thushara;Vijayakanth Viyaskanth~BWL~25~76~S\n\"\"\"\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "ASIAN_GAMES.md",
+      "content": "# Asian Games 2026 (patch 049)\n\nTournament > International tournament > Asian Games 2026 (the men's cricket event, T20, Kōrogi Sports Park,\nNisshin, Japan, 24 September to 3 October 2026).\n\n* **10 teams.** Six are drawn into two groups of three (Group A Nepal, Afghanistan, Japan; Group B Malaysia,\n  Hong Kong, Oman), each team plays the other two once, and the top two of each group go on. Four seeded teams\n  wait in the quarter-finals: **India, Pakistan, Sri Lanka, Bangladesh**.\n* **Quarter-finals (the real draw)**: Pakistan v the Group B runner-up, India v the Group A runner-up, Bangladesh\n  v the Group B winner, Sri Lanka v the Group A winner. **Semi-finals**: winner of QF1 v winner of QF3, winner of\n  QF2 v winner of QF4. Then the **bronze medal match** and the **gold medal match** (named \"Final\" so its winner\n  is the champion).\n* Every match is at **Kōrogi Sports Park**, a ground added to the game (ratings estimated; Nagoya in autumn is\n  humid and rain-prone).\n* **Squads**: the 15-man squads. Players the game already had keep their ratings; 66 are new with ESTIMATED\n  ratings (all of Japan and Malaysia, and the players missing from the other squads: guessed by a tier for the\n  team plus role/style from Wikipedia where a page existed). Japan and Malaysia are new national teams. The\n  Oman squad is as listed on Wikipedia.\n* Points: 2 for a win, 1 for no result; the group tables order by points, wins, net run rate.\n* Not built: the real results (in real life the quarter-finals were rained off), rain rules.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/StadiumData.kt",
+      "find": "        Stadium(\n            id = \"sheikh-zayed\",",
+      "replace": "        Stadium(\n            id = \"korogi-sports-park\", name = \"Kōrogi Sports Park\", city = \"Nisshin\", country = \"Japan\",\n            homeTeamIds = listOf(\"team_jpn\"),\n            pitchType = PitchType.BALANCED, pitchDescription = \"A new pitch: true and even, with a little help for the seamers early.\",\n            boundarySize = BoundarySize.MEDIUM, altitudeM = 20, dewFactor = 0.5,\n            avgT20FirstInningsScore = 150,\n            climate = StadiumClimate(0.35, 75, 22, 10, \"Mild and humid with a real chance of rain.\")\n        ),\n        Stadium(\n            id = \"sheikh-zayed\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: AsiaCup.stadium(id)\n",
+      "replace": "?: AsiaCup.stadium(id) ?: AsianGames.stadium(id)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: AsiaCup.shortNameOrNull(teamId) ?: IplData.shortName(teamId)",
+      "replace": "?: AsiaCup.shortNameOrNull(teamId) ?: AsianGames.shortNameOrNull(teamId) ?: IplData.shortName(teamId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "|| AsiaCup.isTeam(teamId)) \"\"",
+      "replace": "|| AsiaCup.isTeam(teamId) || AsianGames.isTeam(teamId)) \"\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        if (state.tournamentId == AsiaCup.TOURNAMENT_ID) return AsiaCup.advance(state)\n",
+      "replace": "        if (state.tournamentId == AsiaCup.TOURNAMENT_ID) return AsiaCup.advance(state)\n        if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/PlayerProfiles.kt",
+      "find": "    private val CHUNKS: List<String> = listOf(\n",
+      "replace": "    private val CHUNKS: List<String> = listOf(\n        \"\"\"\nMohammad Akram|R|b7|-|-\nIsmat Alam|R|b7|-|-\nHassan Eisakhil|R|-|-|-\nYasir Ali|R|b11|-|-\nMosaddek Hossain|R|b11|-|-\nAliss Islam|R|b11|-|-\nShiv Mathur|R|b9|-|-\nKendel Kadowaki-Fleming|L|b11|-|-\nCharlie Hara-Hinze|L|b4|-|-\nIbrahim Takahashi|R|b11|-|-\nPavandeep Singh|R|b4|-|-\nMuhammad Wafiq|L|b3|-|-\nAslam Khan|L|b4|-|-\nAhmed Daniyal|R|b10|-|-\nArafat Minhas|L|b4|-|-\nSaad Masood|R|b8|-|-\n\"\"\",\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "import com.cricketsim.logic.AsiaCup\n",
+      "replace": "import com.cricketsim.logic.AsiaCup\nimport com.cricketsim.logic.AsianGames\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "            asia -> AsiaCup.tables(state)\n",
+      "replace": "            asia -> AsiaCup.tables(state)\n            games -> AsianGames.tables(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "    val asia = state.tournamentId == AsiaCup.TOURNAMENT_ID\n",
+      "replace": "    val asia = state.tournamentId == AsiaCup.TOURNAMENT_ID\n    val games = state.tournamentId == AsianGames.TOURNAMENT_ID\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "                text = if (asia) {\n",
+      "replace": "                text = if (games) {\n                    \"Two points for a win, one each for no result. The top two of each group of three join India, Pakistan, \" +\n                        \"Sri Lanka and Bangladesh in the quarter-finals.\"\n                } else if (asia) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.AsiaCup\n",
+      "replace": "import com.cricketsim.logic.AsiaCup\nimport com.cricketsim.logic.AsianGames\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val acMatchStore = remember { MatchSaveStore(context, \"saved_asia2025_match.json\") }\n",
+      "replace": "    val acMatchStore = remember { MatchSaveStore(context, \"saved_asia2025_match.json\") }\n    val agStore = remember { TournamentSaveStore(context, \"saved_tournament_asiangames2026.json\") }\n    val agMatchStore = remember { MatchSaveStore(context, \"saved_asiangames2026_match.json\") }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"asia2025\" -> acStore; else -> cplStore }",
+      "replace": "\"asia2025\" -> acStore; \"ag2026\" -> agStore; else -> cplStore }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"asia2025\" -> acMatchStore; else -> cplMatchStore }",
+      "replace": "\"asia2025\" -> acMatchStore; \"ag2026\" -> agMatchStore; else -> cplMatchStore }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val acBuilt = remember { AsiaCup.buildTeams() }\n",
+      "replace": "    val acBuilt = remember { AsiaCup.buildTeams() }\n    val agBuilt = remember { AsianGames.buildTeams() }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"asia2025\" -> acBuilt; else -> cplBuilt }",
+      "replace": "\"asia2025\" -> acBuilt; \"ag2026\" -> agBuilt; else -> cplBuilt }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    kind = \"asia2025\"\n                    page = TPage.Adt\n                },\n",
+      "replace": "                    kind = \"asia2025\"\n                    page = TPage.Adt\n                },\n                onAsianGames = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"ag2026\"\n                    page = TPage.Adt\n                },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onAsiaCup: () -> Unit, onBack: () -> Unit) {",
+      "replace": "onAsiaCup: () -> Unit, onAsianGames: () -> Unit, onBack: () -> Unit) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onAsiaCup\n            )\n",
+      "replace": "                onClick = onAsiaCup\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Asian Games 2026\",\n                description = \"T20 in Nisshin, Japan: ten teams, a group stage, quarter-finals with India, Pakistan, Sri Lanka and Bangladesh seeded, then the medal matches.\",\n                enabled = true,\n                onClick = onAsianGames\n            )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val isAc = kind == \"asia2025\"\n",
+      "replace": "            val isAc = kind == \"asia2025\"\n            val isAg = kind == \"ag2026\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isAc -> AsiaCup.TOURNAMENT_NAME\n",
+      "replace": "                isAc -> AsiaCup.TOURNAMENT_NAME\n                isAg -> AsianGames.TOURNAMENT_NAME\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isMlc || isSa || isWc || isCt || isAc) {",
+      "replace": "isMlc || isSa || isWc || isCt || isAc || isAg) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        isWc || isCt || isAc -> Unit\n",
+      "replace": "                        isWc || isCt || isAc || isAg -> Unit\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                page = if (isWc || isCt || isAc) TPage.International else TPage.Leagues\n",
+      "replace": "                page = if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    isAc -> \"The men's T20 Asia Cup 2025",
+      "replace": "                    isAg -> \"The men's cricket event of the 2026 Asian Games in Nisshin, Japan: ten teams, two groups of three, the quarter-finals with India, Pakistan, Sri Lanka and Bangladesh seeded, the semi-finals, the bronze medal match and the gold medal match.\"\n                    isAc -> \"The men's T20 Asia Cup 2025",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"ct2025\" || kind == \"asia2025\") TPage.Adt",
+      "replace": "kind == \"ct2025\" || kind == \"asia2025\" || kind == \"ag2026\") TPage.Adt",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        \"asia2025\" -> AsiaCup.newTournament(teamId, built)\n",
+      "replace": "                        \"asia2025\" -> AsiaCup.newTournament(teamId, built)\n                        \"ag2026\" -> AsianGames.newTournament(teamId, built)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind != \"ct2025\" && kind != \"asia2025\",",
+      "replace": "kind != \"ct2025\" && kind != \"asia2025\" && kind != \"ag2026\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ct2025\", \"asia2025\" -> TPage.Adt",
+      "replace": "\"ct2025\", \"asia2025\", \"ag2026\" -> TPage.Adt",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "|| state.tournamentId == AsiaCup.TOURNAMENT_ID) {\n        WorldCupTableTab(state)",
+      "replace": "|| state.tournamentId == AsiaCup.TOURNAMENT_ID || state.tournamentId == AsianGames.TOURNAMENT_ID) {\n        WorldCupTableTab(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                AsiaCup.TOURNAMENT_ID -> AsiaCup.stadiums\n",
+      "replace": "                AsiaCup.TOURNAMENT_ID -> AsiaCup.stadiums\n                AsianGames.TOURNAMENT_ID -> AsianGames.stadiums\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"The T20 World Cup 2026, the Champions Trophy 2025 and the Asia Cup 2025, with the real teams, squads and fixtures.\"",
+      "replace": "\"The T20 World Cup 2026, the Champions Trophy 2025, the Asia Cup 2025 and the Asian Games 2026, with the real teams, squads and fixtures.\"",
+      "count": 1
+    }
+  ]
+}
