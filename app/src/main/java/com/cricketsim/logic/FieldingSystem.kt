@@ -548,7 +548,7 @@ object FieldingSystem {
      * powerplay, and the two overs of a Power Surge once the batting side has called it.
      */
     fun isRestrictedBall(state: MatchState, ballsBowled: Int): Boolean {
-        if (state.surge == null) return isPowerplayBall(state.format, ballsBowled)
+        if (state.surge == null) return state.rules?.let { ballsBowled < it.restrictionBalls } ?: isPowerplayBall(state.format, ballsBowled)
         return ballsBowled < PowerSurge.BBL_POWERPLAY_BALLS || PowerSurge.isActiveAt(state, ballsBowled)
     }
 
@@ -560,6 +560,14 @@ object FieldingSystem {
     const val MAX_DEEP_FIELDERS_POWERPLAY = 3
     const val MAX_DEEP_FIELDERS_NORMAL = 5
 
+    /** The deep-fielder cap during the restricted overs of the match being played (a custom tournament changes it). */
+    @Volatile var powerplayDeepCap: Int = MAX_DEEP_FIELDERS_POWERPLAY
+
+    /** Sets the restricted-overs cap for the match about to be played (null rules = the game's own 3). */
+    fun applyRules(rules: MatchRules?) {
+        powerplayDeepCap = rules?.fieldersOutside ?: MAX_DEEP_FIELDERS_POWERPLAY
+    }
+
     /**
      * Whether the given arrangement is legal right now. During a
      * powerplay, at most 3 fielders may be in the deep; outside the
@@ -568,7 +576,7 @@ object FieldingSystem {
      */
     fun isFieldLegal(placements: List<FieldPlacement>, isPowerplay: Boolean): Boolean {
         val deepCount = countDeepFielders(placements)
-        val cap = if (isPowerplay) MAX_DEEP_FIELDERS_POWERPLAY else MAX_DEEP_FIELDERS_NORMAL
+        val cap = if (isPowerplay) powerplayDeepCap else MAX_DEEP_FIELDERS_NORMAL
         return deepCount <= cap
     }
 
@@ -578,7 +586,7 @@ object FieldingSystem {
      */
     fun getIllegalFieldReason(placements: List<FieldPlacement>, isPowerplay: Boolean): String? {
         val deepCount = countDeepFielders(placements)
-        val cap = if (isPowerplay) MAX_DEEP_FIELDERS_POWERPLAY else MAX_DEEP_FIELDERS_NORMAL
+        val cap = if (isPowerplay) powerplayDeepCap else MAX_DEEP_FIELDERS_NORMAL
         if (deepCount <= cap) return null
         val stage = if (isPowerplay) "During the powerplay" else "Outside the powerplay"
         return "$stage, at most $cap fielders are allowed in the deep — this field has $deepCount."

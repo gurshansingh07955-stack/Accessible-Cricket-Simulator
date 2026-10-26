@@ -135,7 +135,8 @@ object CplSimulator {
         stadium: Stadium,
         random: Random,
         format: MatchFormat = MatchFormat.T20,
-        powerSurge: Boolean = false
+        powerSurge: Boolean = false,
+        rules: MatchRules? = null
     ): SimResult? {
         val home = pickXI(homeSquad, tags, stadium)
         val away = pickXI(awaySquad, tags, stadium)
@@ -144,7 +145,7 @@ object CplSimulator {
         val decision = tossDecision(stadium, weather)
 
         var s = MatchStateMachine.createNewMatch(
-            format, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather
+            format, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather, rules = rules
         )
         // Neither side is "the user": the engine then treats both as AI-controlled everywhere
         // (next batter, bowling changes, fields), and its difficulty setting favours nobody.
@@ -155,7 +156,7 @@ object CplSimulator {
             needsBowlerSelection = false,
             fieldPlacements = FieldingSystem.generateAiFieldPlacements(
                 FieldingSystem.getFieldingPlayers(s.bowlingTeam, s.currentBowler.id),
-                FieldingSystem.isPowerplayOver(s.format, 0)
+                FieldingSystem.isRestrictedOver(s, 0)
             )
         )
 
@@ -416,6 +417,7 @@ object CplSimulator {
 
     /** Winner of the Final, once it has been played. */
     fun champion(state: TournamentState): Team? {
+        if (TournamentRules.isCustom(state.tournamentId)) CustomTournaments.leagueChampion(state)?.let { return it }
         val finalMatch = state.fixtures.firstOrNull { it.stage == "Final" } ?: return null
         val id = finalMatch.result?.winnerId ?: return null
         return state.teams.find { it.id == id }
@@ -477,6 +479,7 @@ object CplSimulator {
         if (state.tournamentId == ChampionsTrophy.TOURNAMENT_ID) return ChampionsTrophy.advance(state)
         if (state.tournamentId == AsiaCup.TOURNAMENT_ID) return AsiaCup.advance(state)
         if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)
+        if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
         val table = CplData.standings(state)
@@ -541,7 +544,7 @@ object CplSimulator {
         val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
         val sim = simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
-            state.tournamentId == BigBashLeague.TOURNAMENT_ID) ?: return state
+            state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId)) ?: return state
         val fixtures = state.fixtures.map {
             if (it.id == fixture.id) it.copy(result = sim.result, scorecard = sim.scorecard) else it
         }

@@ -197,7 +197,9 @@ fun MatchScreen(
     /** The IPL's Impact Player rule: each side's five named substitutes. Null = no Impact Players in this match. */
     impact: ImpactSetup? = null,
     /** The Big Bash League's Power Surge is part of this match. */
-    powerSurge: Boolean = false
+    powerSurge: Boolean = false,
+    /** A custom tournament's rules (overs, restriction, DRS, rain); null = the format's own. */
+    rules: MatchRules? = null
 ) {
     val services = LocalGameServices.current
     val matchContext = LocalContext.current
@@ -215,8 +217,10 @@ fun MatchScreen(
                 tossDecision = toss.decision,
                 stadiumId = stadium.id,
                 weather = WeatherSystem.generateWeatherForStadium(stadium),
-                impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) }
+                impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) },
+                rules = rules
             )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }
+                .also { FieldingSystem.applyRules(it.rules) }
         )
     }
     var recentCommentary by remember { mutableStateOf<List<String>>(resume?.recentCommentary ?: emptyList()) }
@@ -768,7 +772,7 @@ fun MatchScreen(
             title = "Change your bowler",
             players = MatchStateMachine.getBowlerChangeOptions(matchState),
             bowlerStats = matchState.currentInningsData.bowlerStats,
-            maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(matchState.format),
+            maxOversPerBowler = MatchStateMachine.maxOversFor(matchState),
             onConfirm = { bowler ->
                 matchState = MatchStateMachine.changeBowlerBeforeFirstBall(matchState, bowler)
                 showChangeBowler = false
@@ -784,7 +788,7 @@ fun MatchScreen(
             title = if (noBallsBowledYet) "Select your opening bowler" else "Select your next bowler",
             players = MatchSimulation.bowlerChoices(matchState),
             bowlerStats = matchState.currentInningsData.bowlerStats,
-            maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(matchState.format),
+            maxOversPerBowler = MatchStateMachine.maxOversFor(matchState),
             onConfirm = { bowler ->
                 matchState = MatchStateMachine.selectBowler(matchState, bowler)
             }

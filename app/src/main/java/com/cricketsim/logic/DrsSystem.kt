@@ -147,7 +147,11 @@ object DrsSystem {
 
     /** How many reviews the side currently batting has left this innings. */
     fun reviewsRemaining(state: MatchState): Int =
-        (reviewsPerInnings(state.format) - state.drsReviewsUsed).coerceAtLeast(0)
+        ((state.rules?.drsReviews ?: reviewsPerInnings(state.format)) - state.drsReviewsUsed).coerceAtLeast(0)
+
+    /** "2 reviews", or "unlimited reviews" when a custom tournament allows as many as the team likes. */
+    fun reviewsText(n: Int): String =
+        if (n >= CustomTournamentDef.UNLIMITED_REVIEWS / 2) "unlimited reviews" else if (n == 1) "1 review" else "$n reviews"
 
     // --- Survival, by the BATTER's timing ---
 

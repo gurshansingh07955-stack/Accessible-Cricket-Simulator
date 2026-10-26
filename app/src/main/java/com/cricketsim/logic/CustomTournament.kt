@@ -113,6 +113,23 @@ object TournamentFormats {
 data class GameTournament(val id: String, val name: String, val formatKey: String, val group: String)
 
 object GameTournaments {
+    /** The tournament id behind a Tournament page "kind" (a custom tournament's kind is "custom:<id>"). */
+    fun idForKind(kind: String): String = when (kind) {
+        "cpl" -> CplData.TOURNAMENT_ID
+        "ipl" -> "ipl2027"
+        "adt10" -> AbuDhabiT10.TOURNAMENT_ID
+        "lpl" -> LankaPremierLeague.TOURNAMENT_ID
+        "ilt" -> InternationalLeagueT20.TOURNAMENT_ID
+        "bbl" -> BigBashLeague.TOURNAMENT_ID
+        "mlc" -> MajorLeagueCricket.TOURNAMENT_ID
+        "sa20" -> Sa20.TOURNAMENT_ID
+        "wc2026" -> T20WorldCup.TOURNAMENT_ID
+        "ct2025" -> ChampionsTrophy.TOURNAMENT_ID
+        "asia2025" -> AsiaCup.TOURNAMENT_ID
+        "ag2026" -> AsianGames.TOURNAMENT_ID
+        else -> kind.removePrefix("custom:")
+    }
+
     val all: List<GameTournament> by lazy {
         listOf(
             GameTournament(CplData.TOURNAMENT_ID, CplData.TOURNAMENT_NAME, "T20", "League tournaments"),

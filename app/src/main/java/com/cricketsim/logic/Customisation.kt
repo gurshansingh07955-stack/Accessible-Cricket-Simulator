@@ -74,6 +74,7 @@ object Customisation {
     private val gson = Gson()
     private var file: File? = null
     private var logoDir: File? = null
+    private var formatsFile: File? = null
     private val writer = Executors.newSingleThreadExecutor { r -> Thread(r, "customisation-writer").apply { isDaemon = true } }
 
     @Volatile private var data = CustomData()
@@ -89,6 +90,7 @@ object Customisation {
         val dir = context.applicationContext.filesDir
         file = File(dir, "customisation.json")
         logoDir = File(dir, "team_logos")
+        formatsFile = File(dir, "custom_formats.json")
         data = try {
             val f = file
             if (f != null && f.exists()) gson.fromJson(f.readText(), CustomData::class.java) ?: CustomData() else CustomData()
@@ -276,6 +278,14 @@ object Customisation {
 
     fun deleteAdded(id: String) {
         update { d -> d.copy(addedPlayers = (d.addedPlayers ?: emptyList()).filter { it.id != id }) }
+    }
+
+    /** The player's custom match formats (read from their file; used when a match is set up). */
+    fun customFormats(): List<CustomFormat> = try {
+        val f = formatsFile
+        if (f != null && f.exists()) (gson.fromJson(f.readText(), Array<CustomFormat>::class.java)?.toList() ?: emptyList()) else emptyList()
+    } catch (e: Exception) {
+        emptyList()
     }
 
     // ---- Tournaments ----------------------------------------------------------------------------

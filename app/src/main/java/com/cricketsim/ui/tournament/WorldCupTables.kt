@@ -20,6 +20,8 @@ import com.cricketsim.logic.AsiaCup
 import com.cricketsim.logic.AsianGames
 import com.cricketsim.logic.ChampionsTrophy
 import com.cricketsim.logic.CplData
+import com.cricketsim.logic.CustomTournaments
+import com.cricketsim.logic.TournamentRules
 import com.cricketsim.logic.T20WorldCup
 import com.cricketsim.logic.TournamentState
 
@@ -37,13 +39,16 @@ internal fun WorldCupTableTab(state: TournamentState) {
             champions -> ChampionsTrophy.tables(state)
             asia -> AsiaCup.tables(state)
             games -> AsianGames.tables(state)
+            TournamentRules.isCustom(state.tournamentId) -> CustomTournaments.tables(state)
             else -> T20WorldCup.tables(state)
         }
     }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item(key = "intro") {
             Text(
-                text = if (games) {
+                text = if (TournamentRules.isCustom(state.tournamentId)) {
+                    "Two points for a win, one each for no result. A knockout tournament has no table."
+                } else if (games) {
                     "Two points for a win, one each for no result. The top two of each group of three join India, Pakistan, " +
                         "Sri Lanka and Bangladesh in the quarter-finals."
                 } else if (asia) {

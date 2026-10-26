@@ -215,7 +215,7 @@ private fun DrsOfferStage(
         // The two choices come first, so they are the first things reached
         // with a screen reader while the clock is running.
         Button(onClick = onRequestReview, modifier = Modifier.fillMaxWidth()) {
-            Text("DRS review, ${countOf(reviewsRemaining, "review")} left")
+            Text("DRS review, ${DrsSystem.reviewsText(reviewsRemaining)} left")
         }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onMoveOn, modifier = Modifier.fillMaxWidth()) {
@@ -275,7 +275,7 @@ private fun DrsAiDecidingStage(
             style = MaterialTheme.typography.bodyLarge
         )
         Text(
-            "${countOf(reviewsRemaining, "review")} left.",
+            "${DrsSystem.reviewsText(reviewsRemaining)} left.",
             style = MaterialTheme.typography.bodyMedium
         )
     }

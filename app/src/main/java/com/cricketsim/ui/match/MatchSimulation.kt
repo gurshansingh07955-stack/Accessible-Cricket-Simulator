@@ -222,7 +222,7 @@ object MatchSimulation {
         val eligible = MatchStateMachine.getEligibleBowlers(state)
         if (eligible.isNotEmpty()) return eligible
 
-        val maxOvers = MatchStateMachine.getMaxOversPerBowler(state.format)
+        val maxOvers = MatchStateMachine.maxOversFor(state)
         val underCap = state.bowlingTeam.players.filter { player ->
             (state.currentInningsData.bowlerStats.firstOrNull { it.playerId == player.id }?.overs ?: 0) < maxOvers
         }
@@ -273,6 +273,7 @@ object MatchSimulation {
      * interruption in the same match.
      */
     private fun maybeInterruptForRain(state: MatchState, stadium: Stadium): MatchState {
+        if (state.rules?.rainEnabled == false) return state
         val triggers = WeatherSystem.shouldTriggerRainInterruption(
             stadium, state.format, state.score.overs, state.oversLimit, state.rainInterruptionUsed
         )

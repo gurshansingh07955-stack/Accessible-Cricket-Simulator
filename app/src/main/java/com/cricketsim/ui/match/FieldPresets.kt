@@ -55,7 +55,7 @@ object FieldPresets {
             isPowerplay = false,
             situationalBias = preset.bias
         )
-        val cap = if (isPowerplay) FieldingSystem.MAX_DEEP_FIELDERS_POWERPLAY else FieldingSystem.MAX_DEEP_FIELDERS_NORMAL
+        val cap = if (isPowerplay) FieldingSystem.powerplayDeepCap else FieldingSystem.MAX_DEEP_FIELDERS_NORMAL
         var excess = FieldingSystem.countDeepFielders(template) - cap
         if (excess <= 0) return PresetResult(template, false)
 

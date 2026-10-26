@@ -183,7 +183,9 @@ data class MatchState(
     // The IPL's Impact Player rule (logic/ImpactPlayer.kt); null = the match has no Impact Players.
     val impact: ImpactState? = null,
     // The Big Bash League's Power Surge (logic/PowerSurge.kt); null = the match has none.
-    val surge: SurgeState? = null
+    val surge: SurgeState? = null,
+    // A custom tournament's rules (overs, fielding restriction, DRS, rain); null = the format's own rules.
+    val rules: MatchRules? = null
 )
 
 object MatchStateMachine {
@@ -207,13 +209,15 @@ object MatchStateMachine {
         bowlerId: String,
         userTeamId: String,
         format: MatchFormat,
-        oversSoFar: Int
+        oversSoFar: Int,
+        rules: MatchRules? = null
     ): List<FieldPlacement> {
         val fieldingPlayers = FieldingSystem.getFieldingPlayers(bowlingTeam, bowlerId)
         if (bowlingTeam.id == userTeamId) {
             return FieldingSystem.createDefaultFieldPlacements(fieldingPlayers)
         }
-        return FieldingSystem.generateAiFieldPlacements(fieldingPlayers, FieldingSystem.isPowerplayOver(format, oversSoFar))
+        val restricted = if (rules != null) oversSoFar * 6 < rules.restrictionBalls else FieldingSystem.isPowerplayOver(format, oversSoFar)
+        return FieldingSystem.generateAiFieldPlacements(fieldingPlayers, restricted)
     }
 
     /**
@@ -233,7 +237,8 @@ object MatchStateMachine {
         tossDecision: TossDecision,
         stadiumId: String,
         weather: WeatherSnapshot,
-        impact: ImpactState? = null
+        impact: ImpactState? = null,
+        rules: MatchRules? = null
     ): MatchState {
         // Determine who bats first
         val battingTeam: Team
@@ -265,7 +270,8 @@ object MatchStateMachine {
 
         val currentInningsData = MatchStats.createEmptyInningsData(battingTeam, bowlingTeam, Pair(striker, nonStriker), bowler)
 
-        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, userTeam.id, format, 0)
+        FieldingSystem.applyRules(rules)
+        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, userTeam.id, format, 0, rules)
 
         return MatchState(
             id = generateId(),
@@ -296,13 +302,14 @@ object MatchStateMachine {
             fieldPlacements = fieldPlacements,
             stadiumId = stadiumId,
             weather = weather,
-            oversLimit = MatchEngine.getFormatOvers(format),
+            oversLimit = rules?.overs ?: MatchEngine.getFormatOvers(format),
             rainInterruptionUsed = false,
             activeRainDelay = null,
             firstInningsInterruption = null,
             secondInningsInterruption = null,
             dlsRevised = false,
-            impact = impact
+            impact = impact,
+            rules = rules
         )
         // Note: the web source calls saveMatch(newState) here — omitted,
         // persistence not ported yet (see file header).
@@ -320,6 +327,9 @@ object MatchStateMachine {
      * Kotlin models that as Int.MAX_VALUE, which is practically infinite
      * for this comparison's purposes).
      */
+    /** How many overs one bowler may bowl in this match: a custom tournament's own limit, else the format's. */
+    fun maxOversFor(state: MatchState): Int = state.rules?.maxOversPerBowler ?: getMaxOversPerBowler(state.format)
+
     fun getMaxOversPerBowler(format: MatchFormat): Int = when (format) {
         MatchFormat.T20 -> 4
         MatchFormat.ODI -> 10
@@ -347,7 +357,7 @@ object MatchStateMachine {
      * default and shouldn't be excluded from the choices.
      */
     fun getEligibleBowlers(state: MatchState): List<Player> {
-        val maxOvers = getMaxOversPerBowler(state.format)
+        val maxOvers = maxOversFor(state)
         val noBallsBowledYet = state.currentInningsData.totalBalls == 0 && state.currentInningsData.totalOvers == 0
 
         val underCap = state.bowlingTeam.players
@@ -419,7 +429,7 @@ object MatchStateMachine {
      * except the one already chosen and the one who bowled the over before (no back-to-back overs).
      */
     fun getBowlerChangeOptions(state: MatchState): List<Player> {
-        val maxOvers = getMaxOversPerBowler(state.format)
+        val maxOvers = maxOversFor(state)
         val previousOverBowlerId = state.ballByBall.lastOrNull()?.bowlerId
         return state.bowlingTeam.players
             .filter { it.role == PlayerRole.BOWLER || it.role == PlayerRole.ALL_ROUNDER }
@@ -710,7 +720,7 @@ object MatchStateMachine {
 
         val currentInningsData = MatchStats.createEmptyInningsData(battingTeam, bowlingTeam, Pair(striker, nonStriker), bowler)
 
-        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, state.userTeam.id, state.format, 0)
+        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, state.userTeam.id, state.format, 0, state.rules)
 
         return state.copy(
             currentInnings = 2,
