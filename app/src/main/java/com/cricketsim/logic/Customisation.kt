@@ -45,7 +45,9 @@ data class CustomData(
     val teamNames: Map<String, String>? = null,
     val playerEdits: List<PlayerEdit>? = null,
     val addedPlayers: List<AddedPlayer>? = null,
-    val customTeams: List<CustomTeam>? = null
+    val customTeams: List<CustomTeam>? = null,
+    val tournamentEdits: Map<String, TournamentEdit>? = null,
+    val customTournaments: List<CustomTournamentDef>? = null
 )
 
 /**
@@ -274,6 +276,38 @@ object Customisation {
 
     fun deleteAdded(id: String) {
         update { d -> d.copy(addedPlayers = (d.addedPlayers ?: emptyList()).filter { it.id != id }) }
+    }
+
+    // ---- Tournaments ----------------------------------------------------------------------------
+
+    fun tournamentEdit(id: String): TournamentEdit? = data.tournamentEdits?.get(id)
+
+    /** The tournament's name as the player has set it (the game's own name when not renamed). */
+    fun tournamentName(id: String, default: String): String = tournamentEdit(id)?.name ?: default
+
+    /** The format key the player has chosen for one of the game's tournaments (the original when not changed). */
+    fun tournamentFormatKey(id: String, default: String): String = tournamentEdit(id)?.formatKey ?: default
+
+    /** Saves a new name and/or format for one of the game's tournaments; both null removes the edit. */
+    fun setTournamentEdit(id: String, name: String?, formatKey: String?) {
+        update { d ->
+            val rest = (d.tournamentEdits ?: emptyMap()) - id
+            d.copy(tournamentEdits = if (name == null && formatKey == null) rest else rest + (id to TournamentEdit(name, formatKey)))
+        }
+    }
+
+    fun customTournaments(): List<CustomTournamentDef> = data.customTournaments ?: emptyList()
+
+    /** Adds a custom tournament, or replaces the one with the same id. */
+    fun saveCustomTournament(def: CustomTournamentDef) {
+        update { d ->
+            val all = d.customTournaments ?: emptyList()
+            d.copy(customTournaments = if (all.any { it.id == def.id }) all.map { if (it.id == def.id) def else it } else all + def)
+        }
+    }
+
+    fun deleteCustomTournament(id: String) {
+        update { d -> d.copy(customTournaments = (d.customTournaments ?: emptyList()).filter { it.id != id }) }
     }
 
     // ---- Custom teams ---------------------------------------------------------------------------

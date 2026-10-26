@@ -63,15 +63,16 @@ fun AdvancedCustomisationFlow(onExit: () -> Unit) {
     when (section) {
         1 -> CustomFormatFlow(onExit = { section = 0 })
         2 -> CustomTeamsFlow(onExit = { section = 0 })
+        3 -> CustomTournamentsFlow(onExit = { section = 0 })
         else -> {
             BackHandler(onBack = onExit)
-            AdvancedMenu(onCreateFormat = { section = 1 }, onCreateTeams = { section = 2 }, onBack = onExit)
+            AdvancedMenu(onCreateFormat = { section = 1 }, onCreateTeams = { section = 2 }, onCreateTournaments = { section = 3 }, onBack = onExit)
         }
     }
 }
 
 @Composable
-private fun AdvancedMenu(onCreateFormat: () -> Unit, onCreateTeams: () -> Unit, onBack: () -> Unit) {
+private fun AdvancedMenu(onCreateFormat: () -> Unit, onCreateTeams: () -> Unit, onCreateTournaments: () -> Unit, onBack: () -> Unit) {
     PageColumn {
         BackButton(onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -95,10 +96,10 @@ private fun AdvancedMenu(onCreateFormat: () -> Unit, onCreateTeams: () -> Unit, 
         Spacer(modifier = Modifier.height(12.dp))
         OptionButton(
             title = "Create Custom Tournaments",
-            description = "Coming soon.",
-            enabled = false,
+            description = "Design your own tournament, or change the name and format of the game's tournaments.",
+            enabled = true,
             emphasised = false,
-            onClick = {}
+            onClick = onCreateTournaments
         )
     }
 }
@@ -350,7 +351,7 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
 
 /** A page with one text box: focused as it opens, a mistake read out as a live region, Continue below. */
 @Composable
-private fun TextInputPage(
+internal fun TextInputPage(
     title: String,
     hint: String,
     label: String,
