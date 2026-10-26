@@ -1,0 +1,467 @@
+{
+  "name": "Custom tournaments part 2: play them",
+  "message": "Play custom tournaments and apply their rules inside matches",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+    "contains": "object CustomTournaments"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * The rules a custom tournament (or a game tournament given another format) plays its matches by. A match carries\n * them in [MatchState.rules]; a null means \"the format's own rules\".\n *\n * @param overs overs a side\n * @param restrictionBalls balls at the start of each innings with the fielding restriction (0 = none)\n * @param fieldersOutside the most fielders allowed outside the circle during that restriction\n * @param drsReviews reviews per innings: 0 = DRS off, 1 to 4, or [CustomTournamentDef.UNLIMITED_REVIEWS]\n * @param rainEnabled whether rain can interrupt a match\n * @param maxOversPerBowler the most overs one bowler may bowl\n */\ndata class MatchRules(\n    val overs: Int,\n    val restrictionBalls: Int,\n    val fieldersOutside: Int,\n    val drsReviews: Int,\n    val rainEnabled: Boolean,\n    val maxOversPerBowler: Int\n)\n\n/**\n * Which rules a tournament plays by: looked up by tournament id, so the same answer is used when the player's\n * match is played, when the others are simulated, and for net run rate.\n *\n *  - A custom tournament (id \"ctour_...\") plays its chosen format with its own DRS and rain settings.\n *  - A game tournament the player gave another format in Edit Tournament plays that format.\n *  - Anything else has no rules object: the game's own format rules apply exactly as before.\n */\nobject TournamentRules {\n    const val CUSTOM_PREFIX = \"ctour_\"\n\n    fun isCustom(id: String?): Boolean = id != null && id.startsWith(CUSTOM_PREFIX)\n\n    private fun builtIn(key: String): MatchFormat? = when (key) {\n        \"T20\" -> MatchFormat.T20\n        \"ODI\" -> MatchFormat.ODI\n        \"T10\" -> MatchFormat.T10\n        \"FIVE_OVERS\" -> MatchFormat.FIVE_OVERS\n        \"ONE_OVER\" -> MatchFormat.ONE_OVER\n        else -> null\n    }\n\n    /** The game format whose built-in constants (powerplay timing, caught-and-bowled odds...) suit this many overs best. */\n    fun baseFormatForOvers(overs: Int): MatchFormat = when {\n        overs >= 40 -> MatchFormat.ODI\n        overs >= 15 -> MatchFormat.T20\n        overs >= 8 -> MatchFormat.T10\n        overs >= 3 -> MatchFormat.FIVE_OVERS\n        else -> MatchFormat.ONE_OVER\n    }\n\n    /** The rules of a format key (\"T20\", \"ODI\"... or \"custom:<id>\"), with DRS on at its usual number of reviews and rain on. */\n    fun rulesForFormat(key: String): MatchRules? {\n        val format = builtIn(key)\n        if (format != null) {\n            return MatchRules(\n                overs = MatchEngine.getFormatOvers(format),\n                restrictionBalls = FieldingSystem.powerplayBalls(format),\n                fieldersOutside = FieldingSystem.MAX_DEEP_FIELDERS_POWERPLAY,\n                drsReviews = DrsSystem.reviewsPerInnings(format),\n                rainEnabled = true,\n                maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(format)\n            )\n        }\n        if (key.startsWith(\"custom:\")) {\n            val id = key.removePrefix(\"custom:\")\n            val cf = Customisation.customFormats().find { it.id == id } ?: return null\n            return MatchRules(\n                overs = cf.overs,\n                restrictionBalls = if (cf.restrictionsEnabled) cf.restrictionOvers * 6 else 0,\n                fieldersOutside = cf.fieldersOutside,\n                drsReviews = DrsSystem.reviewsPerInnings(baseFormatForOvers(cf.overs)),\n                rainEnabled = true,\n                maxOversPerBowler = cf.maxOversPerBowler\n            )\n        }\n        return null\n    }\n\n    fun rulesFor(tournamentId: String?): MatchRules? {\n        if (tournamentId == null) return null\n        if (isCustom(tournamentId)) {\n            val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null\n            val base = rulesForFormat(def.formatKey) ?: return null\n            return base.copy(drsReviews = if (def.drsEnabled) def.drsReviews else 0, rainEnabled = def.rainEnabled)\n        }\n        val key = Customisation.tournamentEdit(tournamentId)?.formatKey ?: return null\n        return rulesForFormat(key)\n    }\n\n    /** The game format to play the tournament as (null = the tournament's own format, unchanged). */\n    fun baseFormatFor(tournamentId: String?): MatchFormat? = rulesFor(tournamentId)?.let { baseFormatForOvers(it.overs) }\n\n    /** Balls in a full innings, for net run rate (null = unchanged). */\n    fun ballsFor(tournamentId: String?): Int? = rulesFor(tournamentId)?.let { it.overs * 6 }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+      "content": "package com.cricketsim.logic\n\nimport kotlin.random.Random\n\n/**\n * Playing a custom tournament (Tournament > Custom tournaments): building its teams and fixtures from the\n * [CustomTournamentDef] the player saved, moving winners on, and its tables. The rules its matches are played by\n * are in [TournamentRules].\n */\nobject CustomTournaments {\n    fun def(id: String): CustomTournamentDef? = Customisation.customTournaments().find { it.id == id }\n\n    fun nameOf(id: String): String = def(id)?.name ?: \"Custom tournament\"\n\n    fun scheduleOf(d: CustomTournamentDef): ScheduleType =\n        try { ScheduleType.valueOf(d.schedule) } catch (e: Exception) { ScheduleType.SINGLE_RR }\n\n    fun introOf(id: String): String {\n        val d = def(id) ?: return \"This custom tournament could not be found.\"\n        val format = TournamentFormats.find(d.formatKey, Customisation.customFormats())?.name ?: d.formatKey\n        val s = scheduleOf(d)\n        val n = d.teamKeys.size\n        val drs = if (!d.drsEnabled) \"DRS off\" else if (d.drsReviews == CustomTournamentDef.UNLIMITED_REVIEWS) \"DRS with unlimited reviews\" else \"DRS with ${d.drsReviews} review${if (d.drsReviews == 1) \"\" else \"s\"} an innings\"\n        return \"$format, ${s.label}: $n teams, ${s.matchCount(n)} matches at ${d.stadiumIds.size} stadium${if (d.stadiumIds.size == 1) \"\" else \"s\"}. $drs, rain ${if (d.rainEnabled) \"on\" else \"off\"}.\"\n    }\n\n    fun stadiumsFor(tournamentId: String): List<Stadium>? =\n        def(tournamentId)?.stadiumIds?.mapNotNull { StadiumData.getStadiumById(it) }\n\n    /** A three-letter name for a custom team (the other teams already have theirs). */\n    fun shortNameOrNull(teamId: String): String? =\n        Customisation.customTeams().find { it.id == teamId }?.let { c ->\n            c.name.filter { it.isLetter() }.take(3).uppercase().ifEmpty { \"CUS\" }\n        }\n\n    /** Round robin plays the table; a round robin with the IPL's playoffs uses the game's own play-off code. */\n    fun usesDefaultPlayoffs(tournamentId: String): Boolean = def(tournamentId)?.let { scheduleOf(it) == ScheduleType.RR_IPL } ?: false\n\n    /** The teams of a saved tournament (every squad taken as the game has it now), with plain squad tags. */\n    fun buildTeams(id: String): Pair<List<Team>, Map<String, SquadTag>> {\n        val d = def(id) ?: return Pair(emptyList(), emptyMap())\n        val catalog = TeamCatalog.load().associateBy { it.key }\n        val teams = d.teamKeys.mapNotNull { catalog[it]?.team }\n        val tags = LinkedHashMap<String, SquadTag>()\n        teams.forEach { t -> t.players.forEach { tags[it.id] = SquadTag.DOMESTIC } }\n        return Pair(teams, tags)\n    }\n\n    fun newTournament(id: String, userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState {\n        val d = def(id)\n        val fixtures = if (d == null) emptyList() else buildSchedule(d, built.first.map { it.id }, Random.Default)\n        return TournamentState(\n            version = 1, tournamentId = id, name = d?.name ?: \"Custom tournament\", userTeamId = userTeamId,\n            teams = built.first, tags = built.second, fixtures = fixtures, playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n    }\n\n    // ---- Fixtures -----------------------------------------------------------------------------\n\n    /** Every pair once, round by round (the circle method), so a team does not play twice running when it can be avoided. */\n    private fun roundRobin(ids: List<String>): List<Pair<String, String>> {\n        val rot = ids.toMutableList()\n        if (rot.size % 2 == 1) rot.add(\"\")\n        val n = rot.size\n        val out = ArrayList<Pair<String, String>>()\n        repeat(n - 1) { round ->\n            for (i in 0 until n / 2) {\n                val a = rot[i]\n                val b = rot[n - 1 - i]\n                if (a.isNotEmpty() && b.isNotEmpty()) out.add(if ((i + round) % 2 == 0) a to b else b to a)\n            }\n            rot.add(1, rot.removeAt(n - 1))\n        }\n        return out\n    }\n\n    fun buildSchedule(d: CustomTournamentDef, teamIds: List<String>, random: Random): List<TournamentFixture> {\n        val ids = teamIds.shuffled(random)\n        val grounds = d.stadiumIds.ifEmpty { listOf(\"wankhede\") }\n        val list = ArrayList<TournamentFixture>()\n        fun ground() = grounds[list.size % grounds.size]\n        fun add(stage: String, home: String?, away: String?, note: String = \"\") {\n            list.add(TournamentFixture(list.size, list.size + 1, stage, home, away, ground(), placeholder = note))\n        }\n        when (scheduleOf(d)) {\n            ScheduleType.SINGLE_RR -> roundRobin(ids).forEach { add(CplData.LEAGUE, it.first, it.second) }\n            ScheduleType.DOUBLE_RR -> {\n                val first = roundRobin(ids)\n                first.forEach { add(CplData.LEAGUE, it.first, it.second) }\n                first.forEach { add(CplData.LEAGUE, it.second, it.first) }\n            }\n            ScheduleType.RR_FINAL -> {\n                roundRobin(ids).forEach { add(CplData.LEAGUE, it.first, it.second) }\n                add(\"Final\", null, null, \"1st v 2nd in the table\")\n            }\n            ScheduleType.RR_SEMIS -> {\n                roundRobin(ids).forEach { add(CplData.LEAGUE, it.first, it.second) }\n                add(\"Semi-final 1\", null, null, \"1st v 4th in the table\")\n                add(\"Semi-final 2\", null, null, \"2nd v 3rd in the table\")\n                add(\"Final\", null, null, \"Winners of the two semi-finals\")\n            }\n            ScheduleType.RR_IPL -> {\n                roundRobin(ids).forEach { add(CplData.LEAGUE, it.first, it.second) }\n                add(\"Qualifier 1\", null, null, \"1st v 2nd in the table\")\n                add(\"Eliminator\", null, null, \"3rd v 4th in the table\")\n                add(\"Qualifier 2\", null, null, \"Loser of Qualifier 1 v winner of the Eliminator\")\n                add(\"Final\", null, null, \"Winners of Qualifier 1 and Qualifier 2\")\n            }\n            ScheduleType.GROUPS_SEMIS -> {\n                val half = (ids.size + 1) / 2\n                roundRobin(ids.take(half)).forEach { add(\"Group A\", it.first, it.second) }\n                roundRobin(ids.drop(half)).forEach { add(\"Group B\", it.first, it.second) }\n                add(\"Semi-final 1\", null, null, \"Group A winner v Group B runner-up\")\n                add(\"Semi-final 2\", null, null, \"Group B winner v Group A runner-up\")\n                add(\"Final\", null, null, \"Winners of the two semi-finals\")\n            }\n            ScheduleType.KNOCKOUT -> buildKnockout(ids, ::add, { list.size + 1 })\n        }\n        return list\n    }\n\n    /** One place in a knockout round: a team that is known, or the winner of an earlier match (by its number). */\n    private class Place(val team: String?, val match: Int?)\n\n    private fun buildKnockout(ids: List<String>, add: (String, String?, String?, String) -> Unit, nextNumber: () -> Int) {\n        val n = ids.size\n        var p = 1\n        while (p < n) p *= 2\n        val byes = p - n\n        // Byes go to the first teams of the (random) draw; the rest play the first round.\n        val byeTeams = ids.take(byes).map { Place(it, null) }\n        val playing = ids.drop(byes).map { Place(it, null) }\n        fun round(stage: String, places: List<Place>): List<Place> {\n            val winners = ArrayList<Place>()\n            var i = 0\n            while (i + 1 < places.size) {\n                val a = places[i]\n                val b = places[i + 1]\n                val number = nextNumber()\n                val parts = ArrayList<String>()\n                if (a.match != null) parts.add(\"winner of match ${a.match}\")\n                if (b.match != null) parts.add(\"winner of match ${b.match}\")\n                val note = if (parts.isEmpty()) \"\" else parts.joinToString(\" v \").replaceFirstChar { it.uppercase() }\n                add(stage, a.team, b.team, note)\n                winners.add(Place(null, number))\n                i += 2\n            }\n            return winners\n        }\n        var current: List<Place>\n        if (byes > 0) {\n            val firstRound = round(\"Preliminary round\", playing)\n            // A bye team meets a first-round winner, so nobody has two byes in a row.\n            val mixed = ArrayList<Place>()\n            val a = byeTeams.iterator()\n            val b = firstRound.iterator()\n            while (a.hasNext() || b.hasNext()) {\n                if (a.hasNext()) mixed.add(a.next())\n                if (b.hasNext()) mixed.add(b.next())\n            }\n            current = mixed\n        } else {\n            current = playing\n        }\n        while (current.size > 1) {\n            val matches = current.size / 2\n            val stage = when (matches) {\n                1 -> \"Final\"\n                2 -> \"Semi-final\"\n                4 -> \"Quarter-final\"\n                else -> \"Round of ${matches * 2}\"\n            }\n            current = round(stage, current)\n        }\n    }\n\n    // ---- Tables and progress ------------------------------------------------------------------\n\n    private fun teamsOfStage(state: TournamentState, stage: String): Set<String> =\n        state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()\n\n    private fun stageTable(state: TournamentState, stage: String): List<StandingRow> {\n        val ids = teamsOfStage(state, stage)\n        return CplData.standings(state, stage).filter { it.team.id in ids }\n    }\n\n    /** The tables to show: one league table, or the two groups; a knockout has none. */\n    fun tables(state: TournamentState): List<Pair<String, List<StandingRow>>> {\n        val d = def(state.tournamentId) ?: return emptyList()\n        return when (scheduleOf(d)) {\n            ScheduleType.KNOCKOUT -> emptyList()\n            ScheduleType.GROUPS_SEMIS -> listOf(\"Group A\", \"Group B\").filter { teamsOfStage(state, it).isNotEmpty() }.map { it to stageTable(state, it) }\n            else -> listOf(\"League table\" to CplData.standings(state))\n        }\n    }\n\n    /** The winner of a tournament that has no Final: the team on top of the finished table. */\n    fun leagueChampion(state: TournamentState): Team? {\n        val d = def(state.tournamentId) ?: return null\n        val s = scheduleOf(d)\n        if (s != ScheduleType.SINGLE_RR && s != ScheduleType.DOUBLE_RR) return null\n        val league = state.fixtures.filter { it.stage == CplData.LEAGUE }\n        if (league.isEmpty() || league.any { it.result == null }) return null\n        return CplData.standings(state).firstOrNull()?.team\n    }\n\n    /** Fills in the semi-finals, Final and knockout rounds as their teams become known. Safe after every match. */\n    fun advance(state: TournamentState): TournamentState {\n        val d = def(state.tournamentId) ?: return state\n        var fx = state.fixtures\n        fun complete(stage: String): Boolean {\n            val l = fx.filter { it.stage == stage }\n            return l.isNotEmpty() && l.all { it.result != null }\n        }\n        fun winner(f: TournamentFixture?): String? = f?.result?.winnerId\n        fun fill(stage: String, home: String?, away: String?) {\n            if (home == null || away == null) return\n            fx = fx.map { f -> if (f.stage == stage && f.homeId == null) f.copy(homeId = home, awayId = away) else f }\n        }\n        fun stageFixture(stage: String) = fx.firstOrNull { it.stage == stage }\n        when (scheduleOf(d)) {\n            ScheduleType.SINGLE_RR, ScheduleType.DOUBLE_RR, ScheduleType.RR_IPL -> return state\n            ScheduleType.RR_FINAL -> {\n                if (complete(CplData.LEAGUE)) {\n                    val t = CplData.standings(state)\n                    if (t.size >= 2) fill(\"Final\", t[0].team.id, t[1].team.id)\n                }\n            }\n            ScheduleType.RR_SEMIS -> {\n                if (complete(CplData.LEAGUE)) {\n                    val t = CplData.standings(state)\n                    if (t.size >= 4) {\n                        fill(\"Semi-final 1\", t[0].team.id, t[3].team.id)\n                        fill(\"Semi-final 2\", t[1].team.id, t[2].team.id)\n                    }\n                }\n                if (winner(stageFixture(\"Semi-final 1\")) != null && winner(stageFixture(\"Semi-final 2\")) != null) {\n                    fill(\"Final\", winner(stageFixture(\"Semi-final 1\")), winner(stageFixture(\"Semi-final 2\")))\n                }\n            }\n            ScheduleType.GROUPS_SEMIS -> {\n                if (complete(\"Group A\") && complete(\"Group B\")) {\n                    val a = stageTable(state, \"Group A\").map { it.team.id }\n                    val b = stageTable(state, \"Group B\").map { it.team.id }\n                    if (a.size >= 2 && b.size >= 2) {\n                        fill(\"Semi-final 1\", a[0], b[1])\n                        fill(\"Semi-final 2\", b[0], a[1])\n                    }\n                }\n                if (winner(stageFixture(\"Semi-final 1\")) != null && winner(stageFixture(\"Semi-final 2\")) != null) {\n                    fill(\"Final\", winner(stageFixture(\"Semi-final 1\")), winner(stageFixture(\"Semi-final 2\")))\n                }\n            }\n            ScheduleType.KNOCKOUT -> {\n                // A place that was \"winner of match N\" is filled once match N has a result.\n                val byNumber = fx.associateBy { it.number }\n                fx = fx.map { f ->\n                    if (f.homeId != null && f.awayId != null) return@map f\n                    val nums = Regex(\"\"\"[Mm]atch (\\d+)\"\"\").findAll(f.placeholder).map { it.groupValues[1].toInt() }.toList()\n                    var k = 0\n                    val home = if (f.homeId == null) { val w = nums.getOrNull(k)?.let { winner(byNumber[it]) }; k++; w } else f.homeId\n                    val away = if (f.awayId == null) { val w = nums.getOrNull(k)?.let { winner(byNumber[it]) }; k++; w } else f.awayId\n                    if (home != f.homeId || away != f.awayId) f.copy(homeId = home, awayId = away) else f\n                }\n            }\n        }\n        return state.copy(fixtures = fx)\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/CustomTournamentPages.kt",
+      "content": "package com.cricketsim.ui.tournament\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.heightIn\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.OutlinedButton\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.CustomTournamentDef\nimport com.cricketsim.logic.CustomTournaments\nimport com.cricketsim.ui.custom.BackButton\nimport com.cricketsim.ui.custom.PageHeading\n\n/**\n * Tournament > Custom tournaments: the tournaments the player designed in Advanced Customisation, each one a button\n * that opens its start page (new tournament or resume), the same pages as every other tournament.\n */\n@Composable\ninternal fun CustomTournamentListPage(defs: List<CustomTournamentDef>, onOpen: (String) -> Unit, onBack: () -> Unit) {\n    Column(\n        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)\n    ) {\n        BackButton(onBack)\n        Spacer(modifier = Modifier.height(16.dp))\n        PageHeading(\"Custom tournaments\")\n        Spacer(modifier = Modifier.height(12.dp))\n        if (defs.isEmpty()) {\n            Text(\n                \"You have not made any custom tournaments yet. Make one in Advanced Customisation, then Create Custom Tournaments.\",\n                style = MaterialTheme.typography.bodyLarge\n            )\n        }\n        defs.forEach { d ->\n            OutlinedButton(\n                onClick = { onOpen(d.id) },\n                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(vertical = 4.dp)\n            ) {\n                Column(modifier = Modifier.fillMaxWidth()) {\n                    Text(d.name, style = MaterialTheme.typography.titleMedium)\n                    Text(CustomTournaments.introOf(d.id), style = MaterialTheme.typography.bodyMedium)\n                }\n            }\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "CUSTOM_TOURNAMENTS_PLAY.md",
+      "content": "# Custom tournaments, part 2: play them (patch 053)\n\n**Tournament > Custom tournaments** lists the tournaments saved in Advanced Customisation. Open one for its start\npage (new tournament or resume): pick your team, Playing XI, toss and match, tables, venues and stats work as in\nevery other tournament. Its own save files are kept per tournament.\n\n## Schedules\nRound Robin and Double Round Robin (the team on top of the table wins), Round Robin and Final, Round Robin +\nSemi-finals + Final (1st v 4th, 2nd v 3rd), Round Robin + IPL-style Playoffs (the game's own Qualifier 1,\nEliminator, Qualifier 2, Final), Knockout (random draw; byes in a Preliminary round when the number of teams is not a\npower of two) and Two Groups + Semi-finals + Final. Matches are spread over the chosen stadiums in turn.\n\n## Rules inside matches (`MatchState.rules`, `TournamentRules`)\n* **Overs**: the format's overs (custom formats too). A bowler's limit is the format's (a custom format: a fifth of the\n  innings, rounded up).\n* **Fielding restrictions**: how many balls and how many fielders may stay outside the circle (the cap is held in\n  `FieldingSystem.powerplayDeepCap`, reset to 3 whenever a normal match starts).\n* **DRS**: off, 1 to 4 reviews an innings, or unlimited (spoken as \"unlimited reviews\").\n* **Rain**: switched off, no rain interruption happens.\n* **Edit Tournament**: a game tournament given another format plays it from now on (its fixtures stay as they are),\n  and a renamed tournament shows its new name on its start page. Tournaments already in progress keep the format\n  they started with only until their next match.\n* Computer-v-computer matches use the same rules; a 40-over or longer innings uses the ODI scoring setting of the\n  ball model, shorter ones the T20 one.\n\n## Things that are approximations\nA custom format picks its engine constants (the odds of a catch, DLS, drinks) from the game format nearest in overs;\nthe AI's opening field in the first over uses the restriction exactly, the user's own field is checked against the cap.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "    private var logoDir: File? = null\n",
+      "replace": "    private var logoDir: File? = null\n    private var formatsFile: File? = null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "        logoDir = File(dir, \"team_logos\")\n",
+      "replace": "        logoDir = File(dir, \"team_logos\")\n        formatsFile = File(dir, \"custom_formats.json\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "    // ---- Tournaments ----",
+      "replace": "    /** The player's custom match formats (read from their file; used when a match is set up). */\n    fun customFormats(): List<CustomFormat> = try {\n        val f = formatsFile\n        if (f != null && f.exists()) (gson.fromJson(f.readText(), Array<CustomFormat>::class.java)?.toList() ?: emptyList()) else emptyList()\n    } catch (e: Exception) {\n        emptyList()\n    }\n\n    // ---- Tournaments ----",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "object GameTournaments {\n",
+      "replace": "object GameTournaments {\n    /** The tournament id behind a Tournament page \"kind\" (a custom tournament's kind is \"custom:<id>\"). */\n    fun idForKind(kind: String): String = when (kind) {\n        \"cpl\" -> CplData.TOURNAMENT_ID\n        \"ipl\" -> \"ipl2027\"\n        \"adt10\" -> AbuDhabiT10.TOURNAMENT_ID\n        \"lpl\" -> LankaPremierLeague.TOURNAMENT_ID\n        \"ilt\" -> InternationalLeagueT20.TOURNAMENT_ID\n        \"bbl\" -> BigBashLeague.TOURNAMENT_ID\n        \"mlc\" -> MajorLeagueCricket.TOURNAMENT_ID\n        \"sa20\" -> Sa20.TOURNAMENT_ID\n        \"wc2026\" -> T20WorldCup.TOURNAMENT_ID\n        \"ct2025\" -> ChampionsTrophy.TOURNAMENT_ID\n        \"asia2025\" -> AsiaCup.TOURNAMENT_ID\n        \"ag2026\" -> AsianGames.TOURNAMENT_ID\n        else -> kind.removePrefix(\"custom:\")\n    }\n\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    val surge: SurgeState? = null\n)",
+      "replace": "    val surge: SurgeState? = null,\n    // A custom tournament's rules (overs, fielding restriction, DRS, rain); null = the format's own rules.\n    val rules: MatchRules? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        impact: ImpactState? = null\n    ): MatchState {",
+      "replace": "        impact: ImpactState? = null,\n        rules: MatchRules? = null\n    ): MatchState {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, userTeam.id, format, 0)\n",
+      "replace": "        FieldingSystem.applyRules(rules)\n        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, userTeam.id, format, 0, rules)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "            oversLimit = MatchEngine.getFormatOvers(format),\n",
+      "replace": "            oversLimit = rules?.overs ?: MatchEngine.getFormatOvers(format),\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "            impact = impact\n        )\n",
+      "replace": "            impact = impact,\n            rules = rules\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        format: MatchFormat,\n        oversSoFar: Int\n    ): List<FieldPlacement> {",
+      "replace": "        format: MatchFormat,\n        oversSoFar: Int,\n        rules: MatchRules? = null\n    ): List<FieldPlacement> {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        return FieldingSystem.generateAiFieldPlacements(fieldingPlayers, FieldingSystem.isPowerplayOver(format, oversSoFar))\n",
+      "replace": "        val restricted = if (rules != null) oversSoFar * 6 < rules.restrictionBalls else FieldingSystem.isPowerplayOver(format, oversSoFar)\n        return FieldingSystem.generateAiFieldPlacements(fieldingPlayers, restricted)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "pickStartingFieldPlacements(bowlingTeam, bowler.id, state.userTeam.id, state.format, 0)",
+      "replace": "pickStartingFieldPlacements(bowlingTeam, bowler.id, state.userTeam.id, state.format, 0, state.rules)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        val maxOvers = getMaxOversPerBowler(state.format)\n",
+      "replace": "        val maxOvers = maxOversFor(state)\n",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    fun getMaxOversPerBowler(format: MatchFormat): Int = when (format) {",
+      "replace": "    /** How many overs one bowler may bowl in this match: a custom tournament's own limit, else the format's. */\n    fun maxOversFor(state: MatchState): Int = state.rules?.maxOversPerBowler ?: getMaxOversPerBowler(state.format)\n\n    fun getMaxOversPerBowler(format: MatchFormat): Int = when (format) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/FieldingSystem.kt",
+      "find": "        if (state.surge == null) return isPowerplayBall(state.format, ballsBowled)\n",
+      "replace": "        if (state.surge == null) return state.rules?.let { ballsBowled < it.restrictionBalls } ?: isPowerplayBall(state.format, ballsBowled)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/FieldingSystem.kt",
+      "find": "    const val MAX_DEEP_FIELDERS_NORMAL = 5\n",
+      "replace": "    const val MAX_DEEP_FIELDERS_NORMAL = 5\n\n    /** The deep-fielder cap during the restricted overs of the match being played (a custom tournament changes it). */\n    @Volatile var powerplayDeepCap: Int = MAX_DEEP_FIELDERS_POWERPLAY\n\n    /** Sets the restricted-overs cap for the match about to be played (null rules = the game's own 3). */\n    fun applyRules(rules: MatchRules?) {\n        powerplayDeepCap = rules?.fieldersOutside ?: MAX_DEEP_FIELDERS_POWERPLAY\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/FieldingSystem.kt",
+      "find": "        val cap = if (isPowerplay) MAX_DEEP_FIELDERS_POWERPLAY else MAX_DEEP_FIELDERS_NORMAL\n",
+      "replace": "        val cap = if (isPowerplay) powerplayDeepCap else MAX_DEEP_FIELDERS_NORMAL\n",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/FieldPresets.kt",
+      "find": "val cap = if (isPowerplay) FieldingSystem.MAX_DEEP_FIELDERS_POWERPLAY else FieldingSystem.MAX_DEEP_FIELDERS_NORMAL",
+      "replace": "val cap = if (isPowerplay) FieldingSystem.powerplayDeepCap else FieldingSystem.MAX_DEEP_FIELDERS_NORMAL",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DrsSystem.kt",
+      "find": "        (reviewsPerInnings(state.format) - state.drsReviewsUsed).coerceAtLeast(0)\n",
+      "replace": "        ((state.rules?.drsReviews ?: reviewsPerInnings(state.format)) - state.drsReviewsUsed).coerceAtLeast(0)\n\n    /** \"2 reviews\", or \"unlimited reviews\" when a custom tournament allows as many as the team likes. */\n    fun reviewsText(n: Int): String =\n        if (n >= CustomTournamentDef.UNLIMITED_REVIEWS / 2) \"unlimited reviews\" else if (n == 1) \"1 review\" else \"$n reviews\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/DrsScreens.kt",
+      "find": "${countOf(reviewsRemaining, \"review\")}",
+      "replace": "${DrsSystem.reviewsText(reviewsRemaining)}",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "    private fun maybeInterruptForRain(state: MatchState, stadium: Stadium): MatchState {\n",
+      "replace": "    private fun maybeInterruptForRain(state: MatchState, stadium: Stadium): MatchState {\n        if (state.rules?.rainEnabled == false) return state\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "        val maxOvers = MatchStateMachine.getMaxOversPerBowler(state.format)\n",
+      "replace": "        val maxOvers = MatchStateMachine.maxOversFor(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "maxOversPerBowler = MatchStateMachine.getMaxOversPerBowler(matchState.format),",
+      "replace": "maxOversPerBowler = MatchStateMachine.maxOversFor(matchState),",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    powerSurge: Boolean = false\n) {\n",
+      "replace": "    powerSurge: Boolean = false,\n    /** A custom tournament's rules (overs, restriction, DRS, rain); null = the format's own. */\n    rules: MatchRules? = null\n) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "                impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) }\n            )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }\n",
+      "replace": "                impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) },\n                rules = rules\n            )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }\n                .also { FieldingSystem.applyRules(it.rules) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+      "find": "    fun formatFor(tournamentId: String?): MatchFormat = when (tournamentId) {",
+      "replace": "    fun formatFor(tournamentId: String?): MatchFormat = TournamentRules.baseFormatFor(tournamentId) ?: when (tournamentId) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+      "find": "    fun fullInningsBalls(tournamentId: String): Int = when (tournamentId) {",
+      "replace": "    fun fullInningsBalls(tournamentId: String): Int = TournamentRules.ballsFor(tournamentId) ?: when (tournamentId) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)\n",
+      "replace": "        if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)\n        if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val finalMatch = state.fixtures.firstOrNull { it.stage == \"Final\" } ?: return null\n",
+      "replace": "        if (TournamentRules.isCustom(state.tournamentId)) CustomTournaments.leagueChampion(state)?.let { return it }\n        val finalMatch = state.fixtures.firstOrNull { it.stage == \"Final\" } ?: return null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        powerSurge: Boolean = false\n    ): SimResult? {",
+      "replace": "        powerSurge: Boolean = false,\n        rules: MatchRules? = null\n    ): SimResult? {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            format, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather\n        )",
+      "replace": "            format, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather, rules = rules\n        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "                FieldingSystem.isPowerplayOver(s.format, 0)\n",
+      "replace": "                FieldingSystem.isRestrictedOver(s, 0)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            state.tournamentId == BigBashLeague.TOURNAMENT_ID) ?: return state",
+      "replace": "            state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId)) ?: return state",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: AsiaCup.stadium(id) ?: AsianGames.stadium(id)\n",
+      "replace": "?: AsiaCup.stadium(id) ?: AsianGames.stadium(id) ?: StadiumData.getStadiumById(id)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: AsianGames.shortNameOrNull(teamId) ?: IplData.shortName(teamId)",
+      "replace": "?: AsianGames.shortNameOrNull(teamId) ?: CustomTournaments.shortNameOrNull(teamId) ?: IplData.shortName(teamId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "import com.cricketsim.logic.CplData\n",
+      "replace": "import com.cricketsim.logic.CplData\nimport com.cricketsim.logic.CustomTournaments\nimport com.cricketsim.logic.TournamentRules\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "            games -> AsianGames.tables(state)\n",
+      "replace": "            games -> AsianGames.tables(state)\n            TournamentRules.isCustom(state.tournamentId) -> CustomTournaments.tables(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "                text = if (games) {\n",
+      "replace": "                text = if (TournamentRules.isCustom(state.tournamentId)) {\n                    \"Two points for a win, one each for no result. A knockout tournament has no table.\"\n                } else if (games) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.AsianGames\n",
+      "replace": "import com.cricketsim.logic.AsianGames\nimport com.cricketsim.logic.CustomTournaments\nimport com.cricketsim.logic.Customisation\nimport com.cricketsim.logic.GameTournaments\nimport com.cricketsim.logic.TournamentRules\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val store = when (kind) {",
+      "replace": "    // A custom tournament's kind is \"custom:<id>\"; each has its own saved tournament and match.\n    val isCustomKind = kind.startsWith(\"custom:\")\n    val customId = GameTournaments.idForKind(kind)\n    val customStore = remember(customId) { TournamentSaveStore(context, \"saved_tournament_$customId.json\") }\n    val customMatchStore = remember(customId) { MatchSaveStore(context, \"saved_${customId}_match.json\") }\n    val store = when (kind) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ag2026\" -> agStore; else -> cplStore }",
+      "replace": "\"ag2026\" -> agStore; else -> if (isCustomKind) customStore else cplStore }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ag2026\" -> agMatchStore; else -> cplMatchStore }",
+      "replace": "\"ag2026\" -> agMatchStore; else -> if (isCustomKind) customMatchStore else cplMatchStore }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val built = when (kind) {",
+      "replace": "    val customBuilt = remember(customId) { if (isCustomKind) CustomTournaments.buildTeams(customId) else cplBuilt }\n    val built = when (kind) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ag2026\" -> agBuilt; else -> cplBuilt }",
+      "replace": "\"ag2026\" -> agBuilt; else -> if (isCustomKind) customBuilt else cplBuilt }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    object International : TPage\n",
+      "replace": "    object International : TPage\n    /** The custom tournaments the player designed (Tournament > Custom tournaments). */\n    object CustomList : TPage\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onInternational = { page = TPage.International },\n",
+      "replace": "                onInternational = { page = TPage.International },\n                onCustom = { page = TPage.CustomList },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        is TPage.International -> {\n            val back = { page = TPage.Menu }\n",
+      "replace": "        is TPage.CustomList -> {\n            val back = { page = TPage.Menu }\n            BackHandler(onBack = back)\n            CustomTournamentListPage(\n                defs = remember { Customisation.customTournaments() },\n                onOpen = { id ->\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"custom:$id\"\n                    page = TPage.Adt\n                },\n                onBack = back\n            )\n        }\n        is TPage.International -> {\n            val back = { page = TPage.Menu }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onBack: () -> Unit) {",
+      "replace": "private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onCustom: () -> Unit, onBack: () -> Unit) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\"Domestic tournament\", \"Coming soon.\", enabled = false, onClick = {})\n",
+      "replace": "            ChoiceRow(\"Custom tournaments\", \"Play the tournaments you designed in Advanced Customisation.\", enabled = true, onClick = onCustom)\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\"Domestic tournament\", \"Coming soon.\", enabled = false, onClick = {})\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isAg -> AsianGames.TOURNAMENT_NAME\n",
+      "replace": "                isAg -> AsianGames.TOURNAMENT_NAME\n                isCustomKind -> CustomTournaments.nameOf(customId)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                else -> \"CPL 2026\"\n            }\n",
+      "replace": "                else -> \"CPL 2026\"\n            }.let { Customisation.tournamentName(GameTournaments.idForKind(kind), it) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isMlc || isSa || isWc || isCt || isAc || isAg) {",
+      "replace": "isMlc || isSa || isWc || isCt || isAc || isAg || isCustomKind) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        isWc || isCt || isAc || isAg -> Unit\n",
+      "replace": "                        isWc || isCt || isAc || isAg || isCustomKind -> Unit\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                page = if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues\n",
+      "replace": "                page = if (isCustomKind) TPage.CustomList else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    isAg -> \"The men's cricket event",
+      "replace": "                    isCustomKind -> CustomTournaments.introOf(customId)\n                    isAg -> \"The men's cricket event",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"ag2026\") TPage.Adt else TPage.Cpl }",
+      "replace": "kind == \"ag2026\" || isCustomKind) TPage.Adt else TPage.Cpl }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        else -> CplData.newTournament(teamId, built, Random.Default)\n",
+      "replace": "                        else -> if (isCustomKind) CustomTournaments.newTournament(customId, teamId, built) else CplData.newTournament(teamId, built, Random.Default)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind != \"asia2025\" && kind != \"ag2026\",",
+      "replace": "kind != \"asia2025\" && kind != \"ag2026\" && !isCustomKind,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"asia2025\", \"ag2026\" -> TPage.Adt; else -> TPage.Cpl } }",
+      "replace": "\"asia2025\", \"ag2026\" -> TPage.Adt; else -> if (isCustomKind) TPage.Adt else TPage.Cpl } }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    format = AbuDhabiT10.formatFor(saved?.tournamentId),\n",
+      "replace": "                    format = AbuDhabiT10.formatFor(saved?.tournamentId),\n                    rules = TournamentRules.rulesFor(saved?.tournamentId),\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "|| state.tournamentId == AsianGames.TOURNAMENT_ID) {\n        WorldCupTableTab(state)",
+      "replace": "|| state.tournamentId == AsianGames.TOURNAMENT_ID || TournamentRules.isCustom(state.tournamentId)) {\n        WorldCupTableTab(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                else -> CplData.stadiums\n",
+      "replace": "                else -> CustomTournaments.stadiumsFor(state.tournamentId) ?: CplData.stadiums\n",
+      "count": 1
+    }
+  ]
+}
