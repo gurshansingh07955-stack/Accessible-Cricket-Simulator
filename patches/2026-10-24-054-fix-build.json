@@ -1,0 +1,13 @@
+{
+  "name": "Fix build: import MatchRules in MatchScreen",
+  "message": "Add the missing MatchRules import in MatchScreen",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "import com.cricketsim.logic.MatchFormat\n",
+      "replace": "import com.cricketsim.logic.MatchFormat\nimport com.cricketsim.logic.MatchRules\n",
+      "count": 1
+    }
+  ]
+}
