@@ -1,0 +1,183 @@
+{
+  "name": "Super Over switch and custom teams in matches",
+  "message": "Super Over on/off for custom tournaments; custom teams on the Play match screen",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+    "contains": "val noSuperOver: Boolean = false"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "SUPER_OVER_AND_CUSTOM_TEAMS_IN_MATCHES.md",
+      "content": "# Super Over switch and custom teams in matches (patch 055)\n\n* **Super Over on or off in a custom tournament** (a new switch on the DRS and rain page, and a line in the summary).\n  Switched off, a tied league or group match is **shared** (1 point each, \"Match tied. The points are shared.\").\n  A knockout match (a semi-final, a Final, a qualifier...) cannot end level, so it still goes to a Super Over.\n  `CustomTournamentDef.noSuperOver`, `MatchRules.noSuperOver`, `SuperOver.isTieAtEnd`, `TournamentSim.buildResult`.\n* **Custom teams on the Play match team screen.** A custom team is listed there (for you and for your opponent) once\n  it is ready: **11 players, a wicketkeeper and at least 4 bowlers or all-rounders**. A custom team's page says what\n  it still needs, and the custom tournament team list marks teams that are not ready.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "    val rainEnabled: Boolean = true\n) {",
+      "replace": "    val rainEnabled: Boolean = true,\n    /** True = a tied league or group match is shared instead of going to a Super Over (knockout matches still play one). */\n    val noSuperOver: Boolean = false\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "    val maxOversPerBowler: Int\n)",
+      "replace": "    val maxOversPerBowler: Int,\n    /** True = a tied match is not settled by a Super Over (the result is a tie). */\n    val noSuperOver: Boolean = false\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "    fun isCustom(id: String?): Boolean = id != null && id.startsWith(CUSTOM_PREFIX)\n",
+      "replace": "    fun isCustom(id: String?): Boolean = id != null && id.startsWith(CUSTOM_PREFIX)\n\n    /** League and group matches may end tied; everything after them (semi-finals, qualifiers, the Final...) must be settled. */\n    fun isLeagueStage(stage: String?): Boolean = stage == CplData.LEAGUE || (stage != null && stage.startsWith(\"Group \"))\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "    fun rulesFor(tournamentId: String?): MatchRules? {",
+      "replace": "    fun rulesFor(tournamentId: String?, stage: String? = null): MatchRules? {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "            return base.copy(drsReviews = if (def.drsEnabled) def.drsReviews else 0, rainEnabled = def.rainEnabled)",
+      "replace": "            return base.copy(\n                drsReviews = if (def.drsEnabled) def.drsReviews else 0,\n                rainEnabled = def.rainEnabled,\n                noSuperOver = def.noSuperOver && isLeagueStage(stage)\n            )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/SuperOver.kt",
+      "find": "        if (state.format == MatchFormat.TEST) return false\n        val target = state.target ?: return false\n",
+      "replace": "        if (state.format == MatchFormat.TEST) return false\n        if (state.rules?.noSuperOver == true) return false\n        val target = state.target ?: return false\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val winnerId = finished.winnerId ?: when {",
+      "replace": "        // With the Super Over switched off a tied league match has no winner: the points are shared.\n        val sharedTie = finished.winnerId == null && finished.rules?.noSuperOver == true\n        val winnerId: String? = if (sharedTie) null else finished.winnerId ?: when {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val winnerName = listOf(home, away).first { it.id == winnerId }.name",
+      "replace": "        val winnerName = if (winnerId == null) \"\" else listOf(home, away).first { it.id == winnerId }.name",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val resultText = when {\n            tied ->",
+      "replace": "        val resultText = when {\n            sharedTie -> \"Match tied. The points are shared.\"\n            tied ->",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "TournamentRules.rulesFor(state.tournamentId)) ?: return state",
+      "replace": "TournamentRules.rulesFor(state.tournamentId, fixture.stage)) ?: return state",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    rules = TournamentRules.rulesFor(saved?.tournamentId),\n",
+      "replace": "                    rules = TournamentRules.rulesFor(saved?.tournamentId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "    /** The player's custom match formats (read from their file; used when a match is set up). */\n",
+      "replace": "    const val MIN_PLAYERS = 11\n\n    /** What a team still needs before it can play a match (null = ready). */\n    fun playProblem(team: Team): String? {\n        val roles = team.players.map { PlayerProfiles.displayRole(it) }\n        return when {\n            team.players.size < MIN_PLAYERS -> \"it needs at least $MIN_PLAYERS players (it has ${team.players.size})\"\n            roles.none { it == PlayerRole.WICKETKEEPER } -> \"it needs a wicketkeeper\"\n            roles.count { it == PlayerRole.BOWLER || it == PlayerRole.ALL_ROUNDER } < 4 -> \"it needs at least 4 bowlers or all-rounders\"\n            else -> null\n        }\n    }\n\n    /** The custom teams that are ready to play a match. */\n    fun playableCustomTeams(): List<Team> = customTeamsAsTeams().filter { playProblem(it) == null }\n\n    /** The player's custom match formats (read from their file; used when a match is set up). */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/TeamSelectionScreen.kt",
+      "find": "import com.cricketsim.logic.CricketData\n",
+      "replace": "import com.cricketsim.logic.CricketData\nimport com.cricketsim.logic.Customisation\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/TeamSelectionScreen.kt",
+      "find": "            teams = remember { CricketData.getAllTeams() },",
+      "replace": "            teams = remember { CricketData.getAllTeams() + Customisation.playableCustomTeams() },",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/TeamSelectionScreen.kt",
+      "find": "            teams = remember(chosenUserTeam) { CricketData.getAllTeams().filter { it.id != chosenUserTeam.id } },",
+      "replace": "            teams = remember(chosenUserTeam) { (CricketData.getAllTeams() + Customisation.playableCustomTeams()).filter { it.id != chosenUserTeam.id } },",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "    var rainOn by remember { mutableStateOf(true) }\n",
+      "replace": "    var rainOn by remember { mutableStateOf(true) }\n    var superOverOn by remember { mutableStateOf(true) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "        rainOn = true\n        message = null\n",
+      "replace": "        rainOn = true\n        superOverOn = true\n        message = null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "                SwitchRow(\"Rain\", \"Rain can interrupt matches, with overs lost and a revised target.\", rainOn) { rainOn = it }\n",
+      "replace": "                SwitchRow(\"Rain\", \"Rain can interrupt matches, with overs lost and a revised target.\", rainOn) { rainOn = it }\n                Spacer(modifier = Modifier.height(12.dp))\n                SwitchRow(\n                    \"Super Over\",\n                    \"A tied match is decided by a Super Over. Switched off, a tied league match is shared. Knockout matches cannot end level, so they still play a Super Over.\",\n                    superOverOn\n                ) { superOverOn = it }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "                    Text(\"Rain: \" + if (rainOn) \"on.\" else \"off.\", style = MaterialTheme.typography.bodyLarge)\n",
+      "replace": "                    Text(\"Rain: \" + if (rainOn) \"on.\" else \"off.\", style = MaterialTheme.typography.bodyLarge)\n                    Text(\"Super Over: \" + if (superOverOn) \"on.\" else \"off for league matches (a tie is shared); knockout matches still play one.\", style = MaterialTheme.typography.bodyLarge)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "                                drsEnabled = drsOn, drsReviews = drsReviews, rainEnabled = rainOn",
+      "replace": "                                drsEnabled = drsOn, drsReviews = drsReviews, rainEnabled = rainOn, noSuperOver = !superOverOn",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "                Text(\"A custom team needs at least ${TeamCatalog.MIN_PLAYERS} players to play.\", style = MaterialTheme.typography.bodyMedium)",
+      "replace": "                Text(\"A custom team needs ${TeamCatalog.MIN_PLAYERS} players, a wicketkeeper and at least 4 bowlers or all-rounders to play.\", style = MaterialTheme.typography.bodyMedium)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "                    val tooSmall = e.kind == TeamCatalog.CUSTOM && e.team.players.size < TeamCatalog.MIN_PLAYERS\n",
+      "replace": "                    val problem = if (e.kind == TeamCatalog.CUSTOM) Customisation.playProblem(e.team) else null\n                    val tooSmall = problem != null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "                        sub = if (tooSmall) \"${e.team.players.size} players: needs ${TeamCatalog.MIN_PLAYERS}\" else \"${e.team.players.size} players\",",
+      "replace": "                        sub = if (problem != null) \"Not ready: $problem\" else \"${e.team.players.size} players\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "            } + \". ${team.players.size} players. Press and hold the name to rename the team.\",\n",
+      "replace": "            } + \". ${team.players.size} players. Press and hold the name to rename the team.\" +\n                (if (kind == TeamKind.Custom) (Customisation.playProblem(team)?.let { \" Not ready to play: $it.\" } ?: \" Ready to play.\") else \"\"),\n",
+      "count": 1
+    }
+  ]
+}
