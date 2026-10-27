@@ -1,6 +1,6 @@
-Patch run: 40465332589
-Timestamp (UTC): 2026-10-27T07:08:44Z
+Patch run: 40489531167
+Timestamp (UTC): 2026-10-27T10:34:39Z
 Result: OK
 -----
-Patch 2026-10-26-055-superover-and-custom-teams-in-matches.json
-  applied 25 operation(s) to 10 file(s)
+Patch 2026-10-26-056-manage-teams-gender-add-players.json
+  applied 24 operation(s) to 4 file(s)

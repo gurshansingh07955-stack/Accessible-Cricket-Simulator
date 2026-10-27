@@ -30,7 +30,9 @@ data class AddedPlayer(
     val bowling: Int = 20,
     val fielding: Int = 50,
     val hand: String = "R",
-    val bowlLabel: String = ""
+    val bowlLabel: String = "",
+    /** "M" or "F" (null in files saved before this choice existed: read as "M"). */
+    val gender: String? = "M"
 )
 
 /** A team the user created. Its players are [AddedPlayer]s with this team's id. */
@@ -255,22 +257,23 @@ object Customisation {
 
     fun addPlayer(
         teamId: String, name: String, role: PlayerRole, batting: Int, bowling: Int, fielding: Int,
-        hand: Char, bowlLabel: String
+        hand: Char, bowlLabel: String, gender: String = "M"
     ): String {
         val id = UUID.randomUUID().toString()
-        val added = AddedPlayer(id, teamId, name, role.name, batting, bowling, fielding, hand.toString(), bowlLabel)
+        val added = AddedPlayer(id, teamId, name, role.name, batting, bowling, fielding, hand.toString(), bowlLabel, gender)
         update { d -> d.copy(addedPlayers = (d.addedPlayers ?: emptyList()) + added) }
         return id
     }
 
     fun updateAdded(
-        id: String, role: PlayerRole, batting: Int, bowling: Int, fielding: Int, hand: Char, bowlLabel: String
+        id: String, role: PlayerRole, batting: Int, bowling: Int, fielding: Int, hand: Char, bowlLabel: String,
+        gender: String? = null
     ) {
         update { d ->
             d.copy(addedPlayers = (d.addedPlayers ?: emptyList()).map {
                 if (it.id == id) it.copy(
                     role = role.name, batting = batting, bowling = bowling, fielding = fielding,
-                    hand = hand.toString(), bowlLabel = bowlLabel
+                    hand = hand.toString(), bowlLabel = bowlLabel, gender = gender ?: it.gender
                 ) else it
             })
         }
@@ -334,6 +337,73 @@ object Customisation {
 
     fun deleteCustomTournament(id: String) {
         update { d -> d.copy(customTournaments = (d.customTournaments ?: emptyList()).filter { it.id != id }) }
+    }
+
+    // ---- Gender, resetting, copying ---------------------------------------------------------------
+
+    /** "M" or "F" for a player the user created or copied; null for the game's own players. */
+    fun genderCodeFor(p: Player): String? = addedById[p.id]?.let { if (it.gender == "F") "F" else "M" }
+
+    /** "Male" or "Female" for a player the user created or copied; null for the game's own players. */
+    fun genderFor(p: Player): String? = genderCodeFor(p)?.let { if (it == "F") "Female" else "Male" }
+
+    /** Deletes several custom teams (and their players and logos) at once. */
+    fun deleteCustomTeams(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        update { d ->
+            d.copy(
+                customTeams = (d.customTeams ?: emptyList()).filter { it.id !in ids },
+                addedPlayers = (d.addedPlayers ?: emptyList()).filter { it.teamId !in ids }
+            )
+        }
+        for (id in ids) {
+            try {
+                logoFile(id)?.delete()
+            } catch (e: Exception) {
+                // The logo file is only decoration.
+            }
+        }
+    }
+
+    /** The ids of the game's teams (not custom teams) the player has changed in any way. */
+    fun editedGameTeamIds(): Set<String> {
+        val d = data
+        val ids = HashSet<String>()
+        d.teamNames?.keys?.let { ids.addAll(it) }
+        d.playerEdits?.forEach { ids.add(it.teamId) }
+        d.addedPlayers?.forEach { ids.add(it.teamId) }
+        return ids.filter { !it.startsWith("custom_") }.toSet()
+    }
+
+    /** Puts game teams back as the game made them (name, player edits, created and copied players); null = all of them. */
+    fun resetGameTeams(ids: Set<String>?) {
+        update { d ->
+            fun keep(teamId: String) = teamId.startsWith("custom_") || (ids != null && teamId !in ids)
+            d.copy(
+                teamNames = (d.teamNames ?: emptyMap()).filterKeys { keep(it) },
+                playerEdits = (d.playerEdits ?: emptyList()).filter { keep(it.teamId) },
+                addedPlayers = (d.addedPlayers ?: emptyList()).filter { keep(it.teamId) }
+            )
+        }
+    }
+
+    /** Copies players into a team as players of its own (the originals stay where they are). Returns how many. */
+    fun copyPlayers(destTeamId: String, players: List<Player>): Int {
+        val copies = players.map { p ->
+            val label = PlayerProfiles.bowlLabelOf(p) ?: when {
+                p.bowlingRating <= 25 -> ""
+                p.bowlingStyle == BowlingStyle.SPIN -> "Right-arm off break"
+                else -> "Right-arm medium-fast"
+            }
+            AddedPlayer(
+                id = UUID.randomUUID().toString(), teamId = destTeamId, name = p.name,
+                role = PlayerProfiles.displayRole(p).name, batting = p.battingRating, bowling = p.bowlingRating,
+                fielding = p.fieldingRating, hand = (PlayerProfiles.handOf(p) ?: 'R').toString(), bowlLabel = label,
+                gender = genderCodeFor(p) ?: "M"
+            )
+        }
+        update { d -> d.copy(addedPlayers = (d.addedPlayers ?: emptyList()) + copies) }
+        return copies.size
     }
 
     // ---- Custom teams ---------------------------------------------------------------------------

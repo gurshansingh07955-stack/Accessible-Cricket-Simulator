@@ -87,12 +87,17 @@ import java.io.FileOutputStream
  *
  * What the edits change is explained in logic/Customisation.kt.
  */
-private enum class TeamKind { International, League, Custom }
+internal enum class TeamKind { International, League, Custom }
 
 private sealed interface CtPage {
     object Hub : CtPage
     object Create : CtPage
     object EditList : CtPage
+    object DeleteMenu : CtPage
+    object DeletePick : CtPage
+    object ResetMenu : CtPage
+    object ResetPick : CtPage
+    class AddPlayers(val kind: TeamKind, val teamId: String) : CtPage
     class TeamView(val kind: TeamKind, val teamId: String) : CtPage
     /** playerName null = create a new player. */
     class PlayerEdit(val kind: TeamKind, val teamId: String, val playerName: String?) : CtPage
@@ -151,8 +156,53 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
                 onTab = { tab = it },
                 onBack = { page = CtPage.Hub },
                 onOpen = { kind, id -> message = null; page = CtPage.TeamView(kind, id) },
-                onRename = { kind, team -> renaming = kind to team }
+                onRename = { kind, team -> renaming = kind to team },
+                onDeleteTeams = { page = CtPage.DeleteMenu },
+                onResetTeams = { page = CtPage.ResetMenu }
             )
+        }
+
+        is CtPage.DeleteMenu -> DeleteTeamsMenuPage(
+            version = version,
+            onBack = { page = CtPage.EditList },
+            onChoose = { page = CtPage.DeletePick },
+            onDone = { text -> version++; message = text; page = CtPage.EditList }
+        )
+
+        is CtPage.DeletePick -> DeleteTeamsPickPage(
+            version = version,
+            onBack = { page = CtPage.DeleteMenu },
+            onDone = { text -> version++; message = text; page = CtPage.EditList }
+        )
+
+        is CtPage.ResetMenu -> ResetTeamsMenuPage(
+            version = version,
+            onBack = { page = CtPage.EditList },
+            onChoose = { page = CtPage.ResetPick },
+            onDone = { text -> version++; message = text; page = CtPage.EditList }
+        )
+
+        is CtPage.ResetPick -> ResetTeamsPickPage(
+            version = version,
+            onBack = { page = CtPage.ResetMenu },
+            onDone = { text -> version++; message = text; page = CtPage.EditList }
+        )
+
+        is CtPage.AddPlayers -> {
+            val team = remember(version, p.teamId) { findTeam(p.kind, p.teamId) }
+            if (team == null) {
+                LaunchedEffect(Unit) { page = CtPage.EditList }
+            } else {
+                AddPlayersPage(
+                    dest = team,
+                    onBack = { page = CtPage.TeamView(p.kind, p.teamId) },
+                    onDone = { text ->
+                        version++
+                        message = text
+                        page = CtPage.TeamView(p.kind, p.teamId)
+                    }
+                )
+            }
         }
 
         is CtPage.TeamView -> {
@@ -168,6 +218,7 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
                     onBack = { page = CtPage.EditList },
                     onEditPlayer = { player -> message = null; page = CtPage.PlayerEdit(p.kind, p.teamId, player.name) },
                     onCreatePlayer = { message = null; page = CtPage.PlayerEdit(p.kind, p.teamId, null) },
+                    onAddPlayers = { message = null; page = CtPage.AddPlayers(p.kind, p.teamId) },
                     onRename = { renaming = p.kind to team },
                     onDeleteTeam = {
                         Customisation.deleteCustomTeam(team.id)
@@ -225,10 +276,10 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
 
 // ---- Finding teams ---------------------------------------------------------------------------
 
-private fun internationalTeams(): List<Team> = CricketData.getAllTeams().sortedBy { it.name }
+internal fun internationalTeams(): List<Team> = CricketData.getAllTeams().sortedBy { it.name }
 
 /** Every league the game has, with its teams as they are built (the IPL is made by its auction, so it is not here). */
-private fun leagueGroups(): List<Pair<String, List<Team>>> = listOf(
+internal fun leagueGroups(): List<Pair<String, List<Team>>> = listOf(
     "Caribbean Premier League" to CplData.buildTeams().first,
     "Abu Dhabi T10" to AbuDhabiT10.buildTeams().first,
     "Lanka Premier League" to LankaPremierLeague.buildTeams().first,
@@ -379,7 +430,9 @@ private fun EditTeamsPage(
     onTab: (TeamKind) -> Unit,
     onBack: () -> Unit,
     onOpen: (TeamKind, String) -> Unit,
-    onRename: (TeamKind, Team) -> Unit
+    onRename: (TeamKind, Team) -> Unit,
+    onDeleteTeams: () -> Unit,
+    onResetTeams: () -> Unit
 ) {
     val international = remember(version) { internationalTeams() }
     val leagues = remember(version, tab) { if (tab == TeamKind.League) leagueGroups() else emptyList() }
@@ -388,6 +441,10 @@ private fun EditTeamsPage(
         BackButton(onBack)
         Spacer(modifier = Modifier.height(16.dp))
         PageHeading("Edit teams")
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(onClick = onDeleteTeams, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Delete custom teams") }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(onClick = onResetTeams, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Reset game teams to default") }
         Spacer(modifier = Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TabButton("International teams", tab == TeamKind.International, Modifier.weight(1f)) { onTab(TeamKind.International) }
@@ -512,6 +569,7 @@ private fun TeamPage(
     onBack: () -> Unit,
     onEditPlayer: (Player) -> Unit,
     onCreatePlayer: () -> Unit,
+    onAddPlayers: () -> Unit,
     onRename: () -> Unit,
     onDeleteTeam: () -> Unit
 ) {
@@ -580,7 +638,7 @@ private fun TeamPage(
                     Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                         Text(p.name, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = "${PlayerProfiles.roleLabel(PlayerProfiles.displayRole(p))}. ${PlayerProfiles.battingText(p)} ${PlayerProfiles.bowlingText(p)} Fielding: rating ${p.fieldingRating}.",
+                            text = "${PlayerProfiles.roleLabel(PlayerProfiles.displayRole(p))}. ${PlayerProfiles.battingText(p)} ${PlayerProfiles.bowlingText(p)} Fielding: rating ${p.fieldingRating}." + (Customisation.genderFor(p)?.let { " $it." } ?: ""),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -594,6 +652,11 @@ private fun TeamPage(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
+        OutlinedButton(
+            onClick = onAddPlayers,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+        ) { Text("Add players from other teams") }
+        Spacer(modifier = Modifier.height(12.dp))
         Button(
             onClick = onCreatePlayer,
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -652,6 +715,7 @@ private fun PlayerEditorPage(team: Team, player: Player?, onBack: () -> Unit, on
     var batText by remember { mutableStateOf((player?.battingRating ?: 50).toString()) }
     var bowlText by remember { mutableStateOf((player?.bowlingRating ?: 30).toString()) }
     var fieldText by remember { mutableStateOf((player?.fieldingRating ?: 50).toString()) }
+    var gender by remember { mutableStateOf(player?.let { Customisation.genderCodeFor(it) } ?: "M") }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
@@ -685,6 +749,14 @@ private fun PlayerEditorPage(team: Team, player: Player?, onBack: () -> Unit, on
                 modifier = Modifier.fillMaxWidth().focusRequester(focus)
             )
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        if (player == null || isAdded) {
+            SectionTitle("Gender")
+            Column(modifier = Modifier.selectableGroup()) {
+                RadioRow("Male", gender == "M") { gender = "M" }
+                RadioRow("Female", gender == "F") { gender = "F" }
+            }
         }
 
         SectionTitle("Batting hand")
@@ -755,11 +827,11 @@ private fun PlayerEditorPage(team: Team, player: Player?, onBack: () -> Unit, on
                 if (error == null && bat != null && bowl != null && field != null) {
                     when {
                         player == null -> {
-                            Customisation.addPlayer(team.id, t, role, bat, bowl, field, hand, label)
+                            Customisation.addPlayer(team.id, t, role, bat, bowl, field, hand, label, gender)
                             onDone("Saved $t.")
                         }
                         isAdded -> {
-                            Customisation.updateAdded(player.id, role, bat, bowl, field, hand, label)
+                            Customisation.updateAdded(player.id, role, bat, bowl, field, hand, label, gender)
                             onDone("Saved ${player.name}.")
                         }
                         else -> {
