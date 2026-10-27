@@ -186,13 +186,16 @@ object CplSimulator {
 
         val tied = finished.superOverResults.isNotEmpty()
         // Only if no Super Over could settle it (should never happen): fewer wickets lost, then batting strength.
-        val winnerId = finished.winnerId ?: when {
+        // With the Super Over switched off a tied league match has no winner: the points are shared.
+        val sharedTie = finished.winnerId == null && finished.rules?.noSuperOver == true
+        val winnerId: String? = if (sharedTie) null else finished.winnerId ?: when {
             second.totalWickets < first.totalWickets -> second.battingTeamId
             second.totalWickets > first.totalWickets -> first.battingTeamId
             else -> listOf(home, away).maxByOrNull { it.battingRating }?.id ?: home.id
         }
-        val winnerName = listOf(home, away).first { it.id == winnerId }.name
+        val winnerName = if (winnerId == null) "" else listOf(home, away).first { it.id == winnerId }.name
         val resultText = when {
+            sharedTie -> "Match tied. The points are shared."
             tied -> (SuperOver.resultText(finished) ?: "Match tied. $winnerName won.") + " " +
                 SuperOver.summaryLines(finished).joinToString(" ")
             else -> (MatchSimulation.matchResultText(finished) ?: "$winnerName won.") +
@@ -544,7 +547,7 @@ object CplSimulator {
         val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
         val sim = simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
-            state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId)) ?: return state
+            state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage)) ?: return state
         val fixtures = state.fixtures.map {
             if (it.id == fixture.id) it.copy(result = sim.result, scorecard = sim.scorecard) else it
         }

@@ -41,6 +41,7 @@ object SuperOver {
     /** True when an innings that has just ended leaves the scores level in a format that has a Super Over. */
     fun isTieAtEnd(state: MatchState): Boolean {
         if (state.format == MatchFormat.TEST) return false
+        if (state.rules?.noSuperOver == true) return false
         val target = state.target ?: return false
         return state.currentInnings == 2 && state.score.runs == target - 1
     }

@@ -1,6 +1,6 @@
-Patch run: 40308258865
-Timestamp (UTC): 2026-10-26T10:33:06Z
+Patch run: 40465332589
+Timestamp (UTC): 2026-10-27T07:08:44Z
 Result: OK
 -----
-Patch 2026-10-24-054-fix-build.json
-  applied 1 operation(s) to 1 file(s)
+Patch 2026-10-26-055-superover-and-custom-teams-in-matches.json
+  applied 25 operation(s) to 10 file(s)

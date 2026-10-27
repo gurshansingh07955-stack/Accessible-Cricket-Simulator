@@ -545,7 +545,8 @@ private fun TeamPage(
                 TeamKind.International -> "International team"
                 TeamKind.League -> "League team"
                 TeamKind.Custom -> "Custom team"
-            } + ". ${team.players.size} players. Press and hold the name to rename the team.",
+            } + ". ${team.players.size} players. Press and hold the name to rename the team." +
+                (if (kind == TeamKind.Custom) (Customisation.playProblem(team)?.let { " Not ready to play: $it." } ?: " Ready to play.") else ""),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

@@ -96,6 +96,7 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
     var drsOn by remember { mutableStateOf(true) }
     var drsReviews by remember { mutableStateOf(2) }
     var rainOn by remember { mutableStateOf(true) }
+    var superOverOn by remember { mutableStateOf(true) }
     var catalog by remember { mutableStateOf<List<TeamEntry>?>(null) }
 
     LaunchedEffect(step) {
@@ -113,6 +114,7 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
         drsOn = true
         drsReviews = 2
         rainOn = true
+        superOverOn = true
         message = null
         step = TStep.Name
     }
@@ -312,6 +314,12 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
                 Spacer(modifier = Modifier.height(12.dp))
                 SwitchRow("Rain", "Rain can interrupt matches, with overs lost and a revised target.", rainOn) { rainOn = it }
                 Spacer(modifier = Modifier.height(12.dp))
+                SwitchRow(
+                    "Super Over",
+                    "A tied match is decided by a Super Over. Switched off, a tied league match is shared. Knockout matches cannot end level, so they still play a Super Over.",
+                    superOverOn
+                ) { superOverOn = it }
+                Spacer(modifier = Modifier.height(12.dp))
                 Button(onClick = { step = TStep.Summary }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Continue") }
             }
         }
@@ -340,6 +348,7 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text("Rain: " + if (rainOn) "on." else "off.", style = MaterialTheme.typography.bodyLarge)
+                    Text("Super Over: " + if (superOverOn) "on." else "off for league matches (a tie is shared); knockout matches still play one.", style = MaterialTheme.typography.bodyLarge)
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Number of matches", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
@@ -357,7 +366,7 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
                                 id = "ctour_" + UUID.randomUUID().toString().take(8),
                                 name = name.trim(), formatKey = formatKey, schedule = schedule.name,
                                 teamKeys = teamKeys.toList(), stadiumIds = stadiumIds.toList(),
-                                drsEnabled = drsOn, drsReviews = drsReviews, rainEnabled = rainOn
+                                drsEnabled = drsOn, drsReviews = drsReviews, rainEnabled = rainOn, noSuperOver = !superOverOn
                             )
                         )
                         version++
@@ -491,16 +500,17 @@ private fun TeamsPage(
                 Text("You have no custom teams yet. Create one in Create Custom Teams and Players.", style = MaterialTheme.typography.bodyLarge)
             }
             if (tab == TeamCatalog.CUSTOM && entries.isNotEmpty()) {
-                Text("A custom team needs at least ${TeamCatalog.MIN_PLAYERS} players to play.", style = MaterialTheme.typography.bodyMedium)
+                Text("A custom team needs ${TeamCatalog.MIN_PLAYERS} players, a wicketkeeper and at least 4 bowlers or all-rounders to play.", style = MaterialTheme.typography.bodyMedium)
             }
             entries.groupBy { it.group }.forEach { (group, list) ->
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(group, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                 list.forEach { e ->
-                    val tooSmall = e.kind == TeamCatalog.CUSTOM && e.team.players.size < TeamCatalog.MIN_PLAYERS
+                    val problem = if (e.kind == TeamCatalog.CUSTOM) Customisation.playProblem(e.team) else null
+                    val tooSmall = problem != null
                     CheckRow(
                         text = e.team.name,
-                        sub = if (tooSmall) "${e.team.players.size} players: needs ${TeamCatalog.MIN_PLAYERS}" else "${e.team.players.size} players",
+                        sub = if (problem != null) "Not ready: $problem" else "${e.team.players.size} players",
                         checked = e.key in selected,
                         enabled = !tooSmall
                     ) { on ->

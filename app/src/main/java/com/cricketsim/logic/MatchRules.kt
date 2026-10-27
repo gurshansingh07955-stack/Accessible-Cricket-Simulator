@@ -17,7 +17,9 @@ data class MatchRules(
     val fieldersOutside: Int,
     val drsReviews: Int,
     val rainEnabled: Boolean,
-    val maxOversPerBowler: Int
+    val maxOversPerBowler: Int,
+    /** True = a tied match is not settled by a Super Over (the result is a tie). */
+    val noSuperOver: Boolean = false
 )
 
 /**
@@ -32,6 +34,9 @@ object TournamentRules {
     const val CUSTOM_PREFIX = "ctour_"
 
     fun isCustom(id: String?): Boolean = id != null && id.startsWith(CUSTOM_PREFIX)
+
+    /** League and group matches may end tied; everything after them (semi-finals, qualifiers, the Final...) must be settled. */
+    fun isLeagueStage(stage: String?): Boolean = stage == CplData.LEAGUE || (stage != null && stage.startsWith("Group "))
 
     private fun builtIn(key: String): MatchFormat? = when (key) {
         "T20" -> MatchFormat.T20
@@ -79,12 +84,16 @@ object TournamentRules {
         return null
     }
 
-    fun rulesFor(tournamentId: String?): MatchRules? {
+    fun rulesFor(tournamentId: String?, stage: String? = null): MatchRules? {
         if (tournamentId == null) return null
         if (isCustom(tournamentId)) {
             val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null
             val base = rulesForFormat(def.formatKey) ?: return null
-            return base.copy(drsReviews = if (def.drsEnabled) def.drsReviews else 0, rainEnabled = def.rainEnabled)
+            return base.copy(
+                drsReviews = if (def.drsEnabled) def.drsReviews else 0,
+                rainEnabled = def.rainEnabled,
+                noSuperOver = def.noSuperOver && isLeagueStage(stage)
+            )
         }
         val key = Customisation.tournamentEdit(tournamentId)?.formatKey ?: return null
         return rulesForFormat(key)

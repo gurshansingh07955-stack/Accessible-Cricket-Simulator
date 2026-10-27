@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.CricketData
+import com.cricketsim.logic.Customisation
 import com.cricketsim.logic.Team
 
 /**
@@ -43,14 +44,14 @@ fun TeamSelectionScreen(onTeamsSelected: (userTeam: Team, opponentTeam: Team) ->
     if (chosenUserTeam == null) {
         TeamListStep(
             title = "Choose your team",
-            teams = remember { CricketData.getAllTeams() },
+            teams = remember { CricketData.getAllTeams() + Customisation.playableCustomTeams() },
             onTeamSelected = { userTeam = it },
             onBack = onBack
         )
     } else {
         TeamListStep(
             title = "Choose the opponent",
-            teams = remember(chosenUserTeam) { CricketData.getAllTeams().filter { it.id != chosenUserTeam.id } },
+            teams = remember(chosenUserTeam) { (CricketData.getAllTeams() + Customisation.playableCustomTeams()).filter { it.id != chosenUserTeam.id } },
             onTeamSelected = { opponent -> onTeamsSelected(chosenUserTeam, opponent) },
             onBack = { userTeam = null }
         )

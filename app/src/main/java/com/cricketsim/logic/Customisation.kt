@@ -280,6 +280,22 @@ object Customisation {
         update { d -> d.copy(addedPlayers = (d.addedPlayers ?: emptyList()).filter { it.id != id }) }
     }
 
+    const val MIN_PLAYERS = 11
+
+    /** What a team still needs before it can play a match (null = ready). */
+    fun playProblem(team: Team): String? {
+        val roles = team.players.map { PlayerProfiles.displayRole(it) }
+        return when {
+            team.players.size < MIN_PLAYERS -> "it needs at least $MIN_PLAYERS players (it has ${team.players.size})"
+            roles.none { it == PlayerRole.WICKETKEEPER } -> "it needs a wicketkeeper"
+            roles.count { it == PlayerRole.BOWLER || it == PlayerRole.ALL_ROUNDER } < 4 -> "it needs at least 4 bowlers or all-rounders"
+            else -> null
+        }
+    }
+
+    /** The custom teams that are ready to play a match. */
+    fun playableCustomTeams(): List<Team> = customTeamsAsTeams().filter { playProblem(it) == null }
+
     /** The player's custom match formats (read from their file; used when a match is set up). */
     fun customFormats(): List<CustomFormat> = try {
         val f = formatsFile

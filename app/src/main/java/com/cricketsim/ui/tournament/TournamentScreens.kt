@@ -767,7 +767,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             if (stadium != null) {
                 MatchScreen(
                     format = AbuDhabiT10.formatFor(saved?.tournamentId),
-                    rules = TournamentRules.rulesFor(saved?.tournamentId),
+                    rules = TournamentRules.rulesFor(saved?.tournamentId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),
                     stadium = stadium,
                     userTeam = current.userXI,
                     opponentTeam = current.opponentXI,

@@ -202,7 +202,9 @@ data class CustomTournamentDef(
     val stadiumIds: List<String> = emptyList(),
     val drsEnabled: Boolean = true,
     val drsReviews: Int = 2,
-    val rainEnabled: Boolean = true
+    val rainEnabled: Boolean = true,
+    /** True = a tied league or group match is shared instead of going to a Super Over (knockout matches still play one). */
+    val noSuperOver: Boolean = false
 ) {
     companion object {
         const val UNLIMITED_REVIEWS = 99
