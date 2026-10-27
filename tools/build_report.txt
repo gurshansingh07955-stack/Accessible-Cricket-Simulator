@@ -1,6 +1,6 @@
-Build run: 40465357582 (attempt 1)
-Commit: c1d447ba5c48353e13e0bcb4b52689dbfaad2523
-Timestamp (UTC): 2026-10-27T07:10:54Z
+Build run: 40489560465 (attempt 1)
+Commit: 0c43a5a0725c916c13b103e8829c171d6ec9ca1a
+Timestamp (UTC): 2026-10-27T10:36:44Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -15,9 +15,9 @@ Daemon will be stopped at the end of the build
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
 > Task :app:packageDebugResources
+> Task :app:mergeDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
-> Task :app:mergeDebugResources
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
@@ -33,10 +33,10 @@ Daemon will be stopped at the end of the build
 > Task :app:checkDebugDuplicateClasses
 > Task :app:mergeDebugNativeLibs NO-SOURCE
 > Task :app:processDebugManifestForPackage
+> Task :app:mergeLibDexDebug
 > Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
-> Task :app:mergeLibDexDebug
 > Task :app:writeDebugSigningConfigVersions
 > Task :app:processDebugResources
 > Task :app:mergeExtDexDebug
@@ -45,7 +45,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/logic/MatchEngine.kt:171:96 Parameter 'difficulty' is never used
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/logic/MatchEngine.kt:768:13 'when' is exhaustive so 'else' is redundant here
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt:191:13 'when' is exhaustive so 'else' is redundant here
-w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt:519:9 Variable 'context' is never used
+w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt:577:9 Variable 'context' is never used
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt:287:87 Unnecessary safe call on a non-null receiver of type LotState?
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt:274:5 Parameter 'batsman' is never used
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/DrsScreens.kt:315:17 Name shadowed: services
@@ -63,7 +63,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1793084951498.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1793097305716.json
 
-BUILD SUCCESSFUL in 1m 46s
+BUILD SUCCESSFUL in 1m 42s
 37 actionable tasks: 37 executed
