@@ -1,0 +1,175 @@
+{
+  "name": "Manage custom teams, gender, add players from other teams",
+  "message": "Delete and reset teams, player gender, add players from other teams",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+    "contains": "fun AddPlayersPage"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "content": "package com.cricketsim.ui.custom\n\nimport androidx.activity.compose.BackHandler\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Row\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.heightIn\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.foundation.layout.size\nimport androidx.compose.foundation.selection.toggleable\nimport androidx.compose.material3.AlertDialog\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.Checkbox\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.OutlinedButton\nimport androidx.compose.material3.Text\nimport androidx.compose.material3.TextButton\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Alignment\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.LiveRegionMode\nimport androidx.compose.ui.semantics.Role\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.liveRegion\nimport androidx.compose.ui.semantics.role\nimport androidx.compose.ui.semantics.selected\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.Customisation\nimport com.cricketsim.logic.Player\nimport com.cricketsim.logic.PlayerProfiles\nimport com.cricketsim.logic.Team\n\n/**\n * Edit teams > Delete custom teams, Reset game teams to default, and (from a team's page) Add players from other\n * teams. Each of the first two offers \"all of them\" or \"choose which\"; both ask before they change anything.\n */\n\n// ---- Delete custom teams ----------------------------------------------------------------------\n\n@Composable\ninternal fun DeleteTeamsMenuPage(version: Int, onBack: () -> Unit, onChoose: () -> Unit, onDone: (String) -> Unit) {\n    val teams = remember(version) { Customisation.customTeamsAsTeams() }\n    var confirmAll by remember { mutableStateOf(false) }\n    BackHandler(onBack = onBack)\n    PageColumn {\n        BackButton(onBack)\n        Spacer(modifier = Modifier.height(16.dp))\n        PageHeading(\"Delete custom teams\")\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            text = if (teams.isEmpty()) \"You have no custom teams.\" else \"You have ${teams.size} custom ${if (teams.size == 1) \"team\" else \"teams\"}.\",\n            style = MaterialTheme.typography.bodyLarge\n        )\n        Spacer(modifier = Modifier.height(16.dp))\n        OptionButton(\n            title = \"Delete all custom teams\",\n            description = \"Delete every custom team and all the players in them.\",\n            enabled = teams.isNotEmpty(), emphasised = false, onClick = { confirmAll = true }\n        )\n        Spacer(modifier = Modifier.height(12.dp))\n        OptionButton(\n            title = \"Choose custom teams to delete\",\n            description = \"Pick the teams you want to delete.\",\n            enabled = teams.isNotEmpty(), emphasised = false, onClick = onChoose\n        )\n    }\n    if (confirmAll) {\n        AlertDialog(\n            onDismissRequest = { confirmAll = false },\n            title = { Text(\"Delete all custom teams?\") },\n            text = { Text(\"Delete all ${teams.size} custom teams and their players? This cannot be undone.\") },\n            confirmButton = {\n                TextButton(onClick = {\n                    confirmAll = false\n                    Customisation.deleteCustomTeams(teams.map { it.id }.toSet())\n                    onDone(\"Deleted all ${teams.size} custom teams.\")\n                }) { Text(\"Delete all\") }\n            },\n            dismissButton = { TextButton(onClick = { confirmAll = false }) { Text(\"Cancel\") } }\n        )\n    }\n}\n\n@Composable\ninternal fun DeleteTeamsPickPage(version: Int, onBack: () -> Unit, onDone: (String) -> Unit) {\n    val teams = remember(version) { Customisation.customTeamsAsTeams() }\n    var picked by remember { mutableStateOf<Set<String>>(emptySet()) }\n    var confirm by remember { mutableStateOf(false) }\n    BackHandler(onBack = onBack)\n    PageColumn {\n        BackButton(onBack)\n        Spacer(modifier = Modifier.height(16.dp))\n        PageHeading(\"Choose custom teams to delete\")\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            text = \"Chosen: ${picked.size}.\",\n            style = MaterialTheme.typography.bodyLarge,\n            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Button(\n            onClick = { confirm = true },\n            enabled = picked.isNotEmpty(),\n            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n        ) { Text(\"Delete the ${picked.size} chosen\") }\n        Spacer(modifier = Modifier.height(8.dp))\n        teams.forEach { t ->\n            PickRow(t.name, \"${t.players.size} players\", t.id in picked, true) { on -> picked = if (on) picked + t.id else picked - t.id }\n        }\n    }\n    if (confirm) {\n        AlertDialog(\n            onDismissRequest = { confirm = false },\n            title = { Text(\"Delete these teams?\") },\n            text = { Text(\"Delete the ${picked.size} chosen custom teams and their players? This cannot be undone.\") },\n            confirmButton = {\n                TextButton(onClick = {\n                    confirm = false\n                    val n = picked.size\n                    Customisation.deleteCustomTeams(picked)\n                    onDone(\"Deleted $n custom ${if (n == 1) \"team\" else \"teams\"}.\")\n                }) { Text(\"Delete\") }\n            },\n            dismissButton = { TextButton(onClick = { confirm = false }) { Text(\"Cancel\") } }\n        )\n    }\n}\n\n// ---- Reset game teams ---------------------------------------------------------------------------\n\n/** The game's teams the player has changed, with the heading they are listed under. */\nprivate fun changedGameTeams(): List<Pair<String, Team>> {\n    val ids = Customisation.editedGameTeamIds()\n    if (ids.isEmpty()) return emptyList()\n    val out = ArrayList<Pair<String, Team>>()\n    internationalTeams().filter { it.id in ids }.forEach { out.add(\"International teams\" to it) }\n    leagueGroups().forEach { (league, teams) -> teams.filter { it.id in ids }.forEach { out.add(league to it) } }\n    return out\n}\n\n@Composable\ninternal fun ResetTeamsMenuPage(version: Int, onBack: () -> Unit, onChoose: () -> Unit, onDone: (String) -> Unit) {\n    val count = remember(version) { Customisation.editedGameTeamIds().size }\n    var confirmAll by remember { mutableStateOf(false) }\n    BackHandler(onBack = onBack)\n    PageColumn {\n        BackButton(onBack)\n        Spacer(modifier = Modifier.height(16.dp))\n        PageHeading(\"Reset game teams to default\")\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            text = if (count == 0) \"None of the game's teams has been changed.\"\n            else \"$count of the game's ${if (count == 1) \"team has\" else \"teams have\"} been changed (renamed, players edited, or players added).\",\n            style = MaterialTheme.typography.bodyLarge\n        )\n        Spacer(modifier = Modifier.height(16.dp))\n        OptionButton(\n            title = \"Reset all teams\",\n            description = \"Put every game team back as the game made it. Your custom teams are not touched.\",\n            enabled = count > 0, emphasised = false, onClick = { confirmAll = true }\n        )\n        Spacer(modifier = Modifier.height(12.dp))\n        OptionButton(\n            title = \"Choose which teams to reset\",\n            description = \"Pick the teams to put back as the game made them.\",\n            enabled = count > 0, emphasised = false, onClick = onChoose\n        )\n    }\n    if (confirmAll) {\n        AlertDialog(\n            onDismissRequest = { confirmAll = false },\n            title = { Text(\"Reset all game teams?\") },\n            text = { Text(\"Every change to the game's teams (names, edited players, created and copied players) is removed. This cannot be undone.\") },\n            confirmButton = {\n                TextButton(onClick = {\n                    confirmAll = false\n                    Customisation.resetGameTeams(null)\n                    onDone(\"Reset all game teams to default.\")\n                }) { Text(\"Reset all\") }\n            },\n            dismissButton = { TextButton(onClick = { confirmAll = false }) { Text(\"Cancel\") } }\n        )\n    }\n}\n\n@Composable\ninternal fun ResetTeamsPickPage(version: Int, onBack: () -> Unit, onDone: (String) -> Unit) {\n    val changed = remember(version) { changedGameTeams() }\n    var picked by remember { mutableStateOf<Set<String>>(emptySet()) }\n    var confirm by remember { mutableStateOf(false) }\n    BackHandler(onBack = onBack)\n    PageColumn {\n        BackButton(onBack)\n        Spacer(modifier = Modifier.height(16.dp))\n        PageHeading(\"Choose which teams to reset\")\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            text = \"Chosen: ${picked.size}.\",\n            style = MaterialTheme.typography.bodyLarge,\n            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Button(\n            onClick = { confirm = true },\n            enabled = picked.isNotEmpty(),\n            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n        ) { Text(\"Reset the ${picked.size} chosen\") }\n        changed.groupBy { it.first }.forEach { (group, list) ->\n            Spacer(modifier = Modifier.height(12.dp))\n            Text(group, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })\n            list.forEach { (_, t) ->\n                PickRow(t.name, \"${t.players.size} players\", t.id in picked, true) { on -> picked = if (on) picked + t.id else picked - t.id }\n            }\n        }\n    }\n    if (confirm) {\n        AlertDialog(\n            onDismissRequest = { confirm = false },\n            title = { Text(\"Reset these teams?\") },\n            text = { Text(\"Put the ${picked.size} chosen teams back as the game made them? This cannot be undone.\") },\n            confirmButton = {\n                TextButton(onClick = {\n                    confirm = false\n                    val n = picked.size\n                    Customisation.resetGameTeams(picked)\n                    onDone(\"Reset $n ${if (n == 1) \"team\" else \"teams\"} to default.\")\n                }) { Text(\"Reset\") }\n            },\n            dismissButton = { TextButton(onClick = { confirm = false }) { Text(\"Cancel\") } }\n        )\n    }\n}\n\n// ---- Add players from other teams ----------------------------------------------------------------\n\n@Composable\ninternal fun AddPlayersPage(dest: Team, onBack: () -> Unit, onDone: (String) -> Unit) {\n    var kind by remember { mutableStateOf(TeamKind.International) }\n    var sourceId by remember { mutableStateOf<String?>(null) }\n    var picked by remember { mutableStateOf<List<Player>>(emptyList()) }\n    val international = remember { internationalTeams().filter { it.id != dest.id } }\n    val leagues = remember(kind) {\n        if (kind == TeamKind.League) leagueGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }\n    val custom = remember { Customisation.customTeamsAsTeams().filter { it.id != dest.id } }\n    val sourceTeam: Team? = sourceId?.let { id ->\n        when (kind) {\n            TeamKind.International -> international.find { it.id == id }\n            TeamKind.League -> leagues.flatMap { it.second }.find { it.id == id }\n            TeamKind.Custom -> custom.find { it.id == id }\n        }\n    }\n    val inDestination = remember(dest.id) { dest.players.map { it.name.lowercase() }.toSet() }\n    val back: () -> Unit = { if (sourceId != null) sourceId = null else onBack() }\n    BackHandler(onBack = back)\n    PageColumn {\n        BackButton(back)\n        Spacer(modifier = Modifier.height(16.dp))\n        PageHeading(\"Add players to ${dest.name}\")\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            text = \"Chosen so far: ${picked.size}. They are copied into ${dest.name}; the original players stay where they are.\",\n            style = MaterialTheme.typography.bodyLarge,\n            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Button(\n            onClick = {\n                val n = Customisation.copyPlayers(dest.id, picked)\n                onDone(\"Added $n ${if (n == 1) \"player\" else \"players\"} to ${dest.name}.\")\n            },\n            enabled = picked.isNotEmpty(),\n            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n        ) { Text(\"Add the ${picked.size} chosen ${if (picked.size == 1) \"player\" else \"players\"}\") }\n        Spacer(modifier = Modifier.height(12.dp))\n\n        if (sourceTeam == null) {\n            listOf(\n                TeamKind.International to \"International teams\",\n                TeamKind.League to \"League teams\",\n                TeamKind.Custom to \"Custom teams\"\n            ).forEach { (k, label) ->\n                val on = kind == k\n                val m = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { this.selected = on; role = Role.Tab }\n                if (on) Button(onClick = { kind = k }, modifier = m) { Text(label) }\n                else OutlinedButton(onClick = { kind = k }, modifier = m) { Text(label) }\n                Spacer(modifier = Modifier.height(6.dp))\n            }\n            val groups: List<Pair<String, List<Team>>> = when (kind) {\n                TeamKind.International -> listOf(\"International teams\" to international)\n                TeamKind.League -> leagues\n                TeamKind.Custom -> listOf(\"Custom teams\" to custom)\n            }\n            if (kind == TeamKind.Custom && custom.isEmpty()) {\n                Text(\"You have no other custom teams.\", style = MaterialTheme.typography.bodyLarge)\n            }\n            groups.forEach { (title, teams) ->\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })\n                teams.forEach { t ->\n                    OutlinedButton(\n                        onClick = { sourceId = t.id },\n                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 2.dp)\n                    ) {\n                        Column(modifier = Modifier.fillMaxWidth()) {\n                            Text(t.name, style = MaterialTheme.typography.titleMedium)\n                            Text(\"${t.players.size} players\", style = MaterialTheme.typography.bodyMedium)\n                        }\n                    }\n                }\n            }\n        } else {\n            Text(sourceTeam.name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })\n            PlayerProfiles.grouped(sourceTeam.players).forEach { (title, players) ->\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(\"$title (${players.size})\", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n                players.forEach { p ->\n                    val isPicked = picked.any { it.id == p.id }\n                    val alreadyThere = p.name.lowercase() in inDestination\n                    val sameNamePicked = !isPicked && picked.any { it.name.equals(p.name, ignoreCase = true) }\n                    val sub = when {\n                        alreadyThere -> \"Already in ${dest.name}\"\n                        sameNamePicked -> \"A player with this name is already chosen\"\n                        else -> \"${PlayerProfiles.roleLabel(PlayerProfiles.displayRole(p))}. ${PlayerProfiles.battingText(p)} ${PlayerProfiles.bowlingText(p)}\"\n                    }\n                    PickRow(p.name, sub, isPicked, !alreadyThere && !sameNamePicked) { on ->\n                        picked = if (on) picked + p else picked.filter { it.id != p.id }\n                    }\n                }\n            }\n        }\n    }\n}\n\n@Composable\nprivate fun PickRow(text: String, sub: String?, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {\n    Row(\n        modifier = Modifier\n            .fillMaxWidth()\n            .heightIn(min = 52.dp)\n            .toggleable(value = checked, enabled = enabled, role = Role.Checkbox, onValueChange = onChange)\n            .padding(vertical = 4.dp),\n        verticalAlignment = Alignment.CenterVertically\n    ) {\n        Checkbox(checked = checked, onCheckedChange = null, enabled = enabled)\n        Spacer(modifier = Modifier.size(12.dp))\n        Column {\n            Text(text, style = MaterialTheme.typography.bodyLarge)\n            if (sub != null) Text(sub, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "MANAGE_CUSTOM_TEAMS.md",
+      "content": "# Manage teams, gender, add players from other teams (patch 056)\n\nCreate Custom Teams and Players > Edit teams now starts with two more choices:\n\n* **Delete custom teams**: **Delete all custom teams**, or **Choose custom teams to delete** (tick the teams, then\n  delete the ones chosen). Both ask before deleting.\n* **Reset game teams to default**: **Reset all teams**, or **Choose which teams to reset**. A game team counts as\n  changed when it was renamed, a player was edited, or players were created or copied into it; resetting removes all of\n  that and puts the team back as the game made it. Custom teams are never touched by a reset.\n\nWhen a player is created there is now a **Gender** choice (Male or Female). It is shown on the player's row; it does not\nchange how the player plays.\n\nEvery team page (game teams and custom teams) has **Add players from other teams** just above Create a new player:\npick International, League or Custom teams, open a team, tick players (from as many teams as you like), then Add. The\nplayers are copied (role, ratings, batting hand, bowling style, gender); the originals stay where they are. A player\nwhose name is already in the team cannot be added twice.\n\nFiles: `Customisation.kt` (reset, delete, copy, gender), `ui/custom/CustomTeamsManagePages.kt` (the new pages),\n`ui/custom/CustomTeamsScreens.kt` (the new buttons and the gender choice).\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "    val hand: String = \"R\",\n    val bowlLabel: String = \"\"\n)",
+      "replace": "    val hand: String = \"R\",\n    val bowlLabel: String = \"\",\n    /** \"M\" or \"F\" (null in files saved before this choice existed: read as \"M\"). */\n    val gender: String? = \"M\"\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "        hand: Char, bowlLabel: String\n    ): String {\n",
+      "replace": "        hand: Char, bowlLabel: String, gender: String = \"M\"\n    ): String {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "        val added = AddedPlayer(id, teamId, name, role.name, batting, bowling, fielding, hand.toString(), bowlLabel)\n",
+      "replace": "        val added = AddedPlayer(id, teamId, name, role.name, batting, bowling, fielding, hand.toString(), bowlLabel, gender)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "        id: String, role: PlayerRole, batting: Int, bowling: Int, fielding: Int, hand: Char, bowlLabel: String\n    ) {",
+      "replace": "        id: String, role: PlayerRole, batting: Int, bowling: Int, fielding: Int, hand: Char, bowlLabel: String,\n        gender: String? = null\n    ) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "                    hand = hand.toString(), bowlLabel = bowlLabel\n",
+      "replace": "                    hand = hand.toString(), bowlLabel = bowlLabel, gender = gender ?: it.gender\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "    // ---- Custom teams ",
+      "replace": "    // ---- Gender, resetting, copying ---------------------------------------------------------------\n\n    /** \"M\" or \"F\" for a player the user created or copied; null for the game's own players. */\n    fun genderCodeFor(p: Player): String? = addedById[p.id]?.let { if (it.gender == \"F\") \"F\" else \"M\" }\n\n    /** \"Male\" or \"Female\" for a player the user created or copied; null for the game's own players. */\n    fun genderFor(p: Player): String? = genderCodeFor(p)?.let { if (it == \"F\") \"Female\" else \"Male\" }\n\n    /** Deletes several custom teams (and their players and logos) at once. */\n    fun deleteCustomTeams(ids: Set<String>) {\n        if (ids.isEmpty()) return\n        update { d ->\n            d.copy(\n                customTeams = (d.customTeams ?: emptyList()).filter { it.id !in ids },\n                addedPlayers = (d.addedPlayers ?: emptyList()).filter { it.teamId !in ids }\n            )\n        }\n        for (id in ids) {\n            try {\n                logoFile(id)?.delete()\n            } catch (e: Exception) {\n                // The logo file is only decoration.\n            }\n        }\n    }\n\n    /** The ids of the game's teams (not custom teams) the player has changed in any way. */\n    fun editedGameTeamIds(): Set<String> {\n        val d = data\n        val ids = HashSet<String>()\n        d.teamNames?.keys?.let { ids.addAll(it) }\n        d.playerEdits?.forEach { ids.add(it.teamId) }\n        d.addedPlayers?.forEach { ids.add(it.teamId) }\n        return ids.filter { !it.startsWith(\"custom_\") }.toSet()\n    }\n\n    /** Puts game teams back as the game made them (name, player edits, created and copied players); null = all of them. */\n    fun resetGameTeams(ids: Set<String>?) {\n        update { d ->\n            fun keep(teamId: String) = teamId.startsWith(\"custom_\") || (ids != null && teamId !in ids)\n            d.copy(\n                teamNames = (d.teamNames ?: emptyMap()).filterKeys { keep(it) },\n                playerEdits = (d.playerEdits ?: emptyList()).filter { keep(it.teamId) },\n                addedPlayers = (d.addedPlayers ?: emptyList()).filter { keep(it.teamId) }\n            )\n        }\n    }\n\n    /** Copies players into a team as players of its own (the originals stay where they are). Returns how many. */\n    fun copyPlayers(destTeamId: String, players: List<Player>): Int {\n        val copies = players.map { p ->\n            val label = PlayerProfiles.bowlLabelOf(p) ?: when {\n                p.bowlingRating <= 25 -> \"\"\n                p.bowlingStyle == BowlingStyle.SPIN -> \"Right-arm off break\"\n                else -> \"Right-arm medium-fast\"\n            }\n            AddedPlayer(\n                id = UUID.randomUUID().toString(), teamId = destTeamId, name = p.name,\n                role = PlayerProfiles.displayRole(p).name, batting = p.battingRating, bowling = p.bowlingRating,\n                fielding = p.fieldingRating, hand = (PlayerProfiles.handOf(p) ?: 'R').toString(), bowlLabel = label,\n                gender = genderCodeFor(p) ?: \"M\"\n            )\n        }\n        update { d -> d.copy(addedPlayers = (d.addedPlayers ?: emptyList()) + copies) }\n        return copies.size\n    }\n\n    // ---- Custom teams ",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "private enum class TeamKind { International, League, Custom }",
+      "replace": "internal enum class TeamKind { International, League, Custom }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "private fun internationalTeams(): List<Team> =",
+      "replace": "internal fun internationalTeams(): List<Team> =",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "private fun leagueGroups(): List<Pair<String, List<Team>>> = listOf(",
+      "replace": "internal fun leagueGroups(): List<Pair<String, List<Team>>> = listOf(",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "    object EditList : CtPage\n",
+      "replace": "    object EditList : CtPage\n    object DeleteMenu : CtPage\n    object DeletePick : CtPage\n    object ResetMenu : CtPage\n    object ResetPick : CtPage\n    class AddPlayers(val kind: TeamKind, val teamId: String) : CtPage\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "                onRename = { kind, team -> renaming = kind to team }\n            )\n",
+      "replace": "                onRename = { kind, team -> renaming = kind to team },\n                onDeleteTeams = { page = CtPage.DeleteMenu },\n                onResetTeams = { page = CtPage.ResetMenu }\n            )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        is CtPage.TeamView -> {\n",
+      "replace": "        is CtPage.DeleteMenu -> DeleteTeamsMenuPage(\n            version = version,\n            onBack = { page = CtPage.EditList },\n            onChoose = { page = CtPage.DeletePick },\n            onDone = { text -> version++; message = text; page = CtPage.EditList }\n        )\n\n        is CtPage.DeletePick -> DeleteTeamsPickPage(\n            version = version,\n            onBack = { page = CtPage.DeleteMenu },\n            onDone = { text -> version++; message = text; page = CtPage.EditList }\n        )\n\n        is CtPage.ResetMenu -> ResetTeamsMenuPage(\n            version = version,\n            onBack = { page = CtPage.EditList },\n            onChoose = { page = CtPage.ResetPick },\n            onDone = { text -> version++; message = text; page = CtPage.EditList }\n        )\n\n        is CtPage.ResetPick -> ResetTeamsPickPage(\n            version = version,\n            onBack = { page = CtPage.ResetMenu },\n            onDone = { text -> version++; message = text; page = CtPage.EditList }\n        )\n\n        is CtPage.AddPlayers -> {\n            val team = remember(version, p.teamId) { findTeam(p.kind, p.teamId) }\n            if (team == null) {\n                LaunchedEffect(Unit) { page = CtPage.EditList }\n            } else {\n                AddPlayersPage(\n                    dest = team,\n                    onBack = { page = CtPage.TeamView(p.kind, p.teamId) },\n                    onDone = { text ->\n                        version++\n                        message = text\n                        page = CtPage.TeamView(p.kind, p.teamId)\n                    }\n                )\n            }\n        }\n\n        is CtPage.TeamView -> {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "    onRename: (TeamKind, Team) -> Unit\n) {\n    val international = remember(version) { internationalTeams() }\n",
+      "replace": "    onRename: (TeamKind, Team) -> Unit,\n    onDeleteTeams: () -> Unit,\n    onResetTeams: () -> Unit\n) {\n    val international = remember(version) { internationalTeams() }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        PageHeading(\"Edit teams\")\n        Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "        PageHeading(\"Edit teams\")\n        Spacer(modifier = Modifier.height(12.dp))\n        OutlinedButton(onClick = onDeleteTeams, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(\"Delete custom teams\") }\n        Spacer(modifier = Modifier.height(8.dp))\n        OutlinedButton(onClick = onResetTeams, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(\"Reset game teams to default\") }\n        Spacer(modifier = Modifier.height(12.dp))\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "    onCreatePlayer: () -> Unit,\n",
+      "replace": "    onCreatePlayer: () -> Unit,\n    onAddPlayers: () -> Unit,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "                    onCreatePlayer = { message = null; page = CtPage.PlayerEdit(p.kind, p.teamId, null) },\n",
+      "replace": "                    onCreatePlayer = { message = null; page = CtPage.PlayerEdit(p.kind, p.teamId, null) },\n                    onAddPlayers = { message = null; page = CtPage.AddPlayers(p.kind, p.teamId) },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        Spacer(modifier = Modifier.height(24.dp))\n        Button(\n            onClick = onCreatePlayer,\n",
+      "replace": "        Spacer(modifier = Modifier.height(24.dp))\n        OutlinedButton(\n            onClick = onAddPlayers,\n            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n        ) { Text(\"Add players from other teams\") }\n        Spacer(modifier = Modifier.height(12.dp))\n        Button(\n            onClick = onCreatePlayer,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": " Fielding: rating ${p.fieldingRating}.\",\n",
+      "replace": " Fielding: rating ${p.fieldingRating}.\" + (Customisation.genderFor(p)?.let { \" $it.\" } ?: \"\"),\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "    var fieldText by remember { mutableStateOf((player?.fieldingRating ?: 50).toString()) }\n",
+      "replace": "    var fieldText by remember { mutableStateOf((player?.fieldingRating ?: 50).toString()) }\n    var gender by remember { mutableStateOf(player?.let { Customisation.genderCodeFor(it) } ?: \"M\") }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        SectionTitle(\"Batting hand\")\n",
+      "replace": "        if (player == null || isAdded) {\n            SectionTitle(\"Gender\")\n            Column(modifier = Modifier.selectableGroup()) {\n                RadioRow(\"Male\", gender == \"M\") { gender = \"M\" }\n                RadioRow(\"Female\", gender == \"F\") { gender = \"F\" }\n            }\n        }\n\n        SectionTitle(\"Batting hand\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "Customisation.addPlayer(team.id, t, role, bat, bowl, field, hand, label)",
+      "replace": "Customisation.addPlayer(team.id, t, role, bat, bowl, field, hand, label, gender)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "Customisation.updateAdded(player.id, role, bat, bowl, field, hand, label)",
+      "replace": "Customisation.updateAdded(player.id, role, bat, bowl, field, hand, label, gender)",
+      "count": 1
+    }
+  ]
+}
