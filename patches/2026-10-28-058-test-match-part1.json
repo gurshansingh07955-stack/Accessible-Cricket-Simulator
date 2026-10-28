@@ -1,0 +1,297 @@
+{
+  "name": "Five-day Test, part 1: four innings, sessions and days, follow-on, declarations, draw, Test tempo and a wearing pitch",
+  "message": "Test matches: 5 days x 90 overs in 3 sessions of 30, four innings, follow-on, declare from Match info, break pop-ups, result by innings/runs/wickets or draw, Test scoring pace, pitch wear",
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "content": "package com.cricketsim.logic\n\nimport kotlin.random.Random\n\n/** One finished innings of a Test match. */\ndata class TestInnings(\n    val data: InningsData,\n    val score: MatchScore,\n    /** Ended by the batting captain's declaration. */\n    val declared: Boolean = false,\n    /** Ended because every wicket had fallen. */\n    val allOut: Boolean = false\n)\n\n/**\n * What a five-day Test remembers beyond [MatchState]'s own fields. Null on every other match.\n * While a Test is on, `MatchState.currentInnings` counts 1 to 4 and `currentInningsData` is the innings being played;\n * finished innings are kept here.\n */\ndata class TestState(\n    val completed: List<TestInnings> = emptyList(),\n    /** True once the current innings has been added to [completed] (the match is between innings, or over). */\n    val currentRecorded: Boolean = false,\n    val followOn: Boolean = false,\n    /** The user may enforce the follow-on and has not yet chosen. */\n    val followOnPending: Boolean = false,\n    /** Lunch, tea and stumps taken so far (3 a day). */\n    val breaksDone: Int = 0,\n    /** 0 = playing, 1 = the \"break begins\" pop-up is showing, 2 = the \"play resumes\" pop-up is showing. */\n    val breakPhase: Int = 0,\n    val sessionStartRuns: Int = 0,\n    val sessionStartWickets: Int = 0\n)\n\ndata class TestOutcome(val winnerId: String?, val text: String)\n\n/**\n * The rules of a five-day Test: 90 overs a day in three sessions of 30 overs, four innings, the follow-on, declarations,\n * a draw when the 450 overs run out, and a pitch that wears. See TEST_MATCH.md.\n * Everything here is switched off by [FIVE_DAY_TEST] = false (the old two-innings, 90-over Test comes back).\n */\nobject TestMatch {\n\n    const val FIVE_DAY_TEST = true\n\n    const val DAYS = 5\n    const val OVERS_PER_DAY = 90\n    const val SESSION_OVERS = 30\n    const val MATCH_OVERS = DAYS * OVERS_PER_DAY\n    const val BALLS_PER_SESSION = SESSION_OVERS * 6\n    const val BALLS_PER_DAY = OVERS_PER_DAY * 6\n    const val MATCH_BALLS = MATCH_OVERS * 6\n\n    /** A side that bats first and leads by this many runs or more may make the other side follow on (five-day Test). */\n    const val FOLLOW_ON_LEAD = 200\n\n    // Test tempo. The ball model is a T20 one (7.4 runs an over, all out in 34 overs); these weights bring a Test innings to about\n    // 330 runs in 100 overs at 3.2 an over, measured with tools/difficulty_twin.js (AI v AI, Medium). Turn them to change the pace.\n    const val SCALE_WICKET = 0.36\n    const val SCALE_FOUR = 0.5\n    const val SCALE_SIX = 0.22\n    const val SCALE_DOT = 1.8\n    const val SCALE_TWO = 0.8\n    const val SCALE_THREE = 0.7\n\n    fun applies(format: MatchFormat, rules: MatchRules?): Boolean = FIVE_DAY_TEST && format == MatchFormat.TEST && rules == null\n\n    fun start(): TestState = TestState()\n\n    private fun ballsOf(score: MatchScore): Int = score.overs * 6 + score.balls\n\n    private fun plural(n: Int, one: String, many: String = one + \"s\"): String = if (n == 1) \"$n $one\" else \"$n $many\"\n\n    private fun oversText(sc: MatchScore): String = \"${sc.overs}.${sc.balls}\"\n\n    private fun ordinal(n: Int): String = when (n) {\n        1 -> \"first\"\n        2 -> \"second\"\n        3 -> \"third\"\n        else -> \"fourth\"\n    }\n\n    private fun teamOf(s: MatchState, id: String): Team = if (s.userTeam.id == id) s.userTeam else s.opponentTeam\n\n    private fun otherTeam(s: MatchState, id: String): Team = if (s.userTeam.id == id) s.opponentTeam else s.userTeam\n\n    // ---------------------------------------------------------------- the clock\n\n    /** Legal balls bowled in the whole match so far. */\n    fun matchBalls(s: MatchState): Int {\n        val t = s.test ?: return 0\n        val done = t.completed.sumOf { ballsOf(it.score) }\n        return if (t.currentRecorded) done else done + ballsOf(s.score)\n    }\n\n    fun ballsLeft(s: MatchState): Int = (MATCH_BALLS - matchBalls(s)).coerceAtLeast(0)\n\n    fun oversLeft(s: MatchState): Int = ballsLeft(s) / 6\n\n    /** The 450 overs are bowled (checked when an over ends, or when an innings ends). */\n    fun timeUp(s: MatchState): Boolean {\n        val t = s.test ?: return false\n        return matchBalls(s) >= MATCH_BALLS && (t.currentRecorded || s.score.balls == 0)\n    }\n\n    private fun teamRuns(s: MatchState, teamId: String): Int {\n        val t = s.test ?: return 0\n        val done = t.completed.filter { it.data.battingTeamId == teamId }.sumOf { it.score.runs }\n        val live = if (!t.currentRecorded && s.battingTeam.id == teamId) s.score.runs else 0\n        return done + live\n    }\n\n    private fun totalRuns(s: MatchState): Int = teamRuns(s, s.userTeam.id) + teamRuns(s, s.opponentTeam.id)\n\n    private fun totalWickets(s: MatchState): Int {\n        val t = s.test ?: return 0\n        val done = t.completed.sumOf { it.score.wickets }\n        return if (t.currentRecorded) done else done + s.score.wickets\n    }\n\n    // ---------------------------------------------------------------- the pitch\n\n    /** 0 (day one) to about 1 (day five); a dusty pitch wears faster, a flat one slower. Used by MatchEngine. */\n    fun wearFactor(s: MatchState): Double {\n        if (s.test == null) return 0.0\n        val base = (matchBalls(s).toDouble() / MATCH_BALLS).coerceIn(0.0, 1.0)\n        val rate = when (s.pitchType) {\n            PitchType.DUSTY -> 1.3\n            PitchType.BATTING -> 0.7\n            PitchType.GREEN -> 0.9\n            else -> 1.0\n        }\n        return (base * rate).coerceIn(0.0, 1.0)\n    }\n\n    fun pitchReport(s: MatchState): String {\n        val w = wearFactor(s)\n        return when {\n            w < 0.12 -> \"The pitch is hard and true, the best of it for batting.\"\n            w < 0.35 -> \"The pitch is still good, with a little more help for the bowlers.\"\n            w < 0.6 -> \"The pitch is starting to wear, with some variable bounce and turn.\"\n            w < 0.8 -> \"The pitch is wearing badly now. The spinners are in the game and the ball is keeping low.\"\n            else -> \"The pitch is cracked and dry. Batting is hard work and spin is a big weapon.\"\n        }\n    }\n\n    // ---------------------------------------------------------------- sessions and days\n\n    private fun breakWord(k: Int): String = when ((k - 1) % 3) {\n        0 -> \"Lunch\"\n        1 -> \"Tea\"\n        else -> \"Stumps\"\n    }\n\n    private fun breakDay(k: Int): Int = (k - 1) / 3 + 1\n\n    private fun sessionName(n: Int): String = when (n) {\n        1 -> \"first\"\n        2 -> \"second\"\n        else -> \"third\"\n    }\n\n    /** A session or day has just run its 30 overs (checked when an over has finished and nobody is being replaced). */\n    fun breakDue(s: MatchState): Boolean {\n        val t = s.test ?: return false\n        if (t.breakPhase != 0 || t.followOnPending || t.currentRecorded) return false\n        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.superOverRound != 0) return false\n        if (s.score.balls != 0 || s.pendingDismissal != null || s.activeRainDelay != null || s.drinksBreak != null) return false\n        val mb = matchBalls(s)\n        return mb < MATCH_BALLS && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION\n    }\n\n    fun beginBreak(s: MatchState): MatchState {\n        val t = s.test ?: return s\n        return s.copy(test = t.copy(breaksDone = t.breaksDone + 1, breakPhase = 1))\n    }\n\n    /** Pop-up one (the break) moves on to pop-up two (play resumes); pop-up two ends the break. */\n    fun continueBreak(s: MatchState): MatchState {\n        val t = s.test ?: return s\n        return if (t.breakPhase == 1) {\n            s.copy(test = t.copy(breakPhase = 2, sessionStartRuns = totalRuns(s), sessionStartWickets = totalWickets(s)))\n        } else {\n            s.copy(test = t.copy(breakPhase = 0))\n        }\n    }\n\n    /** One drinks break in the middle of each session (the 15th over of it). */\n    fun drinksDue(s: MatchState): Boolean {\n        if (s.test == null) return false\n        val mb = matchBalls(s)\n        return s.score.balls == 0 && (mb % BALLS_PER_SESSION) in 90..95\n    }\n\n    fun breakTitle(s: MatchState): String {\n        val t = s.test ?: return \"\"\n        val k = t.breaksDone\n        return if (t.breakPhase == 2) {\n            if (k % 3 == 0) \"Day ${k / 3 + 1} begins\" else \"Day ${k / 3 + 1}, ${sessionName(k % 3 + 1)} session begins\"\n        } else {\n            \"${breakWord(k)} on day ${breakDay(k)}\"\n        }\n    }\n\n    private fun scoreLines(s: MatchState): List<String> = listOf(\n        \"${s.battingTeam.name} are ${s.score.runs} for ${s.score.wickets} after ${oversText(s.score)} overs in the ${ordinal(s.currentInnings)} innings.\",\n        \"${s.bowlingTeam.name} have taken ${plural(s.score.wickets, \"wicket\")}.\"\n    )\n\n    fun situationLine(s: MatchState): String? {\n        if (s.test == null) return null\n        val bat = s.battingTeam\n        if (s.currentInnings == 1) return \"${bat.name} are batting first.\"\n        val target = s.target\n        if (s.currentInnings == 4 && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val inHand = bat.players.size - 1 - s.score.wickets\n            return \"${bat.name} need ${plural(need, \"run\")} to win, with ${plural(inHand, \"wicket\")} in hand.\"\n        }\n        val lead = teamRuns(s, bat.id) - teamRuns(s, s.bowlingTeam.id)\n        return when {\n            lead > 0 -> \"${bat.name} lead by ${plural(lead, \"run\")}.\"\n            lead < 0 -> \"${bat.name} trail by ${plural(-lead, \"run\")}.\"\n            else -> \"The scores are level.\"\n        }\n    }\n\n    private fun timeLine(s: MatchState): String {\n        val t = s.test ?: return \"\"\n        val today = (((t.breaksDone / 3) + 1) * BALLS_PER_DAY - matchBalls(s)).coerceIn(0, BALLS_PER_DAY) / 6\n        return \"${plural(oversLeft(s), \"over\")} remain in the match, ${today} of them today.\"\n    }\n\n    /** The lines of whichever break pop-up is showing. */\n    fun screenLines(s: MatchState): List<String> {\n        val t = s.test ?: return emptyList()\n        val k = t.breaksDone\n        val lines = ArrayList<String>()\n        if (t.breakPhase == 1) {\n            lines.add(\n                if (k % 3 == 0) \"That is the end of play on day ${breakDay(k)}.\"\n                else \"That is the end of the ${sessionName(k % 3)} session on day ${breakDay(k)}.\"\n            )\n            lines.addAll(scoreLines(s))\n            val runs = totalRuns(s) - t.sessionStartRuns\n            val wickets = totalWickets(s) - t.sessionStartWickets\n            lines.add(\"In the session, ${plural(runs, \"run\")} were scored and ${plural(wickets, \"wicket\")} fell.\")\n            situationLine(s)?.let { lines.add(it) }\n            lines.add(timeLine(s))\n        } else {\n            lines.addAll(scoreLines(s))\n            situationLine(s)?.let { lines.add(it) }\n            lines.add(timeLine(s))\n            if (k % 3 == 0) lines.add(pitchReport(s))\n        }\n        return lines\n    }\n\n    fun breakSpoken(s: MatchState): String = breakTitle(s) + \". \" + screenLines(s).joinToString(\" \")\n\n    // ---------------------------------------------------------------- innings\n\n    /** Adds the innings being played to the finished ones. */\n    fun recordCurrent(s: MatchState, declared: Boolean = false): MatchState {\n        val t = s.test ?: return s\n        if (t.currentRecorded) return s\n        val allOut = s.score.wickets >= s.battingTeam.players.size - 1\n        val record = TestInnings(data = s.currentInningsData, score = s.score, declared = declared, allOut = allOut)\n        val base = if (t.completed.isEmpty()) s.copy(firstInningsData = s.currentInningsData, firstInningsScore = s.score) else s\n        return base.copy(test = t.copy(completed = t.completed + record, currentRecorded = true))\n    }\n\n    fun recordIfTest(s: MatchState): MatchState = if (s.test == null) s else recordCurrent(s)\n\n    /** Every innings of the match so far, in order (the one being played last), for the scorecards. */\n    fun allInnings(s: MatchState): List<InningsData> {\n        val t = s.test ?: return listOfNotNull(s.firstInningsData, s.currentInningsData)\n        val done = t.completed.map { it.data }\n        return if (t.currentRecorded) done else done + s.currentInningsData\n    }\n\n    fun inningsSummaryLines(s: MatchState): List<String> {\n        val t = s.test ?: return emptyList()\n        val names = listOf(\"First\", \"Second\", \"Third\", \"Fourth\")\n        val lines = ArrayList<String>()\n        t.completed.forEachIndexed { i, inn ->\n            val how = if (inn.declared) \", declared\" else \"\"\n            lines.add(\"${names.getOrElse(i) { \"Next\" }} innings: ${inn.data.battingTeamName}, ${inn.score.runs} for ${inn.score.wickets} in ${oversText(inn.score)} overs$how.\")\n        }\n        if (!t.currentRecorded) {\n            lines.add(\"${names.getOrElse(t.completed.size) { \"Next\" }} innings: ${s.battingTeam.name}, ${s.score.runs} for ${s.score.wickets} in ${oversText(s.score)} overs.\")\n        }\n        if (t.followOn) lines.add(\"The follow-on was enforced.\")\n        return lines\n    }\n\n    // ---------------------------------------------------------------- the result\n\n    /** Null while the match is on. Needs the current innings to be recorded. */\n    fun outcome(s: MatchState): TestOutcome? {\n        val t = s.test ?: return null\n        if (!t.currentRecorded) return null\n        val list = t.completed\n        val n = list.size\n        if (n < 3) return null\n        val last = list[n - 1]\n        fun runsOf(teamId: String): Int = list.filter { it.data.battingTeamId == teamId }.sumOf { it.score.runs }\n        if (n == 3) {\n            if (!(last.allOut || last.declared)) return null\n            val twice = teamOf(s, last.data.battingTeamId)\n            val once = otherTeam(s, twice.id)\n            val diff = runsOf(once.id) - runsOf(twice.id)\n            return if (diff > 0) TestOutcome(once.id, \"${once.name} won by an innings and ${plural(diff, \"run\")}.\") else null\n        }\n        val chaser = teamOf(s, last.data.battingTeamId)\n        val defender = otherTeam(s, chaser.id)\n        val chaserTotal = runsOf(chaser.id)\n        val defenderTotal = runsOf(defender.id)\n        return when {\n            chaserTotal > defenderTotal -> TestOutcome(chaser.id, \"${chaser.name} won by ${plural(chaser.players.size - 1 - last.score.wickets, \"wicket\")}.\")\n            last.allOut && chaserTotal == defenderTotal -> TestOutcome(null, \"Match tied.\")\n            last.allOut -> TestOutcome(defender.id, \"${defender.name} won by ${plural(defenderTotal - chaserTotal, \"run\")}.\")\n            else -> null\n        }\n    }\n\n    private fun drawText(s: MatchState): String {\n        val t = s.test ?: return \"Match drawn.\"\n        val last = t.completed.lastOrNull() ?: return \"Match drawn.\"\n        val target = s.target\n        if (t.completed.size == 4 && target != null) {\n            val need = (target - last.score.runs).coerceAtLeast(0)\n            return \"Match drawn. ${last.data.battingTeamName} finished on ${last.score.runs} for ${last.score.wickets}, needing ${plural(need, \"more run\")}.\"\n        }\n        return \"Match drawn.\"\n    }\n\n    fun resultText(s: MatchState): String? {\n        if (s.test == null) return null\n        val rec = recordIfTest(s)\n        return (outcome(rec) ?: TestOutcome(null, drawText(rec))).text\n    }\n\n    /** The match is over: a result, or a draw because the overs ran out. Null when this is not a five-day Test. */\n    fun finish(s: MatchState): MatchState? {\n        if (s.test == null) return null\n        val rec = recordIfTest(s)\n        val out = outcome(rec) ?: TestOutcome(null, drawText(rec))\n        return rec.copy(matchStatus = MatchStatus.COMPLETED, winnerId = out.winnerId)\n    }\n\n    // ---------------------------------------------------------------- follow-on\n\n    fun followOnAvailable(s: MatchState): Boolean {\n        val t = s.test ?: return false\n        if (t.completed.size != 2 || !t.currentRecorded) return false\n        return t.completed[0].score.runs - t.completed[1].score.runs >= FOLLOW_ON_LEAD\n    }\n\n    /** The side that batted first is the one that may enforce it. */\n    fun followOnEnforcerId(s: MatchState): String = s.test?.completed?.firstOrNull()?.data?.battingTeamId ?: s.battingTeam.id\n\n    fun followOnLines(s: MatchState): List<String> {\n        val t = s.test ?: return emptyList()\n        if (t.completed.size < 2) return emptyList()\n        val a = t.completed[0]\n        val b = t.completed[1]\n        return listOf(\n            \"${a.data.battingTeamName} scored ${a.score.runs}. ${b.data.battingTeamName} finished on ${b.score.runs}.\",\n            \"${a.data.battingTeamName} lead by ${plural(a.score.runs - b.score.runs, \"run\")}, enough to enforce the follow-on.\",\n            timeLine(s)\n        )\n    }\n\n    fun followOnSpoken(s: MatchState): String =\n        \"Follow-on. \" + followOnLines(s).joinToString(\" \") + \" Enforce the follow-on, or bat again?\"\n\n    fun setFollowOn(s: MatchState, enforce: Boolean): MatchState =\n        s.copy(test = s.test?.copy(followOn = enforce, followOnPending = false))\n\n    fun aiEnforcesFollowOn(s: MatchState): Boolean {\n        val t = s.test ?: return false\n        if (t.completed.size < 2) return false\n        val lead = t.completed[0].score.runs - t.completed[1].score.runs\n        val p = when {\n            oversLeft(s) < 90 -> 0.0\n            oversLeft(s) < 130 -> if (lead >= 300) 0.4 else 0.15\n            else -> if (lead >= 300) 0.9 else 0.6\n        }\n        return Random.nextDouble() < p\n    }\n\n    // ---------------------------------------------------------------- the next innings\n\n    fun startNextInnings(s: MatchState): MatchState {\n        val t = s.test ?: return s\n        val next = t.completed.size + 1\n        val firstBatId = t.completed.first().data.battingTeamId\n        val a = teamOf(s, firstBatId)\n        val b = otherTeam(s, firstBatId)\n        val batting = when (next) {\n            2 -> b\n            3 -> if (t.followOn) b else a\n            else -> if (t.followOn) a else b\n        }\n        val bowling = otherTeam(s, batting.id)\n        val target: Int? = if (next == 4) {\n            val own = t.completed.filter { it.data.battingTeamId == batting.id }.sumOf { it.score.runs }\n            val opposition = t.completed.filter { it.data.battingTeamId != batting.id }.sumOf { it.score.runs }\n            opposition - own + 1\n        } else {\n            null\n        }\n        val ready = s.copy(test = t.copy(currentRecorded = false, followOnPending = false))\n        return MatchStateMachine.startTestInnings(ready, next, batting, bowling, target)\n    }\n\n    fun inningsBreakTitle(s: MatchState): String = \"End of the ${ordinal(s.currentInnings - 1)} innings.\"\n\n    fun startLabel(s: MatchState): String = \"Start the ${ordinal(s.currentInnings)} innings\"\n\n    fun inningsBreakLines(s: MatchState, lastBall: String): List<String> {\n        val t = s.test ?: return emptyList()\n        val last = t.completed.lastOrNull()\n        val lines = ArrayList<String>()\n        if (last != null) {\n            val how = when {\n                last.declared -> \", declared\"\n                last.allOut -> \", all out\"\n                else -> \"\"\n            }\n            lines.add(\"${last.data.battingTeamName} finished on ${last.score.runs} for ${last.score.wickets} after ${oversText(last.score)} overs$how.\")\n        }\n        if (t.followOn && s.currentInnings == 3) lines.add(\"${s.battingTeam.name} must follow on.\")\n        if (lastBall.isNotEmpty()) lines.add(\"Last ball: $lastBall\")\n        situationLine(s)?.let { lines.add(it) }\n        lines.add(timeLine(s))\n        lines.add(if (s.battingTeam.id == s.userTeam.id) \"You are batting next.\" else \"You are bowling next.\")\n        return lines\n    }\n\n    fun inningsBreakSpoken(s: MatchState): String = inningsBreakTitle(s) + \" \" + inningsBreakLines(s, \"\").joinToString(\" \")\n\n    // ---------------------------------------------------------------- declarations\n\n    fun declarationLine(s: MatchState): String = \"${s.battingTeam.name} declare at ${s.score.runs} for ${s.score.wickets}.\"\n\n    /** The user's side is batting in the first three innings and the ball is dead. */\n    fun canDeclare(s: MatchState): Boolean {\n        val t = s.test ?: return false\n        return !t.currentRecorded && t.breakPhase == 0 && !t.followOnPending &&\n            s.matchStatus == MatchStatus.IN_PROGRESS && s.battingTeam.id == s.userTeam.id &&\n            s.currentInnings in 1..3 && s.pendingDismissal == null && !s.needsOpenerSelection &&\n            s.ballByBall.isNotEmpty()\n    }\n\n    /** The computer declares at the start of an over, when its lead is safe for the time left. */\n    fun aiShouldDeclare(s: MatchState): Boolean {\n        val t = s.test ?: return false\n        if (t.currentRecorded || t.breakPhase != 0 || t.followOnPending) return false\n        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.battingTeam.id == s.userTeam.id) return false\n        if (s.currentInnings !in 1..3 || s.score.balls != 0 || s.pendingDismissal != null) return false\n        if (s.score.overs < 40) return false\n        if (s.currentInnings == 1) {\n            return s.score.runs >= 520 && s.score.overs >= 120 && Random.nextDouble() < 0.3\n        }\n        val timeLeft = oversLeft(s)\n        if (timeLeft < 50) return false\n        val lead = teamRuns(s, s.battingTeam.id) - teamRuns(s, s.bowlingTeam.id)\n        val required = maxOf(120.0, 4.2 * (timeLeft - 48))\n        return lead >= required && Random.nextDouble() < 0.5\n    }\n\n    // ---------------------------------------------------------------- the computer's approach\n\n    fun battingBias(s: MatchState): Double {\n        var bias = -0.3\n        val target = s.target\n        val left = ballsLeft(s).coerceAtLeast(1)\n        if (s.currentInnings == 4 && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val rate = need / (left / 6.0)\n            bias = when {\n                rate > 6.5 -> -0.55\n                rate > 4.5 -> 0.4\n                rate > 3.2 -> 0.0\n                else -> -0.3\n            }\n        } else if (s.currentInnings >= 2) {\n            val lead = teamRuns(s, s.battingTeam.id) - teamRuns(s, s.bowlingTeam.id)\n            if (lead > 150 && left < 660) bias = 0.3\n        }\n        if (s.score.wickets >= 8) bias -= 0.1\n        if (s.currentBowler.bowlingRating < 65) bias += 0.15\n        return bias.coerceIn(-1.0, 1.0)\n    }\n\n    fun bowlingBias(s: MatchState): Double {\n        var bias = 0.0\n        if (s.score.wickets >= 7) bias += 0.3\n        val target = s.target\n        if (s.currentInnings == 4 && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val rate = need / (ballsLeft(s).coerceAtLeast(1) / 6.0)\n            if (rate < 3.0) bias += 0.2 else if (rate > 6.0) bias -= 0.3\n        }\n        return bias.coerceIn(-1.0, 1.0)\n    }\n\n    // ---------------------------------------------------------------- Match info\n\n    fun statusLines(s: MatchState): List<String> {\n        val t = s.test ?: return emptyList()\n        val k = t.breaksDone\n        val lines = ArrayList<String>()\n        lines.add(\"Day ${k / 3 + 1} of $DAYS, ${sessionName(k % 3 + 1)} session. Innings ${s.currentInnings} of 4.\")\n        situationLine(s)?.let { lines.add(it) }\n        lines.add(timeLine(s))\n        lines.add(pitchReport(s))\n        if (t.followOn) lines.add(\"The follow-on was enforced.\")\n        return lines\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/match/TestScreens.kt",
+      "content": "package com.cricketsim.ui.match\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\n\n/**\n * The pop-ups of a five-day Test (logic/TestMatch.kt): lunch, tea and stumps, the start of the next session or day,\n * the innings break, the follow-on choice and the declaration check. The same words are spoken as each one appears.\n * [actionsFirst] puts the buttons above the text for a decision, so a screen reader reaches them first.\n */\n@Composable\nprivate fun TestPopup(\n    title: String,\n    lines: List<String>,\n    actions: List<Pair<String, () -> Unit>>,\n    actionsFirst: Boolean = false\n) {\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .verticalScroll(rememberScrollState())\n            .padding(24.dp)\n    ) {\n        if (actionsFirst) {\n            actions.forEachIndexed { index, (label, onClick) ->\n                if (index > 0) Spacer(modifier = Modifier.height(8.dp))\n                Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(label) }\n            }\n            Spacer(modifier = Modifier.height(16.dp))\n        }\n        Text(\n            text = title,\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        lines.forEach { line ->\n            Spacer(modifier = Modifier.height(8.dp))\n            Text(line, style = MaterialTheme.typography.bodyLarge)\n        }\n        if (!actionsFirst) {\n            Spacer(modifier = Modifier.height(24.dp))\n            actions.forEachIndexed { index, (label, onClick) ->\n                if (index > 0) Spacer(modifier = Modifier.height(8.dp))\n                Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(label) }\n            }\n        }\n    }\n}\n\n/** Lunch, tea or stumps, and then the start of the next session or day. */\n@Composable\nfun TestBreakScreen(\n    title: String,\n    lines: List<String>,\n    continueLabel: String,\n    onContinue: () -> Unit,\n    onScorecard: () -> Unit\n) {\n    TestPopup(\n        title = title,\n        lines = lines,\n        actions = listOf(continueLabel to onContinue, \"Scorecard\" to onScorecard)\n    )\n}\n\n/** Between two innings of a Test. */\n@Composable\nfun TestInningsBreakScreen(\n    title: String,\n    lines: List<String>,\n    startLabel: String,\n    onStart: () -> Unit,\n    onScorecard: () -> Unit\n) {\n    TestPopup(\n        title = title,\n        lines = lines,\n        actions = listOf(startLabel to onStart, \"Scorecard\" to onScorecard)\n    )\n}\n\n/** The side that batted first leads by 200 or more: enforce the follow-on or bat again. */\n@Composable\nfun TestFollowOnScreen(lines: List<String>, onEnforce: () -> Unit, onBatAgain: () -> Unit) {\n    TestPopup(\n        title = \"Follow-on\",\n        lines = lines,\n        actions = listOf(\"Enforce the follow-on\" to onEnforce, \"Bat again\" to onBatAgain),\n        actionsFirst = true\n    )\n}\n\n/** Asked before a declaration, so a stray tap cannot end the innings. */\n@Composable\nfun TestDeclareConfirmScreen(text: String, onDeclare: () -> Unit, onCancel: () -> Unit) {\n    TestPopup(\n        title = \"Declare the innings?\",\n        lines = listOf(text),\n        actions = listOf(\"Yes, declare\" to onDeclare, \"No, keep batting\" to onCancel),\n        actionsFirst = true\n    )\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    val rules: MatchRules? = null\n)",
+      "replace": "    val rules: MatchRules? = null,\n    // A five-day Test's innings, sessions and rules (logic/TestMatch.kt); null = not a five-day Test.\n    val test: TestState? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "            oversLimit = rules?.overs ?: MatchEngine.getFormatOvers(format),",
+      "replace": "            oversLimit = rules?.overs ?: if (TestMatch.applies(format, rules)) TestMatch.MATCH_OVERS else MatchEngine.getFormatOvers(format),",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "            impact = impact,\n            rules = rules\n        )",
+      "replace": "            impact = impact,\n            rules = rules,\n            test = if (TestMatch.applies(format, rules)) TestMatch.start() else null\n        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "            outcome.isNoBall -> true\n            outcome.isWide -> state.freeHit",
+      "replace": "            // A Test has no free hits.\n            outcome.isNoBall -> state.format != MatchFormat.TEST\n            outcome.isWide -> state.freeHit",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    fun resumeFromRainDelay(state: MatchState): MatchState = state.copy(activeRainDelay = null)\n}",
+      "replace": "    fun resumeFromRainDelay(state: MatchState): MatchState = state.copy(activeRainDelay = null)\n\n    /**\n     * The next innings of a five-day Test (logic/TestMatch.kt decides who bats and the target). Like switchInnings, but any\n     * innings number, and nothing about overs limits or DLS.\n     */\n    fun startTestInnings(state: MatchState, inningsNumber: Int, battingTeam: Team, bowlingTeam: Team, target: Int?): MatchState {\n        val striker = battingTeam.players[0]\n        val nonStriker = battingTeam.players[1]\n        val bowler = Lineup.openingBowler(bowlingTeam)\n        val innings = MatchStats.createEmptyInningsData(battingTeam, bowlingTeam, Pair(striker, nonStriker), bowler)\n        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, state.userTeam.id, state.format, 0, state.rules)\n        return state.copy(\n            currentInnings = inningsNumber,\n            battingTeam = battingTeam,\n            bowlingTeam = bowlingTeam,\n            score = MatchScore(runs = 0, wickets = 0, overs = 0, balls = 0),\n            target = target,\n            currentBatsmen = Pair(striker, nonStriker),\n            currentBowler = bowler,\n            ballByBall = emptyList(),\n            lastSixBalls = emptyList(),\n            currentInningsData = innings,\n            needsOpenerSelection = battingTeam.id == state.userTeam.id,\n            needsBowlerSelection = bowlingTeam.id == state.userTeam.id,\n            pendingDismissal = null,\n            deferredOverEnd = false,\n            fieldPlacements = fieldPlacements,\n            drsReviewsUsed = 0,\n            freeHit = false,\n            lastAiFieldChangeBall = 0,\n            lastDrinksBreakOver = 0,\n            drinksBreak = null\n        )\n    }\n}",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        val probsByKey = linkedMapOf(",
+      "replace": "        // A five-day Test: Test tempo, and a pitch that wears over the days (logic/TestMatch.kt has the dials).\n        if (matchState.test != null) {\n            val wear = TestMatch.wearFactor(matchState)\n            val spin = bowlingDecision.bowlingStyle == BowlingStyle.SPIN\n            probs.wicket *= TestMatch.SCALE_WICKET * (1.0 + 0.35 * wear + (if (spin) 0.35 * wear else 0.0))\n            probs.four *= TestMatch.SCALE_FOUR * (1.0 - 0.12 * wear)\n            probs.six *= TestMatch.SCALE_SIX\n            probs.dot *= TestMatch.SCALE_DOT * (1.0 + 0.12 * wear)\n            probs.two *= TestMatch.SCALE_TWO\n            probs.three *= TestMatch.SCALE_THREE\n        }\n        val probsByKey = linkedMapOf(",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "runOutChance(matchState.oversLimit, runs)",
+      "replace": "runOutChance(minOf(matchState.oversLimit, 90), runs)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        if (matchState.currentInnings == 1) return 50 // Start of match roughly equal",
+      "replace": "        if (matchState.currentInnings == 1 || matchState.target == null) return 50 // Start of match, or no target to chase yet",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        val ballsRemaining = maxOvers * 6 - ballsBowled",
+      "replace": "        val ballsRemaining = if (matchState.test != null) TestMatch.ballsLeft(matchState) else maxOvers * 6 - ballsBowled",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DrinksBreak.kt",
+      "find": "        val due = if (state.format == MatchFormat.TEST) overs % interval == 0 else overs == interval",
+      "replace": "        val due = if (state.test != null) TestMatch.drinksDue(state)\n            else if (state.format == MatchFormat.TEST) overs % interval == 0 else overs == interval",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/PlayerAwards.kt",
+      "find": "        val innings = listOfNotNull(state.firstInningsData, state.currentInningsData)",
+      "replace": "        val innings = if (state.test != null) TestMatch.allInnings(state) else listOfNotNull(state.firstInningsData, state.currentInningsData)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/PlayerAwards.kt",
+      "find": "                if (b.ballsFaced >= 8) {",
+      "replace": "                if (b.ballsFaced >= 8 && state.test == null) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/PlayerAwards.kt",
+      "find": "                if (balls >= 12) {",
+      "replace": "                if (balls >= 12 && state.test == null) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "        return state.currentInnings == 2 && state.score.runs >= target",
+      "replace": "        return state.currentInnings == (if (state.test != null) 4 else 2) && state.score.runs >= target",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "    fun finishMatch(state: MatchState): MatchState {\n        val target = state.target",
+      "replace": "    fun finishMatch(state: MatchState): MatchState {\n        com.cricketsim.logic.TestMatch.finish(state)?.let { return it }\n        val target = state.target",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "    fun matchResultText(state: MatchState): String? {\n        if (state.currentInnings != 2) return null",
+      "replace": "    fun matchResultText(state: MatchState): String? {\n        if (state.test != null) return com.cricketsim.logic.TestMatch.resultText(state)\n        if (state.currentInnings != 2) return null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AiSituation.kt",
+      "find": "    fun battingBias(state: MatchState, recentOverRuns: List<Int>): Double {\n        val totalOvers = state.oversLimit",
+      "replace": "    fun battingBias(state: MatchState, recentOverRuns: List<Int>): Double {\n        if (state.test != null) return com.cricketsim.logic.TestMatch.battingBias(state)\n        val totalOvers = state.oversLimit",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/AiSituation.kt",
+      "find": "    fun bowlingBias(state: MatchState): Double {\n        val totalOvers = state.oversLimit",
+      "replace": "    fun bowlingBias(state: MatchState): Double {\n        if (state.test != null) return com.cricketsim.logic.TestMatch.bowlingBias(state)\n        val totalOvers = state.oversLimit",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "        if (state.currentInnings != 2) return null\n        val runsNeeded = maxOf(target - state.score.runs, 0)\n        val ballsBowled = state.score.overs * 6 + state.score.balls\n        val ballsRemaining = maxOf(state.oversLimit * 6 - ballsBowled, 0)",
+      "replace": "        if (state.currentInnings != (if (state.test != null) 4 else 2)) return null\n        val runsNeeded = maxOf(target - state.score.runs, 0)\n        val ballsBowled = state.score.overs * 6 + state.score.balls\n        val ballsRemaining = if (state.test != null) com.cricketsim.logic.TestMatch.ballsLeft(state) else maxOf(state.oversLimit * 6 - ballsBowled, 0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "        if (state.currentInnings != 2 || state.target == null) return null",
+      "replace": "        if (state.target == null || state.currentInnings != (if (state.test != null) 4 else 2)) return null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "        state.firstInningsData?.let { \"First innings: ${ScorecardLines.inningsHeader(it)}\" },\n        \"Second innings: ${ScorecardLines.inningsHeader(state.currentInningsData)}\"\n    ) + SuperOver.summaryLines(state)",
+      "replace": "    ) + (if (state.test != null) {\n        com.cricketsim.logic.TestMatch.inningsSummaryLines(state)\n    } else {\n        listOfNotNull(\n            state.firstInningsData?.let { \"First innings: ${ScorecardLines.inningsHeader(it)}\" },\n            \"Second innings: ${ScorecardLines.inningsHeader(state.currentInningsData)}\"\n        )\n    }) + SuperOver.summaryLines(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "        full.firstInningsData?.let { appendInnings(sb, \"FIRST INNINGS\", it, roles) }\n        appendInnings(sb, \"SECOND INNINGS\", full.currentInningsData, roles)",
+      "replace": "        if (full.test != null) {\n            val ordinals = listOf(\"FIRST\", \"SECOND\", \"THIRD\", \"FOURTH\")\n            com.cricketsim.logic.TestMatch.allInnings(full).forEachIndexed { i, inn ->\n                appendInnings(sb, ordinals.getOrElse(i) { \"NEXT\" } + \" INNINGS\", inn, roles)\n            }\n        } else {\n            full.firstInningsData?.let { appendInnings(sb, \"FIRST INNINGS\", it, roles) }\n            appendInnings(sb, \"SECOND INNINGS\", full.currentInningsData, roles)\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardScreen.kt",
+      "find": "import com.cricketsim.logic.MatchState\n",
+      "replace": "import com.cricketsim.logic.MatchState\nimport com.cricketsim.logic.TestMatch\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardScreen.kt",
+      "find": "    var section by remember { mutableStateOf(CardSection.BATTING) }\n\n    // firstInningsData only exists once the second innings is under way.\n    val viewingFirst = showFirstInnings && firstInnings != null\n    val innings = if (viewingFirst && firstInnings != null) firstInnings else state.currentInningsData",
+      "replace": "    var section by remember { mutableStateOf(CardSection.BATTING) }\n    // A five-day Test has up to four innings: one tab each, the latest showing first.\n    val testInnings = if (state.test != null) TestMatch.allInnings(state) else emptyList()\n    var testPick by remember { mutableStateOf(-1) }\n    val testIndex = if (testInnings.isEmpty()) -1 else if (testPick in testInnings.indices) testPick else testInnings.lastIndex\n\n    // firstInningsData only exists once the second innings is under way.\n    val viewingFirst = if (testIndex >= 0) testIndex != testInnings.lastIndex else showFirstInnings && firstInnings != null\n    val innings = if (testIndex >= 0) testInnings[testIndex] else if (viewingFirst && firstInnings != null) firstInnings else state.currentInningsData",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardScreen.kt",
+      "find": "        if (firstInnings != null) {\n            TabStrip(\n                labels = listOf(\"Second innings\", \"First innings\"),",
+      "replace": "        if (testInnings.isNotEmpty()) {\n            TabStrip(\n                labels = testInnings.mapIndexed { i, inn -> \"Innings ${i + 1}, ${inn.battingTeamName}\" },\n                selectedIndex = testIndex,\n                onSelect = { index -> testPick = index }\n            )\n            Spacer(modifier = Modifier.height(8.dp))\n        } else if (firstInnings != null) {\n            TabStrip(\n                labels = listOf(\"Second innings\", \"First innings\"),",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "import com.cricketsim.logic.Stadium\n",
+      "replace": "import com.cricketsim.logic.Stadium\nimport com.cricketsim.logic.TestMatch\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "    onUsePowerSurge: () -> Unit = {},\n",
+      "replace": "    onUsePowerSurge: () -> Unit = {},\n    onDeclare: () -> Unit = {},\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "            Button(onClick = onUsePowerSurge, modifier = Modifier.fillMaxWidth()) { Text(\"Power Surge\") }\n        }",
+      "replace": "            Button(onClick = onUsePowerSurge, modifier = Modifier.fillMaxWidth()) { Text(\"Power Surge\") }\n        }\n        if (TestMatch.canDeclare(state)) {\n            Spacer(modifier = Modifier.height(8.dp))\n            Button(onClick = onDeclare, modifier = Modifier.fillMaxWidth()) { Text(\"Declare innings\") }\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "        MatchInfoLine(\"Right now: ${MatchLines.scoreLine(state)}\")",
+      "replace": "        MatchInfoLine(\"Right now: ${MatchLines.scoreLine(state)}\")\n        TestMatch.statusLines(state).forEach { MatchInfoLine(it) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/MatchAudioDirector.kt",
+      "find": "        if (state.currentInnings == 2) {",
+      "replace": "        if (state.currentInnings >= 2 && state.target != null) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/FormatSelectionScreen.kt",
+      "find": "\"No over limit per innings. The longest format.\"",
+      "replace": "\"Five days of 90 overs, in three sessions of 30. Four innings, the follow-on, declarations, a wearing pitch, and a draw if time runs out.\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "import com.cricketsim.logic.MatchRules\n",
+      "replace": "import com.cricketsim.logic.MatchRules\nimport com.cricketsim.logic.TestMatch\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    var showMatchInfo by remember { mutableStateOf(false) }\n",
+      "replace": "    var showMatchInfo by remember { mutableStateOf(false) }\n    var confirmingDeclare by remember { mutableStateOf(false) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "matchState.ballByBall.isNotEmpty() || matchState.currentInnings == 2",
+      "replace": "matchState.ballByBall.isNotEmpty() || matchState.currentInnings >= 2",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    fun concludeMatchOrSuperOver(nextState: MatchState) {\n        if (SuperOver.isTieAtEnd(nextState)) {",
+      "replace": "    fun concludeMatchOrSuperOver(rawState: MatchState) {\n        // A five-day Test records its last innings first, so the result and the scorecards see all of them.\n        val nextState = TestMatch.recordIfTest(rawState)\n        if (SuperOver.isTieAtEnd(nextState)) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    fun commitBall(before: MatchState, result: BallResult) {",
+      "replace": "    // ---- Five-day Test (logic/TestMatch.kt) ----\n\n    // Next innings: new batting side, new target, and the innings-break pop-up.\n    fun moveToNextTestInnings(recorded: MatchState, lastLine: String) {\n        val switched = TestMatch.startNextInnings(recorded)\n        matchState = switched\n        recentCommentary = emptyList()\n        breakLastBall = lastLine\n        showInningsBreak = true\n        director?.onInningsBreak(switched)\n        services?.announceSpoken(TestMatch.inningsBreakSpoken(switched))\n    }\n\n    // An innings of a Test has ended (all out, a declaration, or the overs running out): a result, a draw, the follow-on question, or the next innings.\n    fun finishTestInnings(ended: MatchState, declared: Boolean, lastLine: String) {\n        val recorded = TestMatch.recordCurrent(ended, declared)\n        if (TestMatch.outcome(recorded) != null || TestMatch.timeUp(recorded)) {\n            concludeMatchOrSuperOver(recorded)\n            return\n        }\n        breakLastBall = lastLine\n        if (TestMatch.followOnAvailable(recorded)) {\n            if (TestMatch.followOnEnforcerId(recorded) == recorded.userTeam.id) {\n                matchState = recorded.copy(test = recorded.test?.copy(followOnPending = true))\n                recentCommentary = emptyList()\n                services?.announceSpoken(TestMatch.followOnSpoken(recorded))\n                return\n            }\n            moveToNextTestInnings(TestMatch.setFollowOn(recorded, TestMatch.aiEnforcesFollowOn(recorded)), lastLine)\n            return\n        }\n        moveToNextTestInnings(recorded, lastLine)\n    }\n\n    // Lunch, tea and stumps come by themselves when a session's 30 overs are done and nobody is being replaced.\n    LaunchedEffect(matchState.score, matchState.currentInnings, matchState.pendingDismissal, matchState.drinksBreak, showInningsBreak, matchOver, matchState.test?.followOnPending) {\n        if (matchOver || showInningsBreak || !TestMatch.breakDue(matchState)) return@LaunchedEffect\n        val started = TestMatch.beginBreak(matchState)\n        matchState = started\n        services?.announceSpoken(TestMatch.breakSpoken(started))\n    }\n\n    // The computer declares at the start of an over when its lead is safe for the time left.\n    LaunchedEffect(matchState.score.overs, matchState.currentInnings, matchState.test?.breakPhase, matchOver, showInningsBreak) {\n        if (matchOver || showInningsBreak || matchState.test == null) return@LaunchedEffect\n        kotlinx.coroutines.delay(700)\n        val now = matchState\n        if (!TestMatch.aiShouldDeclare(now)) return@LaunchedEffect\n        val line = TestMatch.declarationLine(now)\n        recentCommentary = (recentCommentary + line).takeLast(6)\n        services?.announceSpoken(line)\n        finishTestInnings(now, declared = true, lastLine = line)\n    }\n\n    fun commitBall(before: MatchState, result: BallResult) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            MatchSimulation.isTargetReached(nextState) -> concludeMatchOrSuperOver(nextState)\n            MatchSimulation.isInningsOver(nextState) -> {",
+      "replace": "            MatchSimulation.isTargetReached(nextState) -> concludeMatchOrSuperOver(nextState)\n            nextState.test != null && (MatchSimulation.isInningsOver(nextState) || TestMatch.timeUp(nextState)) ->\n                finishTestInnings(nextState, declared = false, lastLine = summary)\n            MatchSimulation.isInningsOver(nextState) -> {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            onBack = { showMatchInfo = false }\n        )\n        return\n    }\n",
+      "replace": "            onDeclare = {\n                showMatchInfo = false\n                confirmingDeclare = true\n            },\n            onBack = { showMatchInfo = false }\n        )\n        return\n    }\n\n    if (confirmingDeclare) {\n        BackHandler(onBack = { confirmingDeclare = false })\n        TestDeclareConfirmScreen(\n            text = \"${matchState.battingTeam.name} are ${matchState.score.runs} for ${matchState.score.wickets} after ${matchState.score.overs}.${matchState.score.balls} overs. Declare and go out to bowl?\",\n            onDeclare = {\n                confirmingDeclare = false\n                val line = TestMatch.declarationLine(matchState)\n                recentCommentary = (recentCommentary + line).takeLast(6)\n                services?.announceSpoken(line)\n                finishTestInnings(matchState, declared = true, lastLine = line)\n            },\n            onCancel = { confirmingDeclare = false }\n        )\n        return\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    if (showInningsBreak) {\n        InningsBreakScreen(",
+      "replace": "    val testNow = matchState.test\n    if (testNow != null && !matchOver) {\n        if (testNow.followOnPending) {\n            TestFollowOnScreen(\n                lines = TestMatch.followOnLines(matchState),\n                onEnforce = { moveToNextTestInnings(TestMatch.setFollowOn(matchState, true), breakLastBall) },\n                onBatAgain = { moveToNextTestInnings(TestMatch.setFollowOn(matchState, false), breakLastBall) }\n            )\n            return\n        }\n        if (testNow.breakPhase != 0 && !showInningsBreak) {\n            TestBreakScreen(\n                title = TestMatch.breakTitle(matchState),\n                lines = TestMatch.screenLines(matchState),\n                continueLabel = if (testNow.breakPhase == 1) \"Continue\" else \"Resume play\",\n                onContinue = {\n                    val next = TestMatch.continueBreak(matchState)\n                    matchState = next\n                    if (next.test?.breakPhase == 2) services?.announceSpoken(TestMatch.breakSpoken(next))\n                },\n                onScorecard = { showScorecard = true }\n            )\n            return\n        }\n    }\n\n    if (showInningsBreak) {\n        if (matchState.test != null) {\n            TestInningsBreakScreen(\n                title = TestMatch.inningsBreakTitle(matchState),\n                lines = TestMatch.inningsBreakLines(matchState, breakLastBall),\n                startLabel = TestMatch.startLabel(matchState),\n                onStart = { showInningsBreak = false },\n                onScorecard = { showScorecard = true }\n            )\n            return\n        }\n        InningsBreakScreen(",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "TEST_MATCH.md",
+      "content": "# Five-day Test match (part 1)\n\nSwitch: `TestMatch.FIVE_DAY_TEST` in `logic/TestMatch.kt`. `false` brings back the old two-innings, 90-over Test.\nA Test is a match played with format Test and no custom rules (custom tournaments cannot use Test). Matches saved before this patch carry on as the old Test.\n\n## The rules in the game\n- Five days, 90 overs a day (450 overs), three sessions of 30 overs a day. Lunch, tea and stumps come when 30 overs of the match have been bowled (after the over that completes them). A drinks break comes in the middle of each session (the 15th over).\n- Four innings: A, B, A, B. The side that batted first may make the other side follow on when it leads by 200 or more (A, B, B, A). You are asked when you are the side that may enforce it; the computer decides by the lead and the overs left.\n- A side may declare in the first three innings. **Match info > Declare innings** (you batting, the ball dead), with a confirmation. The computer declares at the start of an over once its lead is safe for the time left (`TestMatch.aiShouldDeclare`).\n- Results: win by an innings and runs, by runs, by wickets, tied, or drawn when the 450 overs run out (\"Match drawn. X finished on 210 for 6, needing 40 more runs.\").\n- No free hit after a no-ball in a Test. No fielding restrictions. Three DRS reviews an innings (unchanged). The computer batter can leave the ball (unchanged).\n- Player of the match counts every innings and ignores strike rate and economy in a Test.\n- Rain is not played in a Test (unchanged: the rain rule skips Test).\n\n## Pop-ups (all spoken as they appear)\n1. When a session or day ends: \"Lunch on day 1\", \"Tea on day 2\", \"Stumps on day 3\": the batting side's score, the wickets the bowling side has taken, the runs and wickets of the session, the lead, the overs left. Continue.\n2. Then when it starts again: \"Day 1, second session begins\", \"Day 2 begins\": the same score and wickets, the lead or the target, the overs left today and in the match (and a pitch report at the start of a day). Resume play.\n3. Between innings: \"End of the first innings\", the side's total and how it ended, the position, who bats next.\n4. The follow-on question and the declaration check.\nScorecards (screen, share, copy) list every innings, one tab each.\n\n## Pace and the pitch\nThe ball model is a T20 one, so a Test used to be all out in 34 overs at 7.4 an over. `SCALE_*` in `TestMatch.kt` weigh wickets, fours, sixes, dots, twos and threes; with the twin (`tools/difficulty_twin.js`, AI v AI, Medium, no fielders) an innings is about 330 runs in 100 overs at 3.2 an over. Easy about 270, Hard about 410. This was measured on a model, not on people.\nThe pitch wears from 0 (day one) to about 1 (day five) by the overs bowled (`TestMatch.wearFactor`; dusty wears faster, batting slower): wickets up to 35% more likely, spinners a further 35%, fewer fours. Dials in `MatchEngine.simulateBall`.\n\n## Not built yet (parts 2 and 3)\n- The new ball after 80 overs (taking it from Match info, the computer taking it, its effect), over-rate, the last-hour rule, a nightwatchman.\n- Commentary lines (and their ElevenLabs voices) for the start and end of a session or day, the new ball and a declaration.\n- Test matches in tournaments.\n",
+      "mustNotExist": true
+    }
+  ]
+}
