@@ -373,7 +373,7 @@ fun MatchScreen(
             resultText = MatchSimulation.matchResultText(nextState)
         }
         matchOver = true
-        director?.onMatchEnded()
+        director?.onMatchEnded(drawn = resultText?.startsWith("Match drawn") == true)
         // The result, then the Player of the Match, in one announcement so one cannot cut the other off.
         val award = com.cricketsim.logic.PlayerAwards.playerOfTheMatch(matchState)
         val spoken = listOfNotNull(
@@ -394,7 +394,7 @@ fun MatchScreen(
         breakLastBall = lastLine
         showInningsBreak = true
         director?.onInningsBreak(switched)
-        services?.announceSpoken(TestMatch.inningsBreakSpoken(switched))
+        director?.speakWhenQuiet(TestMatch.inningsBreakSpoken(switched)) { services?.announceSpoken(it) }
     }
 
     // An innings of a Test has ended (all out, a declaration, or the overs running out): a result, a draw, the follow-on question, or the next innings.
@@ -405,6 +405,7 @@ fun MatchScreen(
             return
         }
         breakLastBall = lastLine
+        if (declared) director?.onTestDeclaration() else director?.onTestInningsEnded()
         if (TestMatch.followOnAvailable(recorded)) {
             if (TestMatch.followOnEnforcerId(recorded) == recorded.userTeam.id) {
                 matchState = recorded.copy(test = recorded.test?.copy(followOnPending = true))
@@ -423,7 +424,8 @@ fun MatchScreen(
         if (matchOver || showInningsBreak || !TestMatch.breakDue(matchState)) return@LaunchedEffect
         val started = TestMatch.beginBreak(matchState)
         matchState = started
-        services?.announceSpoken(TestMatch.breakSpoken(started))
+        director?.onTestBreakStarted(TestMatch.isStumps(started))
+        director?.speakWhenQuiet(TestMatch.breakSpoken(started)) { services?.announceSpoken(it) }
     }
 
     // The computer declares at the start of an over when its lead is safe for the time left.
@@ -434,8 +436,15 @@ fun MatchScreen(
         if (!TestMatch.aiShouldDeclare(now)) return@LaunchedEffect
         val line = TestMatch.declarationLine(now)
         recentCommentary = (recentCommentary + line).takeLast(6)
-        services?.announceSpoken(line)
         finishTestInnings(now, declared = true, lastLine = line)
+    }
+
+    // Play is about to resume after lunch, tea or stumps: the commentators welcome the new session or day, then the score is read out.
+    LaunchedEffect(matchState.test?.breakPhase, matchState.test?.breaksDone) {
+        val t = matchState.test ?: return@LaunchedEffect
+        if (t.breakPhase != 2) return@LaunchedEffect
+        director?.onTestPlayResumes(newDay = TestMatch.isStumps(matchState))
+        director?.speakWhenQuiet(TestMatch.breakSpoken(matchState)) { services?.announceSpoken(it) }
     }
 
     // The new ball: the computer takes it once it is available; you are told once, and take it from Match info.
@@ -447,6 +456,7 @@ fun MatchScreen(
         if (TestMatch.aiShouldTakeNewBall(now)) {
             val line = TestMatch.newBallLine(now)
             matchState = TestMatch.takeNewBall(now)
+            director?.onTestNewBall()
             recentCommentary = (recentCommentary + line).takeLast(6)
             services?.announceSpoken(line)
         } else if (TestMatch.shouldRemindNewBall(now)) {
@@ -602,6 +612,7 @@ fun MatchScreen(
             onTakeNewBall = {
                 val line = TestMatch.newBallLine(matchState)
                 matchState = TestMatch.takeNewBall(matchState)
+                director?.onTestNewBall()
                 showMatchInfo = false
                 recentCommentary = (recentCommentary + line).takeLast(6)
                 services?.announceSpoken(line)
@@ -623,7 +634,6 @@ fun MatchScreen(
                 confirmingDeclare = false
                 val line = TestMatch.declarationLine(matchState)
                 recentCommentary = (recentCommentary + line).takeLast(6)
-                services?.announceSpoken(line)
                 finishTestInnings(matchState, declared = true, lastLine = line)
             },
             onCancel = { confirmingDeclare = false }
@@ -815,7 +825,6 @@ fun MatchScreen(
                 onContinue = {
                     val next = TestMatch.continueBreak(matchState)
                     matchState = next
-                    if (next.test?.breakPhase == 2) services?.announceSpoken(TestMatch.breakSpoken(next))
                 },
                 onScorecard = { showScorecard = true }
             )

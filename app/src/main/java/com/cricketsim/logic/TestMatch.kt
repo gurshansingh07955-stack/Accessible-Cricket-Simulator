@@ -205,6 +205,9 @@ object TestMatch {
         return s.score.balls == 0 && (mb % BALLS_PER_SESSION) in 90..95
     }
 
+    /** The break that has just been called (or the one that has just ended) is stumps, not lunch or tea. */
+    fun isStumps(s: MatchState): Boolean = (s.test?.breaksDone ?: 0) % 3 == 0
+
     fun breakTitle(s: MatchState): String {
         val t = s.test ?: return ""
         val k = t.breaksDone

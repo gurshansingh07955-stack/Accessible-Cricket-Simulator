@@ -88,7 +88,10 @@ enum class CommentaryCategory {
     SUPER_OVER_ANNOUNCE, SUPER_OVER_START,
     ANTHEM_FIRST, ANTHEM_SECOND,
     // Tournaments: the champions are decided, and the Player of the Series is named.
-    TOURNAMENT_CHAMPIONS, TOURNAMENT_CROWNED, PLAYER_OF_SERIES
+    TOURNAMENT_CHAMPIONS, TOURNAMENT_CROWNED, PLAYER_OF_SERIES,
+    // Five-day Test: sessions and days, the new ball, declarations, the end of an innings, the follow-on and a draw.
+    TEST_SESSION_END, TEST_DAY_END, TEST_SESSION_START, TEST_DAY_START, TEST_NEW_BALL,
+    TEST_DECLARATION, TEST_INNINGS_END, TEST_FOLLOW_ON, TEST_DRAW
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -664,6 +667,120 @@ object CommentaryLibrary {
             CommentaryPair(
                 CommentaryLine("drinksend_2_excited", "Back to the action! The bottles are cleared and play is about to resume!", "/_cdn/commentary/drinksend_2_excited.mp3"),
                 CommentaryLine("drinksend_2_calm", "The batters will want to keep their momentum, and the bowlers will want to break it.", "/_cdn/commentary/drinksend_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_SESSION_END to listOf(
+            CommentaryPair(
+                CommentaryLine("testsessionend_1_excited", "And that's the end of the session! The players are heading off the field!", "/_cdn/commentary/testsessionend_1_excited.mp3"),
+                CommentaryLine("testsessionend_1_calm", "A good time for both sides to take stock and go over what they need to do next.", "/_cdn/commentary/testsessionend_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testsessionend_2_excited", "The umpires have taken the players off, that's the close of the session!", "/_cdn/commentary/testsessionend_2_excited.mp3"),
+                CommentaryLine("testsessionend_2_calm", "Plenty to think about for both captains during this break.", "/_cdn/commentary/testsessionend_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testsessionend_3_excited", "That's the session done! What a spell of Test cricket that was!", "/_cdn/commentary/testsessionend_3_excited.mp3"),
+                CommentaryLine("testsessionend_3_calm", "Every ball matters in this format, and both teams will feel they have something to build on.", "/_cdn/commentary/testsessionend_3_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_DAY_END to listOf(
+            CommentaryPair(
+                CommentaryLine("testdayend_1_excited", "And that's stumps! The day's play is over!", "/_cdn/commentary/testdayend_1_excited.mp3"),
+                CommentaryLine("testdayend_1_calm", "A tough day's cricket for both sides, they will be glad of the rest tonight.", "/_cdn/commentary/testdayend_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testdayend_2_excited", "The umpires have called stumps, that's the end of play for the day!", "/_cdn/commentary/testdayend_2_excited.mp3"),
+                CommentaryLine("testdayend_2_calm", "The match will look different tomorrow, the pitch will have changed overnight.", "/_cdn/commentary/testdayend_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testdayend_3_excited", "Stumps are drawn, and what a day of Test cricket that has been!", "/_cdn/commentary/testdayend_3_excited.mp3"),
+                CommentaryLine("testdayend_3_calm", "Everything to play for when the sides return in the morning.", "/_cdn/commentary/testdayend_3_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_SESSION_START to listOf(
+            CommentaryPair(
+                CommentaryLine("testsessionstart_1_excited", "And we're back, the players are walking out for the next session!", "/_cdn/commentary/testsessionstart_1_excited.mp3"),
+                CommentaryLine("testsessionstart_1_calm", "The first few overs after a break can be decisive, so concentration is vital.", "/_cdn/commentary/testsessionstart_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testsessionstart_2_excited", "Play is about to resume, and the new session is under way!", "/_cdn/commentary/testsessionstart_2_excited.mp3"),
+                CommentaryLine("testsessionstart_2_calm", "The bowlers will want to strike early, and the batters will want to settle in.", "/_cdn/commentary/testsessionstart_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testsessionstart_3_excited", "The umpires are out and the next session of the day begins!", "/_cdn/commentary/testsessionstart_3_excited.mp3"),
+                CommentaryLine("testsessionstart_3_calm", "Let's see which side has used that break the better.", "/_cdn/commentary/testsessionstart_3_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_DAY_START to listOf(
+            CommentaryPair(
+                CommentaryLine("testdaystart_1_excited", "Welcome to a brand new day of Test cricket, the players are walking out!", "/_cdn/commentary/testdaystart_1_excited.mp3"),
+                CommentaryLine("testdaystart_1_calm", "A fresh day and a pitch that has aged overnight, that can change everything.", "/_cdn/commentary/testdaystart_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testdaystart_2_excited", "A new day begins, and the crowd is settling in for another long day!", "/_cdn/commentary/testdaystart_2_excited.mp3"),
+                CommentaryLine("testdaystart_2_calm", "Patience wins Test matches, and today will test that patience.", "/_cdn/commentary/testdaystart_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testdaystart_3_excited", "It's the start of another day, the umpires are out and play is about to resume!", "/_cdn/commentary/testdaystart_3_excited.mp3"),
+                CommentaryLine("testdaystart_3_calm", "The first hour of a morning is always crucial in a Test match.", "/_cdn/commentary/testdaystart_3_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_NEW_BALL to listOf(
+            CommentaryPair(
+                CommentaryLine("testnewball_1_excited", "The new ball has been taken! The fast bowlers will love this!", "/_cdn/commentary/testnewball_1_excited.mp3"),
+                CommentaryLine("testnewball_1_calm", "A fresh ball will swing and seam, and the batters must be at their sharpest.", "/_cdn/commentary/testnewball_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testnewball_2_excited", "The fielding captain has called for the new ball, here we go!", "/_cdn/commentary/testnewball_2_excited.mp3"),
+                CommentaryLine("testnewball_2_calm", "Eighty overs of wear and tear, and now a shiny new ball to attack with.", "/_cdn/commentary/testnewball_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testnewball_3_excited", "A brand new ball is coming out of the box, the bowlers are rubbing their hands!", "/_cdn/commentary/testnewball_3_excited.mp3"),
+                CommentaryLine("testnewball_3_calm", "The next few overs could change the shape of this innings.", "/_cdn/commentary/testnewball_3_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_DECLARATION to listOf(
+            CommentaryPair(
+                CommentaryLine("testdeclaration_1_excited", "And the captain has declared the innings! The batters are walking off!", "/_cdn/commentary/testdeclaration_1_excited.mp3"),
+                CommentaryLine("testdeclaration_1_calm", "A bold decision, now they will need to bowl the opposition out in the time left.", "/_cdn/commentary/testdeclaration_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testdeclaration_2_excited", "Declaration! The team has seen enough runs and wants to attack!", "/_cdn/commentary/testdeclaration_2_excited.mp3"),
+                CommentaryLine("testdeclaration_2_calm", "The captain has weighed up the runs against the time left, and decided to go for it.", "/_cdn/commentary/testdeclaration_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testdeclaration_3_excited", "They have called the batters in, the innings is declared!", "/_cdn/commentary/testdeclaration_3_excited.mp3"),
+                CommentaryLine("testdeclaration_3_calm", "That puts the pressure back on the bowlers to deliver the win.", "/_cdn/commentary/testdeclaration_3_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_INNINGS_END to listOf(
+            CommentaryPair(
+                CommentaryLine("testinningsend_1_excited", "That's the end of the innings, the batting side are all out!", "/_cdn/commentary/testinningsend_1_excited.mp3"),
+                CommentaryLine("testinningsend_1_calm", "A hard-fought innings, now the match moves into its next phase.", "/_cdn/commentary/testinningsend_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testinningsend_2_excited", "All out! The innings comes to a close!", "/_cdn/commentary/testinningsend_2_excited.mp3"),
+                CommentaryLine("testinningsend_2_calm", "The runs on the board will shape everything from here on.", "/_cdn/commentary/testinningsend_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_FOLLOW_ON to listOf(
+            CommentaryPair(
+                CommentaryLine("testfollowon_1_excited", "The follow-on has been enforced! The side has to bat again straight away!", "/_cdn/commentary/testfollowon_1_excited.mp3"),
+                CommentaryLine("testfollowon_1_calm", "A big decision by the captain, and it puts huge pressure on the batters.", "/_cdn/commentary/testfollowon_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testfollowon_2_excited", "They've been asked to follow on! That's a heavy blow for the batting side!", "/_cdn/commentary/testfollowon_2_excited.mp3"),
+                CommentaryLine("testfollowon_2_calm", "The lead was big enough, and the captain wants to finish this match quickly.", "/_cdn/commentary/testfollowon_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.TEST_DRAW to listOf(
+            CommentaryPair(
+                CommentaryLine("testdraw_1_excited", "And that's it, the match is drawn! The time has run out!", "/_cdn/commentary/testdraw_1_excited.mp3"),
+                CommentaryLine("testdraw_1_calm", "A hard-fought draw, neither side could force the result over the five days.", "/_cdn/commentary/testdraw_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("testdraw_2_excited", "The match ends in a draw, after five days of gripping Test cricket!", "/_cdn/commentary/testdraw_2_excited.mp3"),
+                CommentaryLine("testdraw_2_calm", "Both sides will feel they could have done more, but the draw is the result.", "/_cdn/commentary/testdraw_2_calm.mp3")
             )
         ),
         CommentaryCategory.SUPER_OVER_ANNOUNCE to listOf(

@@ -246,14 +246,55 @@ class MatchAudioDirector(private val services: GameServices) {
     /** `switched` is the state after MatchStateMachine.switchInnings. */
     fun onInningsBreak(switched: MatchState) {
         if (switched.dlsRevised) sound.enqueueCommentary(CommentaryCategory.DLS_REVISED)
-        sound.enqueueCommentary(CommentaryCategory.INNINGS_BREAK)
+        val test = switched.test
+        if (test == null) {
+            sound.enqueueCommentary(CommentaryCategory.INNINGS_BREAK)
+        } else if (test.followOn && switched.currentInnings == 3) {
+            // A Test's own innings-end and declaration lines were queued when the innings ended; the generic "chase" lines do not fit.
+            sound.enqueueCommentary(CommentaryCategory.TEST_FOLLOW_ON)
+        }
         resetTrackers()
         sound.setCrowdTension(tensionFor(switched))
     }
 
-    /** The commentary carries on over the result screen; only the crowd stops. */
-    fun onMatchEnded() {
-        sound.enqueueCommentary(CommentaryCategory.MATCH_WIN)
+    // ---- Five-day Test (logic/TestMatch.kt): the commentary queues behind the last ball's own lines. ----
+
+    /** Lunch or tea (a session ends) or stumps (the day ends). */
+    fun onTestBreakStarted(stumps: Boolean) {
+        sound.enqueueCommentary(if (stumps) CommentaryCategory.TEST_DAY_END else CommentaryCategory.TEST_SESSION_END)
+    }
+
+    /** Play is about to resume: a new session, or a new day. */
+    fun onTestPlayResumes(newDay: Boolean) {
+        sound.enqueueCommentary(if (newDay) CommentaryCategory.TEST_DAY_START else CommentaryCategory.TEST_SESSION_START)
+    }
+
+    /** The new ball is taken; held back a moment so the spoken line comes first. */
+    fun onTestNewBall() {
+        sound.schedule(2600L) { sound.enqueueCommentary(CommentaryCategory.TEST_NEW_BALL) }
+    }
+
+    fun onTestDeclaration() {
+        sound.enqueueCommentary(CommentaryCategory.TEST_DECLARATION)
+    }
+
+    fun onTestInningsEnded() {
+        sound.enqueueCommentary(CommentaryCategory.TEST_INNINGS_END)
+    }
+
+    /**
+     * Says `text` once the commentary has finished, so a long announcement and a commentary clip never run over each other
+     * (gives up waiting after about 20 seconds).
+     */
+    fun speakWhenQuiet(text: String, waited: Int = 0, speak: (String) -> Unit) {
+        sound.schedule(500L) {
+            if (sound.isCommentaryBusy() && waited < 40) speakWhenQuiet(text, waited + 1, speak) else speak(text)
+        }
+    }
+
+    /** The commentary carries on over the result screen; only the crowd stops. A drawn Test has its own lines. */
+    fun onMatchEnded(drawn: Boolean = false) {
+        sound.enqueueCommentary(if (drawn) CommentaryCategory.TEST_DRAW else CommentaryCategory.MATCH_WIN)
         sound.stopCrowdAmbience()
     }
 
