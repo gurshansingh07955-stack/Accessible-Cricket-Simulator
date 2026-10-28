@@ -55,7 +55,7 @@ class MatchAudioDirector(private val services: GameServices) {
      * creeps up gently as wickets fall.
      */
     private fun tensionFor(state: MatchState): Float {
-        if (state.currentInnings == 2) {
+        if (state.currentInnings >= 2 && state.target != null) {
             val winProbability = MatchEngine.calculateWinProbability(state)
             return (1.0 - abs(winProbability - 50) / 50.0).coerceIn(0.0, 1.0).toFloat()
         }

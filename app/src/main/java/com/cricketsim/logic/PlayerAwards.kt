@@ -45,7 +45,7 @@ object PlayerAwards {
 
     /** Everyone who played, best first. */
     fun impacts(state: MatchState): List<MatchAward> {
-        val innings = listOfNotNull(state.firstInningsData, state.currentInningsData)
+        val innings = if (state.test != null) TestMatch.allInnings(state) else listOfNotNull(state.firstInningsData, state.currentInningsData)
         // (An Impact Player rule swap removes the player who went off from his team's XI list; he still played.)
         val players = (state.userTeam.players + state.opponentTeam.players + state.impact?.replacedOut.orEmpty()).associateBy { it.id }
         val teamNames = HashMap<String, String>()
@@ -65,7 +65,7 @@ object PlayerAwards {
                 a.balls += b.ballsFaced
                 a.notOut = !b.isOut
                 a.points += b.runs + b.fours + 2.0 * b.sixes
-                if (b.ballsFaced >= 8) {
+                if (b.ballsFaced >= 8 && state.test == null) {
                     val strikeRate = b.runs * 100.0 / b.ballsFaced
                     a.points += b.runs * ((strikeRate - 130.0) / 130.0) * 0.5
                 }
@@ -91,7 +91,7 @@ object PlayerAwards {
                 a.runsConceded += w.runsConceded
                 a.ballsBowled += balls
                 a.points += w.wickets * 25.0 + w.maidens * 8.0
-                if (balls >= 12) {
+                if (balls >= 12 && state.test == null) {
                     val economy = w.runsConceded * 6.0 / balls
                     a.points += (balls / 6.0) * (8.0 - economy) * 1.5
                 }

@@ -51,6 +51,7 @@ import com.cricketsim.logic.ImpactSetup
 import com.cricketsim.logic.ImpactState
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchRules
+import com.cricketsim.logic.TestMatch
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.MatchStateMachine
 import com.cricketsim.logic.ResolvedBowlingDecision
@@ -246,6 +247,7 @@ fun MatchScreen(
     var showFieldScreen by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
     var showMatchInfo by remember { mutableStateOf(false) }
+    var confirmingDeclare by remember { mutableStateOf(false) }
     var showInningsBreak by remember { mutableStateOf(resume?.showInningsBreak ?: false) }
     var showSettings by remember { mutableStateOf(false) }
     var confirmingLeave by remember { mutableStateOf(false) }
@@ -330,7 +332,7 @@ fun MatchScreen(
         if (saves == null || !autosave) return@LaunchedEffect
         if (matchOver) {
             saves.clear()
-        } else if (matchState.ballByBall.isNotEmpty() || matchState.currentInnings == 2) {
+        } else if (matchState.ballByBall.isNotEmpty() || matchState.currentInnings >= 2) {
             saves.save(
                 MatchSnapshot(
                     version = MatchSaveStore.CURRENT_VERSION,
@@ -351,7 +353,9 @@ fun MatchScreen(
     // Decision Review can be committed later, either as it was simulated
     // or replayed as a not-out. `before` is the state the ball started from.
     // The match (or a Super Over) has ended: either it is level, so the next Super Over begins, or it is decided.
-    fun concludeMatchOrSuperOver(nextState: MatchState) {
+    fun concludeMatchOrSuperOver(rawState: MatchState) {
+        // A five-day Test records its last innings first, so the result and the scorecards see all of them.
+        val nextState = TestMatch.recordIfTest(rawState)
         if (SuperOver.isTieAtEnd(nextState)) {
             val started = SuperOver.begin(nextState)
             matchState = started
@@ -380,6 +384,60 @@ fun MatchScreen(
         onMatchComplete?.invoke(matchState)
     }
 
+    // ---- Five-day Test (logic/TestMatch.kt) ----
+
+    // Next innings: new batting side, new target, and the innings-break pop-up.
+    fun moveToNextTestInnings(recorded: MatchState, lastLine: String) {
+        val switched = TestMatch.startNextInnings(recorded)
+        matchState = switched
+        recentCommentary = emptyList()
+        breakLastBall = lastLine
+        showInningsBreak = true
+        director?.onInningsBreak(switched)
+        services?.announceSpoken(TestMatch.inningsBreakSpoken(switched))
+    }
+
+    // An innings of a Test has ended (all out, a declaration, or the overs running out): a result, a draw, the follow-on question, or the next innings.
+    fun finishTestInnings(ended: MatchState, declared: Boolean, lastLine: String) {
+        val recorded = TestMatch.recordCurrent(ended, declared)
+        if (TestMatch.outcome(recorded) != null || TestMatch.timeUp(recorded)) {
+            concludeMatchOrSuperOver(recorded)
+            return
+        }
+        breakLastBall = lastLine
+        if (TestMatch.followOnAvailable(recorded)) {
+            if (TestMatch.followOnEnforcerId(recorded) == recorded.userTeam.id) {
+                matchState = recorded.copy(test = recorded.test?.copy(followOnPending = true))
+                recentCommentary = emptyList()
+                services?.announceSpoken(TestMatch.followOnSpoken(recorded))
+                return
+            }
+            moveToNextTestInnings(TestMatch.setFollowOn(recorded, TestMatch.aiEnforcesFollowOn(recorded)), lastLine)
+            return
+        }
+        moveToNextTestInnings(recorded, lastLine)
+    }
+
+    // Lunch, tea and stumps come by themselves when a session's 30 overs are done and nobody is being replaced.
+    LaunchedEffect(matchState.score, matchState.currentInnings, matchState.pendingDismissal, matchState.drinksBreak, showInningsBreak, matchOver, matchState.test?.followOnPending) {
+        if (matchOver || showInningsBreak || !TestMatch.breakDue(matchState)) return@LaunchedEffect
+        val started = TestMatch.beginBreak(matchState)
+        matchState = started
+        services?.announceSpoken(TestMatch.breakSpoken(started))
+    }
+
+    // The computer declares at the start of an over when its lead is safe for the time left.
+    LaunchedEffect(matchState.score.overs, matchState.currentInnings, matchState.test?.breakPhase, matchOver, showInningsBreak) {
+        if (matchOver || showInningsBreak || matchState.test == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(700)
+        val now = matchState
+        if (!TestMatch.aiShouldDeclare(now)) return@LaunchedEffect
+        val line = TestMatch.declarationLine(now)
+        recentCommentary = (recentCommentary + line).takeLast(6)
+        services?.announceSpoken(line)
+        finishTestInnings(now, declared = true, lastLine = line)
+    }
+
     fun commitBall(before: MatchState, result: BallResult) {
         val nextState = result.state
         // The user's early/late swing note (if any) belongs to exactly this
@@ -404,6 +462,8 @@ fun MatchScreen(
         // NOT ending on this ball, so these checks never fight a prompt.
         when {
             MatchSimulation.isTargetReached(nextState) -> concludeMatchOrSuperOver(nextState)
+            nextState.test != null && (MatchSimulation.isInningsOver(nextState) || TestMatch.timeUp(nextState)) ->
+                finishTestInnings(nextState, declared = false, lastLine = summary)
             MatchSimulation.isInningsOver(nextState) -> {
                 if (nextState.currentInnings == 1) {
                     breakLastBall = summary
@@ -522,7 +582,27 @@ fun MatchScreen(
                 services?.announceSpoken(line)
                 showMatchInfo = false
             },
+            onDeclare = {
+                showMatchInfo = false
+                confirmingDeclare = true
+            },
             onBack = { showMatchInfo = false }
+        )
+        return
+    }
+
+    if (confirmingDeclare) {
+        BackHandler(onBack = { confirmingDeclare = false })
+        TestDeclareConfirmScreen(
+            text = "${matchState.battingTeam.name} are ${matchState.score.runs} for ${matchState.score.wickets} after ${matchState.score.overs}.${matchState.score.balls} overs. Declare and go out to bowl?",
+            onDeclare = {
+                confirmingDeclare = false
+                val line = TestMatch.declarationLine(matchState)
+                recentCommentary = (recentCommentary + line).takeLast(6)
+                services?.announceSpoken(line)
+                finishTestInnings(matchState, declared = true, lastLine = line)
+            },
+            onCancel = { confirmingDeclare = false }
         )
         return
     }
@@ -693,7 +773,43 @@ fun MatchScreen(
         return
     }
 
+    val testNow = matchState.test
+    if (testNow != null && !matchOver) {
+        if (testNow.followOnPending) {
+            TestFollowOnScreen(
+                lines = TestMatch.followOnLines(matchState),
+                onEnforce = { moveToNextTestInnings(TestMatch.setFollowOn(matchState, true), breakLastBall) },
+                onBatAgain = { moveToNextTestInnings(TestMatch.setFollowOn(matchState, false), breakLastBall) }
+            )
+            return
+        }
+        if (testNow.breakPhase != 0 && !showInningsBreak) {
+            TestBreakScreen(
+                title = TestMatch.breakTitle(matchState),
+                lines = TestMatch.screenLines(matchState),
+                continueLabel = if (testNow.breakPhase == 1) "Continue" else "Resume play",
+                onContinue = {
+                    val next = TestMatch.continueBreak(matchState)
+                    matchState = next
+                    if (next.test?.breakPhase == 2) services?.announceSpoken(TestMatch.breakSpoken(next))
+                },
+                onScorecard = { showScorecard = true }
+            )
+            return
+        }
+    }
+
     if (showInningsBreak) {
+        if (matchState.test != null) {
+            TestInningsBreakScreen(
+                title = TestMatch.inningsBreakTitle(matchState),
+                lines = TestMatch.inningsBreakLines(matchState, breakLastBall),
+                startLabel = TestMatch.startLabel(matchState),
+                onStart = { showInningsBreak = false },
+                onScorecard = { showScorecard = true }
+            )
+            return
+        }
         InningsBreakScreen(
             state = matchState,
             lastBall = breakLastBall,

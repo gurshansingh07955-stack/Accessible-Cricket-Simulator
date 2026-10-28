@@ -500,6 +500,17 @@ object MatchEngine {
         // Object.entries(probs) iteration order (dot, one, two, three,
         // four, six, wicket, wide, noBall) — the base OutcomeProbs
         // literal's own key order in getOutcomeProbabilities.
+        // A five-day Test: Test tempo, and a pitch that wears over the days (logic/TestMatch.kt has the dials).
+        if (matchState.test != null) {
+            val wear = TestMatch.wearFactor(matchState)
+            val spin = bowlingDecision.bowlingStyle == BowlingStyle.SPIN
+            probs.wicket *= TestMatch.SCALE_WICKET * (1.0 + 0.35 * wear + (if (spin) 0.35 * wear else 0.0))
+            probs.four *= TestMatch.SCALE_FOUR * (1.0 - 0.12 * wear)
+            probs.six *= TestMatch.SCALE_SIX
+            probs.dot *= TestMatch.SCALE_DOT * (1.0 + 0.12 * wear)
+            probs.two *= TestMatch.SCALE_TWO
+            probs.three *= TestMatch.SCALE_THREE
+        }
         val probsByKey = linkedMapOf(
             "dot" to probs.dot, "one" to probs.one, "two" to probs.two, "three" to probs.three,
             "four" to probs.four, "six" to probs.six, "wicket" to probs.wicket,
@@ -647,7 +658,7 @@ object MatchEngine {
         var outBatterName: String? = null
         if (!isWicket && !isWide && !protectedFromDismissal && runs in 1..3) {
             val runOutsSoFar = matchState.ballByBall.count { it.dismissalType == DismissalType.RUN_OUT }
-            if (runOutsSoFar < MAX_RUN_OUTS_PER_INNINGS && Random.nextDouble() < runOutChance(matchState.oversLimit, runs)) {
+            if (runOutsSoFar < MAX_RUN_OUTS_PER_INNINGS && Random.nextDouble() < runOutChance(minOf(matchState.oversLimit, 90), runs)) {
                 isWicket = true
                 dismissalType = DismissalType.RUN_OUT
                 isEdge = null
@@ -952,7 +963,7 @@ object MatchEngine {
      * heuristic.
      */
     fun calculateWinProbability(matchState: MatchState): Int {
-        if (matchState.currentInnings == 1) return 50 // Start of match roughly equal
+        if (matchState.currentInnings == 1 || matchState.target == null) return 50 // Start of match, or no target to chase yet
 
         val target = matchState.target ?: 0
         val currentRuns = matchState.score.runs
@@ -961,7 +972,7 @@ object MatchEngine {
 
         val maxOvers = matchState.oversLimit
         val ballsBowled = matchState.score.overs * 6 + matchState.score.balls
-        val ballsRemaining = maxOvers * 6 - ballsBowled
+        val ballsRemaining = if (matchState.test != null) TestMatch.ballsLeft(matchState) else maxOvers * 6 - ballsBowled
 
         if (runsNeeded <= 0) return 100
         if (ballsRemaining <= 0 && runsNeeded > 0) return 0

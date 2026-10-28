@@ -70,6 +70,7 @@ object AiSituation {
      * part-timer, respect a genuine strike bowler.
      */
     fun battingBias(state: MatchState, recentOverRuns: List<Int>): Double {
+        if (state.test != null) return com.cricketsim.logic.TestMatch.battingBias(state)
         val totalOvers = state.oversLimit
         val oversDone = state.score.overs + state.score.balls / 6.0
         val wicketsDown = state.score.wickets
@@ -135,6 +136,7 @@ object AiSituation {
      * AI's field (attacking / balanced / containing) and its next bowler.
      */
     fun bowlingBias(state: MatchState): Double {
+        if (state.test != null) return com.cricketsim.logic.TestMatch.bowlingBias(state)
         val totalOvers = state.oversLimit
         val oversDone = state.score.overs + state.score.balls / 6.0
         val wicketsDown = state.score.wickets

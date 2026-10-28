@@ -21,6 +21,7 @@ import com.cricketsim.logic.PowerSurge
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.Stadium
+import com.cricketsim.logic.TestMatch
 
 /**
  * Match info: everything about the match in one place, opened from the match screen's Match info button.
@@ -35,6 +36,7 @@ fun MatchInfoScreen(
     stadium: Stadium,
     onUseImpact: () -> Unit,
     onUsePowerSurge: () -> Unit = {},
+    onDeclare: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val user = state.userTeam
@@ -59,6 +61,10 @@ fun MatchInfoScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onUsePowerSurge, modifier = Modifier.fillMaxWidth()) { Text("Power Surge") }
         }
+        if (TestMatch.canDeclare(state)) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onDeclare, modifier = Modifier.fillMaxWidth()) { Text("Declare innings") }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = "Match info",
@@ -71,6 +77,7 @@ fun MatchInfoScreen(
         val overs = if (state.format == MatchFormat.TEST) "" else " ${countOf(state.oversLimit, "over")} an innings."
         MatchInfoLine("Format: ${ScorecardText.formatNameFor(state)}.$overs")
         MatchInfoLine("Right now: ${MatchLines.scoreLine(state)}")
+        TestMatch.statusLines(state).forEach { MatchInfoLine(it) }
 
         MatchInfoHeading("Venue")
         MatchInfoLine(stadium.name)

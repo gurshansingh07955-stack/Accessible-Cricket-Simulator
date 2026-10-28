@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.MatchState
+import com.cricketsim.logic.TestMatch
 
 /**
  * The scorecard: the web's MatchScorecard (an innings switch, then
@@ -71,10 +72,14 @@ fun ScorecardScreen(state: MatchState, onBack: () -> Unit, startOnFirstInnings: 
     val firstInnings = state.firstInningsData
     var showFirstInnings by remember { mutableStateOf(startOnFirstInnings) }
     var section by remember { mutableStateOf(CardSection.BATTING) }
+    // A five-day Test has up to four innings: one tab each, the latest showing first.
+    val testInnings = if (state.test != null) TestMatch.allInnings(state) else emptyList()
+    var testPick by remember { mutableStateOf(-1) }
+    val testIndex = if (testInnings.isEmpty()) -1 else if (testPick in testInnings.indices) testPick else testInnings.lastIndex
 
     // firstInningsData only exists once the second innings is under way.
-    val viewingFirst = showFirstInnings && firstInnings != null
-    val innings = if (viewingFirst && firstInnings != null) firstInnings else state.currentInningsData
+    val viewingFirst = if (testIndex >= 0) testIndex != testInnings.lastIndex else showFirstInnings && firstInnings != null
+    val innings = if (testIndex >= 0) testInnings[testIndex] else if (viewingFirst && firstInnings != null) firstInnings else state.currentInningsData
 
     // Who is captain, vice-captain and wicketkeeper, shown beside each name and in a line at the top of each side's table.
     val roles = remember(state.userTeam, state.opponentTeam) { ScorecardText.roleMap(state) }
@@ -98,7 +103,14 @@ fun ScorecardScreen(state: MatchState, onBack: () -> Unit, startOnFirstInnings: 
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        if (firstInnings != null) {
+        if (testInnings.isNotEmpty()) {
+            TabStrip(
+                labels = testInnings.mapIndexed { i, inn -> "Innings ${i + 1}, ${inn.battingTeamName}" },
+                selectedIndex = testIndex,
+                onSelect = { index -> testPick = index }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        } else if (firstInnings != null) {
             TabStrip(
                 labels = listOf("Second innings", "First innings"),
                 selectedIndex = if (viewingFirst) 1 else 0,

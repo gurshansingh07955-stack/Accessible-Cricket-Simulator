@@ -72,10 +72,10 @@ object MatchLines {
      */
     private fun chase(state: MatchState): Chase? {
         val target = state.target ?: return null
-        if (state.currentInnings != 2) return null
+        if (state.currentInnings != (if (state.test != null) 4 else 2)) return null
         val runsNeeded = maxOf(target - state.score.runs, 0)
         val ballsBowled = state.score.overs * 6 + state.score.balls
-        val ballsRemaining = maxOf(state.oversLimit * 6 - ballsBowled, 0)
+        val ballsRemaining = if (state.test != null) com.cricketsim.logic.TestMatch.ballsLeft(state) else maxOf(state.oversLimit * 6 - ballsBowled, 0)
         val oversRemaining = ballsRemaining / 6.0
         val requiredRunRate = if (oversRemaining > 0) runsNeeded / oversRemaining else 0.0
         return Chase(runsNeeded, ballsRemaining, requiredRunRate)
@@ -98,7 +98,7 @@ object MatchLines {
      * rather than smoothly.
      */
     fun winProbabilityLine(state: MatchState): String? {
-        if (state.currentInnings != 2 || state.target == null) return null
+        if (state.target == null || state.currentInnings != (if (state.test != null) 4 else 2)) return null
         val percent = MatchEngine.calculateWinProbability(state)
         return "Win probability: $percent percent for ${state.battingTeam.name}."
     }
@@ -167,9 +167,14 @@ object MatchLines {
         com.cricketsim.logic.PlayerAwards.playerOfTheMatch(state)?.let {
             "Player of the match: ${it.name}, ${it.teamName}. ${it.summary}."
         },
-        state.firstInningsData?.let { "First innings: ${ScorecardLines.inningsHeader(it)}" },
-        "Second innings: ${ScorecardLines.inningsHeader(state.currentInningsData)}"
-    ) + SuperOver.summaryLines(state)
+    ) + (if (state.test != null) {
+        com.cricketsim.logic.TestMatch.inningsSummaryLines(state)
+    } else {
+        listOfNotNull(
+            state.firstInningsData?.let { "First innings: ${ScorecardLines.inningsHeader(it)}" },
+            "Second innings: ${ScorecardLines.inningsHeader(state.currentInningsData)}"
+        )
+    }) + SuperOver.summaryLines(state)
 }
 
 /** Scorecard rows, one self-contained sentence each. */

@@ -185,7 +185,9 @@ data class MatchState(
     // The Big Bash League's Power Surge (logic/PowerSurge.kt); null = the match has none.
     val surge: SurgeState? = null,
     // A custom tournament's rules (overs, fielding restriction, DRS, rain); null = the format's own rules.
-    val rules: MatchRules? = null
+    val rules: MatchRules? = null,
+    // A five-day Test's innings, sessions and rules (logic/TestMatch.kt); null = not a five-day Test.
+    val test: TestState? = null
 )
 
 object MatchStateMachine {
@@ -302,14 +304,15 @@ object MatchStateMachine {
             fieldPlacements = fieldPlacements,
             stadiumId = stadiumId,
             weather = weather,
-            oversLimit = rules?.overs ?: MatchEngine.getFormatOvers(format),
+            oversLimit = rules?.overs ?: if (TestMatch.applies(format, rules)) TestMatch.MATCH_OVERS else MatchEngine.getFormatOvers(format),
             rainInterruptionUsed = false,
             activeRainDelay = null,
             firstInningsInterruption = null,
             secondInningsInterruption = null,
             dlsRevised = false,
             impact = impact,
-            rules = rules
+            rules = rules,
+            test = if (TestMatch.applies(format, rules)) TestMatch.start() else null
         )
         // Note: the web source calls saveMatch(newState) here — omitted,
         // persistence not ported yet (see file header).
@@ -651,7 +654,8 @@ object MatchStateMachine {
         // FREE HIT: a no-ball makes the NEXT delivery a free hit. A wide leaves it standing,
         // and the next legal delivery (or a further no-ball, which starts a new one) settles it.
         val nextFreeHit = when {
-            outcome.isNoBall -> true
+            // A Test has no free hits.
+            outcome.isNoBall -> state.format != MatchFormat.TEST
             outcome.isWide -> state.freeHit
             else -> false
         }
@@ -815,4 +819,38 @@ object MatchStateMachine {
      * revised overs/target and is ready to resume play.
      */
     fun resumeFromRainDelay(state: MatchState): MatchState = state.copy(activeRainDelay = null)
+
+    /**
+     * The next innings of a five-day Test (logic/TestMatch.kt decides who bats and the target). Like switchInnings, but any
+     * innings number, and nothing about overs limits or DLS.
+     */
+    fun startTestInnings(state: MatchState, inningsNumber: Int, battingTeam: Team, bowlingTeam: Team, target: Int?): MatchState {
+        val striker = battingTeam.players[0]
+        val nonStriker = battingTeam.players[1]
+        val bowler = Lineup.openingBowler(bowlingTeam)
+        val innings = MatchStats.createEmptyInningsData(battingTeam, bowlingTeam, Pair(striker, nonStriker), bowler)
+        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, state.userTeam.id, state.format, 0, state.rules)
+        return state.copy(
+            currentInnings = inningsNumber,
+            battingTeam = battingTeam,
+            bowlingTeam = bowlingTeam,
+            score = MatchScore(runs = 0, wickets = 0, overs = 0, balls = 0),
+            target = target,
+            currentBatsmen = Pair(striker, nonStriker),
+            currentBowler = bowler,
+            ballByBall = emptyList(),
+            lastSixBalls = emptyList(),
+            currentInningsData = innings,
+            needsOpenerSelection = battingTeam.id == state.userTeam.id,
+            needsBowlerSelection = bowlingTeam.id == state.userTeam.id,
+            pendingDismissal = null,
+            deferredOverEnd = false,
+            fieldPlacements = fieldPlacements,
+            drsReviewsUsed = 0,
+            freeHit = false,
+            lastAiFieldChangeBall = 0,
+            lastDrinksBreakOver = 0,
+            drinksBreak = null
+        )
+    }
 }

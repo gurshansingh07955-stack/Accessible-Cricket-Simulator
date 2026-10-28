@@ -148,8 +148,15 @@ object ScorecardText {
         sb.append(leadersLine(state.userTeam)).append("\n")
         sb.append(leadersLine(state.opponentTeam)).append("\n")
 
-        full.firstInningsData?.let { appendInnings(sb, "FIRST INNINGS", it, roles) }
-        appendInnings(sb, "SECOND INNINGS", full.currentInningsData, roles)
+        if (full.test != null) {
+            val ordinals = listOf("FIRST", "SECOND", "THIRD", "FOURTH")
+            com.cricketsim.logic.TestMatch.allInnings(full).forEachIndexed { i, inn ->
+                appendInnings(sb, ordinals.getOrElse(i) { "NEXT" } + " INNINGS", inn, roles)
+            }
+        } else {
+            full.firstInningsData?.let { appendInnings(sb, "FIRST INNINGS", it, roles) }
+            appendInnings(sb, "SECOND INNINGS", full.currentInningsData, roles)
+        }
 
         val superOver = SuperOver.summaryLines(state)
         if (superOver.isNotEmpty()) {

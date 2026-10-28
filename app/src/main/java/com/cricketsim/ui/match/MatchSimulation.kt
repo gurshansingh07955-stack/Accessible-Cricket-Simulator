@@ -468,7 +468,7 @@ object MatchSimulation {
     /** True once the second innings has reached (or passed) the target — the chase is won. */
     fun isTargetReached(state: MatchState): Boolean {
         val target = state.target ?: return false
-        return state.currentInnings == 2 && state.score.runs >= target
+        return state.currentInnings == (if (state.test != null) 4 else 2) && state.score.runs >= target
     }
 
     /**
@@ -478,6 +478,7 @@ object MatchSimulation {
      * side that was bowling.
      */
     fun finishMatch(state: MatchState): MatchState {
+        com.cricketsim.logic.TestMatch.finish(state)?.let { return it }
         val target = state.target
         val winnerId = when {
             isTargetReached(state) -> state.battingTeam.id
@@ -489,6 +490,7 @@ object MatchSimulation {
 
     /** A short plain-text result summary once the match is over. Null while the match is still in progress. */
     fun matchResultText(state: MatchState): String? {
+        if (state.test != null) return com.cricketsim.logic.TestMatch.resultText(state)
         if (state.currentInnings != 2) return null
         if (!isTargetReached(state) && !isInningsOver(state)) return null
 

@@ -117,7 +117,7 @@ private val FORMAT_OPTIONS = listOf(
     FormatOption(MatchFormat.T10, "T10", "10 overs per side. A three-over powerplay, and up to two overs per bowler."),
     FormatOption(MatchFormat.T20, "T20", "20 overs per side. A six-over powerplay, and up to four overs per bowler."),
     FormatOption(MatchFormat.ODI, "One Day International", "50 overs per side. A full day of cricket."),
-    FormatOption(MatchFormat.TEST, "Test Match", "No over limit per innings. The longest format.")
+    FormatOption(MatchFormat.TEST, "Test Match", "Five days of 90 overs, in three sessions of 30. Four innings, the follow-on, declarations, a wearing pitch, and a draw if time runs out.")
 )
 
 @Composable

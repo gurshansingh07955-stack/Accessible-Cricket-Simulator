@@ -46,7 +46,8 @@ object DrinksBreak {
         if (overs <= 0 || overs <= state.lastDrinksBreakOver) return state
         // No break once the innings is at its limit.
         if (overs >= state.oversLimit) return state
-        val due = if (state.format == MatchFormat.TEST) overs % interval == 0 else overs == interval
+        val due = if (state.test != null) TestMatch.drinksDue(state)
+            else if (state.format == MatchFormat.TEST) overs % interval == 0 else overs == interval
         if (!due) return state
         return state.copy(lastDrinksBreakOver = overs, drinksBreak = summarise(state, interval))
     }
