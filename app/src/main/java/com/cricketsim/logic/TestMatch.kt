@@ -29,7 +29,12 @@ data class TestState(
     /** 0 = playing, 1 = the "break begins" pop-up is showing, 2 = the "play resumes" pop-up is showing. */
     val breakPhase: Int = 0,
     val sessionStartRuns: Int = 0,
-    val sessionStartWickets: Int = 0
+    val sessionStartWickets: Int = 0,
+    /** Legal balls of the match at which the ball in use was taken (0 = the match started with it). */
+    val ballStartBalls: Int = 0,
+    val newBallsTaken: Int = 0,
+    /** The user has been told that the new ball is available. */
+    val newBallNotified: Boolean = false
 )
 
 data class TestOutcome(val winnerId: String?, val text: String)
@@ -53,6 +58,14 @@ object TestMatch {
 
     /** A side that bats first and leads by this many runs or more may make the other side follow on (five-day Test). */
     const val FOLLOW_ON_LEAD = 200
+
+    /** The fielding side may take a new ball after this many overs with the old one. */
+    const val NEW_BALL_OVERS = 80
+
+    /** A fresh ball helps the pace bowlers for this many balls (20 overs); after that they are a little less dangerous. Not measured: dials. */
+    const val NEW_BALL_BOOST_BALLS = 120
+    const val NEW_BALL_WICKET = 1.3
+    const val OLD_BALL_WICKET = 0.96
 
     // Test tempo. The ball model is a T20 one (7.4 runs an over, all out in 34 overs); these weights bring a Test innings to about
     // 330 runs in 100 overs at 3.2 an over, measured with tools/difficulty_twin.js (AI v AI, Medium). Turn them to change the pace.
@@ -252,6 +265,7 @@ object TestMatch {
             situationLine(s)?.let { lines.add(it) }
             lines.add(timeLine(s))
             if (k % 3 == 0) lines.add(pitchReport(s))
+            if (newBallAvailable(s)) lines.add("The new ball is available to ${s.bowlingTeam.name}.")
         }
         return lines
     }
@@ -507,6 +521,63 @@ object TestMatch {
         return bias.coerceIn(-1.0, 1.0)
     }
 
+    // ---------------------------------------------------------------- the new ball
+
+    /** Legal balls bowled with the ball in use. */
+    fun ballAge(s: MatchState): Int {
+        val t = s.test ?: return 0
+        return (matchBalls(s) - t.ballStartBalls).coerceAtLeast(0)
+    }
+
+    fun newBallAvailable(s: MatchState): Boolean {
+        val t = s.test ?: return false
+        return !t.currentRecorded && ballAge(s) >= NEW_BALL_OVERS * 6
+    }
+
+    /** The user is bowling, the old ball is 80 overs old and the ball is dead. */
+    fun canTakeNewBall(s: MatchState): Boolean {
+        val t = s.test ?: return false
+        return newBallAvailable(s) && t.breakPhase == 0 && !t.followOnPending &&
+            s.matchStatus == MatchStatus.IN_PROGRESS && s.bowlingTeam.id == s.userTeam.id &&
+            s.pendingDismissal == null && !s.needsOpenerSelection
+    }
+
+    fun takeNewBall(s: MatchState): MatchState {
+        val t = s.test ?: return s
+        return s.copy(test = t.copy(ballStartBalls = matchBalls(s), newBallsTaken = t.newBallsTaken + 1, newBallNotified = false))
+    }
+
+    fun newBallLine(s: MatchState): String = "${s.bowlingTeam.name} take the new ball."
+
+    fun newBallReminder(): String = "The new ball is available. You can take it from Match info."
+
+    /** The computer takes the new ball at the start of an over once it is available (not every time, so it is not instant). */
+    fun aiShouldTakeNewBall(s: MatchState): Boolean {
+        val t = s.test ?: return false
+        if (!newBallAvailable(s) || t.breakPhase != 0 || t.followOnPending) return false
+        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.bowlingTeam.id == s.userTeam.id) return false
+        if (s.score.balls != 0 || s.pendingDismissal != null || s.needsOpenerSelection) return false
+        return Random.nextDouble() < 0.7
+    }
+
+    /** Tells the user once that the new ball is available. */
+    fun shouldRemindNewBall(s: MatchState): Boolean {
+        val t = s.test ?: return false
+        return newBallAvailable(s) && !t.newBallNotified && t.breakPhase == 0 && !t.followOnPending &&
+            s.bowlingTeam.id == s.userTeam.id && s.score.balls == 0 && s.pendingDismissal == null
+    }
+
+    fun markNewBallNotified(s: MatchState): MatchState {
+        val t = s.test ?: return s
+        return s.copy(test = t.copy(newBallNotified = true))
+    }
+
+    fun ballLine(s: MatchState): String {
+        val overs = ballAge(s) / 6
+        return if (newBallAvailable(s)) "The ball is ${overs} overs old. The new ball is available."
+        else "The ball is ${overs} overs old. The new ball is due in ${NEW_BALL_OVERS - overs} overs."
+    }
+
     // ---------------------------------------------------------------- Match info
 
     fun statusLines(s: MatchState): List<String> {
@@ -517,6 +588,7 @@ object TestMatch {
         situationLine(s)?.let { lines.add(it) }
         lines.add(timeLine(s))
         lines.add(pitchReport(s))
+        lines.add(ballLine(s))
         if (t.followOn) lines.add("The follow-on was enforced.")
         return lines
     }

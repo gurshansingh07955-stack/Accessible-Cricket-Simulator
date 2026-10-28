@@ -438,6 +438,23 @@ fun MatchScreen(
         finishTestInnings(now, declared = true, lastLine = line)
     }
 
+    // The new ball: the computer takes it once it is available; you are told once, and take it from Match info.
+    LaunchedEffect(matchState.score.overs, matchState.currentInnings, matchState.test?.breakPhase, matchOver, showInningsBreak) {
+        if (matchOver || showInningsBreak || matchState.test == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(900)
+        if (showInningsBreak) return@LaunchedEffect
+        val now = matchState
+        if (TestMatch.aiShouldTakeNewBall(now)) {
+            val line = TestMatch.newBallLine(now)
+            matchState = TestMatch.takeNewBall(now)
+            recentCommentary = (recentCommentary + line).takeLast(6)
+            services?.announceSpoken(line)
+        } else if (TestMatch.shouldRemindNewBall(now)) {
+            matchState = TestMatch.markNewBallNotified(now)
+            services?.announceSpoken(TestMatch.newBallReminder())
+        }
+    }
+
     fun commitBall(before: MatchState, result: BallResult) {
         val nextState = result.state
         // The user's early/late swing note (if any) belongs to exactly this
@@ -581,6 +598,13 @@ fun MatchScreen(
                 recentCommentary = (recentCommentary + line).takeLast(6)
                 services?.announceSpoken(line)
                 showMatchInfo = false
+            },
+            onTakeNewBall = {
+                val line = TestMatch.newBallLine(matchState)
+                matchState = TestMatch.takeNewBall(matchState)
+                showMatchInfo = false
+                recentCommentary = (recentCommentary + line).takeLast(6)
+                services?.announceSpoken(line)
             },
             onDeclare = {
                 showMatchInfo = false

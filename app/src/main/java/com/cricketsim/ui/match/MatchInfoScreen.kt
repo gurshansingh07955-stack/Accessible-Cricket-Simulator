@@ -37,6 +37,7 @@ fun MatchInfoScreen(
     onUseImpact: () -> Unit,
     onUsePowerSurge: () -> Unit = {},
     onDeclare: () -> Unit = {},
+    onTakeNewBall: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val user = state.userTeam
@@ -60,6 +61,10 @@ fun MatchInfoScreen(
         if (state.battingTeam.id == user.id && PowerSurge.canTakeNow(state)) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onUsePowerSurge, modifier = Modifier.fillMaxWidth()) { Text("Power Surge") }
+        }
+        if (TestMatch.canTakeNewBall(state)) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onTakeNewBall, modifier = Modifier.fillMaxWidth()) { Text("Take the new ball") }
         }
         if (TestMatch.canDeclare(state)) {
             Spacer(modifier = Modifier.height(8.dp))

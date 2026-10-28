@@ -510,6 +510,10 @@ object MatchEngine {
             probs.dot *= TestMatch.SCALE_DOT * (1.0 + 0.12 * wear)
             probs.two *= TestMatch.SCALE_TWO
             probs.three *= TestMatch.SCALE_THREE
+            // The ball in use: a fresh one helps the pace bowlers for 20 overs.
+            if (!spin) {
+                probs.wicket *= if (TestMatch.ballAge(matchState) < TestMatch.NEW_BALL_BOOST_BALLS) TestMatch.NEW_BALL_WICKET else TestMatch.OLD_BALL_WICKET
+            }
         }
         val probsByKey = linkedMapOf(
             "dot" to probs.dot, "one" to probs.one, "two" to probs.two, "three" to probs.three,

@@ -23,7 +23,10 @@ Scorecards (screen, share, copy) list every innings, one tab each.
 The ball model is a T20 one, so a Test used to be all out in 34 overs at 7.4 an over. `SCALE_*` in `TestMatch.kt` weigh wickets, fours, sixes, dots, twos and threes; with the twin (`tools/difficulty_twin.js`, AI v AI, Medium, no fielders) an innings is about 330 runs in 100 overs at 3.2 an over. Easy about 270, Hard about 410. This was measured on a model, not on people.
 The pitch wears from 0 (day one) to about 1 (day five) by the overs bowled (`TestMatch.wearFactor`; dusty wears faster, batting slower): wickets up to 35% more likely, spinners a further 35%, fewer fours. Dials in `MatchEngine.simulateBall`.
 
-## Not built yet (parts 2 and 3)
-- The new ball after 80 overs (taking it from Match info, the computer taking it, its effect), over-rate, the last-hour rule, a nightwatchman.
+## The new ball (part 2)
+After 80 overs with the old ball the fielding side may take a new one. You are told once ("The new ball is available. You can take it from Match info.") and take it with **Match info > Take the new ball** (the ball must be dead). The computer takes it at the start of an over once it is available (70% each over, so not instantly). Match info says how old the ball is, and the pop-ups at the start of a session say when it is available. A fresh ball makes the pace bowlers 30% more likely to take a wicket for 20 overs; after that they are 4% less likely (spinners are not affected). Dials: `NEW_BALL_*` and `OLD_BALL_WICKET` in `TestMatch.kt`; not measured.
+
+## Not built yet (part 3 and later)
+- Over-rate, the last-hour rule, a nightwatchman.
 - Commentary lines (and their ElevenLabs voices) for the start and end of a session or day, the new ball and a declaration.
 - Test matches in tournaments.
