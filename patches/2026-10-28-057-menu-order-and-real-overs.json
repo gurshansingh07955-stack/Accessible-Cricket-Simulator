@@ -1,0 +1,41 @@
+{
+  "name": "Tournament menu order and real overs on scorecard",
+  "message": "Remove the extra coming-soon Custom tournament row, put Domestic before Custom tournaments, and show a custom format's real overs on the scorecard, Match info and Resume text",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\"Custom tournaments\", \"Play the tournaments you designed in Advanced Customisation.\", enabled = true, onClick = onCustom)\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\"Domestic tournament\", \"Coming soon.\", enabled = false, onClick = {})\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\"Custom tournament\", \"Coming soon.\", enabled = false, onClick = {})\n",
+      "replace": "            ChoiceRow(\"Domestic tournament\", \"Coming soon.\", enabled = false, onClick = {})\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\"Custom tournaments\", \"Play the tournaments you designed in Advanced Customisation.\", enabled = true, onClick = onCustom)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "    internal fun pitchName(pitch: PitchType): String = when (pitch) {",
+      "replace": "    /**\n     * The format a match really plays. A custom format (or a tournament given another format) carries its own overs\n     * in [MatchState.rules] while `state.format` is only the nearest game format (a 6-over match is FIVE_OVERS),\n     * so say the real number of overs whenever it differs from the game format's own.\n     */\n    internal fun formatNameFor(state: MatchState): String {\n        val overs = state.rules?.overs\n        if (overs == null || state.format == MatchFormat.TEST) return formatName(state.format)\n        if (overs == com.cricketsim.logic.MatchEngine.getFormatOvers(state.format)) return formatName(state.format)\n        return if (overs == 1) \"1 over\" else \"$overs overs\"\n    }\n\n    internal fun pitchName(pitch: PitchType): String = when (pitch) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "        sb.append(formatName(state.format)).append(\" match at \").append(stadium.name)",
+      "replace": "        sb.append(formatNameFor(state)).append(\" match at \").append(stadium.name)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "MatchInfoLine(\"Format: ${ScorecardText.formatName(state.format)}.$overs\")",
+      "replace": "MatchInfoLine(\"Format: ${ScorecardText.formatNameFor(state)}.$overs\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "$formatName, $innings, $score.\"",
+      "replace": "${state.rules?.let { r -> if (r.overs == com.cricketsim.logic.MatchEngine.getFormatOvers(state.format)) formatName else \"${r.overs}-over match\" } ?: formatName}, $innings, $score.\"",
+      "count": 1
+    }
+  ]
+}
