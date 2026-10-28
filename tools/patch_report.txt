@@ -1,6 +1,7 @@
-Patch run: 40660917038
-Timestamp (UTC): 2026-10-28T09:00:43Z
-Result: OK
+Patch run: 40673673797
+Timestamp (UTC): 2026-10-28T10:38:16Z
+Result: FAILED at 2026-10-28-060-test-match-part3-commentary.json
 -----
-Patch 2026-10-28-059-test-match-part2-new-ball.json
-  applied 11 operation(s) to 5 file(s)
+Patch 2026-10-28-060-test-match-part3-commentary.json
+  FAILED - nothing was changed:
+    op 16 (replace app/src/main/java/com/cricketsim/TEST_MATCH.md): file does not exist
