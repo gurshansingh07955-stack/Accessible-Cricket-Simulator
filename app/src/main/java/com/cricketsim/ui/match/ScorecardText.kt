@@ -42,6 +42,18 @@ object ScorecardText {
         MatchFormat.ONE_OVER -> "1 over"
     }
 
+    /**
+     * The format a match really plays. A custom format (or a tournament given another format) carries its own overs
+     * in [MatchState.rules] while `state.format` is only the nearest game format (a 6-over match is FIVE_OVERS),
+     * so say the real number of overs whenever it differs from the game format's own.
+     */
+    internal fun formatNameFor(state: MatchState): String {
+        val overs = state.rules?.overs
+        if (overs == null || state.format == MatchFormat.TEST) return formatName(state.format)
+        if (overs == com.cricketsim.logic.MatchEngine.getFormatOvers(state.format)) return formatName(state.format)
+        return if (overs == 1) "1 over" else "$overs overs"
+    }
+
     internal fun pitchName(pitch: PitchType): String = when (pitch) {
         PitchType.BATTING -> "batting-friendly"
         PitchType.BOWLING -> "bowling-friendly"
@@ -122,7 +134,7 @@ object ScorecardText {
         val sb = StringBuilder()
         sb.append("SCORECARD\n")
         sb.append(state.userTeam.name).append(" vs ").append(state.opponentTeam.name).append("\n")
-        sb.append(formatName(state.format)).append(" match at ").append(stadium.name)
+        sb.append(formatNameFor(state)).append(" match at ").append(stadium.name)
             .append(", ").append(stadium.city).append(", ").append(stadium.country).append("\n")
         sb.append(tossLine(state)).append("\n")
         if (!resultText.isNullOrBlank()) sb.append("Result: ").append(resultText).append("\n")

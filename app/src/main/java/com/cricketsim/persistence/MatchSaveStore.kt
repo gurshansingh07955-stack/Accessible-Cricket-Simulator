@@ -171,7 +171,7 @@ fun MatchSnapshot.summary(): String {
     }
     val innings = if (state.currentInnings == 1) "first innings" else "second innings"
     val score = "${state.battingTeam.name} ${state.score.runs} for ${state.score.wickets} after ${state.score.overs}.${state.score.balls} overs"
-    return "${state.userTeam.name} versus ${state.opponentTeam.name}, $formatName, $innings, $score."
+    return "${state.userTeam.name} versus ${state.opponentTeam.name}, ${state.rules?.let { r -> if (r.overs == com.cricketsim.logic.MatchEngine.getFormatOvers(state.format)) formatName else "${r.overs}-over match" } ?: formatName}, $innings, $score."
 }
 
 /** Writes a DeliveryLength as {kind, name} so it can be read back as the right one of its two enums. */

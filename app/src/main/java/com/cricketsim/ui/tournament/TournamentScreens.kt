@@ -894,11 +894,9 @@ private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onCustom
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow("League tournament", "Play a full league season, saved as you go.", enabled = true, onClick = onLeague)
             Spacer(modifier = Modifier.height(12.dp))
-            ChoiceRow("Custom tournaments", "Play the tournaments you designed in Advanced Customisation.", enabled = true, onClick = onCustom)
-            Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow("Domestic tournament", "Coming soon.", enabled = false, onClick = {})
             Spacer(modifier = Modifier.height(12.dp))
-            ChoiceRow("Custom tournament", "Coming soon.", enabled = false, onClick = {})
+            ChoiceRow("Custom tournaments", "Play the tournaments you designed in Advanced Customisation.", enabled = true, onClick = onCustom)
         }
         Spacer(modifier = Modifier.height(8.dp))
         BackButton(onBack = onBack)

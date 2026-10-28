@@ -1,6 +1,6 @@
-Patch run: 40489531167
-Timestamp (UTC): 2026-10-27T10:34:39Z
+Patch run: 40610574775
+Timestamp (UTC): 2026-10-28T00:43:40Z
 Result: OK
 -----
-Patch 2026-10-26-056-manage-teams-gender-add-players.json
-  applied 24 operation(s) to 4 file(s)
+Patch 2026-10-28-057-menu-order-and-real-overs.json
+  applied 5 operation(s) to 4 file(s)
