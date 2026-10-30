@@ -402,7 +402,11 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (fixture.result != null) return state
         val home = if (fixture.homeId == userXI.id) userXI else opponentXI
         val away = if (fixture.homeId == userXI.id) opponentXI else userXI
-        val result = buildResult(finished, home, away) ?: return state
+        val result = (if (finished.test != null) {
+            buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, !Ranji.isGroupStage(fixture.stage))
+        } else {
+            buildResult(finished, home, away)
+        }) ?: return state
         val slim = finished.copy(
             ballByBall = emptyList(), lastSixBalls = emptyList(), fieldPlacements = emptyList(),
             regulationState = null, drinksBreak = null, activeRainDelay = null, pendingDismissal = null
@@ -553,7 +557,8 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         tags: Map<String, SquadTag>,
         stadium: Stadium,
         random: Random,
-        days: Int
+        days: Int,
+        knockout: Boolean = false
     ): SimResult? {
         val home = pickXI(homeSquad, tags, stadium)
         val away = pickXI(awaySquad, tags, stadium)
@@ -575,7 +580,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         )
         s = playFirstClass(s, stadium, random)
         val finished = TestMatch.finish(s) ?: return null
-        val result = buildFirstClassResult(finished, home, away) ?: return null
+        val result = buildFirstClassResult(finished, home, away, knockout) ?: return null
         val slim = finished.copy(
             ballByBall = emptyList(), lastSixBalls = emptyList(), fieldPlacements = emptyList(),
             regulationState = null, drinksBreak = null, activeRainDelay = null, firstInningsData = null
@@ -622,7 +627,9 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         return TestMatch.recordIfTest(s)
     }
 
-    private fun buildFirstClassResult(finished: MatchState, home: Team, away: Team): FixtureResult? {
+    /** A first-class result. A knockout is never left without a winner: a draw or a tie goes to the first-innings leader (the first-named side if level). */
+    private fun buildFirstClassResult(finished: MatchState, home: Team, away: Team, knockout: Boolean = false): FixtureResult? {
+        val knockoutWinner: String? = if (knockout && finished.winnerId == null) (FirstClass.firstInningsLeaderId(finished) ?: home.id) else null
         val innings = FirstClass.innings(finished)
         if (innings.isEmpty()) return null
         val homePoints = FirstClass.points(finished, home.id)
@@ -631,8 +638,13 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         val last = innings.last()
         val award = PlayerAwards.playerOfTheMatch(finished)
         return FixtureResult(
-            winnerId = finished.winnerId,
-            summary = FirstClass.summary(finished, home, away, homePoints, awayPoints),
+            winnerId = knockoutWinner ?: finished.winnerId,
+            summary = if (knockoutWinner != null) {
+                FirstClass.summary(finished, home, away, homePoints, awayPoints, withPoints = false) + " " +
+                    (if (knockoutWinner == home.id) home.name else away.name) + " go through on the first innings."
+            } else {
+                FirstClass.summary(finished, home, away, homePoints, awayPoints, withPoints = !knockout)
+            },
             firstBattingId = first.teamId,
             firstRuns = first.runs,
             firstWickets = first.wickets,
@@ -655,7 +667,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
         val sim = (if (Ranji.isRanji(state.tournamentId)) {
-            simulateFirstClass(home, away, state.tags, stadium, random, Ranji.daysFor(fixture.stage))
+            simulateFirstClass(home, away, state.tags, stadium, random, Ranji.daysFor(fixture.stage), !Ranji.isGroupStage(fixture.stage))
         } else {
             simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
                 state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage))

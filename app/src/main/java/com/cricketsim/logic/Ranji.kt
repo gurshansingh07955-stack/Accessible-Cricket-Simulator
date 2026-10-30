@@ -36,7 +36,12 @@ object Ranji {
         return Entry(p[0].trim(), p.getOrElse(1) { "" }, p.getOrNull(2)?.firstOrNull() ?: '-', p.getOrNull(4) ?: "")
     }
 
-    fun daysFor(stage: String): Int = if (stage in STAGES) LEAGUE_DAYS else KNOCKOUT_DAYS
+    const val PLATE_FINAL = "Plate Final"
+
+    fun isGroupStage(stage: String): Boolean = stage in STAGES
+
+    /** League matches and the Plate Final are four days, the quarter-finals, semi-finals and the Final five. */
+    fun daysFor(stage: String): Int = if (stage in STAGES || stage == PLATE_FINAL) LEAGUE_DAYS else KNOCKOUT_DAYS
 
     private val DEFS: List<TeamDef> by lazy {
         TEAM_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->
@@ -218,8 +223,56 @@ object Ranji {
         }
     }
 
-    /** The knockouts (quarter-finals, semi-finals, the Final, the Plate final) come in a later part. */
-    fun advance(state: TournamentState): TournamentState = state
+    private fun nameOf(state: TournamentState, id: String): String = state.teams.find { it.id == id }?.name ?: id
+
+    /**
+     * The knockouts, created as the teams become known: when the last Elite group match is played the quarter-finals (A1 v C2, B1 v D2,
+     * C1 v A2, D1 v B2), then each semi-final and the Final as the matches before them are won; the Plate Final when the Plate group
+     * is done. A knockout is never left without a winner (a draw goes to the first-innings leader, see CplSimulator.simulateFirstClass).
+     */
+    fun advance(state: TournamentState): TournamentState {
+        var fx = state.fixtures
+        fun complete(stage: String): Boolean {
+            val l = fx.filter { it.stage == stage }
+            return l.isNotEmpty() && l.all { it.result != null }
+        }
+        fun add(stage: String, home: String?, away: String?) {
+            if (home == null || away == null) return
+            if (fx.any { it.stage == stage }) return
+            fx = fx + TournamentFixture(fx.size, fx.size + 1, stage, home, away, homeGround(home))
+        }
+        fun winnerOf(stage: String): String? = fx.firstOrNull { it.stage == stage }?.result?.winnerId
+        val elite = STAGES.take(4)
+        if (elite.all { complete(it) }) {
+            val top = elite.map { g -> FirstClass.standings(state.copy(fixtures = fx), g).map { it.team.id } }
+            add("Quarter-final 1", top[0].getOrNull(0), top[2].getOrNull(1))
+            add("Quarter-final 2", top[1].getOrNull(0), top[3].getOrNull(1))
+            add("Quarter-final 3", top[2].getOrNull(0), top[0].getOrNull(1))
+            add("Quarter-final 4", top[3].getOrNull(0), top[1].getOrNull(1))
+        }
+        add("Semi-final 1", winnerOf("Quarter-final 1"), winnerOf("Quarter-final 4"))
+        add("Semi-final 2", winnerOf("Quarter-final 2"), winnerOf("Quarter-final 3"))
+        add("Final", winnerOf("Semi-final 1"), winnerOf("Semi-final 2"))
+        if (complete(STAGES[4])) {
+            val plate = FirstClass.standings(state.copy(fixtures = fx), STAGES[4]).map { it.team.id }
+            add(PLATE_FINAL, plate.getOrNull(0), plate.getOrNull(1))
+        }
+        return state.copy(fixtures = fx)
+    }
+
+    /** Promotion and relegation, once they are known: the Plate Final winner goes up, the bottom Elite side goes down. */
+    fun seasonEndLines(state: TournamentState): List<String> {
+        val lines = ArrayList<String>()
+        val promoted = state.fixtures.firstOrNull { it.stage == PLATE_FINAL }?.result?.winnerId
+        if (promoted != null) lines.add("${nameOf(state, promoted)} won the Plate Final and are promoted to the Elite groups next season.")
+        val elite = STAGES.take(4)
+        if (elite.all { g -> state.fixtures.filter { it.stage == g }.all { it.result != null } }) {
+            val bottom = elite.flatMap { FirstClass.standings(state, it) }
+                .sortedWith(compareBy<FcRow>({ it.points }, { it.won }, { it.quotient })).firstOrNull()
+            if (bottom != null) lines.add("${bottom.team.name} finished bottom of the Elite groups and are relegated to the Plate group next season.")
+        }
+        return lines
+    }
 
     fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =
         TournamentState(

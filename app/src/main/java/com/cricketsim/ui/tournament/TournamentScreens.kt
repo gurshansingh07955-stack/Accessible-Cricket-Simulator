@@ -538,7 +538,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                         "then Qualifier 1, the Eliminator, Qualifier 2 and the Final at Newlands. At most four overseas players in your XI."
                     isWc -> "The ICC Men's T20 World Cup 2026: the 20 real teams and squads in their four groups, the real group fixtures across India and Sri Lanka, then the Super 8, the semi-finals and the Final at Ahmedabad."
                     isRanji -> "The Ranji Trophy 2026-27: the 38 real teams and squads in four Elite groups and the Plate group, and the real group fixtures, in four-day matches. " +
-                        "For now the computer plays every match, yours included; playing your own four-day match and the knockouts are coming."
+                        "Play your own four-day matches or let the computer play them. The top two of each Elite group go through to the quarter-finals, then the semi-finals and the Final (five days each); a drawn knockout goes to the side ahead on the first innings. The Plate Final decides the promotion."
                     isCustomKind -> CustomTournaments.introOf(customId)
                     isAg -> "The men's cricket event of the 2026 Asian Games in Nisshin, Japan: ten teams, two groups of three, the quarter-finals with India, Pakistan, Sri Lanka and Bangladesh seeded, the semi-finals, the bronze medal match and the gold medal match."
                     isAc -> "The men's T20 Asia Cup 2025: the eight real teams and squads in two groups of four, the real group fixtures in Dubai and Abu Dhabi, then the Super 4 and the Final."
@@ -1372,8 +1372,8 @@ private fun MatchesTab(
     val next = CplSimulator.nextFixture(state)
     val champion = CplSimulator.champion(state)
     val nextIsMine = next != null && CplSimulator.involves(next, state.userTeamId)
-    // Playing your own four-day match is a later part of the Ranji Trophy: for now the computer plays it.
-    val canPlay = state.tournamentId != Ranji.TOURNAMENT_ID
+    // Every tournament, the Ranji Trophy included, lets you play your own match.
+    val canPlay = true
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
             Column(modifier = Modifier.padding(bottom = 8.dp)) {

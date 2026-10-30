@@ -43,5 +43,16 @@ fun RanjiTableTab(state: TournamentState) {
             }
             Spacer(modifier = Modifier.height(16.dp))
         }
+        val endLines = remember(state) { Ranji.seasonEndLines(state) }
+        if (endLines.isNotEmpty()) {
+            Text(
+                text = "Promotion and relegation",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() }
+            )
+            endLines.forEach {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp))
+            }
+        }
     }
 }

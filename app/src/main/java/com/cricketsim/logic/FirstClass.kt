@@ -92,11 +92,11 @@ object FirstClass {
         }
     }
 
-    fun summary(s: MatchState, home: Team, away: Team, homePoints: Int, awayPoints: Int): String {
+    fun summary(s: MatchState, home: Team, away: Team, homePoints: Int, awayPoints: Int, withPoints: Boolean = true): String {
         val list = innings(s)
         val result = TestMatch.resultText(s) ?: "Match drawn."
         return "${CplData.shortName(home.id)} ${teamText(list, home)}, ${CplData.shortName(away.id)} ${teamText(list, away)}. " +
-            "$result Points: ${CplData.shortName(home.id)} $homePoints, ${CplData.shortName(away.id)} $awayPoints."
+            (if (withPoints) "$result Points: ${CplData.shortName(home.id)} $homePoints, ${CplData.shortName(away.id)} $awayPoints." else result)
     }
 
     /** The table of one group, every team of it, best first. */
