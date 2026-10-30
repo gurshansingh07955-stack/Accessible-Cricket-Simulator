@@ -69,6 +69,14 @@ object AiBallModel {
     private const val ODI_DOT = 1.30
     private const val ODI_RUNS = 0.98
 
+    // A first-class match (the Ranji Trophy): Test tempo. Measured on a node copy of `sample` (mid-rated sides, no fielders, no ground effects):
+    // about 290 runs an innings in 90 overs at 3 an over, all out. Turn these to change the pace.
+    private const val TEST_BOUNDARY = 0.42
+    private const val TEST_SIX = 0.30
+    private const val TEST_WICKET = 0.48
+    private const val TEST_DOT = 2.2
+    private const val TEST_RUNS = 0.74
+
     fun sample(state: MatchState, stadium: Stadium, random: Random): BallOutcome {
         val striker = state.currentBatsmen.first
         val bowler = state.currentBowler
@@ -110,11 +118,12 @@ object AiBallModel {
         val fraction = balls.toDouble() / (limit * 6)
         // The Big Bash: a four-over powerplay, and the Power Surge the batting side usually takes (overs 15 and 16).
         val bigBash = state.surge != null && limit >= 15
-        val odi = limit >= 40
+        val test = state.test != null
+        val odi = limit >= 40 && !test
         val powerplayEnd = if (bigBash || odi) 0.2 else 0.3
         val middleEnd = if (odi) 0.8 else 0.75
         val inSurge = bigBash && balls >= 84 && balls < 96
-        when {
+        if (!test) when {
             fraction < powerplayEnd || inSurge -> { fBoundary *= 1.15; fDot *= 0.95 }
             fraction < middleEnd -> { fBoundary *= 0.85; fRuns *= 1.08; fWicket *= 0.95 }
             else -> { fBoundary *= 1.4; fWicket *= 1.3; fDot *= 0.85 }
@@ -136,6 +145,16 @@ object AiBallModel {
             fRuns *= ODI_RUNS
         }
 
+        // A first-class match: Test tempo, a pitch that wears over the days and the age of the ball (logic/TestMatch.kt).
+        if (test) {
+            val wear = TestMatch.wearFactor(state)
+            val ballFactor = if (spin) 1.0 else if (TestMatch.ballAge(state) < TestMatch.NEW_BALL_BOOST_BALLS) TestMatch.NEW_BALL_WICKET else TestMatch.OLD_BALL_WICKET
+            fBoundary *= TEST_BOUNDARY * (1.0 - 0.12 * wear)
+            fWicket *= TEST_WICKET * (1.0 + 0.35 * wear + (if (spin) 0.35 * wear else 0.0)) * ballFactor
+            fDot *= TEST_DOT * (1.0 + 0.12 * wear)
+            fRuns *= TEST_RUNS
+        }
+
         // The pitch.
         when (state.pitchType) {
             PitchType.BATTING -> { fBoundary *= 1.1; fWicket *= 0.9 }
@@ -150,7 +169,7 @@ object AiBallModel {
 
         // The chase.
         val target = state.target
-        if (state.currentInnings == 2 && target != null) {
+        if (!test && state.currentInnings == 2 && target != null) {
             val need = target - state.score.runs
             val ballsLeft = maxOf(1, limit * 6 - balls)
             val required = need * 6.0 / ballsLeft
@@ -160,10 +179,22 @@ object AiBallModel {
                 required < 6 -> { fBoundary *= 0.9; fWicket *= 0.85 }
             }
         }
+        // The fourth innings of a first-class match: go for it when the runs are within reach, block for the draw when they are not.
+        if (test && state.currentInnings == 4 && target != null) {
+            val need = target - state.score.runs
+            val ballsLeft = maxOf(1, TestMatch.ballsLeft(state))
+            val required = need * 6.0 / ballsLeft
+            when {
+                required > 7.0 -> { fBoundary *= 0.6; fWicket *= 0.6; fRuns *= 0.8; fDot *= 1.3 }
+                required > 4.2 -> { fBoundary *= 1.25; fWicket *= 1.25 }
+                required < 2.2 -> { fBoundary *= 0.9; fWicket *= 0.85 }
+            }
+        }
 
+        val sixScale = if (test) TEST_SIX else 1.0
         val wicketChance = if (freeHit) 0.0 else WICKET * fWicket
         val weights = doubleArrayOf(
-            DOT * fDot, ONE * fRuns, TWO * fRuns, THREE * fRuns, FOUR * fBoundary, SIX * fBoundary, wicketChance
+            DOT * fDot, ONE * fRuns, TWO * fRuns, THREE * fRuns, FOUR * fBoundary, SIX * fBoundary * sixScale, wicketChance
         )
 
         // Extras first: a wide, or a no-ball (which the batter still plays, and which makes the next a free hit).

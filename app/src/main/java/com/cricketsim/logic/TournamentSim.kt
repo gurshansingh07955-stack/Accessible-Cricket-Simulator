@@ -31,6 +31,7 @@ object CplSimulator {
 
     private const val OBSERVER_ID = "cpl_observer"
     private const val MAX_DELIVERIES = 2500
+private const val FIRST_CLASS_MAX_LOOPS = 20000
     private const val MAX_OVERSEAS = 4
 
     class SimResult(val result: FixtureResult, val scorecard: MatchState, val home: Team, val away: Team, val finished: MatchState)
@@ -301,7 +302,7 @@ object CplSimulator {
 
         all.forEach { p -> m[p.id] = get(p.id).let { it.copy(matches = it.matches + 1) } }
 
-        for (data in listOfNotNull(finished.firstInningsData, finished.currentInningsData)) {
+        for (data in (if (finished.test != null) TestMatch.allInnings(finished) else listOfNotNull(finished.firstInningsData, finished.currentInningsData))) {
             val fielders = if (data.bowlingTeamId == home.id) home.players else away.players
             for (b in data.batsmanStats) {
                 val cur = get(b.playerId)
@@ -482,6 +483,7 @@ object CplSimulator {
         if (state.tournamentId == ChampionsTrophy.TOURNAMENT_ID) return ChampionsTrophy.advance(state)
         if (state.tournamentId == AsiaCup.TOURNAMENT_ID) return AsiaCup.advance(state)
         if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)
+        if (state.tournamentId == Ranji.TOURNAMENT_ID) return Ranji.advance(state)
         if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
@@ -541,13 +543,123 @@ object CplSimulator {
         return state.copy(fixtures = fixtures)
     }
 
+    /**
+     * A first-class match between two computer sides (the Ranji Trophy): `days` long, with the rules of logic/TestMatch.kt
+     * (follow-on, declarations, the new ball, a draw when the overs run out). Null if it could not be played.
+     */
+    fun simulateFirstClass(
+        homeSquad: Team,
+        awaySquad: Team,
+        tags: Map<String, SquadTag>,
+        stadium: Stadium,
+        random: Random,
+        days: Int
+    ): SimResult? {
+        val home = pickXI(homeSquad, tags, stadium)
+        val away = pickXI(awaySquad, tags, stadium)
+        val weather = WeatherSystem.generateWeatherForStadium(stadium)
+        val tossWinner = if (random.nextBoolean()) home else away
+        val decision = tossDecision(stadium, weather)
+        var s = MatchStateMachine.createNewMatch(
+            MatchFormat.TEST, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather,
+            rules = TestMatch.rulesForDays(days)
+        )
+        s = s.copy(
+            userTeam = home.copy(id = OBSERVER_ID),
+            needsOpenerSelection = false,
+            needsBowlerSelection = false,
+            fieldPlacements = FieldingSystem.generateAiFieldPlacements(
+                FieldingSystem.getFieldingPlayers(s.bowlingTeam, s.currentBowler.id),
+                false
+            )
+        )
+        s = playFirstClass(s, stadium, random)
+        val finished = TestMatch.finish(s) ?: return null
+        val result = buildFirstClassResult(finished, home, away) ?: return null
+        val slim = finished.copy(
+            ballByBall = emptyList(), lastSixBalls = emptyList(), fieldPlacements = emptyList(),
+            regulationState = null, drinksBreak = null, activeRainDelay = null, firstInningsData = null
+        )
+        return SimResult(result, slim, home, away, finished)
+    }
+
+    /** Ball by ball until the match is decided or the overs run out; the computer declares, enforces the follow-on and takes the new ball. */
+    private fun playFirstClass(start: MatchState, stadium: Stadium, random: Random): MatchState {
+        var s = start
+        var loops = 0
+        while (loops < FIRST_CLASS_MAX_LOOPS) {
+            loops++
+            if (s.drinksBreak != null) s = s.copy(drinksBreak = null)
+            if (s.activeRainDelay != null) s = MatchStateMachine.resumeFromRainDelay(s)
+            if (s.pendingDismissal != null) {
+                val next = MatchStateMachine.getAvailableBatsmen(s).firstOrNull()
+                s = if (next != null) MatchSimulation.completeWicketReplacement(s, next, stadium) else s.copy(pendingDismissal = null)
+                continue
+            }
+            val declare = s.score.balls == 0 && TestMatch.aiShouldDeclare(s)
+            if (declare || MatchSimulation.isInningsOver(s) || MatchSimulation.isTargetReached(s) || TestMatch.timeUp(s)) {
+                val recorded = TestMatch.recordCurrent(s, declare)
+                if (TestMatch.outcome(recorded) != null || TestMatch.timeUp(recorded)) return recorded
+                val next = if (TestMatch.followOnAvailable(recorded)) {
+                    TestMatch.setFollowOn(recorded, TestMatch.aiEnforcesFollowOn(recorded))
+                } else {
+                    recorded
+                }
+                s = TestMatch.startNextInnings(next)
+                continue
+            }
+            if (s.score.balls == 0 && TestMatch.aiShouldTakeNewBall(s)) s = TestMatch.takeNewBall(s)
+            val delivery = MatchSimulation.prepareAiDelivery(s)
+            val outcome = AiBallModel.sample(delivery.state, stadium, random)
+            s = MatchSimulation.simulateOneBall(
+                state = delivery.state,
+                stadium = stadium,
+                difficulty = Difficulty.MEDIUM,
+                presetBowlingDecision = delivery.bowling,
+                outcomeOverride = outcome
+            ).state
+        }
+        return TestMatch.recordIfTest(s)
+    }
+
+    private fun buildFirstClassResult(finished: MatchState, home: Team, away: Team): FixtureResult? {
+        val innings = FirstClass.innings(finished)
+        if (innings.isEmpty()) return null
+        val homePoints = FirstClass.points(finished, home.id)
+        val awayPoints = FirstClass.points(finished, away.id)
+        val first = innings.first()
+        val last = innings.last()
+        val award = PlayerAwards.playerOfTheMatch(finished)
+        return FixtureResult(
+            winnerId = finished.winnerId,
+            summary = FirstClass.summary(finished, home, away, homePoints, awayPoints),
+            firstBattingId = first.teamId,
+            firstRuns = first.runs,
+            firstWickets = first.wickets,
+            firstBalls = first.balls,
+            secondRuns = last.runs,
+            secondWickets = last.wickets,
+            secondBalls = last.balls,
+            playerOfMatchId = award?.playerId,
+            playerOfMatch = award?.let { "${it.name} (${CplData.shortName(it.teamId)}), ${it.summary}" },
+            fcInnings = innings,
+            fcKind = FirstClass.kind(finished),
+            homePoints = homePoints,
+            awayPoints = awayPoints
+        )
+    }
+
     /** Simulates one fixture and records its result, scorecard and the players' stats. */
     fun simulateFixture(state: TournamentState, fixture: TournamentFixture, random: Random): TournamentState {
         val home = state.teams.find { it.id == fixture.homeId } ?: return state
         val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
-        val sim = simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
-            state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage)) ?: return state
+        val sim = (if (Ranji.isRanji(state.tournamentId)) {
+            simulateFirstClass(home, away, state.tags, stadium, random, Ranji.daysFor(fixture.stage))
+        } else {
+            simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
+                state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage))
+        }) ?: return state
         val fixtures = state.fixtures.map {
             if (it.id == fixture.id) it.copy(result = sim.result, scorecard = sim.scorecard) else it
         }

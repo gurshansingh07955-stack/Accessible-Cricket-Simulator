@@ -19,7 +19,9 @@ data class MatchRules(
     val rainEnabled: Boolean,
     val maxOversPerBowler: Int,
     /** True = a tied match is not settled by a Super Over (the result is a tie). */
-    val noSuperOver: Boolean = false
+    val noSuperOver: Boolean = false,
+    /** 0 = not a Test; 4 or 5 = the days of a first-class match (logic/TestMatch.kt). */
+    val testDays: Int = 0
 )
 
 /**

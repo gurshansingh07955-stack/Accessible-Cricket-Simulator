@@ -34,7 +34,9 @@ data class TestState(
     val ballStartBalls: Int = 0,
     val newBallsTaken: Int = 0,
     /** The user has been told that the new ball is available. */
-    val newBallNotified: Boolean = false
+    val newBallNotified: Boolean = false,
+    /** The length of the match: 5 days in a Test, 4 in a Ranji Trophy league match. */
+    val days: Int = 5
 )
 
 data class TestOutcome(val winnerId: String?, val text: String)
@@ -76,9 +78,22 @@ object TestMatch {
     const val SCALE_TWO = 0.8
     const val SCALE_THREE = 0.7
 
-    fun applies(format: MatchFormat, rules: MatchRules?): Boolean = FIVE_DAY_TEST && format == MatchFormat.TEST && rules == null
+    /** A Test, or a first-class match given its days by the rules (the Ranji Trophy). */
+    fun applies(format: MatchFormat, rules: MatchRules?): Boolean =
+        FIVE_DAY_TEST && format == MatchFormat.TEST && (rules == null || rules.testDays > 0)
 
-    fun start(): TestState = TestState()
+    fun start(rules: MatchRules? = null): TestState = TestState(days = rules?.testDays?.takeIf { it > 0 } ?: DAYS)
+
+    /** The rules of a first-class match of this many days played by two computer sides (no DRS, no rain, no Super Over). */
+    fun rulesForDays(days: Int): MatchRules = MatchRules(
+        overs = days * OVERS_PER_DAY, restrictionBalls = 0, fieldersOutside = 5, drsReviews = 0,
+        rainEnabled = false, maxOversPerBowler = 999, noSuperOver = true, testDays = days
+    )
+
+    fun totalBalls(s: MatchState): Int = (s.test?.days ?: DAYS) * BALLS_PER_DAY
+
+    /** 200 in a five-day match, 150 in a four-day one. */
+    fun followOnLead(s: MatchState): Int = if ((s.test?.days ?: DAYS) >= 5) FOLLOW_ON_LEAD else 150
 
     private fun ballsOf(score: MatchScore): Int = score.overs * 6 + score.balls
 
@@ -93,9 +108,11 @@ object TestMatch {
         else -> "fourth"
     }
 
-    private fun teamOf(s: MatchState, id: String): Team = if (s.userTeam.id == id) s.userTeam else s.opponentTeam
+    // Looked up among the two sides that are playing: in a match between two computer sides the "user" team has another id.
+    private fun teamOf(s: MatchState, id: String): Team =
+        if (s.battingTeam.id == id) s.battingTeam else if (s.bowlingTeam.id == id) s.bowlingTeam else if (s.userTeam.id == id) s.userTeam else s.opponentTeam
 
-    private fun otherTeam(s: MatchState, id: String): Team = if (s.userTeam.id == id) s.opponentTeam else s.userTeam
+    private fun otherTeam(s: MatchState, id: String): Team = if (s.battingTeam.id == id) s.bowlingTeam else s.battingTeam
 
     // ---------------------------------------------------------------- the clock
 
@@ -106,14 +123,14 @@ object TestMatch {
         return if (t.currentRecorded) done else done + ballsOf(s.score)
     }
 
-    fun ballsLeft(s: MatchState): Int = (MATCH_BALLS - matchBalls(s)).coerceAtLeast(0)
+    fun ballsLeft(s: MatchState): Int = (totalBalls(s) - matchBalls(s)).coerceAtLeast(0)
 
     fun oversLeft(s: MatchState): Int = ballsLeft(s) / 6
 
     /** The 450 overs are bowled (checked when an over ends, or when an innings ends). */
     fun timeUp(s: MatchState): Boolean {
         val t = s.test ?: return false
-        return matchBalls(s) >= MATCH_BALLS && (t.currentRecorded || s.score.balls == 0)
+        return matchBalls(s) >= totalBalls(s) && (t.currentRecorded || s.score.balls == 0)
     }
 
     private fun teamRuns(s: MatchState, teamId: String): Int {
@@ -136,7 +153,7 @@ object TestMatch {
     /** 0 (day one) to about 1 (day five); a dusty pitch wears faster, a flat one slower. Used by MatchEngine. */
     fun wearFactor(s: MatchState): Double {
         if (s.test == null) return 0.0
-        val base = (matchBalls(s).toDouble() / MATCH_BALLS).coerceIn(0.0, 1.0)
+        val base = (matchBalls(s).toDouble() / totalBalls(s)).coerceIn(0.0, 1.0)
         val rate = when (s.pitchType) {
             PitchType.DUSTY -> 1.3
             PitchType.BATTING -> 0.7
@@ -180,7 +197,7 @@ object TestMatch {
         if (s.matchStatus != MatchStatus.IN_PROGRESS || s.superOverRound != 0) return false
         if (s.score.balls != 0 || s.pendingDismissal != null || s.activeRainDelay != null || s.drinksBreak != null) return false
         val mb = matchBalls(s)
-        return mb < MATCH_BALLS && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION
+        return mb < totalBalls(s) && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION
     }
 
     fun beginBreak(s: MatchState): MatchState {
@@ -371,7 +388,7 @@ object TestMatch {
     fun followOnAvailable(s: MatchState): Boolean {
         val t = s.test ?: return false
         if (t.completed.size != 2 || !t.currentRecorded) return false
-        return t.completed[0].score.runs - t.completed[1].score.runs >= FOLLOW_ON_LEAD
+        return t.completed[0].score.runs - t.completed[1].score.runs >= followOnLead(s)
     }
 
     /** The side that batted first is the one that may enforce it. */
@@ -587,7 +604,7 @@ object TestMatch {
         val t = s.test ?: return emptyList()
         val k = t.breaksDone
         val lines = ArrayList<String>()
-        lines.add("Day ${k / 3 + 1} of $DAYS, ${sessionName(k % 3 + 1)} session. Innings ${s.currentInnings} of 4.")
+        lines.add("Day ${k / 3 + 1} of ${t.days}, ${sessionName(k % 3 + 1)} session. Innings ${s.currentInnings} of 4.")
         situationLine(s)?.let { lines.add(it) }
         lines.add(timeLine(s))
         lines.add(pitchReport(s))

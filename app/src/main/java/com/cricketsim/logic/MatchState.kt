@@ -312,7 +312,7 @@ object MatchStateMachine {
             dlsRevised = false,
             impact = impact,
             rules = rules,
-            test = if (TestMatch.applies(format, rules)) TestMatch.start() else null
+            test = if (TestMatch.applies(format, rules)) TestMatch.start(rules) else null
         )
         // Note: the web source calls saveMatch(newState) here — omitted,
         // persistence not ported yet (see file header).
