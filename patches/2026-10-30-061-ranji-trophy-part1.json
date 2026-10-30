@@ -1,0 +1,387 @@
+{
+  "name": "Ranji Trophy 2026-27, part 1: teams, squads, grounds, fixtures, four-day matches played by the computer, points and tables",
+  "message": "Domestic tournament: Ranji Trophy (38 teams, real groups and fixtures, first-class matches simulated, BCCI points, tables)",
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/Ranji.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * The Ranji Trophy 2026-27: 38 teams, four Elite groups of eight and a Plate group of six, the real group fixtures in their real order\n * and the real squads (the squads named for the first round, from Wisden; Haryana from Sportscafe; Sikkim's is last season's).\n * League matches are four days long (the first-class rules of logic/TestMatch.kt with `testDays` 4). The computer plays them\n * (`CplSimulator.simulateFirstClass`); playing your own match, the knockouts and promotion are later parts. See RANJI_TROPHY.md.\n *\n * Players already in the game (the roster and every league) are copied with their ratings; the rest are new, with ESTIMATED ratings\n * from the team's strength and the role (read from Wikipedia where a page exists, otherwise from the squad order).\n */\nobject Ranji {\n\n    const val TOURNAMENT_ID = \"ranji_2026_27\"\n    const val TOURNAMENT_NAME = \"Ranji Trophy 2026-27\"\n    const val LEAGUE_DAYS = 4\n    const val KNOCKOUT_DAYS = 5\n\n    val STAGES = listOf(\"Elite Group A\", \"Elite Group B\", \"Elite Group C\", \"Elite Group D\", \"Plate Group\")\n    private val STAGE_OF_LETTER = mapOf('A' to STAGES[0], 'B' to STAGES[1], 'C' to STAGES[2], 'D' to STAGES[3], 'P' to STAGES[4])\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n\n    /** name, flags (c, vc, wk), role letter (B, W, A, L or ? / - when unknown), batting hand, bowling style code. */\n    private class Entry(val name: String, val flags: String, val role: Char, val bowl: String)\n\n    private class TeamDef(val id: String, val name: String, val shortName: String, val home: String, val tier: Int, val stage: String, val squad: List<Entry>)\n\n    private fun parseEntry(text: String): Entry {\n        val p = text.split(\"~\")\n        return Entry(p[0].trim(), p.getOrElse(1) { \"\" }, p.getOrNull(2)?.firstOrNull() ?: '-', p.getOrNull(4) ?: \"\")\n    }\n\n    fun daysFor(stage: String): Int = if (stage in STAGES) LEAGUE_DAYS else KNOCKOUT_DAYS\n\n    private val DEFS: List<TeamDef> by lazy {\n        TEAM_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n            val p = line.split(\"|\")\n            TeamDef(\"rj_\" + p[0], p[1], p[2], p[3], p[4].toInt(), STAGE_OF_LETTER.getValue(p[5][0]), p[6].split(\";\").map { parseEntry(it) })\n        }\n    }\n\n    fun isRanji(tournamentId: String?): Boolean = tournamentId == TOURNAMENT_ID\n\n    fun isTeam(teamId: String): Boolean = DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = DEFS.find { it.id == teamId }?.shortName\n\n    fun homeGround(teamId: String): String = DEFS.find { it.id == teamId }?.home ?: \"wankhede\"\n\n    fun groupTeamIds(stage: String): Set<String> = DEFS.filter { it.stage == stage }.map { it.id }.toSet()\n\n    fun stageOf(teamId: String): String? = DEFS.find { it.id == teamId }?.stage\n\n    // ---------------------------------------------------------------- grounds\n\n    private fun pitchOf(c: Char): PitchType = when (c) {\n        'B' -> PitchType.BATTING\n        'D' -> PitchType.DUSTY\n        'G' -> PitchType.GREEN\n        'O' -> PitchType.BOWLING\n        else -> PitchType.BALANCED\n    }\n\n    private fun pitchText(t: PitchType): String = when (t) {\n        PitchType.BATTING -> \"A flat, true surface that generally favors batters.\"\n        PitchType.GREEN -> \"A grassy surface with seam movement early on.\"\n        PitchType.DUSTY -> \"A dry, dusty surface that turns as the match goes on.\"\n        PitchType.BOWLING -> \"A surface that helps the bowlers.\"\n        else -> \"A balanced surface with something for everyone.\"\n    }\n\n    private fun boundaryOf(c: Char): BoundarySize = when (c) {\n        'S' -> BoundarySize.SMALL\n        'L' -> BoundarySize.LARGE\n        else -> BoundarySize.MEDIUM\n    }\n\n    /** The grounds of the competition. Estimated ratings (pitch, boundary, altitude): the game has no data for most of them. */\n    val stadiums: List<Stadium> by lazy {\n        VENUE_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n            val p = line.split(\"|\")\n            val pitch = pitchOf(p[3][0])\n            Stadium(\n                id = p[0], name = p[1], city = p[2], country = \"India\", homeTeamIds = emptyList(),\n                pitchType = pitch, pitchDescription = pitchText(pitch), boundarySize = boundaryOf(p[4][0]),\n                altitudeM = p[5].toInt(), dewFactor = 0.25, avgT20FirstInningsScore = 160,\n                climate = StadiumClimate(0.2, 55, 27, 10, \"Typical conditions for the Indian domestic season.\")\n            )\n        }\n    }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    // ---------------------------------------------------------------- players\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** A steady \"random\" number from a name, so a player's estimated ratings are the same every time. */\n    private fun jit(name: String, salt: Int, range: Int): Int {\n        var h = salt * 7919\n        for (c in name) h = h * 31 + c.code\n        return (h and 0x7fffffff) % (2 * range + 1) - range\n    }\n\n    private fun assignRoles(entries: List<Entry>): List<PlayerRole> {\n        val n = entries.size\n        val roles = entries.mapIndexed { i, e ->\n            when {\n                e.flags.contains(\"wk\") || e.role == 'W' -> WK\n                e.role == 'B' -> BAT\n                e.role == 'A' -> AR\n                e.role == 'L' -> BWL\n                i < (n * 4) / 10 -> BAT\n                i < (n * 6) / 10 -> AR\n                else -> BWL\n            }\n        }.toMutableList()\n        if (roles.none { it == WK }) {\n            val pick = (0 until n).firstOrNull { roles[it] == BAT && entries[it].role != 'B' } ?: (0 until n).firstOrNull { roles[it] == BAT } ?: 0\n            roles[pick] = WK\n        }\n        var need = 5 - roles.count { it == BWL || it == AR }\n        var k = n - 1\n        while (need > 0 && k >= 0) {\n            if (roles[k] == BAT && entries[k].role != 'B') { roles[k] = BWL; need-- }\n            k--\n        }\n        k = n - 1\n        while (need > 0 && k >= 0) {\n            if (roles[k] == BAT) { roles[k] = BWL; need-- }\n            k--\n        }\n        return roles\n    }\n\n    private fun styleOf(code: String, name: String, role: PlayerRole): BowlingStyle = when (code) {\n        \"RF\", \"RFM\", \"RMF\", \"RM\", \"LF\", \"LFM\", \"LMF\", \"LM\" -> PACE\n        \"OB\", \"LB\", \"SLA\", \"SLC\" -> SPIN\n        else -> if (role == BWL || role == AR) (if (jit(name, 3, 4) % 3 == 0) SPIN else PACE) else PACE\n    }\n\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val roster = CricketData.getAllTeams().flatMap { it.players }.associateBy { norm(it.name) }\n        val cpl = CplData.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val adt = AbuDhabiT10.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val lpl = LankaPremierLeague.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val ilt = InternationalLeagueT20.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val bbl = BigBashLeague.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val mlc = MajorLeagueCricket.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val sa = Sa20.buildTeams().first.flatMap { it.players }.associateBy { norm(it.name) }\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = DEFS.map { def ->\n            val roles = assignRoles(def.squad)\n            val tierDelta = when (def.tier) { 5 -> 7; 4 -> 3; 3 -> 0; 2 -> -4; else -> -9 }\n            val base = 56 + tierDelta\n            val players = def.squad.mapIndexed { index, e ->\n                val id = \"${def.id}_${index + 1}\"\n                val key = norm(e.name)\n                val known = roster[key] ?: cpl[key] ?: adt[key] ?: lpl[key] ?: ilt[key] ?: bbl[key] ?: mlc[key] ?: sa[key]\n                val player = if (known != null) {\n                    known.copy(id = id, teamId = def.id, name = e.name)\n                } else {\n                    val role = roles[index]\n                    val bat = when (role) {\n                        BAT -> base + 12 + jit(e.name, 1, 6) + (if (index < 6) 2 else 0)\n                        WK -> base + 9 + jit(e.name, 1, 6)\n                        AR -> base + 3 + jit(e.name, 1, 6)\n                        else -> base - 22 + jit(e.name, 1, 5)\n                    }.coerceIn(8, 92)\n                    val bowl = when (role) {\n                        BWL -> base + 8 + jit(e.name, 2, 6)\n                        AR -> base + 1 + jit(e.name, 2, 6)\n                        WK -> 8\n                        else -> 14 + jit(e.name, 2, 5)\n                    }.coerceIn(5, 92)\n                    val fixed = PlayerProfiles.role(e.name, role)\n                    Player(\n                        id = id, teamId = def.id, name = e.name, role = fixed,\n                        battingRating = bat, bowlingRating = bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(fixed, bat, bowl),\n                        bowlingStyle = PlayerProfiles.style(e.name, styleOf(e.bowl, e.name, role))\n                    )\n                }\n                tags[id] = SquadTag.DOMESTIC\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.shortName,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Customisation.applyToBuilt(Pair(teams, tags), true)\n    }\n\n    // ---------------------------------------------------------------- fixtures\n\n    /** The real group matches in the real order: round by round, group by group. A match with no ground named yet is at the first side's home ground. */\n    fun buildSchedule(): List<TournamentFixture> {\n        val rows = FIXTURE_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { it.split(\"|\") }\n        val order = \"ABCDP\"\n        val sorted = rows.sortedWith(compareBy({ it[1].toInt() }, { order.indexOf(it[0][0]) }))\n        return sorted.mapIndexed { index, p ->\n            val home = \"rj_\" + p[2]\n            val away = \"rj_\" + p[3]\n            val ground = p.getOrNull(4)?.takeIf { it.isNotEmpty() } ?: homeGround(home)\n            TournamentFixture(index, index + 1, STAGE_OF_LETTER.getValue(p[0][0]), home, away, ground)\n        }\n    }\n\n    /** The knockouts (quarter-finals, semi-finals, the Final, the Plate final) come in a later part. */\n    fun advance(state: TournamentState): TournamentState = state\n\n    fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n\n    // ---------------------------------------------------------------- the data\n\n    // id | ground (id, name, city, pitch B/L/D/G/O, boundary S/M/L, altitude m)\n    private const val VENUE_TEXT = \"\"\"\nrajgir|Rajgir International Cricket Stadium|Rajgir|L|M|70\npanjim|Panjim Gymkhana Ground|Panaji|G|S|5\nsrinagar|Sher-i-Kashmir Stadium|Srinagar|G|L|1585\nnagpur|Vidarbha Cricket Association Stadium|Nagpur|D|L|310\nvadodara_rel|Reliance Stadium|Vadodara|B|M|35\nkotambi|Kotambi Stadium|Vadodara|L|M|35\npuducherry|CAP Ground, Siechem|Puducherry|L|M|10\nkanpur|Green Park|Kanpur|D|L|126\nindore|Holkar Cricket Stadium|Indore|B|S|553\nporvorim|Goa Cricket Association Academy Ground|Porvorim|G|M|10\nsecunderabad|Gymkhana Ground|Secunderabad|L|M|536\nmulapadu|Dr. DVR Praneetha Cricket Ground|Mulapadu|B|M|20\nguwahati|Barsapara Cricket Stadium|Guwahati|G|L|55\nmullanpur|Maharaja Yadavindra Singh International Cricket Stadium|New Chandigarh|G|L|300\nrajkot|Niranjan Shah Stadium|Rajkot|B|M|130\nalur|KSCA Cricket Ground|Alur|L|M|900\nmysore|SNR Wadeyar Ground|Mysuru|L|M|770\njamshedpur|Keenan Stadium|Jamshedpur|L|M|135\nkalyani|Bengal Cricket Academy Ground|Kalyani|G|M|10\nmotera|Narendra Modi Stadium|Ahmedabad|L|L|55\npalam_a|Palam A Ground|Delhi|L|M|230\npalam_b|Palam B Ground|Delhi|L|M|230\npune|Maharashtra Cricket Association Stadium|Pune|B|L|560\ngreenfield|Greenfield International Stadium|Thiruvananthapuram|L|L|5\nranchi|JSCA International Stadium|Ranchi|D|L|650\nbhubaneswar|KIIT Stadium|Bhubaneswar|L|M|45\nmangalapuram|KCA Cricket Ground|Mangalapuram|G|M|10\neden|Eden Gardens|Kolkata|L|L|10\nrohtak|Chaudhary Bansi Lal Cricket Stadium|Rohtak|B|M|220\nbrabourne|Brabourne Stadium|Mumbai|B|S|10\njaipur|Sawai Mansingh Stadium|Jaipur|B|L|430\nwankhede|Wankhede Stadium|Mumbai|B|M|10\nbilaspur|Luhnu Cricket Ground|Bilaspur|G|M|700\nchepauk|M. A. Chidambaram Stadium|Chennai|D|L|7\nbkc|Sharad Pawar Cricket Academy|Mumbai|L|M|10\ndehradun|Abhimanyu Cricket Academy|Dehradun|G|M|640\nchandigarh16|Sector 16 Stadium|Chandigarh|G|M|320\nrangpo|SICA Ground|Rangpo|G|S|280\nnadiad|Nadiad Cricket Ground|Nadiad|L|M|40\nshillong|Meghalaya Cricket Association Ground|Shillong|G|M|1500\nsovima|Nagaland Cricket Stadium|Sovima|G|M|150\nagartala|Maharaja Bir Bikram College Stadium|Agartala|L|M|13\nraipur|Shaheed Veer Narayan Singh Stadium|Raipur|B|L|300\n\"\"\"\n\n    // group | round | home code | away code | ground (blank = the first side's home ground)\n    private const val FIXTURE_TEXT = \"\"\"\nA|1|up|bih|rajgir\nA|1|bar|goa|panjim\nA|1|mp|jak|srinagar\nA|1|vid|pon|nagpur\nA|2|bih|bar|vadodara_rel\nA|2|pon|mp|puducherry\nA|2|jak|vid|srinagar\nA|2|up|goa|kanpur\nA|3|bar|jak|vadodara_rel\nA|3|bih|mp|indore\nA|3|goa|vid|nagpur\nA|3|up|pon|puducherry\nA|4|up|bar|kanpur\nA|4|goa|bih|\nA|4|vid|mp|\nA|4|jak|pon|srinagar\nA|5|bar|vid|kotambi\nA|5|bih|jak|\nA|5|mp|up|\nA|5|goa|pon|porvorim\nA|6|pon|bar|puducherry\nA|6|bih|vid|\nA|6|mp|goa|\nA|6|up|jak|\nA|7|bar|mp|vadodara_rel\nA|7|pon|bih|\nA|7|vid|up|\nA|7|jak|goa|\nB|1|tri|hyd|secunderabad\nB|1|kar|and|mulapadu\nB|1|ass|pun|mullanpur\nB|1|sau|chh|rajkot\nB|2|ass|tri|guwahati\nB|2|hyd|and|mulapadu\nB|2|kar|sau|alur\nB|2|pun|chh|mullanpur\nB|3|pun|hyd|secunderabad\nB|3|tri|kar|mysore\nB|3|ass|sau|rajkot\nB|3|and|chh|mulapadu\nB|4|chh|hyd|\nB|4|ass|kar|\nB|4|pun|and|\nB|4|tri|sau|\nB|5|ass|hyd|\nB|5|kar|chh|\nB|5|tri|pun|\nB|5|and|sau|\nB|6|hyd|kar|\nB|6|pun|sau|\nB|6|ass|chh|\nB|6|tri|and|\nB|7|sau|hyd|\nB|7|kar|pun|\nB|7|and|ass|\nB|7|chh|tri|\nC|1|jha|ker|jamshedpur\nC|1|del|ben|kalyani\nC|1|odi|guj|motera\nC|1|mah|ser|palam_a\nC|2|jha|mah|pune\nC|2|del|guj|palam_b\nC|2|ben|ser|palam_a\nC|2|ker|odi|greenfield\nC|3|del|jha|ranchi\nC|3|odi|ser|bhubaneswar\nC|3|guj|mah|pune\nC|3|ben|ker|mangalapuram\nC|4|odi|jha|\nC|4|guj|ker|\nC|4|del|ser|\nC|4|ben|mah|eden\nC|5|jha|ser|\nC|5|guj|ben|\nC|5|odi|del|\nC|5|mah|ker|\nC|6|jha|ben|\nC|6|ser|guj|\nC|6|ker|del|\nC|6|mah|odi|\nC|7|guj|jha|\nC|7|del|mah|\nC|7|ben|odi|\nC|7|ker|ser|\nD|1|hp|har|rohtak\nD|1|rai|utt|brabourne\nD|1|raj|tn|jaipur\nD|1|mum|cha|wankhede\nD|2|cha|har|rohtak\nD|2|hp|mum|bilaspur\nD|2|utt|tn|chepauk\nD|2|raj|rai|jaipur\nD|3|mum|har|bkc\nD|3|raj|utt|dehradun\nD|3|rai|tn|chepauk\nD|3|cha|hp|chandigarh16\nD|4|utt|har|\nD|4|hp|raj|\nD|4|rai|mum|\nD|4|cha|tn|\nD|5|rai|har|\nD|5|mum|utt|\nD|5|raj|cha|\nD|5|tn|hp|\nD|6|raj|har|\nD|6|hp|utt|\nD|6|cha|rai|\nD|6|tn|mum|\nD|7|har|tn|\nD|7|utt|cha|\nD|7|mum|raj|\nD|7|hp|rai|\nP|1|sik|meg|rangpo\nP|1|miz|man|nadiad\nP|1|ap|nag|\nP|2|meg|man|shillong\nP|2|miz|nag|sovima\nP|2|ap|sik|nadiad\nP|3|nag|sik|rangpo\nP|3|ap|man|motera\nP|3|miz|meg|nadiad\nP|4|man|sik|\nP|4|meg|nag|\nP|4|miz|ap|\nP|5|nag|man|\nP|5|meg|ap|\nP|5|sik|miz|\n\"\"\"\n\n    // code | name | short | home ground | tier 1-5 (strength guess) | group | squad (name~flags~role~hand~bowling style)\n    private const val TEAM_TEXT = \"\"\"\nup|Uttar Pradesh|UP|kanpur|4|A|Aryan Juyal~c+wk~W~R~;Abhishek Goswami~~?~?~?;Adarsh Singh~;Priyam Garg~~B~R~RM;Madhav Kaushik~~?~R~OB;Rinku Singh~~B~L~OB;Karan Sharma~~?~?~;Prashant Veer~~A~L~SLA;Abhinandan Singh~;Yash Dayal~~L~R~LFM;Zeeshan Ansari~~?~R~LB;Aaditya Sharma~;Aaradhya Yadav~;Vansh Chaudhary~;Kartik Yadav~;Kunal Tyagi~\nbih|Bihar|BIH|rajgir|2|A|Sakibul Gani~c~?~R~RMF;Himanshu Singh~vc;Sraman Nigrodh~wk;Piyush Singh~~?~?~?;Bipin Saurabh~wk;Mohammed Izhar~;Sakib Hussain~~L~R~RFM;Naman Gaurav~;Suraj Kashyap~~L~R~OB;Khalid Alam~;Ayush Loharuka~;Mangal Mahrour~~B~?~?;Raghuvendra Pratap Singh~~A~R~RMF;Prithvi Raj~~?~?~;Akash Raj~;Shabbir Khan~~?~R~RF;Amod Yadav~\nbar|Baroda|BAR|vadodara_rel|4|A|Atit Sheth~c~A~R~RMF;Priyanshu Moliya~;Mitesh Patel~wk~?~?~?;Shivalik Sharma~~?~L~?;Aryan Chavda~;Deepak Hooda~~A~R~OB;Bhargav Bhatt~~L~L~SLA;Raj Limbani~;Rasikh Salam~~L~R~RFM;Shashwat Rawat~vc~?~L~RMF;Manan Solanki~;Akshay More~;Dhruv Patel~~?~?~?;Mahesh Pithiya~~?~R~OB;Lakshit Toksiya~\ngoa|Goa|GOA|porvorim|2|A|Abhinav Tejrana~c;Deepraj Gaonkar~~?~?~?;Snehal Kauthankar~~B~R~OB;Lalit Yadav~~?~?~?;Darshan Misal~~?~?~?;Suyash Prabhudessai~~A~R~RM;Felix Alemao~~L~R~RM;Vasuki Koushik~~L~R~RM;Shivendra Bhujbal~;Rajashekhar Harikant~~?~R~?;Yash Kasvankar~;Manthan Khutkar~;Amulya Pandrekar~;Mohit Redkar~;Ruthvik Naik~;Shubham Tari~\nmp|Madhya Pradesh|MP|indore|4|A|Shubham Sharma~c~B~R~OB;Yash Dubey~~?~R~LB;Harsh Gawli~;Himanshu Mantri~wk~W~L~;Saransh Jain~~A~L~OB;Shivang Kumar~;Avesh Khan~~L~R~RFM;Kumar Kartikeya~~L~R~SLA;Aryan Pandey~;Kuldeep Sen~;Anubhav Agarwal~;Akshay Sharma~;Roshan Kewat~;Atharva Mahajan~;Chanchal Rathore~\njak|Jammu & Kashmir|J&K|srinagar|4|A|Abdul Samad~;Paras Dogra~;Shubham Khajuria~~B~R~?;Shubham Pundir~~B~L~LB;Qamran Iqbal~~B~R~?;Kanhaiya Wadhawan~wk~?~?~?;Yawer Hassan~;Abid Mushtaq~~A~?~?;Sahil Lotra~;Auqib Nabi~~L~R~RM;Sunil Kumar~;Rohit Sharma~~B~R~OB;Vanshaj Sharma~;Umran Malik~~L~R~RF\nvid|Vidarbha|VID|nagpur|5|A|Akshay Wadkar~c+wk~W~R~?;Danish Malewar~~B~R~LB;Aman Mokhade~~B~R~LB;Yash Rathod~~B~L~SLA;Ravikumar Samarth~~B~R~OB;Dhruv Shorey~~B~R~OB;Nachiket Bhute~~?~?~?;Harsh Dubey~~A~L~SLA;Parth Rekhade~~?~?~?;Atharva Taide~~B~L~SLA;Rajneesh Gurbani~~L~R~RMF;Praful Hinge~~L~R~RMF;Darshan Nalkande~~L~R~RFM;Ganesh Bhosle~;Satyam Bhoyar~\npon|Puducherry|PUD|puducherry|1|A|Mohit Kale~~?~R~LB;Aman Khan~;Nikhil Gangta~~?~R~RM;Ankit Sharma~~L~L~SLA;Gaurav Yadav~~?~R~RM;Neyan Shyam Kangayan~;Karan Kannan~;Logesh Prabagaran~;Prasad Pawar~;Ritesh Gudge~;Murugaiyan Sivamurugan~;Tahir Bhat~;Parandaman Thamaraikannan~~?~R~RM;Sagar Trivedi~~?~?~;Sagar Udeshi~~?~?~?;Vijai Raja~\ntri|Tripura|TRI|agartala|2|B|Manisankar Murasingh~c~A~L~RM;Abhijit Sarkar~vc~?~?~?;Bikramkumar Das~;Rajat Dey~~?~?~?;Amit Ali~;Mandeep Singh~~A~R~RM;Sridam Paul~;Hanuma Vihari~~A~R~OB;Parvez Sultan~~?~?~?;Ajay Sarkar~;Swapnil Singh~~L~R~SLA;Arindam Barman~;Bikramjit Debnath~;Hrituraj Roy~;Sandip Sarkar~\nhyd|Hyderabad|HYD|secunderabad|3|B|Mohammed Siraj~c~L~R~RF;Chama Milind~vc~L~L~LM;Tanmay Agarwal~~B~L~LB;Kodimela Himateja~;Rakshan Readdi~~?~?~?;Tanay Thyagarajan~~?~L~SLA;Abhirath Reddy~~?~R~?;Aniketh Reddy~;Ajay Dev Goud~~?~R~RM;Ruthik Mende~;Pragnay Reddy~~?~?~?;Rahul Radesh~;Rahul Singh~~?~?~;Sai Vikas Reddy~;Aelgani Varun Goud~\nkar|Karnataka|KAR|alur|5|B|Ravichandran Smaran~c;Mayank Agarwal~~B~R~OB;KV Aneesh~;Kruthik Krishna~wk;Karun Nair~~B~R~OB;KL Rahul~wk~W~R~;Krishnan Shrijith~wk~W~L~?;Rithesh Bhatkal~;Aneeshwar Gautam~;Shreyas Gopal~~A~R~LB;Manvanth Kumar~;Shikhar Shetty~;Abhilash Shetty~;LR Kumar~;Prasidh Krishna~~L~R~RFM\nand|Andhra|AND|mulapadu|3|B|Ricky Bhui~c~B~R~LB;Shaik Rasheed~~B~R~LB;Saurabh Kumar~~A~L~SLA;Satyanarayana Raju~~L~R~RMF;Kavuri Saiteja~;KV Sasikanth~~A~R~RM;Tripurana Vijay~;M Hemanth Reddy~vc;Uppara Girinath~~?~?~?;Karan Shinde~~?~?~?;Lalith Mohan~~?~?~?;Seeram Rahul~;Abhishek Reddy~~?~R~OB;Revanth Reddy~;Cheepurapalli Stephen~\nass|Assam|ASM|guwahati|2|B|Denish Das~c~B~R~LB;Sibsankar Roy~~B~L~OB;Roshan Alam~~L~R~SLA;Bishal Newar~;Rishav Das~~B~R~OB;Amlanjyoti Das~;Sumit Ghadigaonkar~~?~?~?;Sunil Lachit~~L~L~LMF;Mohit Thakur~;Mukhtar Hussain~~L~R~RFM;Nihar Deka~;Swarupam Purkayastha~~A~R~OB;Rajveer Singh~;Dipjyoti Saikia~;Anurag Talukdar~\npun|Punjab|PUN|mullanpur|3|B|Uday Saharan~c;Salil Arora~wk;Harnoor Singh~;Ramandeep Singh~~?~?~;Emanjot Singh Chahal~;Vihaan Malhotra~~A~L~OB;Sanvir Singh~~A~R~RM;Gurnoor Brar~~L~L~RF;Harpreet Brar~~L~L~SLA;Umesh Yadav~~L~R~RF;Anshul Chaudhary~;Sahaj Dhawan~;Gursimran Singh~;Harjas Singh~~A~L~RM;Jashanpreet Singh~;Anmol Malhotra~\nsau|Saurashtra|SAU|rajkot|5|B|Jaydev Unadkat~c~L~R~LM;Harvik Desai~wk~W~R~?;Tarang Gohel~wk;Arpit Vasavada~~A~L~SLA;Ravindra Jadeja~~A~L~SLA;Chirag Jani~~A~R~RM;Prerak Mankad~~A~R~RM;Chetan Sakariya~~?~L~LMF;Parth Bhut~~A~R~SLA;Sammar Gajjar~;Vishvaraj Jadeja~~?~?~?;Jay Gohil~;Hetvik Kotak~;Neel Pandya~;Ankur Panwar~;Arth Yadav~\nchh|Chhattisgarh|CHH|raipur|2|B|Sanjeet Desai~~?~R~?;Aayush Pandey~;Ajay Mandal~~?~L~SLA;Dharmendrasinh Jadeja~~A~L~SLA;Sandeep Warrier~~L~R~RMF;Jayant Yadav~~L~R~OB;Ashutosh Singh~~A~R~OB;Rudra Dehari~;Dev Aditya Singh~;Sanidhya Hurkat~~?~R~OB;Amandeep Khare~~B~R~RM;Sourabh Majumdar~~L~R~RMF;Mayank Verma~;Mohammad Sohail~~?~R~OB;Rahul Pradhan~;Anuj Tiwary~;Vasudev Barath~\njha|Jharkhand|JHA|jamshedpur|3|C|Virat Singh~c~B~L~OB;Robin Minz~wk~W~L~SLA;Utkarsh Singh~~?~?~?;Amit Kumar~~?~?~;Sushant Mishra~~L~L~LMF;Saurabh Shekhar~;Md Kounain Quraishi~;Manishi~;Shikhar Mohan~;Jatin Pandey~;Sahil Raj~~?~?~?;Shresht Sagar~;Aryaman Sen~;Sharandeep Singh~;Aditya Singh~~?~?~?\nker|Kerala|KER|greenfield|4|C|Vishnu Vinod~c+wk~W~R~RMF;Ahammed Imran~;Rohan Kunnummal~~B~R~OB;Mohammed Azharuddeen~wk~W~R~?;Varun Nayanar~;Sachin Baby~~B~L~OB;Salman Nizar~~B~L~OB;Eden Apple Tom~;Jalaj Saxena~~A~R~OB;Aditya Sarwate~~L~R~SLA;Nedumankuzhy Basil~~L~R~RFM;MD Nidheesh~~L~R~RFM;JS Anuraj~;Abhishek Nair~\ndel|Delhi|DEL|palam_a|4|C|Ayush Badoni~c~B~R~OB;Yash Dhull~vc~B~R~OB;Anuj Rawat~wk~W~L~?;Ayush Doseja~;Tejasvi Dahiya~wk;Sarthak Ranjan~~?~R~LB;Sanat Sangwan~;Navdeep Saini~~L~R~RF;Hrithik Shokeen~~L~R~OB;Simarjeet Singh~~L~R~RMF;Dev Lakra~;Dhruv Kaushik~;Money Grewal~;Divij Mehra~;Pranav Rajvanshi~;Sumit Mathur~~?~R~?\nben|Bengal|BEN|kalyani|4|C|Abhimanyu Easwaran~c~B~R~LB;Sudip Kumar Gharami~vc~?~R~OB;Abishek Porel~wk~W~L~;Sudip Chatterjee~~B~L~LB;Akash Deep~~L~R~RFM;Mohammed Shami~~L~R~RF;Mukesh Kumar~~?~?~;Ankur Paul~;Subham Chatterjee~;Aamir Gani~~L~R~OB;Sumanta Gupta~~?~R~LB;Suraj Jaiswal~;Mohammed Kaif~;Pradipta Pramanik~~?~R~SLA;Shakir Gandhi~;Ankit Shukla~;Soumyadip Mandal~\nodi|Odisha|ODI|bhubaneswar|2|C|Subhranshu Senapati~c~B~R~RM;Badal Biswal~;Sambit Beja~;Shreyansh Bhardwaj~;Gourav Choudhary~;Lalit Yadav~~?~?~?;Soumya Lenka~;Dinesh Majhi~;Om T Munde~;Sandeep Pattnaik~~?~?~?;Rajesh Mohanty~~L~L~RM;Prasanta Rana~;Ninad Rathva~~A~L~SLA;Swastik Samal~~?~?~?;Sayed Tufayl Ahmad~;Shantanu Mishra~~?~R~OB;Aashirwad Swain~\nguj|Gujarat|GUJ|motera|4|C|Chintan Gaja~c~?~?~?;Urvil Patel~vc+wk~W~R~?;Aarya Desai~;Kshitij Patel~~B~R~OB;Jaymeet Patel~;Vedant Trivedi~;Harshal Patel~~A~R~RFM;Siddharth Desai~~L~L~SLA;Arzan Nagwaswalla~~L~R~LFM;Amit Desai~;Abhishek Desai~;Manan Hingrajia~~?~L~OB;Priyajitsing Jadeja~;Saral Prajapati~;Priyesh Patel~~?~R~?;Vishal Jayswal~\nmah|Maharashtra|MAH|pune|3|C|Prithvi Shaw~c~B~R~OB;Ankit Bawne~~B~R~OB;Sachin Dhas~~B~R~?;Rajvardhan Hangargekar~~A~R~RF;Siddhesh Veer~;Pradeep Dadhe~~?~?~?;Mukesh Choudhary~~L~L~LM;Vicky Ostwal~;Vaibhav Darkunde~;Atharva Dharmadhikari~;Digvijay Patil~;Harshal Kate~;Saurabh Nawale~;Tanay Sanghvi~;Maya Sonawane~;Hitesh Walunj~~?~R~SLA\nser|Services|SER|palam_b|3|C|Rajat Paliwal~~B~R~OB;Arjun Sharma~~?~?~?;Rahul Singh~~?~?~;Varun Choudhary~~?~?~?;Vineet Dhankhar~;Jayant Goyat~;Devender Lohchab~;Mohit Ahlawat~~W~R~?;Nakul Sharma~~W~R~LB;Pulkit Narang~~?~R~OB;Amit Pachhara~~?~R~OB;Raj Bahadur~~?~L~LM;Ravi Chauhan~;Nitin Tanwar~;Virender Dagar~\nhp|Himachal Pradesh|HP|bilaspur|2|D|Pukhraj Mann~c;Innesh Mahajan~wk;Nehal Wadhera~~B~L~LB;Akash Vasisht~~A~L~SLA;Arpit Guleria~;Amanpreet Singh~;Aryaman Singh~;Divesh Sharma~;Harshit Sandal~;Jitender Rana~;Hritik Kalia~;Mukul Negi~;Nitin Sharma~~?~?~?;Shubham Arora~;Vaibhav Kalta~\nhar|Haryana|HAR|rohtak|3|D|Tanmay Baloda~;Lakshya Suman Dalal~;Yashvardhan Dalal~;Kapil Hooda~;Anshul Kamboj~~A~R~RM;Nikhil Kashyap~;Aman Kumar~;Ankit Kumar~~?~R~OB;Sumit Kumar~~W~R~OB;Amit Rana~~L~R~OB;Rahul Pawan Rathee~;Bhuwan Rohilla~;Mayank Shandilya~;Nishant Sindhu~~A~L~SLA;Dheeru Singh~;Yuvraj Singh~~B~L~SLA;Anuj Hira Thakral~;Parth Shiv Vats~\nrai|Railways|RLY|palam_b|3|D|Bhargav Merai~c~?~R~RM;Suraj Ahuja~wk~?~?~?;Kush Marathe~;Ravi Singh~~?~R~?;Vivek Singh~~W~L~RM;Raj Choudhary~;Eshaan Goyal~;Kunal Yadav~;Mohammad Saif~~?~L~SLA;Pradhyumn Parikh~;Sahab Yuvraj Singh~;Himanshu Sangwan~~?~?~?;Adarsh Singh~;Toufik Uddin Mondal~;Zubair Ali~\nutt|Uttarakhand|UTK|dehradun|2|D|Kunal Chandela~~?~R~RM;Lakshya Raichandani~;Saurabh Rawat~wk~W~R~?;Avneesh Sudha~;Yuvraj Chaudhary~~A~L~SLA;Mayank Mishra~~A~L~SLA;Agnivesh Ayachi~~L~R~RM;Deepak Dhapola~~?~?~?;Janmejay Joshi~;Aditya Rawat~;Jagadeesha Suchith~~A~L~SLA;Aarav Mahajan~;Devendra Singh Bora~;Tejasvi Jaiswal~;Vaibhav Kandpal~\nraj|Rajasthan|RAJ|jaipur|3|D|Manav Suthar~c~A~L~SLA;Mahipal Lomror~vc~A~L~SLA;Mukul Choudhary~wk~W~R~?;Sumit Godara~;Kartik Sharma~wk~W~R~?;Kukna Ajay Singh~~?~L~SLA;Akash Singh~~L~R~LMF;Hemant Kumar~;Anshul Garhwal~;Danish Bhambhu~;Chetan Sharma~~A~R~RFM;Darshan Jain~;Karan Lamba~~B~R~?;Rohan Rajbar~;Sachin Yadav~\ntn|Tamil Nadu|TN|chepauk|4|D|Sai Kishore~c;C Andre Siddarth~vc;Guruswamy Ajitesh~wk;Athish SR~wk;Baba Indrajith~;Narayan Jagadeesan~wk;Pradosh Ranjan Paul~wk;Vimal Khumar~;Nidhish Rajagopal~;Sonu Yadav~~?~?~?;Washington Sundar~~A~L~OB;Ajith Ram~;Deepesh Devendran~;Govinth Ganesh~;Pranav Ragavendra~\nmum|Mumbai|MUM|wankhede|5|D|Siddhesh Lad~c~B~R~OB;Ayush Mhatre~vc~B~R~OB;Akash Anand~wk;Yashasvi Jaiswal~~B~L~LB;Sarfaraz Khan~~B~R~LB;Suved Parkar~;Hardik Tamore~wk~?~?~?;Atharva Ankolekar~~A~L~SLA;Tanush Kotian~~A~R~OB;Shams Mulani~~?~L~SLA;Musheer Khan~~A~R~SLA;Mohit Avasthi~~?~R~RMF;Tushar Deshpande~~L~L~RM;Onkar Tarmale~;Sylvester D'Souza~\ncha|Chandigarh|CHD|chandigarh16|2|D|Manan Vohra~~B~R~RFM;Raj Bawa~;Akshit Rana~;Arjit Pannu~;Arjun Azad~;Arslan Khan~~?~?~;Shivam Bhambri~~?~R~OB;Rohit Dhanda~;Dipender Kush~;Jagjit Singh~~?~?~;Anirudh Kanwar~;Karthik Sandil~;Nishunk Birla~;Nehal Pajni~\nsik|Sikkim|SIK|rangpo|1|P|Lee Yong Lepcha~c~A~R~?;Gurinder Singh~~A~R~SLA;K Sai Satwik~;Kranti Kumar~;Amit Rajera~;Ankur Malik~~A~R~OB;Anwesh Karan Sharma~;Arun Chettri~;Ashish Thapa~;Bhim Lall Luitel~;Bijay Prasad~;Nilesh Lamichaney~~?~R~?;Palzor Tamang~~?~R~RM;Pranesh Chettri~;Robin Limboo~\nmeg|Meghalaya|MEG|shillong|1|P|Arpit Bhatewara~wk;Kishan Lyngdoh~;Abhishek Kumar~;Aryan Bora~;Swastic Chettri~;Kevin Christopher~;Rahul Dalal~~B~R~OB;Ajay Duhan~;Ram Gurung~;Jaskirat Singh Sachdeva~;Joydeepan Deb~;Bipin Ray~;Sudhir Sahani~;PM Santhosh~;Mewada Shylla~\nmiz|Mizoram|MIZ|nadiad|1|P|Joseph Lalthankhuma~c;Jehu Anderson~vc~?~R~?;Vikash Kumar~~?~?~?;Remruatdika Ralte~;Lalhruaizela~~B~R~?;R Lalnuntluanga~;Lalrempuia~~?~R~OB;Manender Singh~~W~R~?;Nasib Rai~;Sahil Reza~;Sahil Sharma~~?~?~?;Chinmay Sutar~~B~R~LB;Khiangte Vanrotlinga~;Bobby Zothansanga~\nman|Manipur|MAN|nadiad|1|P|Kangabam Priyojit~;Pheiroijam Jotin~;Bishworjit Konthoujam~~?~R~RMF;Al Bashid Muhammed~;Aziz Mirza~;Basir Rahman~;Johnson Singh~~?~?~?;Langlonyamba Meitan Keishangbam~;Ulenyai Khwairakpam~~?~?~?;L Kishan Singha~;Ronald Longjam~~?~?~?;Lamabam Ajay~;Soubam Rohit Singh~;Rex Rajkumar~~L~L~LFM;Karnajit Yumnam~~?~?~?\nap|Arunachal Pradesh|ARU|motera|1|P|Neelam Obi~c~?~R~LB;Kamsha Yangfo~vc~W~R~?;Nabam Kama~;Licha Jhon~;Myendung Singpo~;Techi Doria~~?~R~RM;Biki Kumar~;Mibom Mosu~;Yorjum Sera~;Yab Niya~~L~R~RMF;Nabam Tempol~~L~R~RMF;Techi Neri~~?~R~OB;Likha Sonia~;Nabam Dol~;Salil Malhotra~\nnag|Nagaland|NAG|sovima|1|P|Chetan Bist~wk;Joshua Ozukum~~?~?~?;Hokaito Zhimomi~~B~R~LM;Rongsen Jonathan~~A~R~RM;Imliwati Lemtur~~A~L~SLA;Chopise Hopongkyu~;Bikram Chetri~;Anil Gupta~~?~?~;Odilemba Kichu~;Saurav Kumar~;Nagaho Chishi~;Sedezhalie Rupero~~?~?~?;Neizekho Rupreo~;Akamu Sumi~;Yugandhar Singh~;Vino Zhimomi~~?~?~?\n\"\"\"\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/FirstClass.kt",
+      "content": "package com.cricketsim.logic\n\n/** One innings of a first-class match, kept on a fixture's result. */\ndata class FcInnings(\n    val teamId: String,\n    val runs: Int,\n    val wickets: Int,\n    val balls: Int,\n    val declared: Boolean = false\n)\n\n/** One line of a Ranji Trophy group table. */\nclass FcRow(\n    val team: Team,\n    val played: Int,\n    val won: Int,\n    val drawn: Int,\n    val lost: Int,\n    val tied: Int,\n    val points: Int,\n    val quotient: Double\n)\n\n/**\n * The points and tables of the Ranji Trophy (and the rest of first-class cricket in India), from the BCCI's rules:\n * an outright win is 6 points, 7 when it is by an innings or by ten wickets; a tie is 3 each; in a draw the side ahead on the first\n * innings gets 3 and the other 1 (1 each when the first innings were level or one of them was not finished). A loss is 0.\n * Tables are ordered by points, then wins, then the quotient (runs per wicket scored over runs per wicket conceded).\n */\nobject FirstClass {\n    const val WIN = 6\n    const val WIN_BONUS = 7\n    const val TIE = 3\n    const val LEAD = 3\n    const val TRAIL = 1\n\n    fun innings(s: MatchState): List<FcInnings> {\n        val t = s.test ?: return emptyList()\n        return t.completed.map { FcInnings(it.data.battingTeamId, it.score.runs, it.score.wickets, it.score.overs * 6 + it.score.balls, it.declared) }\n    }\n\n    /** \"WIN\", \"TIE\" or \"DRAW\" for a finished match (its last innings recorded). */\n    fun kind(s: MatchState): String = when {\n        s.winnerId != null -> \"WIN\"\n        TestMatch.outcome(s) != null -> \"TIE\"\n        else -> \"DRAW\"\n    }\n\n    fun points(s: MatchState, teamId: String): Int {\n        val t = s.test ?: return 0\n        val list = t.completed\n        when (kind(s)) {\n            \"WIN\" -> {\n                if (s.winnerId != teamId) return 0\n                val bonus = list.size == 3 ||\n                    (list.size == 4 && list.last().data.battingTeamId == teamId && list.last().score.wickets == 0)\n                return if (bonus) WIN_BONUS else WIN\n            }\n            \"TIE\" -> return TIE\n        }\n        // A draw: the first innings decide.\n        if (list.size < 2) return TRAIL\n        val finishedFirstInnings = list.size >= 3 || list[1].allOut || list[1].declared\n        if (!finishedFirstInnings) return TRAIL\n        val a = list[0]\n        val b = list[1]\n        return when {\n            a.score.runs == b.score.runs -> TRAIL\n            (a.score.runs > b.score.runs) == (a.data.battingTeamId == teamId) -> LEAD\n            else -> TRAIL\n        }\n    }\n\n    /** The side ahead on the first innings, for a knockout match that is drawn (null when level). */\n    fun firstInningsLeaderId(s: MatchState): String? {\n        val list = s.test?.completed ?: return null\n        if (list.size < 2) return null\n        val a = list[0]\n        val b = list[1]\n        return when {\n            a.score.runs > b.score.runs -> a.data.battingTeamId\n            b.score.runs > a.score.runs -> b.data.battingTeamId\n            else -> null\n        }\n    }\n\n    private fun teamText(list: List<FcInnings>, team: Team): String {\n        val mine = list.filter { it.teamId == team.id }\n        if (mine.isEmpty()) return \"did not bat\"\n        return mine.joinToString(\" and \") {\n            if (it.wickets >= 10) \"${it.runs}\" else \"${it.runs}/${it.wickets}\" + (if (it.declared) \"d\" else \"\")\n        }\n    }\n\n    fun summary(s: MatchState, home: Team, away: Team, homePoints: Int, awayPoints: Int): String {\n        val list = innings(s)\n        val result = TestMatch.resultText(s) ?: \"Match drawn.\"\n        return \"${CplData.shortName(home.id)} ${teamText(list, home)}, ${CplData.shortName(away.id)} ${teamText(list, away)}. \" +\n            \"$result Points: ${CplData.shortName(home.id)} $homePoints, ${CplData.shortName(away.id)} $awayPoints.\"\n    }\n\n    /** The table of one group, every team of it, best first. */\n    fun standings(state: TournamentState, stage: String): List<FcRow> {\n        val ids = Ranji.groupTeamIds(stage)\n        val rows = state.teams.filter { it.id in ids }.map { team ->\n            var played = 0\n            var won = 0\n            var drawn = 0\n            var lost = 0\n            var tied = 0\n            var points = 0\n            var runsFor = 0\n            var wicketsLost = 0\n            var runsAgainst = 0\n            var wicketsTaken = 0\n            for (f in state.fixtures) {\n                if (f.stage != stage) continue\n                val r = f.result ?: continue\n                if (f.homeId != team.id && f.awayId != team.id) continue\n                played++\n                points += if (f.homeId == team.id) r.homePoints else r.awayPoints\n                when (r.fcKind) {\n                    \"WIN\" -> if (r.winnerId == team.id) won++ else lost++\n                    \"TIE\" -> tied++\n                    else -> drawn++\n                }\n                for (i in r.fcInnings) {\n                    if (i.teamId == team.id) {\n                        runsFor += i.runs\n                        wicketsLost += i.wickets\n                    } else {\n                        runsAgainst += i.runs\n                        wicketsTaken += i.wickets\n                    }\n                }\n            }\n            val scored = runsFor.toDouble() / maxOf(1, wicketsLost)\n            val conceded = runsAgainst.toDouble() / maxOf(1, wicketsTaken)\n            val quotient = if (conceded <= 0.0) (if (scored > 0.0) 99.0 else 0.0) else scored / conceded\n            FcRow(team, played, won, drawn, lost, tied, points, quotient)\n        }\n        return rows.sortedWith(compareByDescending<FcRow> { it.points }.thenByDescending { it.won }.thenByDescending { it.quotient })\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/RanjiTable.kt",
+      "content": "package com.cricketsim.ui.tournament\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.remember\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.FirstClass\nimport com.cricketsim.logic.Ranji\nimport com.cricketsim.logic.TournamentState\n\n/**\n * The Ranji Trophy's tables: one for each Elite group and the Plate group, each team as one line a screen reader reads whole\n * (\"1. Mumbai. Played 3, won 2, drawn 1, lost 0. 15 points. Quotient 1.34.\").\n */\n@Composable\nfun RanjiTableTab(state: TournamentState) {\n    val tables = remember(state) { Ranji.STAGES.map { it to FirstClass.standings(state, it) } }\n    Column(modifier = Modifier.padding(vertical = 8.dp)) {\n        tables.forEach { (stage, rows) ->\n            Text(\n                text = stage,\n                style = MaterialTheme.typography.titleMedium,\n                modifier = Modifier.semantics { heading() }\n            )\n            Spacer(modifier = Modifier.height(4.dp))\n            rows.forEachIndexed { index, row ->\n                val mine = if (row.team.id == state.userTeamId) \" Your team.\" else \"\"\n                Text(\n                    text = \"${index + 1}. ${row.team.name}. Played ${row.played}, won ${row.won}, drawn ${row.drawn}, lost ${row.lost}\" +\n                        (if (row.tied > 0) \", tied ${row.tied}\" else \"\") +\n                        \". ${row.points} points. Quotient ${\"%.3f\".format(row.quotient)}.$mine\",\n                    style = MaterialTheme.typography.bodyMedium,\n                    modifier = Modifier.padding(vertical = 2.dp)\n                )\n            }\n            Spacer(modifier = Modifier.height(16.dp))\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "RANJI_TROPHY.md",
+      "content": "# Ranji Trophy 2026-27 (part 1)\n\nTournament > Domestic tournament. File: `logic/Ranji.kt` (teams, squads, grounds, fixtures), `logic/FirstClass.kt` (points and tables), `ui/tournament/RanjiTable.kt` (the group tables). Own saved tournament: `saved_tournament_ranji_2026_27.json`.\n\n## What is in part 1\n- 38 real teams: Elite Groups A to D (eight each) and the Plate group (six). 127 real group matches (28 in each Elite group, 15 in the Plate group), in the real order (round by round, group by group). A match whose ground was not announced is at the first-named side's home ground.\n- Squads: the first-round squads from Wisden (35 teams), Haryana's from Sportscafe, Arunachal Pradesh's from the BCCI-appointed panel's announcement (October 2026) and **Sikkim's is last season's** (the page did not have this season's). About 586 players.\n- Players already in the game (the roster and every league) are copied with their ratings. The rest (most of them) are new with **estimated ratings**: from a strength guess for the team (tier 1 to 5, `TEAM_TEXT`), the role and a steady \"random\" number from the name. The role comes from Wikipedia's infobox where the player has a page (about half), otherwise from the order of the squad list (batters first, bowlers last), with at least one wicketkeeper and five bowlers or all-rounders a team. The Ranji teams are not yet in Advanced Customisation (a later part).\n- Grounds: about 45, all **estimated** (pitch, boundary size, altitude) in `VENUE_TEXT`.\n- Matches are four days (`Ranji.LEAGUE_DAYS`), played by the computer with the first-class rules of the five-day Test (`TEST_MATCH.md`): follow-on at a lead of 150, declarations, the new ball, a draw when 360 overs are bowled, the pitch wearing. The computer-v-computer ball model has a Test setting (`TEST_*` in `AiBallModel.kt`), measured on a model of the ball (mid-rated sides: about 290 runs in 90 overs at 3 an over; strong batters against a weak attack about 380; the reverse about 180).\n- Points (the BCCI's): outright win 6, or 7 by an innings or ten wickets; tie 3 each; in a draw the first-innings leader 3 and the other side 1 (1 each when level or when a first innings was not finished); loss 0. Tables by points, then wins, then the quotient (runs per wicket scored over runs per wicket conceded).\n- Tournament pages as the others: Matches, Table (one table a group), Venues, Stats, scorecards (four innings, one tab each).\n\n## Not in part 1\n- **Playing your own match** (the Matches page says the computer plays yours): part 2.\n- The knockouts (the top two of each Elite group go to the quarter-finals, then the semi-finals and the Final, five-day matches, a drawn knockout going to the first-innings leader), the Plate semi-finals and Final, promotion and relegation, and the celebration: part 3.\n- Real results (the game simulates them; the real season is already three rounds in).\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "    val noSuperOver: Boolean = false\n)",
+      "replace": "    val noSuperOver: Boolean = false,\n    /** 0 = not a Test; 4 or 5 = the days of a first-class match (logic/TestMatch.kt). */\n    val testDays: Int = 0\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "test = if (TestMatch.applies(format, rules)) TestMatch.start() else null",
+      "replace": "test = if (TestMatch.applies(format, rules)) TestMatch.start(rules) else null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    val newBallNotified: Boolean = false\n)",
+      "replace": "    val newBallNotified: Boolean = false,\n    /** The length of the match: 5 days in a Test, 4 in a Ranji Trophy league match. */\n    val days: Int = 5\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    fun applies(format: MatchFormat, rules: MatchRules?): Boolean = FIVE_DAY_TEST && format == MatchFormat.TEST && rules == null\n\n    fun start(): TestState = TestState()",
+      "replace": "    /** A Test, or a first-class match given its days by the rules (the Ranji Trophy). */\n    fun applies(format: MatchFormat, rules: MatchRules?): Boolean =\n        FIVE_DAY_TEST && format == MatchFormat.TEST && (rules == null || rules.testDays > 0)\n\n    fun start(rules: MatchRules? = null): TestState = TestState(days = rules?.testDays?.takeIf { it > 0 } ?: DAYS)\n\n    /** The rules of a first-class match of this many days played by two computer sides (no DRS, no rain, no Super Over). */\n    fun rulesForDays(days: Int): MatchRules = MatchRules(\n        overs = days * OVERS_PER_DAY, restrictionBalls = 0, fieldersOutside = 5, drsReviews = 0,\n        rainEnabled = false, maxOversPerBowler = 999, noSuperOver = true, testDays = days\n    )\n\n    fun totalBalls(s: MatchState): Int = (s.test?.days ?: DAYS) * BALLS_PER_DAY\n\n    /** 200 in a five-day match, 150 in a four-day one. */\n    fun followOnLead(s: MatchState): Int = if ((s.test?.days ?: DAYS) >= 5) FOLLOW_ON_LEAD else 150",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    private fun teamOf(s: MatchState, id: String): Team = if (s.userTeam.id == id) s.userTeam else s.opponentTeam\n\n    private fun otherTeam(s: MatchState, id: String): Team = if (s.userTeam.id == id) s.opponentTeam else s.userTeam",
+      "replace": "    // Looked up among the two sides that are playing: in a match between two computer sides the \"user\" team has another id.\n    private fun teamOf(s: MatchState, id: String): Team =\n        if (s.battingTeam.id == id) s.battingTeam else if (s.bowlingTeam.id == id) s.bowlingTeam else if (s.userTeam.id == id) s.userTeam else s.opponentTeam\n\n    private fun otherTeam(s: MatchState, id: String): Team = if (s.battingTeam.id == id) s.bowlingTeam else s.battingTeam",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    fun ballsLeft(s: MatchState): Int = (MATCH_BALLS - matchBalls(s)).coerceAtLeast(0)",
+      "replace": "    fun ballsLeft(s: MatchState): Int = (totalBalls(s) - matchBalls(s)).coerceAtLeast(0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        return matchBalls(s) >= MATCH_BALLS && (t.currentRecorded || s.score.balls == 0)",
+      "replace": "        return matchBalls(s) >= totalBalls(s) && (t.currentRecorded || s.score.balls == 0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val base = (matchBalls(s).toDouble() / MATCH_BALLS).coerceIn(0.0, 1.0)",
+      "replace": "        val base = (matchBalls(s).toDouble() / totalBalls(s)).coerceIn(0.0, 1.0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        return mb < MATCH_BALLS && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION",
+      "replace": "        return mb < totalBalls(s) && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "score.runs >= FOLLOW_ON_LEAD",
+      "replace": "score.runs >= followOnLead(s)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "of $DAYS,",
+      "replace": "of ${t.days},",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "    private const val ODI_RUNS = 0.98\n",
+      "replace": "    private const val ODI_RUNS = 0.98\n\n    // A first-class match (the Ranji Trophy): Test tempo. Measured on a node copy of `sample` (mid-rated sides, no fielders, no ground effects):\n    // about 290 runs an innings in 90 overs at 3 an over, all out. Turn these to change the pace.\n    private const val TEST_BOUNDARY = 0.42\n    private const val TEST_SIX = 0.30\n    private const val TEST_WICKET = 0.48\n    private const val TEST_DOT = 2.2\n    private const val TEST_RUNS = 0.74\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        val odi = limit >= 40\n",
+      "replace": "        val test = state.test != null\n        val odi = limit >= 40 && !test\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        when {\n            fraction < powerplayEnd || inSurge -> { fBoundary *= 1.15; fDot *= 0.95 }",
+      "replace": "        if (!test) when {\n            fraction < powerplayEnd || inSurge -> { fBoundary *= 1.15; fDot *= 0.95 }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        // The pitch.\n        when (state.pitchType) {",
+      "replace": "        // A first-class match: Test tempo, a pitch that wears over the days and the age of the ball (logic/TestMatch.kt).\n        if (test) {\n            val wear = TestMatch.wearFactor(state)\n            val ballFactor = if (spin) 1.0 else if (TestMatch.ballAge(state) < TestMatch.NEW_BALL_BOOST_BALLS) TestMatch.NEW_BALL_WICKET else TestMatch.OLD_BALL_WICKET\n            fBoundary *= TEST_BOUNDARY * (1.0 - 0.12 * wear)\n            fWicket *= TEST_WICKET * (1.0 + 0.35 * wear + (if (spin) 0.35 * wear else 0.0)) * ballFactor\n            fDot *= TEST_DOT * (1.0 + 0.12 * wear)\n            fRuns *= TEST_RUNS\n        }\n\n        // The pitch.\n        when (state.pitchType) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        val target = state.target\n        if (state.currentInnings == 2 && target != null) {\n            val need = target - state.score.runs\n            val ballsLeft = maxOf(1, limit * 6 - balls)\n            val required = need * 6.0 / ballsLeft\n            when {\n                required > 12 -> { fBoundary *= 1.25; fWicket *= 1.25 }\n                required > 9.5 -> { fBoundary *= 1.12; fWicket *= 1.1 }\n                required < 6 -> { fBoundary *= 0.9; fWicket *= 0.85 }\n            }\n        }\n",
+      "replace": "        val target = state.target\n        if (!test && state.currentInnings == 2 && target != null) {\n            val need = target - state.score.runs\n            val ballsLeft = maxOf(1, limit * 6 - balls)\n            val required = need * 6.0 / ballsLeft\n            when {\n                required > 12 -> { fBoundary *= 1.25; fWicket *= 1.25 }\n                required > 9.5 -> { fBoundary *= 1.12; fWicket *= 1.1 }\n                required < 6 -> { fBoundary *= 0.9; fWicket *= 0.85 }\n            }\n        }\n        // The fourth innings of a first-class match: go for it when the runs are within reach, block for the draw when they are not.\n        if (test && state.currentInnings == 4 && target != null) {\n            val need = target - state.score.runs\n            val ballsLeft = maxOf(1, TestMatch.ballsLeft(state))\n            val required = need * 6.0 / ballsLeft\n            when {\n                required > 7.0 -> { fBoundary *= 0.6; fWicket *= 0.6; fRuns *= 0.8; fDot *= 1.3 }\n                required > 4.2 -> { fBoundary *= 1.25; fWicket *= 1.25 }\n                required < 2.2 -> { fBoundary *= 0.9; fWicket *= 0.85 }\n            }\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        val wicketChance = if (freeHit) 0.0 else WICKET * fWicket\n",
+      "replace": "        val sixScale = if (test) TEST_SIX else 1.0\n        val wicketChance = if (freeHit) 0.0 else WICKET * fWicket\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "FOUR * fBoundary, SIX * fBoundary, wicketChance",
+      "replace": "FOUR * fBoundary, SIX * fBoundary * sixScale, wicketChance",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "    val playerOfMatch: String? = null\n)",
+      "replace": "    val playerOfMatch: String? = null,\n    /** A first-class match (the Ranji Trophy): every innings, how it ended (WIN, TIE or DRAW) and each side's points. */\n    val fcInnings: List<FcInnings> = emptyList(),\n    val fcKind: String = \"\",\n    val homePoints: Int = 0,\n    val awayPoints: Int = 0\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "Sa20.stadium(id) ?: T20WorldCup.stadium(id)",
+      "replace": "Sa20.stadium(id) ?: Ranji.stadium(id) ?: T20WorldCup.stadium(id)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "Sa20.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId)",
+      "replace": "Sa20.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "        else if (Sa20.isTeam(teamId)) Sa20.homeGround(teamId)\n",
+      "replace": "        else if (Sa20.isTeam(teamId)) Sa20.homeGround(teamId)\n        else if (Ranji.isTeam(teamId)) Ranji.homeGround(teamId)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "private const val MAX_DELIVERIES = 2500\n",
+      "replace": "private const val MAX_DELIVERIES = 2500\nprivate const val FIRST_CLASS_MAX_LOOPS = 20000\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)\n",
+      "replace": "        if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)\n        if (state.tournamentId == Ranji.TOURNAMENT_ID) return Ranji.advance(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val sim = simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),\n            state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage)) ?: return state",
+      "replace": "        val sim = (if (Ranji.isRanji(state.tournamentId)) {\n            simulateFirstClass(home, away, state.tags, stadium, random, Ranji.daysFor(fixture.stage))\n        } else {\n            simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),\n                state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage))\n        }) ?: return state",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        for (data in listOfNotNull(finished.firstInningsData, finished.currentInningsData)) {",
+      "replace": "        for (data in (if (finished.test != null) TestMatch.allInnings(finished) else listOfNotNull(finished.firstInningsData, finished.currentInningsData))) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "    /** Simulates one fixture and records its result, scorecard and the players' stats. */\n",
+      "replace": "    /**\n     * A first-class match between two computer sides (the Ranji Trophy): `days` long, with the rules of logic/TestMatch.kt\n     * (follow-on, declarations, the new ball, a draw when the overs run out). Null if it could not be played.\n     */\n    fun simulateFirstClass(\n        homeSquad: Team,\n        awaySquad: Team,\n        tags: Map<String, SquadTag>,\n        stadium: Stadium,\n        random: Random,\n        days: Int\n    ): SimResult? {\n        val home = pickXI(homeSquad, tags, stadium)\n        val away = pickXI(awaySquad, tags, stadium)\n        val weather = WeatherSystem.generateWeatherForStadium(stadium)\n        val tossWinner = if (random.nextBoolean()) home else away\n        val decision = tossDecision(stadium, weather)\n        var s = MatchStateMachine.createNewMatch(\n            MatchFormat.TEST, stadium.pitchType, home, away, tossWinner.id, decision, stadium.id, weather,\n            rules = TestMatch.rulesForDays(days)\n        )\n        s = s.copy(\n            userTeam = home.copy(id = OBSERVER_ID),\n            needsOpenerSelection = false,\n            needsBowlerSelection = false,\n            fieldPlacements = FieldingSystem.generateAiFieldPlacements(\n                FieldingSystem.getFieldingPlayers(s.bowlingTeam, s.currentBowler.id),\n                false\n            )\n        )\n        s = playFirstClass(s, stadium, random)\n        val finished = TestMatch.finish(s) ?: return null\n        val result = buildFirstClassResult(finished, home, away) ?: return null\n        val slim = finished.copy(\n            ballByBall = emptyList(), lastSixBalls = emptyList(), fieldPlacements = emptyList(),\n            regulationState = null, drinksBreak = null, activeRainDelay = null, firstInningsData = null\n        )\n        return SimResult(result, slim, home, away, finished)\n    }\n\n    /** Ball by ball until the match is decided or the overs run out; the computer declares, enforces the follow-on and takes the new ball. */\n    private fun playFirstClass(start: MatchState, stadium: Stadium, random: Random): MatchState {\n        var s = start\n        var loops = 0\n        while (loops < FIRST_CLASS_MAX_LOOPS) {\n            loops++\n            if (s.drinksBreak != null) s = s.copy(drinksBreak = null)\n            if (s.activeRainDelay != null) s = MatchStateMachine.resumeFromRainDelay(s)\n            if (s.pendingDismissal != null) {\n                val next = MatchStateMachine.getAvailableBatsmen(s).firstOrNull()\n                s = if (next != null) MatchSimulation.completeWicketReplacement(s, next, stadium) else s.copy(pendingDismissal = null)\n                continue\n            }\n            val declare = s.score.balls == 0 && TestMatch.aiShouldDeclare(s)\n            if (declare || MatchSimulation.isInningsOver(s) || MatchSimulation.isTargetReached(s) || TestMatch.timeUp(s)) {\n                val recorded = TestMatch.recordCurrent(s, declare)\n                if (TestMatch.outcome(recorded) != null || TestMatch.timeUp(recorded)) return recorded\n                val next = if (TestMatch.followOnAvailable(recorded)) {\n                    TestMatch.setFollowOn(recorded, TestMatch.aiEnforcesFollowOn(recorded))\n                } else {\n                    recorded\n                }\n                s = TestMatch.startNextInnings(next)\n                continue\n            }\n            if (s.score.balls == 0 && TestMatch.aiShouldTakeNewBall(s)) s = TestMatch.takeNewBall(s)\n            val delivery = MatchSimulation.prepareAiDelivery(s)\n            val outcome = AiBallModel.sample(delivery.state, stadium, random)\n            s = MatchSimulation.simulateOneBall(\n                state = delivery.state,\n                stadium = stadium,\n                difficulty = Difficulty.MEDIUM,\n                presetBowlingDecision = delivery.bowling,\n                outcomeOverride = outcome\n            ).state\n        }\n        return TestMatch.recordIfTest(s)\n    }\n\n    private fun buildFirstClassResult(finished: MatchState, home: Team, away: Team): FixtureResult? {\n        val innings = FirstClass.innings(finished)\n        if (innings.isEmpty()) return null\n        val homePoints = FirstClass.points(finished, home.id)\n        val awayPoints = FirstClass.points(finished, away.id)\n        val first = innings.first()\n        val last = innings.last()\n        val award = PlayerAwards.playerOfTheMatch(finished)\n        return FixtureResult(\n            winnerId = finished.winnerId,\n            summary = FirstClass.summary(finished, home, away, homePoints, awayPoints),\n            firstBattingId = first.teamId,\n            firstRuns = first.runs,\n            firstWickets = first.wickets,\n            firstBalls = first.balls,\n            secondRuns = last.runs,\n            secondWickets = last.wickets,\n            secondBalls = last.balls,\n            playerOfMatchId = award?.playerId,\n            playerOfMatch = award?.let { \"${it.name} (${CplData.shortName(it.teamId)}), ${it.summary}\" },\n            fcInnings = innings,\n            fcKind = FirstClass.kind(finished),\n            homePoints = homePoints,\n            awayPoints = awayPoints\n        )\n    }\n\n    /** Simulates one fixture and records its result, scorecard and the players' stats. */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.Sa20\n",
+      "replace": "import com.cricketsim.logic.Ranji\nimport com.cricketsim.logic.Sa20\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val saMatchStore = remember { MatchSaveStore(context, \"saved_sa20_match.json\") }\n",
+      "replace": "    val saMatchStore = remember { MatchSaveStore(context, \"saved_sa20_match.json\") }\n    val ranjiStore = remember { TournamentSaveStore(context, \"saved_tournament_ranji_2026_27.json\") }\n    val ranjiMatchStore = remember { MatchSaveStore(context, \"saved_ranji_match.json\") }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa20\" -> saStore;",
+      "replace": "\"sa20\" -> saStore; \"ranji2027\" -> ranjiStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa20\" -> saMatchStore;",
+      "replace": "\"sa20\" -> saMatchStore; \"ranji2027\" -> ranjiMatchStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val saBuilt = remember { Sa20.buildTeams() }\n",
+      "replace": "    val saBuilt = remember { Sa20.buildTeams() }\n    // The Ranji squads are only built when the Ranji Trophy is opened (they are the biggest).\n    val ranjiBuilt = remember { lazy { Ranji.buildTeams() } }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa20\" -> saBuilt;",
+      "replace": "\"sa20\" -> saBuilt; \"ranji2027\" -> ranjiBuilt.value;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onCustom = { page = TPage.CustomList },\n",
+      "replace": "                onCustom = { page = TPage.CustomList },\n                onDomestic = {\n                    // The Ranji Trophy has its own saved tournament too.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"ranji2027\"\n                    page = TPage.Adt\n                },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onCustom: () -> Unit, onBack: () -> Unit) {",
+      "replace": "private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onCustom: () -> Unit, onDomestic: () -> Unit, onBack: () -> Unit) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\"Domestic tournament\", \"Coming soon.\", enabled = false, onClick = {})",
+      "replace": "            ChoiceRow(\"Domestic tournament\", \"The Ranji Trophy 2026-27 with the real teams, squads and fixtures, in four-day matches.\", enabled = true, onClick = onDomestic)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val isAg = kind == \"ag2026\"\n",
+      "replace": "            val isAg = kind == \"ag2026\"\n            val isRanji = kind == \"ranji2027\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isAg -> AsianGames.TOURNAMENT_NAME\n",
+      "replace": "                isAg -> AsianGames.TOURNAMENT_NAME\n                isRanji -> Ranji.TOURNAMENT_NAME\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc || isCt || isAc || isAg || isCustomKind) {",
+      "replace": "if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc || isCt || isAc || isAg || isRanji || isCustomKind) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        isWc || isCt || isAc || isAg || isCustomKind -> Unit",
+      "replace": "                        isWc || isCt || isAc || isAg || isRanji || isCustomKind -> Unit",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "page = if (isCustomKind) TPage.CustomList else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues",
+      "replace": "page = if (isCustomKind) TPage.CustomList else if (isRanji) TPage.Menu else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    isCustomKind -> CustomTournaments.introOf(customId)\n",
+      "replace": "                    isRanji -> \"The Ranji Trophy 2026-27: the 38 real teams and squads in four Elite groups and the Plate group, and the real group fixtures, in four-day matches. \" +\n                        \"For now the computer plays every match, yours included; playing your own four-day match and the knockouts are coming.\"\n                    isCustomKind -> CustomTournaments.introOf(customId)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"ag2026\" || isCustomKind) TPage.Adt else TPage.Cpl }",
+      "replace": "kind == \"ag2026\" || kind == \"ranji2027\" || isCustomKind) TPage.Adt else TPage.Cpl }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        \"ag2026\" -> AsianGames.newTournament(teamId, built)\n",
+      "replace": "                        \"ag2026\" -> AsianGames.newTournament(teamId, built)\n                        \"ranji2027\" -> Ranji.newTournament(teamId, built)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind != \"ag2026\" && !isCustomKind,",
+      "replace": "kind != \"ag2026\" && kind != \"ranji2027\" && !isCustomKind,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"asia2025\", \"ag2026\" -> TPage.Adt; else",
+      "replace": "\"asia2025\", \"ag2026\", \"ranji2027\" -> TPage.Adt; else",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val rows = remember(state) { CplData.standings(state) }\n",
+      "replace": "    if (state.tournamentId == Ranji.TOURNAMENT_ID) {\n        RanjiTableTab(state)\n        return\n    }\n    val rows = remember(state) { CplData.standings(state) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                Sa20.TOURNAMENT_ID -> Sa20.stadiums\n",
+      "replace": "                Sa20.TOURNAMENT_ID -> Sa20.stadiums\n                Ranji.TOURNAMENT_ID -> Ranji.stadiums\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val nextIsMine = next != null && CplSimulator.involves(next, state.userTeamId)\n",
+      "replace": "    val nextIsMine = next != null && CplSimulator.involves(next, state.userTeamId)\n    // Playing your own four-day match is a later part of the Ranji Trophy: for now the computer plays it.\n    val canPlay = state.tournamentId != Ranji.TOURNAMENT_ID\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    if (nextIsMine && matchInProgress) {",
+      "replace": "                    if (nextIsMine && matchInProgress && canPlay) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    } else if (nextIsMine) {",
+      "replace": "                    } else if (nextIsMine && canPlay) {",
+      "count": 1
+    }
+  ]
+}
