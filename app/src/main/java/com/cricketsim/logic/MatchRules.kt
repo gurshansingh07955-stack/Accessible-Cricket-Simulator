@@ -89,7 +89,7 @@ object TournamentRules {
     fun rulesFor(tournamentId: String?, stage: String? = null): MatchRules? {
         if (tournamentId == null) return null
         // The Ranji Trophy: first-class matches (four days, five in the knockouts), no DRS, no rain.
-        if (Ranji.isRanji(tournamentId)) return TestMatch.rulesForDays(Ranji.daysFor(stage ?: Ranji.STAGES[0]))
+        DomesticFc.rulesFor(tournamentId, stage)?.let { return it }
         if (isCustom(tournamentId)) {
             val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null
             val base = rulesForFormat(def.formatKey) ?: return null

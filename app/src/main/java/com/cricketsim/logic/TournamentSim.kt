@@ -403,7 +403,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         val home = if (fixture.homeId == userXI.id) userXI else opponentXI
         val away = if (fixture.homeId == userXI.id) opponentXI else userXI
         val result = (if (finished.test != null) {
-            buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, !Ranji.isGroupStage(fixture.stage))
+            buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, DomesticFc.isKnockout(state.tournamentId, fixture.stage))
         } else {
             buildResult(finished, home, away)
         }) ?: return state
@@ -488,6 +488,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (state.tournamentId == AsiaCup.TOURNAMENT_ID) return AsiaCup.advance(state)
         if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)
         if (state.tournamentId == Ranji.TOURNAMENT_ID) return Ranji.advance(state)
+        if (DomesticFc.isSmall(state.tournamentId)) return DomesticFc.advance(state)
         if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
@@ -666,8 +667,8 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         val home = state.teams.find { it.id == fixture.homeId } ?: return state
         val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
-        val sim = (if (Ranji.isRanji(state.tournamentId)) {
-            simulateFirstClass(home, away, state.tags, stadium, random, Ranji.daysFor(fixture.stage), !Ranji.isGroupStage(fixture.stage))
+        val sim = (if (DomesticFc.isFirstClass(state.tournamentId)) {
+            simulateFirstClass(home, away, state.tags, stadium, random, DomesticFc.daysFor(state.tournamentId, fixture.stage), DomesticFc.isKnockout(state.tournamentId, fixture.stage))
         } else {
             simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
                 state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage))

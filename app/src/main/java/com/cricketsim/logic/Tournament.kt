@@ -166,7 +166,7 @@ object CplData {
     fun stadium(id: String): Stadium? =
         stadiums.find { it.id == id } ?: IplSeason.stadium(id) ?: AbuDhabiT10.stadium(id) ?: LankaPremierLeague.stadium(id)
             ?: InternationalLeagueT20.stadium(id) ?: BigBashLeague.stadium(id) ?: MajorLeagueCricket.stadium(id)
-            ?: Sa20.stadium(id) ?: Ranji.stadium(id) ?: T20WorldCup.stadium(id) ?: ChampionsTrophy.stadium(id) ?: AsiaCup.stadium(id) ?: AsianGames.stadium(id) ?: StadiumData.getStadiumById(id)
+            ?: Sa20.stadium(id) ?: Ranji.stadium(id) ?: DomesticFc.stadium(id) ?: T20WorldCup.stadium(id) ?: ChampionsTrophy.stadium(id) ?: AsiaCup.stadium(id) ?: AsianGames.stadium(id) ?: StadiumData.getStadiumById(id)
 
     /** Grounds that are nobody's home: a few league matches are played there, as the real CPL tours. */
     private val NEUTRAL_VENUES = listOf("arnos-vale-st-vincent", "queens-park-oval", "national-stadium-grenada")
@@ -252,7 +252,7 @@ object CplData {
         DEFS.find { it.id == teamId }?.shortName ?: AbuDhabiT10.shortNameOrNull(teamId)
             ?: LankaPremierLeague.shortNameOrNull(teamId) ?: InternationalLeagueT20.shortNameOrNull(teamId)
             ?: BigBashLeague.shortNameOrNull(teamId) ?: MajorLeagueCricket.shortNameOrNull(teamId)
-            ?: Sa20.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId) ?: ChampionsTrophy.shortNameOrNull(teamId) ?: AsiaCup.shortNameOrNull(teamId) ?: AsianGames.shortNameOrNull(teamId) ?: CustomTournaments.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
+            ?: Sa20.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId) ?: DomesticFc.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId) ?: ChampionsTrophy.shortNameOrNull(teamId) ?: AsiaCup.shortNameOrNull(teamId) ?: AsianGames.shortNameOrNull(teamId) ?: CustomTournaments.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
 
     fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId
         ?: if (AbuDhabiT10.isTeam(teamId)) AbuDhabiT10.GROUND_ID
@@ -262,6 +262,7 @@ object CplData {
         else if (MajorLeagueCricket.isTeam(teamId)) MajorLeagueCricket.homeGround(teamId)
         else if (Sa20.isTeam(teamId)) Sa20.homeGround(teamId)
         else if (Ranji.isTeam(teamId)) Ranji.homeGround(teamId)
+        else if (DomesticFc.isTeam(teamId)) DomesticFc.homeGround(teamId)
         else if (T20WorldCup.isTeam(teamId) || ChampionsTrophy.isTeam(teamId) || AsiaCup.isTeam(teamId) || AsianGames.isTeam(teamId)) "" // national teams have no home ground
         else if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else "kensington-oval"
 

@@ -102,7 +102,7 @@ object AbuDhabiT10 {
     val stadiums: List<Stadium> by lazy { listOfNotNull(StadiumData.getStadiumById(GROUND_ID)) }
 
     /** 10 overs a side here; the CPL and the IPL are T20. */
-    fun formatFor(tournamentId: String?): MatchFormat = if (Ranji.isRanji(tournamentId)) MatchFormat.TEST else TournamentRules.baseFormatFor(tournamentId) ?: when (tournamentId) {
+    fun formatFor(tournamentId: String?): MatchFormat = if (DomesticFc.isFirstClass(tournamentId)) MatchFormat.TEST else TournamentRules.baseFormatFor(tournamentId) ?: when (tournamentId) {
         TOURNAMENT_ID -> MatchFormat.T10
         ChampionsTrophy.TOURNAMENT_ID -> MatchFormat.ODI // the Champions Trophy is 50 overs a side
         else -> MatchFormat.T20
