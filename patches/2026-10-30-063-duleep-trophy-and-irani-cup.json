@@ -1,0 +1,248 @@
+{
+  "name": "Duleep Trophy 2026-27 and Irani Cup 2026-27 (domestic first-class tournaments) and a Domestic tournament list",
+  "message": "Domestic tournaments: Duleep Trophy (six zones, knockouts) and Irani Cup (one five-day match), a list under Tournament > Domestic tournament",
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * The two small first-class tournaments: the Duleep Trophy 2026-27 (six zones: two quarter-finals, two semi-finals and the\n * Final, four days each) and the Irani Cup 2026-27 (one five-day match between the Ranji Trophy champions, Jammu & Kashmir, and Rest\n * of India). They use the same first-class machinery as the Ranji Trophy (logic/Ranji.kt, FirstClass.kt, TestMatch.kt): play your own\n * match or let the computer play it; a drawn knockout goes to the side ahead on the first innings. See DOMESTIC_FIRST_CLASS.md.\n *\n * Squads are the ones named for the tournaments (Wikipedia, Wisden, Sportsdunia). A player already in the game (the roster, the\n * leagues, the Ranji Trophy) is copied with his ratings; the rest are new with ESTIMATED ratings from the team's strength, the role and\n * a steady number made from the name. The roles and bowling styles written here are from general knowledge of the players or, where\n * unknown, from the order of the squad list.\n */\nobject DomesticFc {\n\n    const val DULEEP_ID = \"duleep_2026_27\"\n    const val DULEEP_NAME = \"Duleep Trophy 2026-27\"\n    const val IRANI_ID = \"irani_2026_27\"\n    const val IRANI_NAME = \"Irani Cup 2026-27\"\n    const val DULEEP_DAYS = 4\n    const val IRANI_DAYS = 5\n\n    fun isSmall(id: String?): Boolean = id == DULEEP_ID || id == IRANI_ID\n\n    /** The Ranji Trophy, the Duleep Trophy or the Irani Cup: matches played with the first-class rules. */\n    fun isFirstClass(id: String?): Boolean = Ranji.isRanji(id) || isSmall(id)\n\n    fun daysFor(id: String?, stage: String): Int = when (id) {\n        IRANI_ID -> IRANI_DAYS\n        DULEEP_ID -> DULEEP_DAYS\n        else -> Ranji.daysFor(stage)\n    }\n\n    /** In a knockout a drawn match goes to the first-innings leader; only the Ranji league stage can be drawn. */\n    fun isKnockout(id: String?, stage: String): Boolean = if (Ranji.isRanji(id)) !Ranji.isGroupStage(stage) else true\n\n    fun rulesFor(id: String?, stage: String?): MatchRules? =\n        if (isFirstClass(id)) TestMatch.rulesForDays(daysFor(id, stage ?: Ranji.STAGES[0])) else null\n\n    // ---------------------------------------------------------------- grounds\n\n    private fun ground(id: String, name: String, city: String, altitude: Int): Stadium = Stadium(\n        id = id, name = name, city = city, country = \"India\", homeTeamIds = emptyList(),\n        pitchType = PitchType.BALANCED, pitchDescription = \"A balanced surface with something for everyone.\",\n        boundarySize = BoundarySize.MEDIUM, altitudeM = altitude, dewFactor = 0.25, avgT20FirstInningsScore = 160,\n        climate = StadiumClimate(0.2, 55, 27, 10, \"Typical conditions for the Indian domestic season.\")\n    )\n\n    // The BCCI Centre of Excellence grounds (estimated ratings). The Final is at Chepauk and the Irani Cup at Srinagar: both are in Ranji.stadiums.\n    private val coe1: Stadium by lazy { ground(\"coe1\", \"BCCI Centre of Excellence Ground 1\", \"Bengaluru\", 900) }\n    private val coe2: Stadium by lazy { ground(\"coe2\", \"BCCI Centre of Excellence Ground 2\", \"Bengaluru\", 900) }\n\n    fun stadium(id: String): Stadium? = when (id) {\n        \"coe1\" -> coe1\n        \"coe2\" -> coe2\n        else -> null\n    }\n\n    fun stadiumsFor(tournamentId: String): List<Stadium> =\n        if (tournamentId == IRANI_ID) listOfNotNull(Ranji.stadium(\"srinagar\"))\n        else listOf(coe1, coe2) + listOfNotNull(Ranji.stadium(\"chepauk\"))\n\n    // ---------------------------------------------------------------- teams\n\n    private class Entry(val name: String, val flags: String, val role: Char, val bowl: String)\n\n    private class Def(val id: String, val name: String, val shortName: String, val home: String, val tier: Int, val squad: List<Entry>)\n\n    private fun parseEntry(text: String): Entry {\n        val p = text.split(\"~\")\n        return Entry(p[0].trim(), p.getOrElse(1) { \"\" }, p.getOrNull(2)?.firstOrNull() ?: '-', p.getOrNull(4) ?: \"\")\n    }\n\n    private fun parseDefs(text: String): List<Def> = text.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n        val p = line.split(\"|\")\n        Def(p[0], p[1], p[2], p[3], p[4].toInt(), p[5].split(\";\").map { parseEntry(it) })\n    }\n\n    private val DULEEP_DEFS: List<Def> by lazy { parseDefs(DULEEP_TEXT) }\n    private val IRANI_DEFS: List<Def> by lazy { parseDefs(IRANI_TEXT) }\n    private val ALL_DEFS: List<Def> by lazy { DULEEP_DEFS + IRANI_DEFS }\n\n    fun isTeam(teamId: String): Boolean = ALL_DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = ALL_DEFS.find { it.id == teamId }?.shortName\n\n    fun homeGround(teamId: String): String = ALL_DEFS.find { it.id == teamId }?.home ?: \"srinagar\"\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    private fun jit(name: String, salt: Int, range: Int): Int {\n        var h = salt * 7919\n        for (c in name) h = h * 31 + c.code\n        return (h and 0x7fffffff) % (2 * range + 1) - range\n    }\n\n    private fun assignRoles(entries: List<Entry>): List<PlayerRole> {\n        val n = entries.size\n        val roles = entries.mapIndexed { i, e ->\n            when {\n                e.flags.contains(\"wk\") || e.role == 'W' -> WK\n                e.role == 'B' -> BAT\n                e.role == 'A' -> AR\n                e.role == 'L' -> BWL\n                i < (n * 4) / 10 -> BAT\n                i < (n * 6) / 10 -> AR\n                else -> BWL\n            }\n        }.toMutableList()\n        if (roles.none { it == WK }) {\n            val pick = (0 until n).firstOrNull { roles[it] == BAT && entries[it].role != 'B' } ?: (0 until n).firstOrNull { roles[it] == BAT } ?: 0\n            roles[pick] = WK\n        }\n        var need = 5 - roles.count { it == BWL || it == AR }\n        var k = n - 1\n        while (need > 0 && k >= 0) {\n            if (roles[k] == BAT && entries[k].role != 'B') { roles[k] = BWL; need-- }\n            k--\n        }\n        k = n - 1\n        while (need > 0 && k >= 0) {\n            if (roles[k] == BAT) { roles[k] = BWL; need-- }\n            k--\n        }\n        return roles\n    }\n\n    private fun styleOf(code: String, name: String, role: PlayerRole): BowlingStyle = when (code) {\n        \"RF\", \"RFM\", \"RMF\", \"RM\", \"LF\", \"LFM\", \"LMF\", \"LM\" -> PACE\n        \"OB\", \"LB\", \"SLA\", \"SLC\" -> SPIN\n        else -> if (role == BWL || role == AR) (if (jit(name, 3, 4) % 3 == 0) SPIN else PACE) else PACE\n    }\n\n    /** Everyone the game already has by name: the roster, the leagues and the Ranji Trophy squads. */\n    private fun knownPlayers(): Map<String, Player> {\n        val out = HashMap<String, Player>()\n        fun addAll(players: List<Player>) {\n            for (p in players) out.putIfAbsent(norm(p.name), p)\n        }\n        addAll(CricketData.getAllTeams().flatMap { it.players })\n        addAll(Ranji.buildTeams().first.flatMap { it.players })\n        addAll(CplData.buildTeams().first.flatMap { it.players })\n        addAll(AbuDhabiT10.buildTeams().first.flatMap { it.players })\n        addAll(LankaPremierLeague.buildTeams().first.flatMap { it.players })\n        addAll(InternationalLeagueT20.buildTeams().first.flatMap { it.players })\n        addAll(BigBashLeague.buildTeams().first.flatMap { it.players })\n        addAll(MajorLeagueCricket.buildTeams().first.flatMap { it.players })\n        addAll(Sa20.buildTeams().first.flatMap { it.players })\n        return out\n    }\n\n    private fun build(defs: List<Def>): Pair<List<Team>, Map<String, SquadTag>> {\n        val known = knownPlayers()\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = defs.map { def ->\n            val roles = assignRoles(def.squad)\n            val tierDelta = when (def.tier) { 5 -> 7; 4 -> 3; 3 -> 0; 2 -> -4; else -> -9 }\n            val base = 56 + tierDelta\n            val players = def.squad.mapIndexed { index, e ->\n                val id = \"${def.id}_${index + 1}\"\n                val found = known[norm(e.name)]\n                val player = if (found != null) {\n                    found.copy(id = id, teamId = def.id, name = e.name)\n                } else {\n                    val role = roles[index]\n                    val bat = when (role) {\n                        BAT -> base + 12 + jit(e.name, 1, 6) + (if (index < 6) 2 else 0)\n                        WK -> base + 9 + jit(e.name, 1, 6)\n                        AR -> base + 3 + jit(e.name, 1, 6)\n                        else -> base - 22 + jit(e.name, 1, 5)\n                    }.coerceIn(8, 92)\n                    val bowl = when (role) {\n                        BWL -> base + 8 + jit(e.name, 2, 6)\n                        AR -> base + 1 + jit(e.name, 2, 6)\n                        WK -> 8\n                        else -> 14 + jit(e.name, 2, 5)\n                    }.coerceIn(5, 92)\n                    val fixed = PlayerProfiles.role(e.name, role)\n                    Player(\n                        id = id, teamId = def.id, name = e.name, role = fixed,\n                        battingRating = bat, bowlingRating = bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(fixed, bat, bowl),\n                        bowlingStyle = PlayerProfiles.style(e.name, styleOf(e.bowl, e.name, role))\n                    )\n                }\n                tags[id] = SquadTag.DOMESTIC\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.shortName,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Customisation.applyToBuilt(Pair(teams, tags), true)\n    }\n\n    fun buildDuleep(): Pair<List<Team>, Map<String, SquadTag>> = build(DULEEP_DEFS)\n\n    fun buildIrani(): Pair<List<Team>, Map<String, SquadTag>> = build(IRANI_DEFS)\n\n    // ---------------------------------------------------------------- the tournaments\n\n    fun newDuleep(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = DULEEP_ID,\n            name = DULEEP_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = listOf(\n                TournamentFixture(0, 1, \"Quarter-final 1\", \"dz_east\", \"dz_northeast\", \"coe2\"),\n                TournamentFixture(1, 2, \"Quarter-final 2\", \"dz_north\", \"dz_west\", \"coe1\")\n            ),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n\n    /** The Irani Cup is one match: Jammu & Kashmir (the Ranji champions, at home in Srinagar) against Rest of India. Its stage is \"Final\". */\n    fun newIrani(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = IRANI_ID,\n            name = IRANI_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = listOf(TournamentFixture(0, 1, \"Final\", \"ir_jk\", \"ir_roi\", \"srinagar\")),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n\n    /** The Duleep Trophy's later rounds: Central meet the winner of quarter-final 1, South the winner of quarter-final 2, then the Final at Chepauk. */\n    fun advance(state: TournamentState): TournamentState {\n        if (state.tournamentId != DULEEP_ID) return state\n        var fx = state.fixtures\n        fun add(stage: String, home: String?, away: String?, ground: String) {\n            if (home == null || away == null) return\n            if (fx.any { it.stage == stage }) return\n            fx = fx + TournamentFixture(fx.size, fx.size + 1, stage, home, away, ground)\n        }\n        fun winnerOf(stage: String): String? = fx.firstOrNull { it.stage == stage }?.result?.winnerId\n        add(\"Semi-final 1\", \"dz_central\", winnerOf(\"Quarter-final 1\"), \"coe2\")\n        add(\"Semi-final 2\", \"dz_south\", winnerOf(\"Quarter-final 2\"), \"coe1\")\n        add(\"Final\", winnerOf(\"Semi-final 1\"), winnerOf(\"Semi-final 2\"), \"chepauk\")\n        return state.copy(fixtures = fx)\n    }\n\n    // ---------------------------------------------------------------- the data\n\n    // id | name | short | home ground | tier 1-5 | squad (name~flags~role letter~~bowling style)\n    private const val DULEEP_TEXT = \"\"\"\ndz_central|Central Zone|CEN|coe1|4|Rajat Patidar~c~B;Rinku Singh~~B~~OB;Aman Mokhade~~B~~LB;Yash Rathod~~B~~SLA;Kunal Chandela~~B~~RM;Aayush Pandey~wk~W;Saransh Jain~~A~~OB;Arshad Khan~~A~~RM;Harsh Dubey~~A~~SLA;Zeeshan Ansari~~L~~LB;Yash Thakur~~L~~RFM;Nachiket Bhute~~?;Aryan Pandey~~L~~RMF\ndz_east|East Zone|EAS|coe1|4|Ishan Kishan~c+wk~W;Vaibhav Sooryavanshi~~B~~SLA;Virat Singh~~B~~OB;Abhimanyu Easwaran~~B~~LB;Sudip Kumar Gharami~~B~~OB;Subhranshu Senapati~~B~~RM;Anukul Roy~~A~~SLA;Shikhar Mohan~~?;Shahbaz Ahmed~~A~~SLA;Suraj Jaiswal~~?;Mohammed Shami~~L~~RF;Mukesh Kumar~~L~~RFM;Denish Das~~B~~LB;Abhijit Sarkar~~L~~RM\ndz_north|North Zone|NOR|coe1|4|Kanhaiya Wadhawan~c+wk~W;Qamran Iqbal~~B;Yash Dhull~~B~~OB;Ayush Doseja~~B;Sanat Sangwan~~B;Abid Mushtaq~~A~~SLA;Ayush Badoni~~B~~OB;Nishant Sindhu~~A~~SLA;Arjun Sharma~~?;Yudhvir Singh~~L~~RMF;Sunil Kumar~~L~~RFM;Arshdeep Singh~~L~~LFM;Anshul Kamboj~~A~~RMF;Nikhil Kashyap~~?\ndz_northeast|North East Zone|NEZ|coe1|1|Rongsen Jonathan~c~A~~RM;Kishan Lyngdoh~~B;Joseph Lalthankhuma~~B;Techi Neri~~A~~OB;Robin Limboo~wk~W;Imliwati Lemtur~~A~~SLA;Priyojit Singh Kangabam~~?;Ronald Longjam~~?;Pheiroijam Jotin~~L~~RM;Akash Choudhary~~L~~RFM;Lalrempuia~~A~~OB;Vino Zhimomi~~?;Bishworjit Konthoujam~~L~~RMF\ndz_south|South Zone|SOU|coe1|4|Tilak Varma~c~B~~OB;Ricky Bhui~wk~W;Shaik Rasheed~~B~~LB;Kodimela Himateja~~B;Karun Nair~~B~~OB;Ravichandran Smaran~~B;Shreyas Gopal~~A~~LB;Aman Khan~~?;Abhinav Tejrana~~B;Vidwath Kaverappa~~L~~RFM;Kavuri Saiteja~~?;Tripurana Vijay~~A~~RMF;Tanay Thyagarajan~~L~~SLA;MD Nidheesh~~L~~RFM\ndz_west|West Zone|WES|coe1|5|Ruturaj Gaikwad~c~B;Prithvi Shaw~~B~~OB;Jay Gohil~wk~W;Shivalik Sharma~~A~~LB;Musheer Khan~~A~~SLA;Shams Mulani~~A~~SLA;Tanush Kotian~~A~~OB;Shardul Thakur~~A~~RFM;Atit Sheth~~A~~RMF;Jaymeet Patel~~B;Mukesh Choudhary~~L~~LM;Tushar Deshpande~~L~~RM;Siddharth Desai~~L~~SLA\n\"\"\"\n\n    private const val IRANI_TEXT = \"\"\"\nir_jk|Jammu & Kashmir|J&K|srinagar|4|Paras Dogra~c~B;Shubham Khajuria~~B;Qamran Iqbal~~B;Yawer Hassan~~?;Shubham Pundir~~B~~LB;Abdul Samad~~B;Kawalpreet Singh~~?;Kanhaiya Wadhawan~wk~W;Abid Mushtaq~~A~~SLA;Sahil Lotra~~?;Vanshaj Sharma~~A;Sunil Kumar~~L~~RFM;Umar Nazir~~L~~RFM;Lone Nasir Muzaffar~~L~~RMF;Rohit Sharma~~B~~OB\nir_roi|Rest of India|ROI|srinagar|5|Rishabh Pant~c+wk~W;Sanat Sangwan~~B;Shikhar Mohan~~B;Sudip Kumar Gharami~~B~~OB;Sarfaraz Khan~vc~B~~LB;Ravichandran Smaran~~B;Manav Suthar~~A~~SLA;Saransh Jain~~A~~OB;Akash Deep~~L~~RFM;Mukesh Kumar~~L~~RFM;Mukesh Choudhary~~L~~LM;Aryan Juyal~wk~W;Aryan Pandey~~L~~RMF;Anukul Roy~~A~~SLA;Ayush Doseja~~B\n\"\"\"\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/DomesticTabs.kt",
+      "content": "package com.cricketsim.ui.tournament\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.DomesticFc\nimport com.cricketsim.logic.TournamentState\n\n/**\n * The \"Table\" page of the Duleep Trophy and the Irani Cup, which have no table: how the competition works, then each match\n * with its stage, the two sides and the result, in order.\n */\n@Composable\nfun DomesticKnockoutTab(state: TournamentState) {\n    val intro = if (state.tournamentId == DomesticFc.IRANI_ID) {\n        \"The Irani Cup is one five-day match between the Ranji Trophy champions, Jammu & Kashmir, and Rest of India. If it is drawn, the side ahead on the first innings wins the cup.\"\n    } else {\n        \"The Duleep Trophy is a knockout between six zones. East meet North East and North meet West in the quarter-finals; Central then meet the winner of the first and South the winner of the second in the semi-finals; the winners play the Final at Chepauk. Four days each. A drawn match goes to the side ahead on the first innings.\"\n    }\n    Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {\n        Text(text = intro, style = MaterialTheme.typography.bodyMedium)\n        Spacer(modifier = Modifier.height(12.dp))\n        Text(text = \"Matches\", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n        state.fixtures.forEach { f ->\n            val home = state.teams.find { it.id == f.homeId }?.name ?: \"To be decided\"\n            val away = state.teams.find { it.id == f.awayId }?.name ?: \"To be decided\"\n            Text(\n                text = \"${f.stage}: $home v $away. ${f.result?.summary ?: \"Not played yet.\"}\",\n                style = MaterialTheme.typography.bodyMedium,\n                modifier = Modifier.padding(vertical = 4.dp)\n            )\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "DOMESTIC_FIRST_CLASS.md",
+      "content": "# Duleep Trophy 2026-27 and Irani Cup 2026-27\n\nTournament > Domestic tournament now opens a short list: the Ranji Trophy (see `RANJI_TROPHY.md`), the Duleep Trophy and the Irani Cup. Files: `logic/DomesticFc.kt` (squads, grounds, fixtures, the Duleep knockout) and `ui/tournament/DomesticTabs.kt` (the Table page, which has no table for these two). Each has its own saved tournament (`saved_tournament_duleep_2026.json`, `saved_tournament_irani_2026.json`) and part-match file.\n\n## Duleep Trophy\n- Six zones: Central, East, North, North East, South, West. Quarter-final 1: East v North East; quarter-final 2: North v West; semi-final 1: Central v the winner of quarter-final 1; semi-final 2: South v the winner of quarter-final 2; the Final. Four days each (the real tournament: BCCI Centre of Excellence, Bengaluru; the Final at Chepauk, Chennai). The first-named side is at home. A drawn match goes to the side ahead on the first innings (the first-named side if level).\n- Squads: the 13 or 14 players each zone named (Wikipedia, 2026-27 Duleep Trophy; Sarfaraz Khan, struck out of the West squad, is left out). The Bengaluru grounds are ESTIMATED (balanced pitch).\n\n## Irani Cup\n- One five-day match at Sher-i-Kashmir Stadium, Srinagar: Jammu & Kashmir (the Ranji Trophy champions, captain Paras Dogra) v Rest of India (captain Rishabh Pant). The squads are the 15 named for the real match (Sportsdunia, 30 September 2026). A draw goes to the first-innings leader, as in the real competition. The cup is the \"Final\" of this one-match tournament, so the celebration works as in the others.\n\n## Players\nPlayers already in the game (the roster, the leagues, the Ranji Trophy squads) keep their ratings. The rest are new with ESTIMATED ratings: the team's strength (tier 1 to 5), the role and a steady number made from the name. Roles and bowling styles are from general knowledge of the players, or from the order of the squad list where unknown; a few keepers (Aayush Pandey, Robin Limboo, Ricky Bhui) are guesses.\n\n## Not built\nThe real results (the game simulates them), the zone squads' reserves, and these teams in Advanced Customisation.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "Sa20.stadium(id) ?: Ranji.stadium(id) ?: T20WorldCup.stadium(id)",
+      "replace": "Sa20.stadium(id) ?: Ranji.stadium(id) ?: DomesticFc.stadium(id) ?: T20WorldCup.stadium(id)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "Sa20.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId)",
+      "replace": "Sa20.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId) ?: DomesticFc.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "        else if (Ranji.isTeam(teamId)) Ranji.homeGround(teamId)\n",
+      "replace": "        else if (Ranji.isTeam(teamId)) Ranji.homeGround(teamId)\n        else if (DomesticFc.isTeam(teamId)) DomesticFc.homeGround(teamId)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        if (state.tournamentId == Ranji.TOURNAMENT_ID) return Ranji.advance(state)\n",
+      "replace": "        if (state.tournamentId == Ranji.TOURNAMENT_ID) return Ranji.advance(state)\n        if (DomesticFc.isSmall(state.tournamentId)) return DomesticFc.advance(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "(if (Ranji.isRanji(state.tournamentId)) {",
+      "replace": "(if (DomesticFc.isFirstClass(state.tournamentId)) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "simulateFirstClass(home, away, state.tags, stadium, random, Ranji.daysFor(fixture.stage), !Ranji.isGroupStage(fixture.stage))",
+      "replace": "simulateFirstClass(home, away, state.tags, stadium, random, DomesticFc.daysFor(state.tournamentId, fixture.stage), DomesticFc.isKnockout(state.tournamentId, fixture.stage))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, !Ranji.isGroupStage(fixture.stage))",
+      "replace": "buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, DomesticFc.isKnockout(state.tournamentId, fixture.stage))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        if (Ranji.isRanji(tournamentId)) return TestMatch.rulesForDays(Ranji.daysFor(stage ?: Ranji.STAGES[0]))\n",
+      "replace": "        DomesticFc.rulesFor(tournamentId, stage)?.let { return it }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+      "find": "if (Ranji.isRanji(tournamentId)) MatchFormat.TEST else",
+      "replace": "if (DomesticFc.isFirstClass(tournamentId)) MatchFormat.TEST else",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.Ranji\n",
+      "replace": "import com.cricketsim.logic.DomesticFc\nimport com.cricketsim.logic.Ranji\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    object CustomList : TPage\n",
+      "replace": "    object CustomList : TPage\n    /** The domestic tournaments: the Ranji Trophy, the Duleep Trophy and the Irani Cup. */\n    object Domestic : TPage\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val ranjiMatchStore = remember { MatchSaveStore(context, \"saved_ranji_match.json\") }\n",
+      "replace": "    val ranjiMatchStore = remember { MatchSaveStore(context, \"saved_ranji_match.json\") }\n    val duleepStore = remember { TournamentSaveStore(context, \"saved_tournament_duleep_2026.json\") }\n    val duleepMatchStore = remember { MatchSaveStore(context, \"saved_duleep_match.json\") }\n    val iraniStore = remember { TournamentSaveStore(context, \"saved_tournament_irani_2026.json\") }\n    val iraniMatchStore = remember { MatchSaveStore(context, \"saved_irani_match.json\") }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ranji2027\" -> ranjiStore;",
+      "replace": "\"ranji2027\" -> ranjiStore; \"duleep2026\" -> duleepStore; \"irani2026\" -> iraniStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ranji2027\" -> ranjiMatchStore;",
+      "replace": "\"ranji2027\" -> ranjiMatchStore; \"duleep2026\" -> duleepMatchStore; \"irani2026\" -> iraniMatchStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val ranjiBuilt = remember { lazy { Ranji.buildTeams() } }\n",
+      "replace": "    val ranjiBuilt = remember { lazy { Ranji.buildTeams() } }\n    val duleepBuilt = remember { lazy { DomesticFc.buildDuleep() } }\n    val iraniBuilt = remember { lazy { DomesticFc.buildIrani() } }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ranji2027\" -> ranjiBuilt.value;",
+      "replace": "\"ranji2027\" -> ranjiBuilt.value; \"duleep2026\" -> duleepBuilt.value; \"irani2026\" -> iraniBuilt.value;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onDomestic = {\n                    // The Ranji Trophy has its own saved tournament too.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"ranji2027\"\n                    page = TPage.Adt\n                },\n",
+      "replace": "                onDomestic = { page = TPage.Domestic },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        is TPage.Leagues -> {\n",
+      "replace": "        is TPage.Domestic -> {\n            val back = { page = TPage.Menu }\n            BackHandler(onBack = back)\n            DomesticPage(\n                onRanji = {\n                    // Each domestic tournament has its own saved tournament and match slot.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"ranji2027\"\n                    page = TPage.Adt\n                },\n                onDuleep = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"duleep2026\"\n                    page = TPage.Adt\n                },\n                onIrani = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"irani2026\"\n                    page = TPage.Adt\n                },\n                onBack = back\n            )\n        }\n        is TPage.Leagues -> {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val isRanji = kind == \"ranji2027\"\n",
+      "replace": "            val isRanji = kind == \"ranji2027\"\n            val isDuleep = kind == \"duleep2026\"\n            val isIrani = kind == \"irani2026\"\n            val isDomestic = isRanji || isDuleep || isIrani\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isRanji -> Ranji.TOURNAMENT_NAME\n",
+      "replace": "                isRanji -> Ranji.TOURNAMENT_NAME\n                isDuleep -> DomesticFc.DULEEP_NAME\n                isIrani -> DomesticFc.IRANI_NAME\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isAg || isRanji || isCustomKind) {",
+      "replace": "isAg || isDomestic || isCustomKind) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isWc || isCt || isAc || isAg || isRanji || isCustomKind -> Unit",
+      "replace": "isWc || isCt || isAc || isAg || isDomestic || isCustomKind -> Unit",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "else if (isRanji) TPage.Menu",
+      "replace": "else if (isDomestic) TPage.Domestic",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    isCustomKind -> CustomTournaments.introOf(customId)\n",
+      "replace": "                    isDuleep -> \"The Duleep Trophy 2026-27: the six zones and their squads. East meet North East and North meet West in the quarter-finals, Central and South wait in the semi-finals, then the Final at Chepauk. Four-day matches; a drawn match goes to the side ahead on the first innings.\"\n                    isIrani -> \"The Irani Cup 2026-27: one five-day match at Srinagar between the Ranji Trophy champions, Jammu & Kashmir, and Rest of India. If it is drawn, the side ahead on the first innings wins the cup.\"\n                    isCustomKind -> CustomTournaments.introOf(customId)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"ranji2027\" || isCustomKind) TPage.Adt else TPage.Cpl }",
+      "replace": "kind == \"ranji2027\" || kind == \"duleep2026\" || kind == \"irani2026\" || isCustomKind) TPage.Adt else TPage.Cpl }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        \"ranji2027\" -> Ranji.newTournament(teamId, built)\n",
+      "replace": "                        \"ranji2027\" -> Ranji.newTournament(teamId, built)\n                        \"duleep2026\" -> DomesticFc.newDuleep(teamId, built)\n                        \"irani2026\" -> DomesticFc.newIrani(teamId, built)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind != \"ranji2027\" && !isCustomKind,",
+      "replace": "kind != \"ranji2027\" && kind != \"duleep2026\" && kind != \"irani2026\" && !isCustomKind,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ag2026\", \"ranji2027\" -> TPage.Adt; else",
+      "replace": "\"ag2026\", \"ranji2027\", \"duleep2026\", \"irani2026\" -> TPage.Adt; else",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    if (state.tournamentId == Ranji.TOURNAMENT_ID) {\n        RanjiTableTab(state)\n        return\n    }\n",
+      "replace": "    if (state.tournamentId == Ranji.TOURNAMENT_ID) {\n        RanjiTableTab(state)\n        return\n    }\n    if (DomesticFc.isSmall(state.tournamentId)) {\n        DomesticKnockoutTab(state)\n        return\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                Ranji.TOURNAMENT_ID -> Ranji.stadiums\n",
+      "replace": "                Ranji.TOURNAMENT_ID -> Ranji.stadiums\n                DomesticFc.DULEEP_ID, DomesticFc.IRANI_ID -> DomesticFc.stadiumsFor(state.tournamentId)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"The Ranji Trophy 2026-27 with the real teams, squads and fixtures, in four-day matches.\"",
+      "replace": "\"The Ranji Trophy, the Duleep Trophy and the Irani Cup 2026-27, with the real teams and squads, in four- and five-day matches.\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "@Composable\nprivate fun InternationalPage(",
+      "replace": "@Composable\nprivate fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () -> Unit, onBack: () -> Unit) {\n    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {\n        PageTitle(\"Domestic tournaments\")\n        Spacer(modifier = Modifier.height(16.dp))\n        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {\n            ChoiceRow(\n                title = \"Ranji Trophy 2026-27\",\n                description = \"38 teams in four Elite groups and the Plate group, the real fixtures, then the knockouts. Four-day matches.\",\n                enabled = true,\n                onClick = onRanji\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Duleep Trophy 2026-27\",\n                description = \"Six zones: two quarter-finals, two semi-finals and the Final at Chepauk. Four-day matches.\",\n                enabled = true,\n                onClick = onDuleep\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Irani Cup 2026-27\",\n                description = \"One five-day match: Jammu & Kashmir, the Ranji champions, against Rest of India, in Srinagar.\",\n                enabled = true,\n                onClick = onIrani\n            )\n        }\n        Spacer(modifier = Modifier.height(8.dp))\n        BackButton(onBack = onBack)\n    }\n}\n\n@Composable\nprivate fun InternationalPage(",
+      "count": 1
+    }
+  ]
+}
