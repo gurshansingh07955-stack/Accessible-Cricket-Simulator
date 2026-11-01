@@ -1,0 +1,193 @@
+{
+  "name": "Syed Mushtaq Ali Trophy and Vijay Hazare Trophy",
+  "message": "Add the two Indian domestic white-ball tournaments of 2026-27 to Tournament > Domestic tournament",
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticWhiteBall.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * The two Indian domestic white-ball tournaments of 2026-27: the Syed Mushtaq Ali Trophy (T20, 14 November to 6 December) and the Vijay\n * Hazare Trophy (50 overs, 14 December to 8 January). Both are played by the 38 Ranji Trophy teams: four Elite groups of eight and a Plate\n * group of six, every team playing the others in its group once. The fixtures are the real ones in their real order (Cricinfo, 31 October\n * 2026). See DOMESTIC_WHITE_BALL.md.\n *\n * Teams and squads: the Ranji Trophy teams (logic/Ranji.kt, ids \"rj_xx\") and their squads, plus a few well-known players for each state taken\n * from the game's own players (the roster, the IPL pool and the leagues). Nobody is created here. [ADD_STARS] = false gives plain Ranji squads.\n * The real squads for these tournaments are named a few days before they start.\n *\n * Stages: \"Elite Group A\" to \"Elite Group D\", \"Plate Group\", then\n *  - T20: \"Super League Group A\" (A1, B1, C2, D2) and \"Super League Group B\" (C1, D1, A2, B2), each a round robin of four, the group\n *    winners play the \"Final\"; \"Plate Final\" between the top two of the Plate group.\n *  - 50 overs: quarter-finals A1 v C2, B1 v D2, C1 v A2, D1 v B2, semi-finals, the \"Final\"; the \"Plate Final\".\n * Points: 4 for a win, 2 each for a tie or no result (shown in the tables; the game stores 2 for a win and they are converted).\n */\nobject DomesticWhiteBall {\n    const val SMAT_ID = \"smat_2026_27\"\n    const val SMAT_NAME = \"Syed Mushtaq Ali Trophy 2026-27\"\n    const val VHT_ID = \"vht_2026_27\"\n    const val VHT_NAME = \"Vijay Hazare Trophy 2026-27\"\n\n    /** True: each state's squad is its Ranji squad plus well-known players the game already has. False: Ranji squads only. */\n    const val ADD_STARS = true\n\n    const val PLATE = \"Plate Group\"\n    const val PLATE_FINAL = \"Plate Final\"\n    const val FINAL = \"Final\"\n    const val SL_A = \"Super League Group A\"\n    const val SL_B = \"Super League Group B\"\n    val ELITE = listOf(\"Elite Group A\", \"Elite Group B\", \"Elite Group C\", \"Elite Group D\")\n    private val STAGE_OF_LETTER = mapOf('A' to ELITE[0], 'B' to ELITE[1], 'C' to ELITE[2], 'D' to ELITE[3], 'P' to PLATE)\n\n    // Grounds: all exist in the game already (StadiumData or Ranji.stadiums). Group B's and C's cities in the 50-over event are an assumption.\n    private val SMAT_GROUND = mapOf(\n        \"m\" to \"bkc\", \"w\" to \"wankhede\", \"v\" to \"aca-vdca-vizag\", \"p\" to \"mohali\",\n        \"n\" to \"mullanpur\", \"k\" to \"kalyani\", \"e\" to \"eden-gardens\", \"s\" to \"sovima\"\n    )\n    private val VHT_GROUND = mapOf(\n        \"r\" to \"saurashtra-rajkot\", \"a\" to \"narendra-modi-ahmedabad\", \"b\" to \"alur\", \"j\" to \"jsca-ranchi\", \"i\" to \"holkar-indore\"\n    )\n    private const val SMAT_KNOCKOUT_GROUND = \"vca-nagpur\"\n    private const val SMAT_PLATE_FINAL_GROUND = \"sovima\"\n    private const val VHT_KNOCKOUT_GROUND = \"aca-vdca-vizag\"\n    private const val VHT_PLATE_FINAL_GROUND = \"holkar-indore\"\n\n    fun isSmat(id: String?): Boolean = id == SMAT_ID\n    fun isVht(id: String?): Boolean = id == VHT_ID\n    fun isWhiteBall(id: String?): Boolean = id == SMAT_ID || id == VHT_ID\n\n    /** 20 overs (T20) or 50 overs, no DRS and no rain, as in Indian domestic cricket. In the 50-over event a tied league match is shared. */\n    fun rulesFor(id: String?, stage: String?): MatchRules? {\n        val key = when (id) {\n            SMAT_ID -> \"T20\"\n            VHT_ID -> \"ODI\"\n            else -> return null\n        }\n        val base = TournamentRules.rulesForFormat(key) ?: return null\n        val league = stage != null && (stage in ELITE || stage == PLATE)\n        return base.copy(drsReviews = 0, rainEnabled = false, noSuperOver = id == VHT_ID && league)\n    }\n\n    fun introOf(id: String?): String =\n        if (id == SMAT_ID) {\n            \"Four points for a win, two each for a tie or no result. The top two of each Elite group go to the Super League. \" +\n                \"Super League Group A is the winners of Elite groups A and B and the runners-up of C and D; Super League Group B is the winners \" +\n                \"of C and D and the runners-up of A and B. The winners of the two Super League groups play the Final. \" +\n                \"The top two of the Plate group play the Plate Final.\"\n        } else {\n            \"Four points for a win, two each for a tie or no result. The top two of each Elite group go to the quarter-finals: \" +\n                \"A1 v C2, B1 v D2, C1 v A2, D1 v B2. Then the semi-finals and the Final. The top two of the Plate group play the Plate Final.\"\n        }\n\n    // ---------------------------------------------------------------- teams\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** Everyone the game already has by name: the roster, the IPL pool and the leagues. */\n    private fun knownPlayers(): Map<String, Player> {\n        val out = HashMap<String, Player>()\n        fun addAll(players: List<Player>) {\n            for (p in players) out.putIfAbsent(norm(p.name), p)\n        }\n        addAll(CricketData.getAllTeams().flatMap { it.players })\n        addAll(IplData.buildPool().map { it.player })\n        addAll(CplData.buildTeams().first.flatMap { it.players })\n        addAll(AbuDhabiT10.buildTeams().first.flatMap { it.players })\n        addAll(LankaPremierLeague.buildTeams().first.flatMap { it.players })\n        addAll(InternationalLeagueT20.buildTeams().first.flatMap { it.players })\n        addAll(BigBashLeague.buildTeams().first.flatMap { it.players })\n        addAll(MajorLeagueCricket.buildTeams().first.flatMap { it.players })\n        addAll(Sa20.buildTeams().first.flatMap { it.players })\n        return out\n    }\n\n    /** The 38 teams. A name in [STARS_TEXT] that the game does not have is simply left out. */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val ranji = Ranji.buildTeams()\n        if (!ADD_STARS) return ranji\n        val known = knownPlayers()\n        val tags = LinkedHashMap<String, SquadTag>(ranji.second)\n        val extra = STARS_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.associate { line ->\n            val p = line.split(\"|\")\n            p[0] to p[1].split(\";\").map { it.trim() }\n        }\n        val teams = ranji.first.map { team ->\n            val names = extra[team.id.removePrefix(\"rj_\")] ?: return@map team\n            val have = team.players.map { norm(it.name) }.toMutableSet()\n            val added = ArrayList<Player>()\n            for (n in names) {\n                val found = known[norm(n)] ?: continue\n                if (!have.add(norm(n))) continue\n                val id = \"${team.id}_s${added.size + 1}\"\n                added.add(found.copy(id = id, teamId = team.id, name = n))\n                tags[id] = SquadTag.DOMESTIC\n            }\n            if (added.isEmpty()) {\n                team\n            } else {\n                val players = (team.players + added).sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n                team.copy(\n                    players = players,\n                    battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                    bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                    fieldingRating = avg(players.map { it.fieldingRating })\n                )\n            }\n        }\n        return Pair(teams, tags)\n    }\n\n    // ---------------------------------------------------------------- fixtures\n\n    private fun rows(text: String): List<List<String>> = text.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { it.split(\"|\") }\n\n    /** The 127 real group matches in the real order (by date, then as listed). The later stages are added by [advance]. */\n    fun buildSchedule(id: String): List<TournamentFixture> {\n        val smat = id == SMAT_ID\n        val grounds = if (smat) SMAT_GROUND else VHT_GROUND\n        return rows(if (smat) SMAT_TEXT else VHT_TEXT).mapIndexed { i, p ->\n            TournamentFixture(i, i + 1, STAGE_OF_LETTER.getValue(p[0][0]), \"rj_\" + p[1], \"rj_\" + p[2], grounds.getValue(p[3]))\n        }\n    }\n\n    fun newTournament(id: String, userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = id,\n            name = if (id == SMAT_ID) SMAT_NAME else VHT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(id),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n\n    fun stadiumsFor(id: String): List<Stadium> {\n        val extra = if (id == SMAT_ID) listOf(SMAT_KNOCKOUT_GROUND, SMAT_PLATE_FINAL_GROUND) else listOf(VHT_KNOCKOUT_GROUND, VHT_PLATE_FINAL_GROUND)\n        return (buildSchedule(id).map { it.stadiumId } + extra).distinct().mapNotNull { CplData.stadium(it) }\n    }\n\n    // ---------------------------------------------------------------- tables and progress\n\n    private fun teamsOfStage(state: TournamentState, stage: String): Set<String> =\n        state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()\n\n    /** The table of one stage with the BCCI's points: 4 for a win, 2 for a tie or no result. */\n    private fun stageTable(state: TournamentState, stage: String): List<StandingRow> {\n        val ids = teamsOfStage(state, stage)\n        return CplData.standings(state, stage).filter { it.team.id in ids }\n            .map { it.copy(points = it.won * 4 + it.noResult * 2) }\n    }\n\n    /** One table per group (and per Super League group once it exists), each with its heading. */\n    fun tables(state: TournamentState): List<Pair<String, List<StandingRow>>> {\n        val stages = ELITE + listOf(PLATE) + (if (state.tournamentId == SMAT_ID) listOf(SL_A, SL_B) else emptyList())\n        return stages.filter { teamsOfStage(state, it).isNotEmpty() }.map { it to stageTable(state, it) }\n    }\n\n    private fun complete(fx: List<TournamentFixture>, stage: String): Boolean {\n        val l = fx.filter { it.stage == stage }\n        return l.isNotEmpty() && l.all { it.result != null }\n    }\n\n    private fun winnerOf(fx: List<TournamentFixture>, stage: String): String? =\n        fx.firstOrNull { it.stage == stage }?.result?.winnerId\n\n    private fun topTwo(state: TournamentState, fx: List<TournamentFixture>, stage: String): List<String> =\n        stageTable(state.copy(fixtures = fx), stage).map { it.team.id }.take(2)\n\n    private fun addPlateFinal(state: TournamentState, fx: List<TournamentFixture>, ground: String): List<TournamentFixture> {\n        if (fx.any { it.stage == PLATE_FINAL } || !complete(fx, PLATE)) return fx\n        val top = topTwo(state, fx, PLATE)\n        if (top.size < 2) return fx\n        return fx + TournamentFixture(fx.size, fx.size + 1, PLATE_FINAL, top[0], top[1], ground)\n    }\n\n    private val SL_ROUNDS = listOf(listOf(0 to 1, 2 to 3), listOf(0 to 2, 1 to 3), listOf(0 to 3, 1 to 2))\n\n    private fun advanceSmat(state: TournamentState): TournamentState {\n        var fx = addPlateFinal(state, state.fixtures, SMAT_PLATE_FINAL_GROUND)\n        if (ELITE.all { complete(fx, it) } && fx.none { it.stage == SL_A }) {\n            val t = ELITE.map { topTwo(state, fx, it) }\n            if (t.all { it.size == 2 }) {\n                val a = listOf(t[0][0], t[1][0], t[2][1], t[3][1])\n                val b = listOf(t[2][0], t[3][0], t[0][1], t[1][1])\n                for (round in SL_ROUNDS) {\n                    for ((x, y) in round) {\n                        fx = fx + TournamentFixture(fx.size, fx.size + 1, SL_A, a[x], a[y], SMAT_KNOCKOUT_GROUND)\n                        fx = fx + TournamentFixture(fx.size, fx.size + 1, SL_B, b[x], b[y], SMAT_KNOCKOUT_GROUND)\n                    }\n                }\n            }\n        }\n        if (complete(fx, SL_A) && complete(fx, SL_B) && fx.none { it.stage == FINAL }) {\n            val a = topTwo(state, fx, SL_A)\n            val b = topTwo(state, fx, SL_B)\n            if (a.isNotEmpty() && b.isNotEmpty()) {\n                fx = fx + TournamentFixture(fx.size, fx.size + 1, FINAL, a[0], b[0], SMAT_KNOCKOUT_GROUND)\n            }\n        }\n        return state.copy(fixtures = fx)\n    }\n\n    private fun advanceVht(state: TournamentState): TournamentState {\n        var fx = addPlateFinal(state, state.fixtures, VHT_PLATE_FINAL_GROUND)\n        fun add(stage: String, home: String?, away: String?) {\n            if (home == null || away == null) return\n            if (fx.any { it.stage == stage }) return\n            fx = fx + TournamentFixture(fx.size, fx.size + 1, stage, home, away, VHT_KNOCKOUT_GROUND)\n        }\n        if (ELITE.all { complete(fx, it) }) {\n            val t = ELITE.map { topTwo(state, fx, it) }\n            fun at(g: Int, p: Int): String? = t[g].getOrNull(p)\n            add(\"Quarter-final 1\", at(0, 0), at(2, 1))\n            add(\"Quarter-final 2\", at(1, 0), at(3, 1))\n            add(\"Quarter-final 3\", at(2, 0), at(0, 1))\n            add(\"Quarter-final 4\", at(3, 0), at(1, 1))\n        }\n        add(\"Semi-final 1\", winnerOf(fx, \"Quarter-final 1\"), winnerOf(fx, \"Quarter-final 4\"))\n        add(\"Semi-final 2\", winnerOf(fx, \"Quarter-final 2\"), winnerOf(fx, \"Quarter-final 3\"))\n        add(FINAL, winnerOf(fx, \"Semi-final 1\"), winnerOf(fx, \"Semi-final 2\"))\n        return state.copy(fixtures = fx)\n    }\n\n    /** Fills in the later stages as the teams become known. Safe after every match. */\n    fun advance(state: TournamentState): TournamentState = when (state.tournamentId) {\n        SMAT_ID -> advanceSmat(state)\n        VHT_ID -> advanceVht(state)\n        else -> state\n    }\n\n    // ---------------------------------------------------------------- the data\n\n    // stage letter (A-D Elite groups, P Plate) | home team code (Ranji's \"rj_\" + code) | away team code | ground code\n    private const val SMAT_TEXT = \"\"\"\nP|nag|meg|s\nP|ap|man|s\nA|cha|bar|m\nB|sau|bih|v\nB|rai|tn|v\nB|pun|har|v\nB|jak|del|v\nC|mah|pon|n\nD|hyd|mum|k\nC|tri|and|p\nA|miz|jha|w\nD|guj|odi|e\nP|ser|sik|s\nA|raj|up|m\nC|hp|ass|n\nD|vid|goa|k\nA|kar|ben|w\nC|mp|ker|p\nD|utt|chh|e\nP|sik|ap|s\nP|nag|man|s\nA|raj|jha|m\nB|rai|bih|v\nB|jak|tn|v\nB|sau|har|v\nB|del|pun|v\nC|hp|and|n\nD|vid|odi|k\nC|mp|ass|p\nA|kar|up|w\nD|utt|goa|e\nP|ser|meg|s\nA|miz|bar|m\nC|tri|pon|n\nD|guj|mum|k\nA|ben|cha|w\nC|ker|mah|p\nD|chh|hyd|e\nA|ben|jha|m\nP|sik|nag|s\nP|ser|ap|s\nB|del|bih|v\nB|pun|rai|v\nB|tn|har|v\nB|jak|sau|v\nC|ker|and|n\nD|chh|odi|k\nD|hyd|vid|e\nA|cha|raj|w\nC|mah|hp|p\nP|meg|man|s\nA|up|bar|m\nC|ass|pon|n\nD|goa|mum|k\nA|kar|miz|w\nC|mp|tri|p\nD|utt|guj|e\nP|ap|meg|s\nP|ser|nag|s\nA|cha|up|m\nB|pun|tn|v\nB|jak|bih|v\nB|del|sau|v\nB|rai|har|v\nC|mah|ass|n\nD|hyd|goa|k\nA|kar|jha|w\nC|mp|and|p\nD|utt|odi|e\nP|sik|man|s\nA|ben|miz|m\nC|ker|tri|n\nD|chh|guj|k\nA|raj|bar|w\nC|hp|pon|p\nD|vid|mum|e\nC|hp|tri|n\nD|vid|guj|k\nP|ser|man|s\nP|sik|meg|s\nA|raj|miz|m\nB|rai|sau|v\nB|del|har|v\nB|jak|pun|v\nB|tn|bih|v\nC|ker|pon|p\nD|chh|mum|e\nA|ben|bar|w\nP|ap|nag|s\nA|kar|cha|m\nC|mp|mah|n\nD|utt|hyd|k\nA|up|jha|w\nC|ass|and|p\nD|goa|odi|e\nA|ben|up|m\nB|del|tn|v\nB|pun|sau|v\nB|jak|rai|v\nB|bih|har|v\nC|ker|ass|n\nD|chh|goa|k\nA|cha|miz|w\nC|mah|tri|p\nD|hyd|guj|e\nA|kar|raj|m\nC|mp|hp|n\nD|utt|vid|k\nA|jha|bar|w\nC|and|pon|p\nD|odi|mum|e\nA|kar|bar|m\nB|jak|har|v\nB|del|rai|v\nB|pun|bih|v\nB|sau|tn|v\nC|mp|pon|n\nD|utt|mum|k\nC|ker|hp|p\nD|chh|vid|e\nA|ben|raj|w\nA|cha|jha|m\nC|mah|and|n\nD|hyd|odi|k\nA|miz|up|w\nC|tri|ass|p\nD|guj|goa|e\n\"\"\"\n\n    private const val VHT_TEXT = \"\"\"\nA|bar|vid|r\nA|rai|utt|r\nA|tn|bih|r\nA|mp|and|r\nB|har|hyd|a\nB|jak|guj|a\nB|sau|jha|a\nB|ser|mum|a\nC|mah|chh|b\nC|pun|hp|b\nC|cha|raj|b\nC|goa|del|b\nD|ass|ker|j\nD|kar|tri|j\nD|pon|odi|j\nD|up|ben|j\nP|sik|miz|i\nP|meg|nag|i\nP|ap|man|i\nA|rai|and|r\nA|utt|tn|r\nA|mp|vid|r\nA|bar|bih|r\nB|jak|mum|a\nB|guj|sau|a\nB|ser|hyd|a\nB|har|jha|a\nC|pun|del|b\nC|hp|cha|b\nC|goa|chh|b\nC|mah|raj|b\nD|kar|ben|j\nD|tri|pon|j\nD|up|ker|j\nD|ass|odi|j\nP|nag|ap|i\nP|meg|miz|i\nP|sik|man|i\nA|tn|mp|r\nA|rai|bar|r\nA|utt|vid|r\nA|and|bih|r\nB|sau|ser|a\nB|jak|har|a\nB|guj|hyd|a\nB|mum|jha|a\nC|cha|goa|b\nC|pun|mah|b\nC|hp|chh|b\nC|del|raj|b\nD|pon|up|j\nD|kar|ass|j\nD|tri|ker|j\nD|ben|odi|j\nP|nag|sik|i\nP|miz|man|i\nP|meg|ap|i\nA|rai|vid|r\nA|mp|bih|r\nA|tn|and|r\nA|utt|bar|r\nB|jak|hyd|a\nB|ser|jha|a\nB|sau|mum|a\nB|guj|har|a\nC|pun|chh|b\nC|goa|raj|b\nC|cha|del|b\nC|hp|mah|b\nD|kar|ker|j\nD|up|odi|j\nD|pon|ben|j\nD|tri|ass|j\nP|ap|miz|i\nP|nag|man|i\nP|meg|sik|i\nA|utt|bih|r\nA|and|vid|r\nA|mp|bar|r\nA|rai|tn|r\nB|guj|jha|a\nB|mum|hyd|a\nB|ser|har|a\nB|jak|sau|a\nC|hp|raj|b\nC|del|chh|b\nC|goa|mah|b\nC|pun|cha|b\nD|tri|odi|j\nD|ben|ker|j\nD|up|ass|j\nD|kar|pon|j\nP|meg|man|i\nP|ap|sik|i\nP|nag|miz|i\nA|tn|bar|r\nA|vid|bih|r\nA|utt|and|r\nA|rai|mp|r\nB|sau|har|a\nB|hyd|jha|a\nB|guj|mum|a\nB|jak|ser|a\nC|cha|mah|b\nC|chh|raj|b\nC|hp|del|b\nC|pun|goa|b\nD|pon|ass|j\nD|ker|odi|j\nD|tri|ben|j\nD|kar|up|j\nA|utt|mp|r\nA|bar|and|r\nA|rai|bih|r\nA|tn|vid|r\nB|guj|ser|a\nB|har|mum|a\nB|jak|jha|a\nB|sau|hyd|a\nC|cha|chh|b\nC|hp|goa|b\nC|mah|del|b\nC|pun|raj|b\nD|tri|up|j\nD|ass|ben|j\nD|kar|odi|j\nD|pon|ker|j\n\"\"\"\n\n    // state code | well-known players (copied from the game when it has them; a name it does not have is skipped)\n    private const val STARS_TEXT = \"\"\"\nmum|Suryakumar Yadav;Shivam Dube;Shardul Thakur;Ajinkya Rahane;Sarfaraz Khan;Yashasvi Jaiswal;Shreyas Iyer;Rohit Sharma;Tushar Deshpande;Musheer Khan;Tanush Kotian;Ayush Mhatre;Siddhesh Lad;Shams Mulani\ndel|Virat Kohli;Rishabh Pant;Nitish Rana;Ishant Sharma;Harshit Rana;Ayush Badoni;Priyansh Arya\nkar|KL Rahul;Devdutt Padikkal;Mayank Agarwal;Prasidh Krishna;Karun Nair;Abhinav Manohar\npun|Shubman Gill;Abhishek Sharma;Arshdeep Singh;Prabhsimran Singh;Nehal Wadhera;Harpreet Brar;Ramandeep Singh;Anmolpreet Singh;Mayank Markande\nker|Sanju Samson;Vishnu Vinod;Shreyas Gopal;Vignesh Puthur;Sachin Baby;Basil Thampi;Jalaj Saxena\ntn|Varun Chakravarthy;Washington Sundar;Sai Sudharsan;Sai Kishore;Narayan Jagadeesan;Shahrukh Khan;T Natarajan;Vijay Shankar\nhar|Yuzvendra Chahal;Rahul Tewatia;Anshul Kamboj;Harshal Patel;Nishant Sindhu;Ankit Kumar;Himanshu Rana;Sumit Kumar\nraj|Deepak Chahar;Rahul Chahar;Mahipal Lomror;Khaleel Ahmed;Kunal Singh Rathore;Ashok Sharma;Ravi Bishnoi\njha|Ishan Kishan;Kumar Kushagra;Anukul Roy;Shahbaz Nadeem;Robin Minz;Virat Singh\nben|Mohammed Shami;Akash Deep;Abhimanyu Easwaran;Shahbaz Ahmed;Sudip Kumar Gharami;Mukesh Kumar;Anustup Majumdar;Ishan Porel;Karan Lal\nup|Rinku Singh;Dhruv Jurel;Bhuvneshwar Kumar;Kuldeep Yadav;Yash Dayal;Mohsin Khan;Madhav Kaushik;Shivam Mavi;Ankit Rajpoot;Priyam Garg;Sameer Rizvi;Shivam Sharma\nguj|Jasprit Bumrah;Axar Patel;Urvil Patel;Arzan Nagwaswalla;Priyank Panchal;Chintan Gaja\nbar|Hardik Pandya;Krunal Pandya;Deepak Hooda;Shivalik Sharma;Mahesh Pithiya\nhyd|Tilak Varma;Mohammed Siraj;Tanmay Agarwal;Rahul Buddhi;Rohit Rayudu;Rahul Singh\nsau|Ravindra Jadeja;Jaydev Unadkat;Cheteshwar Pujara;Chirag Jani;Prerak Mankad;Harvik Desai;Arpit Vasavada\nmah|Ruturaj Gaikwad;Rahul Tripathi;Ankit Bawne;Prithvi Shaw;Mukesh Choudhary;Azim Kazi;Satyajeet Bachhav;Nikhil Naik\nvid|Dhruv Shorey;Atharva Taide;Akshay Wadkar;Darshan Nalkande;Harsh Dubey;Aman Mokhade;Yash Thakur;Danish Malewar;Yash Rathod\nmp|Rajat Patidar;Venkatesh Iyer;Avesh Khan;Kumar Kartikeya;Kuldeep Sen;Shubham Sharma;Harpreet Singh Bhatia;Arshad Khan;Himanshu Mantri\nass|Riyan Parag;Denish Das;Abhishek Thakuri;Mukhtar Hussain;Rishav Das\nand|Nitish Kumar Reddy;Ricky Bhui;KS Bharat;Shaik Rasheed;Ashwin Hebbar\nchh|Shashank Singh;Ajay Mandal;Amandeep Khare\nrai|Ashutosh Sharma;Upendra Yadav;Karn Sharma;Pratham Singh;Himanshu Sangwan\njak|Abdul Samad;Auqib Nabi;Umran Malik;Parvez Rasool;Qamran Iqbal;Vanshaj Sharma;Shubham Khajuria;Yudhvir Singh\nbih|Vaibhav Sooryavanshi;Sakibul Gani\ngoa|Arjun Tendulkar;Suyash Prabhudessai;Snehal Kauthankar\n\"\"\"\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "DOMESTIC_WHITE_BALL.md",
+      "content": "# Syed Mushtaq Ali Trophy 2026-27 and Vijay Hazare Trophy 2026-27\n\nTournament > Domestic tournament now lists five: the Ranji Trophy, the Duleep Trophy, the Irani Cup, the Syed Mushtaq Ali Trophy (T20) and the Vijay Hazare Trophy (50 overs). File: `logic/DomesticWhiteBall.kt`. Each has its own saved tournament (`saved_tournament_smat_2026_27.json`, `saved_tournament_vht_2026_27.json`) and part-match file.\n\n## What is in the game\n- The 38 Ranji Trophy teams (ids `rj_xx`): four Elite groups of eight and a Plate group of six, the **real group fixtures in the real order** (Cricinfo, 31 October 2026). Elite group matches are 28 a group, the Plate group 15. The groups are the real 2026-27 ones for each tournament (Mizoram promoted into the Elite in the T20, Services relegated to its Plate group).\n- **T20 (SMAT)**: top two of each Elite group go to the Super League (assumption from 2025-26: Group A = A1, B1, C2, D2; Group B = C1, D1, A2, B2), each Super League group a round robin of four at Nagpur, the two group winners play the Final. The Plate Final is between the top two of the Plate group at Sovima.\n- **50 overs (VHT)**: quarter-finals A1 v C2, B1 v D2, C1 v A2, D1 v B2, semi-finals QF1 v QF4 and QF2 v QF3 (assumption, as in the Ranji Trophy), the Final, all at Visakhapatnam. The Plate Final is at Indore.\n- Points: 4 for a win, 2 each for a tie or no result (shown in the tables), then wins, then net run rate. No DRS, no rain. In the 50-over event a tied league match is shared; every other tie is settled by a Super Over (assumption).\n- Grounds: all already in the game. Mumbai matches are at BKC and the Wankhede, Kolkata ones at Kalyani and Eden Gardens, the Visakhapatnam group at the ACA-VDCA Stadium, Mohali and New Chandigarh (Mullanpur) for group C. In the 50-over event Rajkot, Ranchi and Indore are right; **which of Ahmedabad and Bengaluru (Alur) hosts group B and which group C is an assumption.**\n\n## Squads\nThe real squads are named a few days before each tournament starts. Until then each team is its **Ranji Trophy squad** (see `RANJI_TROPHY.md`) plus well-known players added from the game's own players (the roster, the IPL pool, the leagues): for example Kohli and Pant for Delhi, Suryakumar and Dube for Mumbai. Which state each player plays for is from general knowledge of last season; a name the game does not have is skipped, nobody is created. `ADD_STARS = false` in `DomesticWhiteBall.kt` gives plain Ranji squads. Edit a player in the game if a squad is wrong. Ratings of Ranji players are the estimates described in `RANJI_TROPHY.md`.\n\n## Not built\nThe real results (the game simulates them), the real squads, the over-rate and bonus rules, these tournaments in Advanced Customisation.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "DomesticFc.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "DomesticFc.rulesFor(tournamentId, stage)?.let { return it }\n        // The Syed Mushtaq Ali Trophy (20 overs) and the Vijay Hazare Trophy (50 overs): no DRS, no rain.\n        DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "if (DomesticFc.isSmall(state.tournamentId)) return DomesticFc.advance(state)",
+      "replace": "if (DomesticFc.isSmall(state.tournamentId)) return DomesticFc.advance(state)\n        if (DomesticWhiteBall.isWhiteBall(state.tournamentId)) return DomesticWhiteBall.advance(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "import com.cricketsim.logic.CustomTournaments",
+      "replace": "import com.cricketsim.logic.CustomTournaments\nimport com.cricketsim.logic.DomesticWhiteBall",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "val games = state.tournamentId == AsianGames.TOURNAMENT_ID",
+      "replace": "val games = state.tournamentId == AsianGames.TOURNAMENT_ID\n    val wb = DomesticWhiteBall.isWhiteBall(state.tournamentId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "champions -> ChampionsTrophy.tables(state)",
+      "replace": "wb -> DomesticWhiteBall.tables(state)\n            champions -> ChampionsTrophy.tables(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WorldCupTables.kt",
+      "find": "text = if (TournamentRules.isCustom(state.tournamentId)) {",
+      "replace": "text = if (wb) {\n                    DomesticWhiteBall.introOf(state.tournamentId)\n                } else if (TournamentRules.isCustom(state.tournamentId)) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.DomesticFc\n",
+      "replace": "import com.cricketsim.logic.DomesticFc\nimport com.cricketsim.logic.DomesticWhiteBall\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val iraniMatchStore = remember { MatchSaveStore(context, \"saved_irani_match.json\") }",
+      "replace": "val iraniMatchStore = remember { MatchSaveStore(context, \"saved_irani_match.json\") }\n    val smatStore = remember { TournamentSaveStore(context, \"saved_tournament_smat_2026_27.json\") }\n    val smatMatchStore = remember { MatchSaveStore(context, \"saved_smat_match.json\") }\n    val vhtStore = remember { TournamentSaveStore(context, \"saved_tournament_vht_2026_27.json\") }\n    val vhtMatchStore = remember { MatchSaveStore(context, \"saved_vht_match.json\") }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"irani2026\" -> iraniStore;",
+      "replace": "\"irani2026\" -> iraniStore; \"smat2026\" -> smatStore; \"vht2026\" -> vhtStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"irani2026\" -> iraniMatchStore;",
+      "replace": "\"irani2026\" -> iraniMatchStore; \"smat2026\" -> smatMatchStore; \"vht2026\" -> vhtMatchStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val iraniBuilt = remember { lazy { DomesticFc.buildIrani() } }",
+      "replace": "val iraniBuilt = remember { lazy { DomesticFc.buildIrani() } }\n    // The two white-ball tournaments share their 38 teams (built only when one is opened).\n    val whiteBallBuilt = remember { lazy { DomesticWhiteBall.buildTeams() } }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"irani2026\" -> iraniBuilt.value;",
+      "replace": "\"irani2026\" -> iraniBuilt.value; \"smat2026\", \"vht2026\" -> whiteBallBuilt.value;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onIrani = {",
+      "replace": "onSmat = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"smat2026\"\n                    page = TPage.Adt\n                },\n                onVht = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"vht2026\"\n                    page = TPage.Adt\n                },\n                onIrani = {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val isDomestic = isRanji || isDuleep || isIrani",
+      "replace": "val isSmat = kind == \"smat2026\"\n            val isVht = kind == \"vht2026\"\n            val isDomestic = isRanji || isDuleep || isIrani || isSmat || isVht",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isIrani -> DomesticFc.IRANI_NAME",
+      "replace": "isIrani -> DomesticFc.IRANI_NAME\n                isSmat -> DomesticWhiteBall.SMAT_NAME\n                isVht -> DomesticWhiteBall.VHT_NAME",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isCustomKind -> CustomTournaments.introOf(customId)",
+      "replace": "isSmat -> \"The Syed Mushtaq Ali Trophy 2026-27, 20 overs a side: the 38 real teams in four Elite groups of eight and the Plate group, and the real group fixtures. \" +\n                        \"The top two of each Elite group go to the Super League at Nagpur, and the winners of the two Super League groups play the Final. \" +\n                        \"Squads are the Ranji Trophy squads plus well-known players the game already has; the real squads are named just before the tournament.\"\n                    isVht -> \"The Vijay Hazare Trophy 2026-27, 50 overs a side: the 38 real teams in four Elite groups of eight and the Plate group, and the real group fixtures. \" +\n                        \"The top two of each Elite group go to the quarter-finals, then the semi-finals and the Final at Visakhapatnam. \" +\n                        \"Squads are the Ranji Trophy squads plus well-known players the game already has; the real squads are named just before the tournament.\"\n                    isCustomKind -> CustomTournaments.introOf(customId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"irani2026\" || isCustomKind) TPage.Adt else TPage.Cpl",
+      "replace": "kind == \"irani2026\" || kind == \"smat2026\" || kind == \"vht2026\" || isCustomKind) TPage.Adt else TPage.Cpl",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"irani2026\" -> DomesticFc.newIrani(teamId, built)",
+      "replace": "\"irani2026\" -> DomesticFc.newIrani(teamId, built)\n                        \"smat2026\" -> DomesticWhiteBall.newTournament(DomesticWhiteBall.SMAT_ID, teamId, built)\n                        \"vht2026\" -> DomesticWhiteBall.newTournament(DomesticWhiteBall.VHT_ID, teamId, built)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind != \"irani2026\" && !isCustomKind,",
+      "replace": "kind != \"irani2026\" && kind != \"smat2026\" && kind != \"vht2026\" && !isCustomKind,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"duleep2026\", \"irani2026\" -> TPage.Adt;",
+      "replace": "\"duleep2026\", \"irani2026\", \"smat2026\", \"vht2026\" -> TPage.Adt;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"The Ranji Trophy, the Duleep Trophy and the Irani Cup 2026-27, with the real teams and squads, in four- and five-day matches.\"",
+      "replace": "\"The Ranji Trophy, the Duleep Trophy and the Irani Cup, then the Syed Mushtaq Ali Trophy (T20) and the Vijay Hazare Trophy (50 overs), 2026-27, with the real teams and fixtures.\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () -> Unit, onBack: () -> Unit) {",
+      "replace": "private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () -> Unit, onSmat: () -> Unit, onVht: () -> Unit, onBack: () -> Unit) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onClick = onIrani",
+      "replace": "onClick = onIrani\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Syed Mushtaq Ali Trophy 2026-27\",\n                description = \"The T20 competition: 38 teams in four Elite groups and the Plate group, the real fixtures, then the Super League and the Final.\",\n                enabled = true,\n                onClick = onSmat\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Vijay Hazare Trophy 2026-27\",\n                description = \"The 50-over competition: 38 teams in four Elite groups and the Plate group, the real fixtures, then the quarter-finals, semi-finals and the Final.\",\n                enabled = true,\n                onClick = onVht",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "AsianGames.TOURNAMENT_ID || TournamentRules.isCustom(state.tournamentId)) {",
+      "replace": "AsianGames.TOURNAMENT_ID || DomesticWhiteBall.isWhiteBall(state.tournamentId) || TournamentRules.isCustom(state.tournamentId)) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "DomesticFc.DULEEP_ID, DomesticFc.IRANI_ID -> DomesticFc.stadiumsFor(state.tournamentId)",
+      "replace": "DomesticFc.DULEEP_ID, DomesticFc.IRANI_ID -> DomesticFc.stadiumsFor(state.tournamentId)\n                DomesticWhiteBall.SMAT_ID, DomesticWhiteBall.VHT_ID -> DomesticWhiteBall.stadiumsFor(state.tournamentId)",
+      "count": 1
+    }
+  ]
+}
