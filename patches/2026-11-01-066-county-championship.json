@@ -1,0 +1,249 @@
+{
+  "name": "County Championship 2027",
+  "message": "Add the English County Championship 2027 to Tournament > Domestic tournament",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CountyCricket.kt",
+      "find": "fun isCounty(id: String?): Boolean = id == ODC_ID || id == BLAST_ID",
+      "replace": "fun isCounty(id: String?): Boolean = id == ODC_ID || id == BLAST_ID || id == CC_ID",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CountyCricket.kt",
+      "find": "const val BLAST_NAME = \"Vitality Blast 2027\"",
+      "replace": "const val BLAST_NAME = \"Vitality Blast 2027\"\n    const val CC_ID = \"cc_2027\"\n    const val CC_NAME = \"County Championship 2027\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CountyCricket.kt",
+      "find": "fun buildSchedule(id: String): List<TournamentFixture> = if (id == ODC_ID) odcSchedule() else blastSchedule()",
+      "replace": "fun buildSchedule(id: String): List<TournamentFixture> = when (id) {\n        ODC_ID -> odcSchedule()\n        CC_ID -> ccSchedule()\n        else -> blastSchedule()\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CountyCricket.kt",
+      "find": "name = if (id == ODC_ID) ODC_NAME else BLAST_NAME,",
+      "replace": "name = when (id) { ODC_ID -> ODC_NAME; CC_ID -> CC_NAME; else -> BLAST_NAME },",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CountyCricket.kt",
+      "find": "    // ---------------------------------------------------------------- the data\n",
+      "replace": "    // ---------------------------------------------------------------- the County Championship\n\n    const val DAYS = 4\n    private const val DIV_ONE = \"Division One\"\n    private const val DIV_TWO = \"Division Two\"\n\n    /** The 2027 divisions: the 2026 table with Durham and Kent promoted and Hampshire and Leicestershire relegated. */\n    private val DIVISIONS = listOf(\n        DIV_ONE to listOf(\"war\", \"som\", \"sus\", \"not\", \"yor\", \"gla\", \"sur\", \"ess\", \"dur\", \"ken\"),\n        DIV_TWO to listOf(\"nor\", \"mid\", \"wor\", \"der\", \"lan\", \"glo\", \"lei\", \"ham\")\n    )\n\n    fun isChampionship(id: String?): Boolean = id == CC_ID\n\n    /**\n     * Division One: each county plays five others home and away and the other four once (14 matches; the same circle design every\n     * season, the real list is not out yet). Division Two: home and away against all seven.\n     */\n    private fun divisionMatches(division: Int): List<Pair<String, String>> {\n        val ids = DIVISIONS[division].second.map { \"cc_$it\" }\n        val n = ids.size\n        val out = ArrayList<Pair<String, String>>()\n        if (division == 0) {\n            for (i in 0 until n) {\n                for (d in 1..5) {\n                    val j = (i + d) % n\n                    if (d <= 2) {\n                        out.add(ids[i] to ids[j])\n                    } else if (d < 5 || i < j) {\n                        out.add(ids[i] to ids[j])\n                        out.add(ids[j] to ids[i])\n                    }\n                }\n            }\n        } else {\n            for (i in 0 until n) {\n                for (j in i + 1 until n) {\n                    out.add(ids[i] to ids[j])\n                    out.add(ids[j] to ids[i])\n                }\n            }\n        }\n        return out\n    }\n\n    /** Puts the matches into rounds so that no county plays twice in a round. */\n    private fun inRounds(matches: List<Pair<String, String>>): List<List<Pair<String, String>>> {\n        val left = ArrayList(matches)\n        val rounds = ArrayList<List<Pair<String, String>>>()\n        while (left.isNotEmpty()) {\n            val used = HashSet<String>()\n            val round = ArrayList<Pair<String, String>>()\n            val iter = left.iterator()\n            while (iter.hasNext()) {\n                val m = iter.next()\n                if (m.first !in used && m.second !in used) {\n                    used.add(m.first)\n                    used.add(m.second)\n                    round.add(m)\n                    iter.remove()\n                }\n            }\n            rounds.add(round)\n        }\n        return rounds\n    }\n\n    /** 126 four-day matches (70 in Division One, 56 in Division Two), round by round, Division One first. */\n    private fun ccSchedule(): List<TournamentFixture> {\n        val rs = DIVISIONS.indices.map { inRounds(divisionMatches(it)) }\n        val out = ArrayList<TournamentFixture>()\n        for (r in 0 until rs.maxOf { it.size }) {\n            for (d in rs.indices) {\n                val round = rs[d].getOrNull(r) ?: continue\n                for ((h, a) in round) out.add(fixture(out.size, DIVISIONS[d].first, h, a))\n            }\n        }\n        return out\n    }\n\n    private fun battingBonus(runs: Int): Int = when {\n        runs >= 400 -> 5\n        runs >= 350 -> 4\n        runs >= 300 -> 3\n        runs >= 250 -> 2\n        runs >= 200 -> 1\n        else -> 0\n    }\n\n    private fun bowlingBonus(wickets: Int): Int = when {\n        wickets >= 9 -> 3\n        wickets >= 6 -> 2\n        wickets >= 3 -> 1\n        else -> 0\n    }\n\n    /**\n     * The ECB's points: 16 for a win, 8 each for a draw or a tie, and bonus points for each side's first innings: batting 1 to 5\n     * (200, 250, 300, 350, 400 runs) and bowling 1 to 3 (3, 6, 9 wickets). The real rule counts only the first 110 overs of an\n     * innings; the game does not, a small difference.\n     */\n    fun points(s: MatchState, teamId: String): Int {\n        val list = s.test?.completed ?: return 0\n        var pts = if (FirstClass.kind(s) == \"WIN\") (if (s.winnerId == teamId) 16 else 0) else 8\n        val mine = list.firstOrNull { it.data.battingTeamId == teamId }\n        val theirs = list.firstOrNull { it.data.battingTeamId != teamId }\n        if (mine != null) pts += battingBonus(mine.score.runs)\n        if (theirs != null) pts += bowlingBonus(theirs.score.wickets)\n        return pts\n    }\n\n    /** One division's table: points, then wins, then runs per wicket scored over conceded. */\n    fun championshipTable(state: TournamentState, stage: String): List<FcRow> {\n        val ids = state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()\n        val rows = state.teams.filter { it.id in ids }.map { team ->\n            var played = 0\n            var won = 0\n            var drawn = 0\n            var lost = 0\n            var tied = 0\n            var pts = 0\n            var runsFor = 0\n            var wicketsLost = 0\n            var runsAgainst = 0\n            var wicketsTaken = 0\n            for (f in state.fixtures) {\n                if (f.stage != stage) continue\n                val r = f.result ?: continue\n                if (f.homeId != team.id && f.awayId != team.id) continue\n                played++\n                pts += if (f.homeId == team.id) r.homePoints else r.awayPoints\n                when (r.fcKind) {\n                    \"WIN\" -> if (r.winnerId == team.id) won++ else lost++\n                    \"TIE\" -> tied++\n                    else -> drawn++\n                }\n                for (i in r.fcInnings) {\n                    if (i.teamId == team.id) {\n                        runsFor += i.runs\n                        wicketsLost += i.wickets\n                    } else {\n                        runsAgainst += i.runs\n                        wicketsTaken += i.wickets\n                    }\n                }\n            }\n            val scored = runsFor.toDouble() / maxOf(1, wicketsLost)\n            val conceded = runsAgainst.toDouble() / maxOf(1, wicketsTaken)\n            val quotient = if (conceded <= 0.0) (if (scored > 0.0) 99.0 else 0.0) else scored / conceded\n            FcRow(team, played, won, drawn, lost, tied, pts, quotient)\n        }\n        return rows.sortedWith(compareByDescending<FcRow> { it.points }.thenByDescending { it.won }.thenByDescending { it.quotient })\n    }\n\n    fun championshipTables(state: TournamentState): List<Pair<String, List<FcRow>>> =\n        DIVISIONS.map { it.first }.map { it to championshipTable(state, it) }\n\n    /** The County Champions: the top of Division One, once every match of the season has been played. */\n    fun champion(state: TournamentState): Team? {\n        if (state.fixtures.isEmpty() || state.fixtures.any { it.result == null }) return null\n        return championshipTable(state, DIV_ONE).firstOrNull()?.team\n    }\n\n    /** Champions, promotion and relegation (two up, two down) at the end of the season. */\n    fun seasonEndLines(state: TournamentState): List<String> {\n        if (champion(state) == null) return emptyList()\n        val one = championshipTable(state, DIV_ONE)\n        val two = championshipTable(state, DIV_TWO)\n        if (one.size < 10 || two.size < 2) return emptyList()\n        return listOf(\n            \"${one[0].team.name} are the County Champions.\",\n            \"Promoted to Division One: ${two[0].team.name} and ${two[1].team.name}.\",\n            \"Relegated to Division Two: ${one[8].team.name} and ${one[9].team.name}.\"\n        )\n    }\n\n    // ---------------------------------------------------------------- the data\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "DULEEP_ID -> DULEEP_DAYS",
+      "replace": "DULEEP_ID -> DULEEP_DAYS\n        CountyCricket.CC_ID -> CountyCricket.DAYS",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "fun isFirstClass(id: String?): Boolean = Ranji.isRanji(id) || isSmall(id)",
+      "replace": "fun isFirstClass(id: String?): Boolean = Ranji.isRanji(id) || isSmall(id) || CountyCricket.isChampionship(id)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "if (Ranji.isRanji(id)) !Ranji.isGroupStage(stage) else true",
+      "replace": "if (Ranji.isRanji(id)) !Ranji.isGroupStage(stage) else !CountyCricket.isChampionship(id)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "private fun buildFirstClassResult(finished: MatchState, home: Team, away: Team, knockout: Boolean = false): FixtureResult? {",
+      "replace": "private fun buildFirstClassResult(finished: MatchState, home: Team, away: Team, knockout: Boolean = false, county: Boolean = false): FixtureResult? {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "val homePoints = FirstClass.points(finished, home.id)",
+      "replace": "val homePoints = if (county) CountyCricket.points(finished, home.id) else FirstClass.points(finished, home.id)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "val awayPoints = FirstClass.points(finished, away.id)",
+      "replace": "val awayPoints = if (county) CountyCricket.points(finished, away.id) else FirstClass.points(finished, away.id)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, DomesticFc.isKnockout(state.tournamentId, fixture.stage))",
+      "replace": "buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, DomesticFc.isKnockout(state.tournamentId, fixture.stage), CountyCricket.isChampionship(state.tournamentId))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "if (TournamentRules.isCustom(state.tournamentId)) CustomTournaments.leagueChampion(state)?.let { return it }",
+      "replace": "if (TournamentRules.isCustom(state.tournamentId)) CustomTournaments.leagueChampion(state)?.let { return it }\n        // The County Championship has no final: the top of Division One at the end of the season.\n        if (CountyCricket.isChampionship(state.tournamentId)) return CountyCricket.champion(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        knockout: Boolean = false\n    ): SimResult? {",
+      "replace": "        knockout: Boolean = false,\n        county: Boolean = false\n    ): SimResult? {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "val result = buildFirstClassResult(finished, home, away, knockout) ?: return null",
+      "replace": "val result = buildFirstClassResult(finished, home, away, knockout, county) ?: return null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "DomesticFc.daysFor(state.tournamentId, fixture.stage), DomesticFc.isKnockout(state.tournamentId, fixture.stage))",
+      "replace": "DomesticFc.daysFor(state.tournamentId, fixture.stage), DomesticFc.isKnockout(state.tournamentId, fixture.stage), CountyCricket.isChampionship(state.tournamentId))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val blastMatchStore = remember { MatchSaveStore(context, \"saved_blast_match.json\") }",
+      "replace": "val blastMatchStore = remember { MatchSaveStore(context, \"saved_blast_match.json\") }\n    val ccStore = remember { TournamentSaveStore(context, \"saved_tournament_cc_2027.json\") }\n    val ccMatchStore = remember { MatchSaveStore(context, \"saved_cc_match.json\") }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"odc2027\" -> odcStore; \"blast2027\" -> blastStore;",
+      "replace": "\"odc2027\" -> odcStore; \"blast2027\" -> blastStore; \"cc2027\" -> ccStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"odc2027\" -> odcMatchStore; \"blast2027\" -> blastMatchStore;",
+      "replace": "\"odc2027\" -> odcMatchStore; \"blast2027\" -> blastMatchStore; \"cc2027\" -> ccMatchStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"odc2027\", \"blast2027\" -> countyBuilt.value;",
+      "replace": "\"odc2027\", \"blast2027\", \"cc2027\" -> countyBuilt.value;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onBlast = {",
+      "replace": "onCc = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"cc2027\"\n                    page = TPage.Adt\n                },\n                onBlast = {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val isDomestic = isRanji || isDuleep || isIrani || isSmat || isVht || isOdc || isBlast",
+      "replace": "val isCc = kind == \"cc2027\"\n            val isDomestic = isRanji || isDuleep || isIrani || isSmat || isVht || isOdc || isBlast || isCc",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isBlast -> CountyCricket.BLAST_NAME",
+      "replace": "isBlast -> CountyCricket.BLAST_NAME\n                isCc -> CountyCricket.CC_NAME",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isCustomKind -> CustomTournaments.introOf(customId)",
+      "replace": "isCc -> \"The English County Championship 2027, four-day matches: Division One of ten counties and Division Two of eight, 14 matches each. \" +\n                        \"16 points for a win, 8 for a draw, plus batting and bowling bonus points. The top of Division One are the champions; two go up and two go down. \" +\n                        \"The 2027 fixture list is not published yet, so the game makes the schedule; the squads are the clubs' current squads.\"\n                    isCustomKind -> CustomTournaments.introOf(customId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"odc2027\" || kind == \"blast2027\" || isCustomKind) TPage.Adt else TPage.Cpl",
+      "replace": "kind == \"odc2027\" || kind == \"blast2027\" || kind == \"cc2027\" || isCustomKind) TPage.Adt else TPage.Cpl",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"blast2027\" -> CountyCricket.newTournament(CountyCricket.BLAST_ID, teamId, built)",
+      "replace": "\"blast2027\" -> CountyCricket.newTournament(CountyCricket.BLAST_ID, teamId, built)\n                        \"cc2027\" -> CountyCricket.newTournament(CountyCricket.CC_ID, teamId, built)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind != \"odc2027\" && kind != \"blast2027\" && !isCustomKind,",
+      "replace": "kind != \"odc2027\" && kind != \"blast2027\" && kind != \"cc2027\" && !isCustomKind,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"smat2026\", \"vht2026\", \"odc2027\", \"blast2027\" -> TPage.Adt;",
+      "replace": "\"smat2026\", \"vht2026\", \"odc2027\", \"blast2027\", \"cc2027\" -> TPage.Adt;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onOdc: () -> Unit, onBlast: () -> Unit, onBack: () -> Unit) {",
+      "replace": "onOdc: () -> Unit, onBlast: () -> Unit, onCc: () -> Unit, onBack: () -> Unit) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onClick = onBlast",
+      "replace": "onClick = onBlast\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"County Championship 2027 (England)\",\n                description = \"The English four-day competition: Division One of ten counties and Division Two of eight, 14 matches each, with bonus points.\",\n                enabled = true,\n                onClick = onCc",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "// The World Cup has a table for every group, in its own file.",
+      "replace": "if (CountyCricket.isChampionship(state.tournamentId)) {\n        CountyTableTab(state)\n        return\n    }\n    // The World Cup has a table for every group, in its own file.",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "CountyCricket.ODC_ID, CountyCricket.BLAST_ID -> CountyCricket.stadiumsFor(state.tournamentId)",
+      "replace": "CountyCricket.ODC_ID, CountyCricket.BLAST_ID, CountyCricket.CC_ID -> CountyCricket.stadiumsFor(state.tournamentId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "and the English One-Day Cup and Vitality Blast 2027.\"",
+      "replace": "and the English County Championship, One-Day Cup and Vitality Blast 2027.\"",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/CountyTable.kt",
+      "content": "package com.cricketsim.ui.tournament\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.remember\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.CountyCricket\nimport com.cricketsim.logic.TournamentState\n\n/**\n * The County Championship's tables: Division One and Division Two, each team as one line a screen reader reads whole\n * (\"1. Warwickshire. Played 3, won 2, drawn 1, lost 0. 52 points.\"), then the champions, promotion and relegation at the end.\n */\n@Composable\nfun CountyTableTab(state: TournamentState) {\n    val tables = remember(state) { CountyCricket.championshipTables(state) }\n    val endLines = remember(state) { CountyCricket.seasonEndLines(state) }\n    Column(modifier = Modifier.padding(vertical = 8.dp)) {\n        Text(\n            text = \"16 points for a win, 8 each for a draw or a tie, plus batting bonus points (1 to 5 for 200 to 400 runs) and bowling bonus points (1 to 3 for 3, 6 or 9 wickets) from the first innings.\",\n            style = MaterialTheme.typography.bodyMedium\n        )\n        Spacer(modifier = Modifier.height(12.dp))\n        tables.forEach { (stage, rows) ->\n            Text(\n                text = stage,\n                style = MaterialTheme.typography.titleMedium,\n                modifier = Modifier.semantics { heading() }\n            )\n            Spacer(modifier = Modifier.height(4.dp))\n            rows.forEachIndexed { index, row ->\n                val mine = if (row.team.id == state.userTeamId) \" Your team.\" else \"\"\n                Text(\n                    text = \"${index + 1}. ${row.team.name}. Played ${row.played}, won ${row.won}, drawn ${row.drawn}, lost ${row.lost}\" +\n                        (if (row.tied > 0) \", tied ${row.tied}\" else \"\") +\n                        \". ${row.points} points.$mine\",\n                    style = MaterialTheme.typography.bodyMedium,\n                    modifier = Modifier.padding(vertical = 2.dp)\n                )\n            }\n            Spacer(modifier = Modifier.height(16.dp))\n        }\n        if (endLines.isNotEmpty()) {\n            Text(\n                text = \"End of the season\",\n                style = MaterialTheme.typography.titleMedium,\n                modifier = Modifier.semantics { heading() }\n            )\n            endLines.forEach {\n                Text(text = it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp))\n            }\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "COUNTY_CHAMPIONSHIP.md",
+      "content": "# County Championship 2027\n\nTournament > Domestic tournament > County Championship 2027 (England). Part 2 of the county cricket work (part 1: `COUNTY_CRICKET.md`, the One-Day Cup and the Vitality Blast). Code in `logic/CountyCricket.kt` (the Championship section) and `ui/tournament/CountyTable.kt`; own saved tournament `saved_tournament_cc_2027.json`.\n\n- **Divisions 2027**: Division One: Warwickshire, Somerset, Sussex, Nottinghamshire, Yorkshire, Glamorgan, Surrey, Essex, Durham, Kent. Division Two: Northamptonshire, Middlesex, Worcestershire, Derbyshire, Lancashire, Gloucestershire, Leicestershire, Hampshire. This is the 2026 final table with the top two of Division Two promoted (Durham, Kent) and the bottom two of Division One relegated (Leicestershire, Hampshire).\n- **Fixtures**: not published yet (the ECB usually releases them in November). The game makes the schedule in the real format: 14 four-day matches per county. In Division One each county plays five others home and away and four once (a fixed circle design); in Division Two home and away against all seven. 70 + 56 = 126 matches.\n- **Points** (the ECB's): 16 for a win, 8 each for a draw or a tie, batting bonus 1 to 5 (200, 250, 300, 350, 400 runs) and bowling bonus 1 to 3 (3, 6, 9 wickets) from the first innings. The real rule counts only the first 110 overs of an innings; the game counts the whole innings. Tables: points, then wins, then runs per wicket scored over conceded (assumption for the last tie-break).\n- **Champions** are the top of Division One once all 126 matches are played; the Table tab then says who is promoted and relegated (two up, two down). The celebration screen is shown as for any tournament.\n- Matches are four days, first-class rules (the same machinery as the Ranji Trophy, `TestMatch.kt`), no DRS, no rain. You can play your own match or simulate.\n- Not built: the real fixtures, points deductions, the season's second part (the Championship's real split into stages), overseas limits.\n",
+      "mustNotExist": true
+    }
+  ]
+}
