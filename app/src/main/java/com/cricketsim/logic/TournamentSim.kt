@@ -403,7 +403,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         val home = if (fixture.homeId == userXI.id) userXI else opponentXI
         val away = if (fixture.homeId == userXI.id) opponentXI else userXI
         val result = (if (finished.test != null) {
-            buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, DomesticFc.isKnockout(state.tournamentId, fixture.stage), CountyCricket.isChampionship(state.tournamentId))
+            buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, DomesticFc.isKnockout(state.tournamentId, fixture.stage), CountyCricket.isChampionship(state.tournamentId), AusDomestic.isShield(state.tournamentId))
         } else {
             buildResult(finished, home, away)
         }) ?: return state
@@ -493,6 +493,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (DomesticFc.isSmall(state.tournamentId)) return DomesticFc.advance(state)
         if (DomesticWhiteBall.isWhiteBall(state.tournamentId)) return DomesticWhiteBall.advance(state)
         if (CountyCricket.isCounty(state.tournamentId)) return CountyCricket.advance(state)
+        if (AusDomestic.isAus(state.tournamentId)) return AusDomestic.advance(state)
         if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
@@ -564,7 +565,8 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         random: Random,
         days: Int,
         knockout: Boolean = false,
-        county: Boolean = false
+        county: Boolean = false,
+        shield: Boolean = false
     ): SimResult? {
         val home = pickXI(homeSquad, tags, stadium)
         val away = pickXI(awaySquad, tags, stadium)
@@ -586,7 +588,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         )
         s = playFirstClass(s, stadium, random)
         val finished = TestMatch.finish(s) ?: return null
-        val result = buildFirstClassResult(finished, home, away, knockout, county) ?: return null
+        val result = buildFirstClassResult(finished, home, away, knockout, county, shield) ?: return null
         val slim = finished.copy(
             ballByBall = emptyList(), lastSixBalls = emptyList(), fieldPlacements = emptyList(),
             regulationState = null, drinksBreak = null, activeRainDelay = null, firstInningsData = null
@@ -634,12 +636,14 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
     }
 
     /** A first-class result. A knockout is never left without a winner: a draw or a tie goes to the first-innings leader (the first-named side if level). */
-    private fun buildFirstClassResult(finished: MatchState, home: Team, away: Team, knockout: Boolean = false, county: Boolean = false): FixtureResult? {
-        val knockoutWinner: String? = if (knockout && finished.winnerId == null) (FirstClass.firstInningsLeaderId(finished) ?: home.id) else null
+    private fun buildFirstClassResult(finished: MatchState, home: Team, away: Team, knockout: Boolean = false, county: Boolean = false, shield: Boolean = false): FixtureResult? {
+        val knockoutWinner: String? = if (knockout && finished.winnerId == null) {
+            if (shield) AusDomestic.finalWinnerOnDraw(finished, home.id, away.id) else (FirstClass.firstInningsLeaderId(finished) ?: home.id)
+        } else null
         val innings = FirstClass.innings(finished)
         if (innings.isEmpty()) return null
-        val homePoints = if (county) CountyCricket.points(finished, home.id) else FirstClass.points(finished, home.id)
-        val awayPoints = if (county) CountyCricket.points(finished, away.id) else FirstClass.points(finished, away.id)
+        val homePoints = if (shield) AusDomestic.points(finished, home.id) else if (county) CountyCricket.points(finished, home.id) else FirstClass.points(finished, home.id)
+        val awayPoints = if (shield) AusDomestic.points(finished, away.id) else if (county) CountyCricket.points(finished, away.id) else FirstClass.points(finished, away.id)
         val first = innings.first()
         val last = innings.last()
         val award = PlayerAwards.playerOfTheMatch(finished)
@@ -647,9 +651,10 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
             winnerId = knockoutWinner ?: finished.winnerId,
             summary = if (knockoutWinner != null) {
                 FirstClass.summary(finished, home, away, homePoints, awayPoints, withPoints = false) + " " +
-                    (if (knockoutWinner == home.id) home.name else away.name) + " go through on the first innings."
+                    (if (knockoutWinner == home.id) home.name else away.name) + (if (shield) " win the Final on first-innings bonus points." else " go through on the first innings.")
             } else {
-                FirstClass.summary(finished, home, away, homePoints, awayPoints, withPoints = !knockout)
+                FirstClass.summary(finished, home, away, homePoints, awayPoints, withPoints = !knockout && !shield) +
+                    (if (shield && !knockout) AusDomestic.pointsText(home, away, homePoints, awayPoints) else "")
             },
             firstBattingId = first.teamId,
             firstRuns = first.runs,
@@ -673,7 +678,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
         val sim = (if (DomesticFc.isFirstClass(state.tournamentId)) {
-            simulateFirstClass(home, away, state.tags, stadium, random, DomesticFc.daysFor(state.tournamentId, fixture.stage), DomesticFc.isKnockout(state.tournamentId, fixture.stage), CountyCricket.isChampionship(state.tournamentId))
+            simulateFirstClass(home, away, state.tags, stadium, random, DomesticFc.daysFor(state.tournamentId, fixture.stage), DomesticFc.isKnockout(state.tournamentId, fixture.stage), CountyCricket.isChampionship(state.tournamentId), AusDomestic.isShield(state.tournamentId))
         } else {
             simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
                 state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage))

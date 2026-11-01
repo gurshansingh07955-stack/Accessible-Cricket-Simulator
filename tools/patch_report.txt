@@ -1,6 +1,6 @@
-Patch run: 41297991695
-Timestamp (UTC): 2026-11-01T10:33:23Z
+Patch run: 41299585553
+Timestamp (UTC): 2026-11-01T10:55:43Z
 Result: OK
 -----
-Patch 2026-11-01-066-county-championship.json
-  applied 35 operation(s) to 6 file(s)
+Patch 2026-11-01-067-sheffield-shield-and-aus-one-day-cup.json
+  applied 40 operation(s) to 8 file(s)
