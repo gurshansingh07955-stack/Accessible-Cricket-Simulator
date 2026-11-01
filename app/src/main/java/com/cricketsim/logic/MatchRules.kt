@@ -90,6 +90,8 @@ object TournamentRules {
         if (tournamentId == null) return null
         // The Ranji Trophy: first-class matches (four days, five in the knockouts), no DRS, no rain.
         DomesticFc.rulesFor(tournamentId, stage)?.let { return it }
+        // The Syed Mushtaq Ali Trophy (20 overs) and the Vijay Hazare Trophy (50 overs): no DRS, no rain.
+        DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it }
         if (isCustom(tournamentId)) {
             val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null
             val base = rulesForFormat(def.formatKey) ?: return null
