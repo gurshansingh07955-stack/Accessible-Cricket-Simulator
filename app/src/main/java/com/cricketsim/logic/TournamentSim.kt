@@ -490,6 +490,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (state.tournamentId == Ranji.TOURNAMENT_ID) return Ranji.advance(state)
         if (DomesticFc.isSmall(state.tournamentId)) return DomesticFc.advance(state)
         if (DomesticWhiteBall.isWhiteBall(state.tournamentId)) return DomesticWhiteBall.advance(state)
+        if (CountyCricket.isCounty(state.tournamentId)) return CountyCricket.advance(state)
         if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state

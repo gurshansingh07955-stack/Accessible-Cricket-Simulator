@@ -92,6 +92,8 @@ object TournamentRules {
         DomesticFc.rulesFor(tournamentId, stage)?.let { return it }
         // The Syed Mushtaq Ali Trophy (20 overs) and the Vijay Hazare Trophy (50 overs): no DRS, no rain.
         DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it }
+        // English county cricket: the One-Day Cup (50 overs) and the Vitality Blast (20 overs).
+        CountyCricket.rulesFor(tournamentId, stage)?.let { return it }
         if (isCustom(tournamentId)) {
             val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null
             val base = rulesForFormat(def.formatKey) ?: return null

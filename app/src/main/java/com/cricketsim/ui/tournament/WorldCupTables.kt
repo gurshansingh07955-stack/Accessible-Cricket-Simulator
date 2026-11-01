@@ -21,6 +21,7 @@ import com.cricketsim.logic.AsianGames
 import com.cricketsim.logic.ChampionsTrophy
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.CustomTournaments
+import com.cricketsim.logic.CountyCricket
 import com.cricketsim.logic.DomesticWhiteBall
 import com.cricketsim.logic.TournamentRules
 import com.cricketsim.logic.T20WorldCup
@@ -36,8 +37,10 @@ internal fun WorldCupTableTab(state: TournamentState) {
     val asia = state.tournamentId == AsiaCup.TOURNAMENT_ID
     val games = state.tournamentId == AsianGames.TOURNAMENT_ID
     val wb = DomesticWhiteBall.isWhiteBall(state.tournamentId)
+    val county = CountyCricket.isCounty(state.tournamentId)
     val tables = remember(state) {
         when {
+            county -> CountyCricket.tables(state)
             wb -> DomesticWhiteBall.tables(state)
             champions -> ChampionsTrophy.tables(state)
             asia -> AsiaCup.tables(state)
@@ -49,7 +52,9 @@ internal fun WorldCupTableTab(state: TournamentState) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item(key = "intro") {
             Text(
-                text = if (wb) {
+                text = if (county) {
+                    CountyCricket.introOf(state.tournamentId)
+                } else if (wb) {
                     DomesticWhiteBall.introOf(state.tournamentId)
                 } else if (TournamentRules.isCustom(state.tournamentId)) {
                     "Two points for a win, one each for no result. A knockout tournament has no table."
