@@ -23,16 +23,17 @@ object DomesticFc {
     fun isSmall(id: String?): Boolean = id == DULEEP_ID || id == IRANI_ID
 
     /** The Ranji Trophy, the Duleep Trophy or the Irani Cup: matches played with the first-class rules. */
-    fun isFirstClass(id: String?): Boolean = Ranji.isRanji(id) || isSmall(id)
+    fun isFirstClass(id: String?): Boolean = Ranji.isRanji(id) || isSmall(id) || CountyCricket.isChampionship(id)
 
     fun daysFor(id: String?, stage: String): Int = when (id) {
         IRANI_ID -> IRANI_DAYS
         DULEEP_ID -> DULEEP_DAYS
+        CountyCricket.CC_ID -> CountyCricket.DAYS
         else -> Ranji.daysFor(stage)
     }
 
     /** In a knockout a drawn match goes to the first-innings leader; only the Ranji league stage can be drawn. */
-    fun isKnockout(id: String?, stage: String): Boolean = if (Ranji.isRanji(id)) !Ranji.isGroupStage(stage) else true
+    fun isKnockout(id: String?, stage: String): Boolean = if (Ranji.isRanji(id)) !Ranji.isGroupStage(stage) else !CountyCricket.isChampionship(id)
 
     fun rulesFor(id: String?, stage: String?): MatchRules? =
         if (isFirstClass(id)) TestMatch.rulesForDays(daysFor(id, stage ?: Ranji.STAGES[0])) else null

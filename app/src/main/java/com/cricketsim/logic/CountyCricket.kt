@@ -21,6 +21,8 @@ object CountyCricket {
     const val ODC_NAME = "One-Day Cup 2027"
     const val BLAST_ID = "blast_2027"
     const val BLAST_NAME = "Vitality Blast 2027"
+    const val CC_ID = "cc_2027"
+    const val CC_NAME = "County Championship 2027"
 
     private const val GROUP_A = "Group A"
     private const val GROUP_B = "Group B"
@@ -46,7 +48,7 @@ object CountyCricket {
         "South Group" to listOf("ham", "sur", "ess", "ken", "mid", "sus")
     )
 
-    fun isCounty(id: String?): Boolean = id == ODC_ID || id == BLAST_ID
+    fun isCounty(id: String?): Boolean = id == ODC_ID || id == BLAST_ID || id == CC_ID
 
     /** 50 overs (One-Day Cup, a tied league match is shared) or 20 overs (Blast), no DRS; rain as in the game's formats. */
     fun rulesFor(id: String?, stage: String?): MatchRules? {
@@ -315,13 +317,17 @@ object CountyCricket {
         return out
     }
 
-    fun buildSchedule(id: String): List<TournamentFixture> = if (id == ODC_ID) odcSchedule() else blastSchedule()
+    fun buildSchedule(id: String): List<TournamentFixture> = when (id) {
+        ODC_ID -> odcSchedule()
+        CC_ID -> ccSchedule()
+        else -> blastSchedule()
+    }
 
     fun newTournament(id: String, userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =
         TournamentState(
             version = CplData.SAVE_VERSION,
             tournamentId = id,
-            name = if (id == ODC_ID) ODC_NAME else BLAST_NAME,
+            name = when (id) { ODC_ID -> ODC_NAME; CC_ID -> CC_NAME; else -> BLAST_NAME },
             userTeamId = userTeamId,
             teams = built.first,
             tags = built.second,
@@ -410,6 +416,182 @@ object CountyCricket {
         ODC_ID -> advanceOdc(state)
         BLAST_ID -> advanceBlast(state)
         else -> state
+    }
+
+    // ---------------------------------------------------------------- the County Championship
+
+    const val DAYS = 4
+    private const val DIV_ONE = "Division One"
+    private const val DIV_TWO = "Division Two"
+
+    /** The 2027 divisions: the 2026 table with Durham and Kent promoted and Hampshire and Leicestershire relegated. */
+    private val DIVISIONS = listOf(
+        DIV_ONE to listOf("war", "som", "sus", "not", "yor", "gla", "sur", "ess", "dur", "ken"),
+        DIV_TWO to listOf("nor", "mid", "wor", "der", "lan", "glo", "lei", "ham")
+    )
+
+    fun isChampionship(id: String?): Boolean = id == CC_ID
+
+    /**
+     * Division One: each county plays five others home and away and the other four once (14 matches; the same circle design every
+     * season, the real list is not out yet). Division Two: home and away against all seven.
+     */
+    private fun divisionMatches(division: Int): List<Pair<String, String>> {
+        val ids = DIVISIONS[division].second.map { "cc_$it" }
+        val n = ids.size
+        val out = ArrayList<Pair<String, String>>()
+        if (division == 0) {
+            for (i in 0 until n) {
+                for (d in 1..5) {
+                    val j = (i + d) % n
+                    if (d <= 2) {
+                        out.add(ids[i] to ids[j])
+                    } else if (d < 5 || i < j) {
+                        out.add(ids[i] to ids[j])
+                        out.add(ids[j] to ids[i])
+                    }
+                }
+            }
+        } else {
+            for (i in 0 until n) {
+                for (j in i + 1 until n) {
+                    out.add(ids[i] to ids[j])
+                    out.add(ids[j] to ids[i])
+                }
+            }
+        }
+        return out
+    }
+
+    /** Puts the matches into rounds so that no county plays twice in a round. */
+    private fun inRounds(matches: List<Pair<String, String>>): List<List<Pair<String, String>>> {
+        val left = ArrayList(matches)
+        val rounds = ArrayList<List<Pair<String, String>>>()
+        while (left.isNotEmpty()) {
+            val used = HashSet<String>()
+            val round = ArrayList<Pair<String, String>>()
+            val iter = left.iterator()
+            while (iter.hasNext()) {
+                val m = iter.next()
+                if (m.first !in used && m.second !in used) {
+                    used.add(m.first)
+                    used.add(m.second)
+                    round.add(m)
+                    iter.remove()
+                }
+            }
+            rounds.add(round)
+        }
+        return rounds
+    }
+
+    /** 126 four-day matches (70 in Division One, 56 in Division Two), round by round, Division One first. */
+    private fun ccSchedule(): List<TournamentFixture> {
+        val rs = DIVISIONS.indices.map { inRounds(divisionMatches(it)) }
+        val out = ArrayList<TournamentFixture>()
+        for (r in 0 until rs.maxOf { it.size }) {
+            for (d in rs.indices) {
+                val round = rs[d].getOrNull(r) ?: continue
+                for ((h, a) in round) out.add(fixture(out.size, DIVISIONS[d].first, h, a))
+            }
+        }
+        return out
+    }
+
+    private fun battingBonus(runs: Int): Int = when {
+        runs >= 400 -> 5
+        runs >= 350 -> 4
+        runs >= 300 -> 3
+        runs >= 250 -> 2
+        runs >= 200 -> 1
+        else -> 0
+    }
+
+    private fun bowlingBonus(wickets: Int): Int = when {
+        wickets >= 9 -> 3
+        wickets >= 6 -> 2
+        wickets >= 3 -> 1
+        else -> 0
+    }
+
+    /**
+     * The ECB's points: 16 for a win, 8 each for a draw or a tie, and bonus points for each side's first innings: batting 1 to 5
+     * (200, 250, 300, 350, 400 runs) and bowling 1 to 3 (3, 6, 9 wickets). The real rule counts only the first 110 overs of an
+     * innings; the game does not, a small difference.
+     */
+    fun points(s: MatchState, teamId: String): Int {
+        val list = s.test?.completed ?: return 0
+        var pts = if (FirstClass.kind(s) == "WIN") (if (s.winnerId == teamId) 16 else 0) else 8
+        val mine = list.firstOrNull { it.data.battingTeamId == teamId }
+        val theirs = list.firstOrNull { it.data.battingTeamId != teamId }
+        if (mine != null) pts += battingBonus(mine.score.runs)
+        if (theirs != null) pts += bowlingBonus(theirs.score.wickets)
+        return pts
+    }
+
+    /** One division's table: points, then wins, then runs per wicket scored over conceded. */
+    fun championshipTable(state: TournamentState, stage: String): List<FcRow> {
+        val ids = state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()
+        val rows = state.teams.filter { it.id in ids }.map { team ->
+            var played = 0
+            var won = 0
+            var drawn = 0
+            var lost = 0
+            var tied = 0
+            var pts = 0
+            var runsFor = 0
+            var wicketsLost = 0
+            var runsAgainst = 0
+            var wicketsTaken = 0
+            for (f in state.fixtures) {
+                if (f.stage != stage) continue
+                val r = f.result ?: continue
+                if (f.homeId != team.id && f.awayId != team.id) continue
+                played++
+                pts += if (f.homeId == team.id) r.homePoints else r.awayPoints
+                when (r.fcKind) {
+                    "WIN" -> if (r.winnerId == team.id) won++ else lost++
+                    "TIE" -> tied++
+                    else -> drawn++
+                }
+                for (i in r.fcInnings) {
+                    if (i.teamId == team.id) {
+                        runsFor += i.runs
+                        wicketsLost += i.wickets
+                    } else {
+                        runsAgainst += i.runs
+                        wicketsTaken += i.wickets
+                    }
+                }
+            }
+            val scored = runsFor.toDouble() / maxOf(1, wicketsLost)
+            val conceded = runsAgainst.toDouble() / maxOf(1, wicketsTaken)
+            val quotient = if (conceded <= 0.0) (if (scored > 0.0) 99.0 else 0.0) else scored / conceded
+            FcRow(team, played, won, drawn, lost, tied, pts, quotient)
+        }
+        return rows.sortedWith(compareByDescending<FcRow> { it.points }.thenByDescending { it.won }.thenByDescending { it.quotient })
+    }
+
+    fun championshipTables(state: TournamentState): List<Pair<String, List<FcRow>>> =
+        DIVISIONS.map { it.first }.map { it to championshipTable(state, it) }
+
+    /** The County Champions: the top of Division One, once every match of the season has been played. */
+    fun champion(state: TournamentState): Team? {
+        if (state.fixtures.isEmpty() || state.fixtures.any { it.result == null }) return null
+        return championshipTable(state, DIV_ONE).firstOrNull()?.team
+    }
+
+    /** Champions, promotion and relegation (two up, two down) at the end of the season. */
+    fun seasonEndLines(state: TournamentState): List<String> {
+        if (champion(state) == null) return emptyList()
+        val one = championshipTable(state, DIV_ONE)
+        val two = championshipTable(state, DIV_TWO)
+        if (one.size < 10 || two.size < 2) return emptyList()
+        return listOf(
+            "${one[0].team.name} are the County Champions.",
+            "Promoted to Division One: ${two[0].team.name} and ${two[1].team.name}.",
+            "Relegated to Division Two: ${one[8].team.name} and ${one[9].team.name}."
+        )
     }
 
     // ---------------------------------------------------------------- the data
