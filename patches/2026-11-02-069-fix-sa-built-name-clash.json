@@ -1,0 +1,20 @@
+{
+  "name": "Fix the name clash saBuilt",
+  "message": "Rename the South African domestic built-teams variable (it clashed with the SA20's saBuilt)",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val saBuilt = remember { lazy { SaDomestic.buildTeams() } }",
+      "replace": "val saDomBuilt = remember { lazy { SaDomestic.buildTeams() } }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa4d2026\", \"sa50c2026\", \"pro20c2026\" -> saBuilt.value;",
+      "replace": "\"sa4d2026\", \"sa50c2026\", \"pro20c2026\" -> saDomBuilt.value;",
+      "count": 1
+    }
+  ]
+}
