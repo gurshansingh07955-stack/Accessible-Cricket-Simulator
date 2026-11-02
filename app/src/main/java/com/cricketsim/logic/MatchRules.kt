@@ -96,6 +96,8 @@ object TournamentRules {
         CountyCricket.rulesFor(tournamentId, stage)?.let { return it }
         // Australia: the One-Day Cup (50 overs). The Sheffield Shield gets its four and five days from DomesticFc above.
         AusDomestic.rulesFor(tournamentId, stage)?.let { return it }
+        // South Africa: the Pro50 Cup and the Pro20 Cup. The 4-Day Series gets its days from DomesticFc above.
+        SaDomestic.rulesFor(tournamentId, stage)?.let { return it }
         if (isCustom(tournamentId)) {
             val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null
             val base = rulesForFormat(def.formatKey) ?: return null
