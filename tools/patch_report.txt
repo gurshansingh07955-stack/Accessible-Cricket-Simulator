@@ -1,6 +1,6 @@
-Patch run: 41369409781
-Timestamp (UTC): 2026-11-02T00:51:53Z
+Patch run: 41407452918
+Timestamp (UTC): 2026-11-02T07:37:10Z
 Result: OK
 -----
-Patch 2026-11-01-068-south-africa-domestic-part-one.json
-  applied 40 operation(s) to 8 file(s)
+Patch 2026-11-02-069-fix-sa-built-name-clash.json
+  applied 2 operation(s) to 1 file(s)

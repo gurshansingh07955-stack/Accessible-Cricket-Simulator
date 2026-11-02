@@ -247,13 +247,13 @@ fun TournamentFlow(onExit: () -> Unit) {
     // The two Australian tournaments share their six states (built only when one is opened).
     val ausBuilt = remember { lazy { AusDomestic.buildTeams() } }
     // The three South African tournaments share their 16 teams (built only when one is opened).
-    val saBuilt = remember { lazy { SaDomestic.buildTeams() } }
+    val saDomBuilt = remember { lazy { SaDomestic.buildTeams() } }
     val wcBuilt = remember { T20WorldCup.buildTeams() }
     val ctBuilt = remember { ChampionsTrophy.buildTeams() }
     val acBuilt = remember { AsiaCup.buildTeams() }
     val agBuilt = remember { AsianGames.buildTeams() }
     val customBuilt = remember(customId) { if (isCustomKind) CustomTournaments.buildTeams(customId) else cplBuilt }
-    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; "ilt" -> iltBuilt; "bbl" -> bblBuilt; "mlc" -> mlcBuilt; "sa20" -> saBuilt; "ranji2027" -> ranjiBuilt.value; "duleep2026" -> duleepBuilt.value; "irani2026" -> iraniBuilt.value; "smat2026", "vht2026" -> whiteBallBuilt.value; "odc2027", "blast2027", "cc2027" -> countyBuilt.value; "shield2026", "audc2026" -> ausBuilt.value; "sa4d2026", "sa50c2026", "pro20c2026" -> saBuilt.value; "wc2026" -> wcBuilt; "ct2025" -> ctBuilt; "asia2025" -> acBuilt; "ag2026" -> agBuilt; else -> if (isCustomKind) customBuilt else cplBuilt }
+    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; "ilt" -> iltBuilt; "bbl" -> bblBuilt; "mlc" -> mlcBuilt; "sa20" -> saBuilt; "ranji2027" -> ranjiBuilt.value; "duleep2026" -> duleepBuilt.value; "irani2026" -> iraniBuilt.value; "smat2026", "vht2026" -> whiteBallBuilt.value; "odc2027", "blast2027", "cc2027" -> countyBuilt.value; "shield2026", "audc2026" -> ausBuilt.value; "sa4d2026", "sa50c2026", "pro20c2026" -> saDomBuilt.value; "wc2026" -> wcBuilt; "ct2025" -> ctBuilt; "asia2025" -> acBuilt; "ag2026" -> agBuilt; else -> if (isCustomKind) customBuilt else cplBuilt }
 
     var page by remember { mutableStateOf<TPage>(TPage.Menu) }
     // The "menu open" sound for each menu-type page (not the toss, the match, the celebration or the IPL
