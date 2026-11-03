@@ -428,6 +428,8 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (TournamentRules.isCustom(state.tournamentId)) CustomTournaments.leagueChampion(state)?.let { return it }
         // The County Championship has no final: the top of Division One at the end of the season.
         if (CountyCricket.isChampionship(state.tournamentId)) return CountyCricket.champion(state)
+        // The Plunket Shield has no final either: the top of the table.
+        if (NzDomestic.isPlunket(state.tournamentId)) return NzDomestic.champion(state)
         val finalMatch = state.fixtures.firstOrNull { it.stage == "Final" } ?: return null
         val id = finalMatch.result?.winnerId ?: return null
         return state.teams.find { it.id == id }
@@ -495,6 +497,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (CountyCricket.isCounty(state.tournamentId)) return CountyCricket.advance(state)
         if (AusDomestic.isAus(state.tournamentId)) return AusDomestic.advance(state)
         if (SaDomestic.isSa(state.tournamentId)) return SaDomestic.advance(state)
+        if (NzDomestic.isNz(state.tournamentId)) return NzDomestic.advance(state)
         if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
@@ -644,8 +647,8 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         } else null
         val innings = FirstClass.innings(finished)
         if (innings.isEmpty()) return null
-        val homePoints = if (sa) SaDomestic.points(finished, home.id) else if (shield) AusDomestic.points(finished, home.id) else if (county) CountyCricket.points(finished, home.id) else FirstClass.points(finished, home.id)
-        val awayPoints = if (sa) SaDomestic.points(finished, away.id) else if (shield) AusDomestic.points(finished, away.id) else if (county) CountyCricket.points(finished, away.id) else FirstClass.points(finished, away.id)
+        val homePoints = DomesticFc.otherPoints(finished, home.id) ?: if (sa) SaDomestic.points(finished, home.id) else if (shield) AusDomestic.points(finished, home.id) else if (county) CountyCricket.points(finished, home.id) else FirstClass.points(finished, home.id)
+        val awayPoints = DomesticFc.otherPoints(finished, away.id) ?: if (sa) SaDomestic.points(finished, away.id) else if (shield) AusDomestic.points(finished, away.id) else if (county) CountyCricket.points(finished, away.id) else FirstClass.points(finished, away.id)
         val first = innings.first()
         val last = innings.last()
         val award = PlayerAwards.playerOfTheMatch(finished)
