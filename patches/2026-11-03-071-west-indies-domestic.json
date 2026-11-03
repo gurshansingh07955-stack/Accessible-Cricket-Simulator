@@ -1,0 +1,227 @@
+{
+  "name": "West Indies domestic cricket",
+  "message": "Add the West Indies Championship 2027 and Super50 Cup 2026-27 to Tournament > Domestic tournament",
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/WiDomestic.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * West Indies domestic cricket, 2027 edition: the West Indies Championship (four-day) and the Super50 Cup (50 overs), played by the six\n * regional teams. Team ids are \"wi_xx\". See WEST_INDIES_DOMESTIC.md.\n *\n * There are NO published fixtures for the next editions yet (Cricket West Indies has cut its calendar), so the schedules are made by the\n * game in the published formats; only the venues follow the 2026 and 2025-26 editions.\n *\n *  - West Indies Championship (2026 format): three simultaneous three-match series between Windward and Guyana, Jamaica and Barbados,\n *    Leeward and Trinidad and Tobago (the seeding pairs of 2026: 1 v 6, 3 v 4, 2 v 5). The winner of each series (more points) is ranked 1 to 3\n *    by points; the top one goes straight to the Final, the other two play a Playoff, and the winner of the Playoff meets the top one in the Final\n *    (four days each, at the Sir Vivian Richards Stadium in Antigua). The real top side also played the West Indies Academy as a warm-up:\n *    that match is not built. Points: 16 for a win, 6 for a tie, 3 for a draw (3 each), plus batting bonus (1 point for each 50 runs from 250, up\n *    to 5) and bowling bonus (1 point for 3 wickets, 2 for 5, 3 for 7), from the first innings. The real rule counts only the first 110 overs and\n *    adds 0.2 for each wicket of a designated pace bowler: not built.\n *  - Super50 Cup (2025-26 format): six teams, each plays the other five once (15 matches, all in Trinidad), 4 points a win and 2 for a tie\n *    or no result (the real bonus point is not built), then a Final between the top two. A tied league match is shared.\n *\n * Squads: the 2026 championship squads (13 or 14 players each, Wikipedia). A player already in the game keeps his ratings; the others get\n * ESTIMATED ratings. The West Indies Academy squad is not included.\n */\nobject WiDomestic {\n    const val FOURDAY_ID = \"wi4d_2027\"\n    const val FOURDAY_NAME = \"West Indies Championship 2027\"\n    const val ODC_ID = \"wi50_2026_27\"\n    const val ODC_NAME = \"Super50 Cup 2026-27 (West Indies)\"\n    const val DAYS = 4\n\n    private const val PLAYOFF = \"Playoff\"\n    private const val FINAL = \"Final\"\n    private const val FOURDAY_FINALS_GROUND = \"vivian-richards-stadium\"\n    private const val ODC_FINAL_GROUND = \"queens-park-oval\"\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n\n    /** The bilateral series: team codes and the ground of the series. */\n    private val SERIES = listOf(\n        Triple(\"win\", \"guy\", \"vivian-richards-stadium\"),\n        Triple(\"jam\", \"bar\", \"sabina-park\"),\n        Triple(\"lee\", \"tt\", \"vivian-richards-stadium\")\n    )\n\n    fun isFourDay(id: String?): Boolean = id == FOURDAY_ID\n    fun isOdc(id: String?): Boolean = id == ODC_ID\n    fun isWi(id: String?): Boolean = id == FOURDAY_ID || id == ODC_ID\n\n    /** The Super50 Cup: 50 overs, no DRS, a tied league match is shared. */\n    fun rulesFor(id: String?, stage: String?): MatchRules? {\n        if (id != ODC_ID) return null\n        val base = TournamentRules.rulesForFormat(\"ODI\") ?: return null\n        return base.copy(drsReviews = 0, noSuperOver = stage != FINAL)\n    }\n\n    fun introOf(id: String?): String =\n        if (id == FOURDAY_ID) {\n            \"Sixteen points for a win, six for a tie, three for a draw, plus batting and bowling bonus points from the first innings. \" +\n                \"Three series of three matches: Windward v Guyana, Jamaica v Barbados, Leeward v Trinidad and Tobago. The three series winners are ranked by points: \" +\n                \"the top one goes to the Final, the other two play a Playoff, and its winner meets the top one in the Final in Antigua.\"\n        } else {\n            \"Four points for a win, two each for a tie or no result. Each side plays the other five once, then the top two play the Final.\"\n        }\n\n    // ---------------------------------------------------------------- teams and grounds\n\n    private class Entry(val name: String, val flags: String, val role: Char, val bowl: String)\n\n    private class TeamDef(val id: String, val name: String, val shortName: String, val home: String, val tier: Int, val squad: List<Entry>)\n\n    private fun parseEntry(text: String): Entry {\n        val p = text.split(\"~\")\n        return Entry(p[0].trim(), p.getOrElse(1) { \"\" }, p.getOrNull(2)?.firstOrNull() ?: '-', p.getOrNull(4) ?: \"\")\n    }\n\n    private val DEFS: List<TeamDef> by lazy {\n        TEAM_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n            val p = line.split(\"|\")\n            TeamDef(\"wi_\" + p[0], p[1], p[2], p[3], p[4].toInt(), p[5].split(\";\").map { parseEntry(it) })\n        }\n    }\n\n    fun isTeam(teamId: String): Boolean = DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = DEFS.find { it.id == teamId }?.shortName\n\n    fun homeGround(teamId: String): String = DEFS.find { it.id == teamId }?.home ?: \"queens-park-oval\"\n\n    private fun pitchOf(c: Char): PitchType = when (c) {\n        'B' -> PitchType.BATTING\n        'D' -> PitchType.DUSTY\n        'G' -> PitchType.GREEN\n        'O' -> PitchType.BOWLING\n        else -> PitchType.BALANCED\n    }\n\n    private fun pitchText(t: PitchType): String = when (t) {\n        PitchType.BATTING -> \"A flat, true surface that generally favors batters.\"\n        PitchType.GREEN -> \"A grassy surface with seam movement early on.\"\n        PitchType.DUSTY -> \"A dry, dusty surface that turns as the match goes on.\"\n        PitchType.BOWLING -> \"A surface that helps the bowlers.\"\n        else -> \"A balanced surface with something for everyone.\"\n    }\n\n    private fun boundaryOf(c: Char): BoundarySize = when (c) {\n        'S' -> BoundarySize.SMALL\n        'L' -> BoundarySize.LARGE\n        else -> BoundarySize.MEDIUM\n    }\n\n    /** The one ground the game did not have already (estimated ratings). */\n    val stadiums: List<Stadium> by lazy {\n        VENUE_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n            val p = line.split(\"|\")\n            val pitch = pitchOf(p[3][0])\n            Stadium(\n                id = p[0], name = p[1], city = p[2], country = \"West Indies\", homeTeamIds = emptyList(),\n                pitchType = pitch, pitchDescription = pitchText(pitch), boundarySize = boundaryOf(p[4][0]),\n                altitudeM = p[5].toInt(), dewFactor = 0.15, avgT20FirstInningsScore = 160,\n                climate = StadiumClimate(0.3, 75, 29, 8, \"Hot and humid with the odd shower.\")\n            )\n        }\n    }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    fun stadiumsFor(id: String): List<Stadium> =\n        (buildSchedule(id).map { it.stadiumId } + (if (id == FOURDAY_ID) FOURDAY_FINALS_GROUND else ODC_FINAL_GROUND))\n            .distinct().mapNotNull { CplData.stadium(it) }\n\n    // ---------------------------------------------------------------- players\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    private fun jit(name: String, salt: Int, range: Int): Int {\n        var h = salt * 7919\n        for (c in name) h = h * 31 + c.code\n        return (h and 0x7fffffff) % (2 * range + 1) - range\n    }\n\n    private fun assignRoles(entries: List<Entry>): List<PlayerRole> {\n        val n = entries.size\n        val roles = entries.mapIndexed { i, e ->\n            when {\n                e.flags.contains(\"wk\") || e.role == 'W' -> WK\n                e.role == 'B' -> BAT\n                e.role == 'A' -> AR\n                e.role == 'L' -> BWL\n                i < (n * 4) / 10 -> BAT\n                i < (n * 6) / 10 -> AR\n                else -> BWL\n            }\n        }.toMutableList()\n        if (roles.none { it == WK }) {\n            val pick = (0 until n).firstOrNull { roles[it] == BAT } ?: 0\n            roles[pick] = WK\n        }\n        var need = 5 - roles.count { it == BWL || it == AR }\n        var k = n - 1\n        while (need > 0 && k >= 0) {\n            if (roles[k] == BAT) { roles[k] = BWL; need-- }\n            k--\n        }\n        return roles\n    }\n\n    private fun styleOf(code: String, name: String, role: PlayerRole): BowlingStyle = when (code) {\n        \"RF\", \"RFM\", \"RMF\", \"RM\", \"LF\", \"LFM\", \"LMF\", \"LM\" -> PACE\n        \"OB\", \"LB\", \"SLA\", \"SLC\" -> SPIN\n        else -> if (role == BWL || role == AR) (if (jit(name, 3, 4) % 3 == 0) SPIN else PACE) else PACE\n    }\n\n    /** The six teams. A player already in the game (the roster, the CPL, the leagues) is copied with his ratings; the rest get estimates. */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val known = HashMap<String, Player>()\n        fun addAll(players: List<Player>) {\n            for (p in players) known.putIfAbsent(norm(p.name), p)\n        }\n        addAll(CricketData.getAllTeams().flatMap { it.players })\n        addAll(CplData.buildTeams().first.flatMap { it.players })\n        addAll(MajorLeagueCricket.buildTeams().first.flatMap { it.players })\n        addAll(Sa20.buildTeams().first.flatMap { it.players })\n        addAll(AbuDhabiT10.buildTeams().first.flatMap { it.players })\n        addAll(LankaPremierLeague.buildTeams().first.flatMap { it.players })\n        addAll(InternationalLeagueT20.buildTeams().first.flatMap { it.players })\n        addAll(BigBashLeague.buildTeams().first.flatMap { it.players })\n        addAll(IplData.buildPool().map { it.player })\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = DEFS.map { def ->\n            val roles = assignRoles(def.squad)\n            val tierDelta = when (def.tier) { 5 -> 7; 4 -> 3; 3 -> 0; 2 -> -4; else -> -9 }\n            val base = 56 + tierDelta\n            val players = def.squad.mapIndexed { index, e ->\n                val id = \"${def.id}_${index + 1}\"\n                val found = known[norm(e.name)]\n                val player = if (found != null) {\n                    found.copy(id = id, teamId = def.id, name = e.name)\n                } else {\n                    val role = roles[index]\n                    val bat = when (role) {\n                        BAT -> base + 12 + jit(e.name, 1, 6) + (if (index < 6) 2 else 0)\n                        WK -> base + 9 + jit(e.name, 1, 6)\n                        AR -> base + 3 + jit(e.name, 1, 6)\n                        else -> base - 22 + jit(e.name, 1, 5)\n                    }.coerceIn(8, 92)\n                    val bowl = when (role) {\n                        BWL -> base + 8 + jit(e.name, 2, 6)\n                        AR -> base + 1 + jit(e.name, 2, 6)\n                        WK -> 8\n                        else -> 14 + jit(e.name, 2, 5)\n                    }.coerceIn(5, 92)\n                    val fixed = PlayerProfiles.role(e.name, role)\n                    Player(\n                        id = id, teamId = def.id, name = e.name, role = fixed,\n                        battingRating = bat, bowlingRating = bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(fixed, bat, bowl),\n                        bowlingStyle = PlayerProfiles.style(e.name, styleOf(e.bowl, e.name, role))\n                    )\n                }\n                tags[id] = SquadTag.DOMESTIC\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.shortName,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Customisation.applyToBuilt(Pair(teams, tags), true)\n    }\n\n    // ---------------------------------------------------------------- fixtures\n\n    /** Circle method: the rounds of a single round robin of six. Home and away alternate. */\n    private fun rounds(teams: List<String>): List<List<Pair<String, String>>> {\n        val list = ArrayList<String>(teams)\n        val n = list.size\n        val out = ArrayList<List<Pair<String, String>>>()\n        for (r in 0 until n - 1) {\n            val ms = ArrayList<Pair<String, String>>()\n            for (i in 0 until n / 2) {\n                val a = list[i]\n                val b = list[n - 1 - i]\n                ms.add(if ((r + i) % 2 == 0) a to b else b to a)\n            }\n            out.add(ms)\n            list.add(1, list.removeAt(n - 1))\n        }\n        return out\n    }\n\n    /** Championship: three rounds, each with one match of each series (the ground of a series never changes). */\n    private fun fourDaySchedule(): List<TournamentFixture> {\n        val out = ArrayList<TournamentFixture>()\n        for (round in 0 until 3) {\n            for ((a, b, ground) in SERIES) {\n                val home = if (round % 2 == 0) a else b\n                val away = if (round % 2 == 0) b else a\n                out.add(TournamentFixture(out.size, out.size + 1, CplData.LEAGUE, \"wi_$home\", \"wi_$away\", ground))\n            }\n        }\n        return out\n    }\n\n    /** Super50 Cup: 15 matches in Trinidad, three grounds in turn. */\n    private fun odcSchedule(): List<TournamentFixture> {\n        val grounds = listOf(\"brian-lara-tarouba\", \"queens-park-oval\", \"brian-lara-academy\")\n        val out = ArrayList<TournamentFixture>()\n        for (round in rounds(DEFS.map { it.id.removePrefix(\"wi_\") })) {\n            for ((h, a) in round) out.add(TournamentFixture(out.size, out.size + 1, CplData.LEAGUE, \"wi_$h\", \"wi_$a\", grounds[out.size % 3]))\n        }\n        return out\n    }\n\n    fun buildSchedule(id: String): List<TournamentFixture> = if (id == FOURDAY_ID) fourDaySchedule() else odcSchedule()\n\n    fun newTournament(id: String, userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = id,\n            name = if (id == FOURDAY_ID) FOURDAY_NAME else ODC_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(id),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n\n    // ---------------------------------------------------------------- Championship points and table\n\n    private fun battingBonus(runs: Int): Int = if (runs < 250) 0 else minOf(5, (runs - 200) / 50)\n\n    private fun bowlingBonus(wickets: Int): Int = if (wickets < 3) 0 else minOf(3, (wickets - 1) / 2)\n\n    /** 16 for a win, 6 for a tie, 3 for a draw, plus the first-innings bonus points. */\n    fun points(s: MatchState, teamId: String): Int {\n        val base = when (FirstClass.kind(s)) {\n            \"WIN\" -> if (s.winnerId == teamId) 16 else 0\n            \"TIE\" -> 6\n            else -> 3\n        }\n        val list = s.test?.completed ?: return base\n        val mine = list.firstOrNull { it.data.battingTeamId == teamId }\n        val theirs = list.firstOrNull { it.data.battingTeamId != teamId }\n        return base + (if (mine != null) battingBonus(mine.score.runs) else 0) + (if (theirs != null) bowlingBonus(theirs.score.wickets) else 0)\n    }\n\n    /** The Championship table over the nine league matches: points, then wins, then runs per wicket scored over conceded. */\n    fun fourDayTable(state: TournamentState): List<FcRow> {\n        val rows = state.teams.map { team ->\n            var played = 0\n            var won = 0\n            var drawn = 0\n            var lost = 0\n            var tied = 0\n            var pts = 0\n            var runsFor = 0\n            var wicketsLost = 0\n            var runsAgainst = 0\n            var wicketsTaken = 0\n            for (f in state.fixtures) {\n                if (f.stage != CplData.LEAGUE) continue\n                val r = f.result ?: continue\n                if (f.homeId != team.id && f.awayId != team.id) continue\n                played++\n                pts += if (f.homeId == team.id) r.homePoints else r.awayPoints\n                when (r.fcKind) {\n                    \"WIN\" -> if (r.winnerId == team.id) won++ else lost++\n                    \"TIE\" -> tied++\n                    else -> drawn++\n                }\n                for (i in r.fcInnings) {\n                    if (i.teamId == team.id) {\n                        runsFor += i.runs\n                        wicketsLost += i.wickets\n                    } else {\n                        runsAgainst += i.runs\n                        wicketsTaken += i.wickets\n                    }\n                }\n            }\n            val scored = runsFor.toDouble() / maxOf(1, wicketsLost)\n            val conceded = runsAgainst.toDouble() / maxOf(1, wicketsTaken)\n            val quotient = if (conceded <= 0.0) (if (scored > 0.0) 99.0 else 0.0) else scored / conceded\n            FcRow(team, played, won, drawn, lost, tied, pts, quotient)\n        }\n        return rows.sortedWith(compareByDescending<FcRow> { it.points }.thenByDescending { it.won }.thenByDescending { it.quotient })\n    }\n\n    /** The Super50 Cup table: 4 points for a win, 2 for a tie or no result. */\n    fun odcTable(state: TournamentState): List<StandingRow> =\n        CplData.standings(state, CplData.LEAGUE).map { it.copy(points = it.won * 4 + it.noResult * 2) }\n\n    // ---------------------------------------------------------------- the knockouts\n\n    private fun winnerOf(fx: List<TournamentFixture>, stage: String): String? =\n        fx.firstOrNull { it.stage == stage }?.result?.winnerId\n\n    /** The three series winners (the better placed of each pair in the table), ranked by points: 1st goes to the Final, 2nd and 3rd play the Playoff. */\n    private fun rankedWinners(state: TournamentState): List<String> {\n        val table = fourDayTable(state)\n        val points = table.associate { it.team.id to it.points }\n        val order = table.map { it.team.id }\n        return SERIES.map { (a, b, _) ->\n            val ta = \"wi_$a\"\n            val tb = \"wi_$b\"\n            if (order.indexOf(ta) <= order.indexOf(tb)) ta else tb\n        }.sortedWith(compareByDescending<String> { points[it] ?: 0 }.thenBy { order.indexOf(it) })\n    }\n\n    /** Championship: after nine matches the Playoff (2nd v 3rd) is added, then the Final. Super50: the Final between the top two. Safe after every match. */\n    fun advance(state: TournamentState): TournamentState {\n        var fx = state.fixtures\n        val league = fx.filter { it.stage == CplData.LEAGUE }\n        val leagueDone = league.isNotEmpty() && league.all { it.result != null }\n        if (!leagueDone) return state\n        if (state.tournamentId == ODC_ID) {\n            if (fx.none { it.stage == FINAL }) {\n                val top = odcTable(state).map { it.team.id }.take(2)\n                if (top.size == 2) fx = fx + TournamentFixture(fx.size, fx.size + 1, FINAL, top[0], top[1], ODC_FINAL_GROUND)\n            }\n            return state.copy(fixtures = fx)\n        }\n        val seeds = rankedWinners(state)\n        if (seeds.size == 3) {\n            if (fx.none { it.stage == PLAYOFF }) {\n                fx = fx + TournamentFixture(fx.size, fx.size + 1, PLAYOFF, seeds[1], seeds[2], FOURDAY_FINALS_GROUND)\n            }\n            val w = winnerOf(fx, PLAYOFF)\n            if (w != null && fx.none { it.stage == FINAL }) {\n                fx = fx + TournamentFixture(fx.size, fx.size + 1, FINAL, seeds[0], w, FOURDAY_FINALS_GROUND)\n            }\n        }\n        return state.copy(fixtures = fx)\n    }\n\n    // ---------------------------------------------------------------- the data\n\n    // code | name | short | home ground | strength tier (1-5) | squad: name ~ flags ~ role (B batter, A all-rounder, W keeper, L bowler, - unknown) ~ - ~ bowling style\n    private const val TEAM_TEXT = \"\"\"\nbar|Barbados Pride|BAR|kensington-oval|4|Kraigg Brathwaite~~B~~OB;Joshua Bishop~~L~~RM;Jediah Blades~~L~~RM;Leniko Boucher~~B~~;Shian Brathwaite~~-~~;Jonathan Drakes~~-~~;Johann Layne~~A~~OB;Kyle Mayers~~A~~RM;Jair McAllister~~-~~;Shayne Moseley~~B~~;Ramon Simmonds~~A~~RM;Shamar Springer~~L~~RM;Jomel Warrican~~L~~SLA;Kevin Wickham~wk~W~~\nguy|Guyana Harpy Eagles|GUY|providence-stadium|5|Tevin Imlach~wk~W~~;Matthew Nandu~~B~~;Kevlon Anderson~~L~~RM;Tagenarine Chanderpaul~~B~~;Richie Looknauth~~L~~SLA;Gudakesh Motie~~L~~SLA;Keemo Paul~~A~~RM;Raymond Perez~~L~~SLA;Veerasammy Permaul~~L~~SLA;Zeynul Ramsammy~~-~~;Kemol Savory~~B~~;Nial Smith~~L~~RM;Isai Thorne~~B~~;Jonathan van Lange~~B~~\njam|Jamaica Scorpions|JAM|sabina-park|3|John Campbell~~B~~;Brad Barnes~~B~~;Carlos Brown~~-~~;Javelle Glen~~A~~SLA;Brandon King~~B~~;Abhijai Mansingh~~-~~;Kirk McKenzie~~A~~OB;Marquino Mindley~~L~~RM;Romaine Morris~~-~~;Jeavor Royal~~B~~;Pete Salmon~~L~~SLA;Ojay Shields~~L~~RM;Odean Smith~~A~~RM\nlee|Leeward Islands Hurricanes|LEE|vivian-richards-stadium|3|Justin Greaves~~A~~RM;Jewel Andrew~wk~W~~;Keacy Carty~~B~~;Rahkeem Cornwall~~A~~OB;Daniel Doram~~-~~;Nathan Edward~~L~~RM;Karima Gore~~L~~SLA;Jahmar Hamilton~wk~W~~;Kadeem Henry~~-~~;Jeremiah Louis~~B~~;Mikyle Louis~~B~~;Kelvin Pitman~~A~~RM;Oshane Thomas~~L~~RM\ntt|Trinidad and Tobago Red Force|TTO|queens-park-oval|5|Joshua Da Silva~wk~W~~;Cephas Cooper~~B~~;Jason Mohammed~~B~~;Jyd Goolie~~B~~;Amir Jangoo~~B~~;Yannic Cariah~~L~~LB;Evin Lewis~~B~~;Bryan Charles~~A~~RM;Jayden Seales~~L~~RM;Terrance Hinds~~L~~RM;Anderson Phillip~~L~~RM;Joshua James~~A~~RM;Khary Pierre~~L~~SLA\nwin|Windward Islands Volcanoes|WIN|arnos-vale-st-vincent|2|Alick Athanaze~~B~~OB;Teddy Bishop~~-~~;Sunil Ambris~~B~~;Darel Cyrus~~-~~;Kenneth Dember~~-~~;Shadrack Descarte~~-~~;Stephan Pascal~~L~~RM;Noelle Leo~~-~~;Ackeem Auguste~~B~~;Kavem Hodge~~B~~OB;Ryan John~~L~~SLA;Gilon Tyson~~L~~RM;Darron Nedd~~-~~\n\"\"\"\n\n    // id | name | city | pitch (B batting, G green, D dusty, O bowling) | boundary (S, M, L) | altitude in metres\n    private const val VENUE_TEXT = \"\"\"\nbrian-lara-academy|Brian Lara Cricket Academy|Couva|B|M|10\n\"\"\"\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/WiTable.kt",
+      "content": "package com.cricketsim.ui.tournament\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.remember\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.TournamentState\nimport com.cricketsim.logic.WiDomestic\n\n/**\n * The table of the West Indies Championship or the Super50 Cup: one line per team that a screen reader reads whole\n * (\"1. Guyana Harpy Eagles. Played 3, won 2, drawn 1, lost 0. 41 points.\").\n */\n@Composable\nfun WiTableTab(state: TournamentState) {\n    val id = state.tournamentId\n    val fourDay = WiDomestic.isFourDay(id)\n    val fcRows = remember(state) { if (fourDay) WiDomestic.fourDayTable(state) else emptyList() }\n    val oneDay = remember(state) { if (fourDay) emptyList() else WiDomestic.odcTable(state) }\n    Column(modifier = Modifier.padding(vertical = 8.dp)) {\n        Text(text = WiDomestic.introOf(id), style = MaterialTheme.typography.bodyMedium)\n        Spacer(modifier = Modifier.height(12.dp))\n        Text(text = \"Table\", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n        Spacer(modifier = Modifier.height(4.dp))\n        if (fourDay) {\n            fcRows.forEachIndexed { index, row ->\n                val mine = if (row.team.id == state.userTeamId) \" Your team.\" else \"\"\n                Text(\n                    text = \"${index + 1}. ${row.team.name}. Played ${row.played}, won ${row.won}, drawn ${row.drawn}, lost ${row.lost}\" +\n                        (if (row.tied > 0) \", tied ${row.tied}\" else \"\") + \". ${row.points} points.$mine\",\n                    style = MaterialTheme.typography.bodyMedium,\n                    modifier = Modifier.padding(vertical = 2.dp)\n                )\n            }\n        } else {\n            oneDay.forEachIndexed { index, row ->\n                val mine = if (row.team.id == state.userTeamId) \" Your team.\" else \"\"\n                Text(\n                    text = \"${index + 1}. ${row.team.name}. Played ${row.played}, won ${row.won}, lost ${row.lost}, no result ${row.noResult}\" +\n                        \". ${row.points} points. Net run rate ${\"%.3f\".format(row.netRunRate)}.$mine\",\n                    style = MaterialTheme.typography.bodyMedium,\n                    modifier = Modifier.padding(vertical = 2.dp)\n                )\n            }\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "WEST_INDIES_DOMESTIC.md",
+      "content": "# West Indies domestic cricket, 2027 edition: the West Indies Championship and the Super50 Cup\n\nTournament > Domestic tournament now also lists the **West Indies Championship 2027** (four-day) and the **Super50 Cup 2026-27 (West Indies)** (50 overs). Code: `logic/WiDomestic.kt`, `ui/tournament/WiTable.kt`. Own saved tournament each.\n\n## What is real and what is not\n- **There are no published fixtures for the next editions** (Cricket West Indies has cut its calendar for money reasons). The game makes the schedules in the published formats and says so on the start page. The last real editions were the 2026 West Indies Championship (12 April to 20 May 2026, won by Trinidad and Tobago) and the 2025-26 Super50 Cup (19 to 29 November 2025, won by Barbados Pride).\n- **West Indies Championship (2026 format)**: three simultaneous three-match series between the 2026 seeding pairs, Windward v Guyana (Antigua), Jamaica v Barbados (Jamaica) and Leeward v Trinidad and Tobago (Antigua). The series winners are ranked by points; the top one goes straight to the Final, the other two play a Playoff, and its winner meets the top one in the Final (four days each, at the Sir Vivian Richards Stadium). The real top side also played the West Indies Academy as match practice before the Final: not built. The pairs are an assumption for 2027 (they are the 2026 ones).\n- **Super50 Cup (2025-26 format)**: six teams, each plays the other five once (15 matches, all in Trinidad, in three grounds in turn), then a Final between the top two at Queen's Park Oval. 4 points a win and 2 for a tie or no result; the real bonus-point system is not built. A tied league match is shared.\n- **Squads**: the 2026 championship squads (13 or 14 players each; Wikipedia). Players already in the game (the West Indies roster and the CPL) keep their ratings; the others are new with **estimated ratings**, several with a guessed role. The West Indies Academy is not included.\n- **Ground**: Sabina Park, Queen's Park Oval, Sir Vivian Richards Stadium, Providence, Kensington Oval, Arnos Vale and Brian Lara Stadium were in the game; **added** (estimated ratings): the Brian Lara Cricket Academy in Couva.\n\n## Championship points (CWI)\n16 for a win, 6 for a tie, 3 each for a draw, plus a batting bonus (1 point for each 50 runs from 250, up to 5) and a bowling bonus (1 point for 3 wickets, 2 for 5, 3 for 7) from the first innings. The real rule counts only the first 110 overs of an innings and adds 0.2 points for each wicket taken by a designated pace bowler: not built.\n\n## Not built\nThe West Indies Academy match, the Super50 bonus points, women's competitions, the T20 Blaze (it is a women's competition only).\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: NzDomestic.stadium(id) ?:",
+      "replace": "?: NzDomestic.stadium(id) ?: WiDomestic.stadium(id) ?:",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: NzDomestic.shortNameOrNull(teamId) ?:",
+      "replace": "?: NzDomestic.shortNameOrNull(teamId) ?: WiDomestic.shortNameOrNull(teamId) ?:",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "else if (NzDomestic.isTeam(teamId)) NzDomestic.homeGround(teamId)",
+      "replace": "else if (NzDomestic.isTeam(teamId)) NzDomestic.homeGround(teamId)\n        else if (WiDomestic.isTeam(teamId)) WiDomestic.homeGround(teamId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "NzDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "NzDomestic.rulesFor(tournamentId, stage)?.let { return it }\n        // West Indies: the Super50 Cup. The Championship gets its four days from DomesticFc above.\n        WiDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "if (NzDomestic.isNz(state.tournamentId)) return NzDomestic.advance(state)",
+      "replace": "if (NzDomestic.isNz(state.tournamentId)) return NzDomestic.advance(state)\n        if (WiDomestic.isWi(state.tournamentId)) return WiDomestic.advance(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "NzDomestic.PLUNKET_ID -> NzDomestic.DAYS",
+      "replace": "NzDomestic.PLUNKET_ID -> NzDomestic.DAYS\n        WiDomestic.FOURDAY_ID -> WiDomestic.DAYS",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "|| SaDomestic.isFourDay(id) || NzDomestic.isPlunket(id)",
+      "replace": "|| SaDomestic.isFourDay(id) || NzDomestic.isPlunket(id) || WiDomestic.isFourDay(id)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "else !(CountyCricket.isChampionship(id) || NzDomestic.isPlunket(id))",
+      "replace": "else if (WiDomestic.isFourDay(id)) (stage == \"Playoff\" || stage == \"Final\") else !(CountyCricket.isChampionship(id) || NzDomestic.isPlunket(id))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "if (teamId.startsWith(\"nz_\")) NzDomestic.points(s, teamId) else null",
+      "replace": "if (teamId.startsWith(\"nz_\")) NzDomestic.points(s, teamId) else if (teamId.startsWith(\"wi_\")) WiDomestic.points(s, teamId) else null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.NzDomestic\n",
+      "replace": "import com.cricketsim.logic.NzDomestic\nimport com.cricketsim.logic.WiDomestic\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val smashMatchStore = remember { MatchSaveStore(context, \"saved_smash_match.json\") }",
+      "replace": "val smashMatchStore = remember { MatchSaveStore(context, \"saved_smash_match.json\") }\n    val wi4dStore = remember { TournamentSaveStore(context, \"saved_tournament_wi4d2027.json\") }\n    val wi4dMatchStore = remember { MatchSaveStore(context, \"saved_wi4d_match.json\") }\n    val wi50Store = remember { TournamentSaveStore(context, \"saved_tournament_wi50c2026.json\") }\n    val wi50MatchStore = remember { MatchSaveStore(context, \"saved_wi50c_match.json\") }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"plunket2026\" -> plunketStore; \"ford2026\" -> fordStore; \"smash2026\" -> smashStore;",
+      "replace": "\"plunket2026\" -> plunketStore; \"ford2026\" -> fordStore; \"smash2026\" -> smashStore; \"wi4d2027\" -> wi4dStore; \"wi50c2026\" -> wi50Store;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"plunket2026\" -> plunketMatchStore; \"ford2026\" -> fordMatchStore; \"smash2026\" -> smashMatchStore;",
+      "replace": "\"plunket2026\" -> plunketMatchStore; \"ford2026\" -> fordMatchStore; \"smash2026\" -> smashMatchStore; \"wi4d2027\" -> wi4dMatchStore; \"wi50c2026\" -> wi50MatchStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val nzBuilt = remember { lazy { NzDomestic.buildTeams() } }",
+      "replace": "val nzBuilt = remember { lazy { NzDomestic.buildTeams() } }\n    // The two West Indies tournaments share their six teams (built only when one is opened).\n    val wiDomBuilt = remember { lazy { WiDomestic.buildTeams() } }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"plunket2026\", \"ford2026\", \"smash2026\" -> nzBuilt.value;",
+      "replace": "\"plunket2026\", \"ford2026\", \"smash2026\" -> nzBuilt.value; \"wi4d2027\", \"wi50c2026\" -> wiDomBuilt.value;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onPlunket = {",
+      "replace": "onWi4d = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"wi4d2027\"\n                    page = TPage.Adt\n                },\n                onWi50 = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"wi50c2026\"\n                    page = TPage.Adt\n                },\n                onPlunket = {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val isPlunket = kind == \"plunket2026\"",
+      "replace": "val isWi4d = kind == \"wi4d2027\"\n            val isWi50 = kind == \"wi50c2026\"\n            val isPlunket = kind == \"plunket2026\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "|| isPlunket || isFord || isSmash",
+      "replace": "|| isPlunket || isFord || isSmash || isWi4d || isWi50",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isSmash -> NzDomestic.SMASH_NAME",
+      "replace": "isSmash -> NzDomestic.SMASH_NAME\n                isWi4d -> WiDomestic.FOURDAY_NAME\n                isWi50 -> WiDomestic.ODC_NAME",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isCustomKind -> CustomTournaments.introOf(customId)",
+      "replace": "isWi4d -> \"The West Indies Championship 2027, four-day matches: Barbados, Guyana, Jamaica, Leeward Islands, Trinidad and Tobago and Windward Islands in three bilateral series, then a Playoff and the Final in Antigua. \" +\n                        \"Cricket West Indies has not published the next fixtures, so the game makes the schedule in the 2026 format. Squads are the 2026 squads.\"\n                    isWi50 -> \"The West Indies Super50 Cup 2026-27, 50 overs a side: the six regional teams each play the other five once, then a Final. \" +\n                        \"Cricket West Indies has not published the next fixtures, so the game makes the schedule in the 2025-26 format. Squads are the 2026 squads.\"\n                    isCustomKind -> CustomTournaments.introOf(customId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"plunket2026\" || kind == \"ford2026\" || kind == \"smash2026\" || isCustomKind) TPage.Adt else TPage.Cpl",
+      "replace": "kind == \"plunket2026\" || kind == \"ford2026\" || kind == \"smash2026\" || kind == \"wi4d2027\" || kind == \"wi50c2026\" || isCustomKind) TPage.Adt else TPage.Cpl",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"smash2026\" -> NzDomestic.newTournament(NzDomestic.SMASH_ID, teamId, built)",
+      "replace": "\"smash2026\" -> NzDomestic.newTournament(NzDomestic.SMASH_ID, teamId, built)\n                        \"wi4d2027\" -> WiDomestic.newTournament(WiDomestic.FOURDAY_ID, teamId, built)\n                        \"wi50c2026\" -> WiDomestic.newTournament(WiDomestic.ODC_ID, teamId, built)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind != \"plunket2026\" && kind != \"ford2026\" && kind != \"smash2026\" && !isCustomKind,",
+      "replace": "kind != \"plunket2026\" && kind != \"ford2026\" && kind != \"smash2026\" && kind != \"wi4d2027\" && kind != \"wi50c2026\" && !isCustomKind,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"plunket2026\", \"ford2026\", \"smash2026\" -> TPage.Adt;",
+      "replace": "\"plunket2026\", \"ford2026\", \"smash2026\", \"wi4d2027\", \"wi50c2026\" -> TPage.Adt;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onPlunket: () -> Unit, onFord: () -> Unit, onSmash: () -> Unit, onBack: () -> Unit) {",
+      "replace": "onPlunket: () -> Unit, onFord: () -> Unit, onSmash: () -> Unit, onWi4d: () -> Unit, onWi50: () -> Unit, onBack: () -> Unit) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onClick = onSmash",
+      "replace": "onClick = onSmash\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"West Indies Championship 2027\",\n                description = \"The West Indies four-day competition: six regional teams in three bilateral series, then a Playoff and the Final. The next fixtures are not published, so the game makes the schedule.\",\n                enabled = true,\n                onClick = onWi4d\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Super50 Cup 2026-27 (West Indies)\",\n                description = \"The West Indies 50-over competition: six regional teams, each playing the other five, then the Final. The game makes the schedule.\",\n                enabled = true,\n                onClick = onWi50",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "if (NzDomestic.isNz(state.tournamentId)) {\n        NzTableTab(state)\n        return\n    }",
+      "replace": "if (NzDomestic.isNz(state.tournamentId)) {\n        NzTableTab(state)\n        return\n    }\n    if (WiDomestic.isWi(state.tournamentId)) {\n        WiTableTab(state)\n        return\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "NzDomestic.PLUNKET_ID, NzDomestic.FORD_ID, NzDomestic.SMASH_ID -> NzDomestic.stadiumsFor(state.tournamentId)",
+      "replace": "NzDomestic.PLUNKET_ID, NzDomestic.FORD_ID, NzDomestic.SMASH_ID -> NzDomestic.stadiumsFor(state.tournamentId)\n                WiDomestic.FOURDAY_ID, WiDomestic.ODC_ID -> WiDomestic.stadiumsFor(state.tournamentId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "and the New Zealand Plunket Shield, Ford Trophy and Super Smash 2026-27.\"",
+      "replace": "the New Zealand Plunket Shield, Ford Trophy and Super Smash 2026-27; and the West Indies Championship and Super50 Cup.\"",
+      "count": 1
+    }
+  ]
+}
