@@ -1,0 +1,241 @@
+{
+  "name": "New Zealand domestic cricket",
+  "message": "Add the Plunket Shield, Ford Trophy and Super Smash 2026-27 to Tournament > Domestic tournament",
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/NzDomestic.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * New Zealand domestic cricket 2026-27: the Plunket Shield (first-class), the Ford Trophy (50 overs) and the Super Smash (T20), played\n * by the six major associations. Team ids are \"nz_xx\". See NEW_ZEALAND_DOMESTIC.md.\n *\n * Fixtures: the real published lists (NZC, 17 August, 1 September and 12 October 2026), in the real order. The Ford Trophy began on\n * 28 October, so a few of its matches have been played in real life; the game starts all three from the beginning and simulates every\n * result.\n *\n *  - Plunket Shield: eight rounds (24 matches, each side plays eight), no final: the table decides the champion. Points (NZC): 12 for a\n *    win, 6 for a tie, 0 for a draw or a loss, plus batting bonus (1 point each at 200, 250, 300, 350 runs) and bowling bonus (1 point each\n *    for 3, 5, 7, 9 wickets) from each side's first innings. The real rule counts only the first 110 overs; the game counts the whole\n *    innings. Order: points, wins, net runs per wicket.\n *  - Ford Trophy: ten rounds (30 matches), then an Elimination Final (2nd v 3rd) and the Grand Final (1st v the winner), both at the Basin\n *    Reserve. 4 points a win, 2 for a tie or no result (the real bonus point is not built); a tied league match is shared.\n *  - Super Smash: ten rounds (30 matches, each plays the others twice), then the Elimination Final (2nd v 3rd) and the Final at Kennards\n *    Hire Community Oval (Auckland), the last Super Smash before the new NZ20. 4 points a win, 2 for a tie or no result (assumption);\n *    a tie goes to a Super Over.\n *\n * Squads: the 2026-27 association contracts (NZC, 9 July 2026) and the BLACKCAPS on central contracts, each placed with his association.\n * A player already in the game keeps his ratings; the others get ESTIMATED ratings.\n */\nobject NzDomestic {\n    const val PLUNKET_ID = \"plunket_2026_27\"\n    const val PLUNKET_NAME = \"Plunket Shield 2026-27\"\n    const val FORD_ID = \"ford_2026_27\"\n    const val FORD_NAME = \"Ford Trophy 2026-27\"\n    const val SMASH_ID = \"smash_2026_27\"\n    const val SMASH_NAME = \"Super Smash 2026-27\"\n    const val DAYS = 4\n\n    private const val ELIM = \"Elimination Final\"\n    private const val FINAL = \"Final\"\n    private const val FORD_FINALS_GROUND = \"basin-reserve\"\n    private const val SMASH_FINALS_GROUND = \"kennards-oval\"\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n\n    fun isPlunket(id: String?): Boolean = id == PLUNKET_ID\n    fun isFord(id: String?): Boolean = id == FORD_ID\n    fun isSmash(id: String?): Boolean = id == SMASH_ID\n    fun isNz(id: String?): Boolean = id == PLUNKET_ID || id == FORD_ID || id == SMASH_ID\n\n    /** The Ford Trophy (50 overs; a tied league match is shared) and the Super Smash (20 overs). No DRS. */\n    fun rulesFor(id: String?, stage: String?): MatchRules? {\n        val key = when (id) {\n            FORD_ID -> \"ODI\"\n            SMASH_ID -> \"T20\"\n            else -> return null\n        }\n        val base = TournamentRules.rulesForFormat(key) ?: return null\n        return base.copy(drsReviews = 0, noSuperOver = id == FORD_ID && stage != ELIM && stage != FINAL)\n    }\n\n    fun introOf(id: String?): String = when (id) {\n        PLUNKET_ID -> \"Twelve points for a win, six for a tie, none for a draw, plus batting bonus points (200, 250, 300, 350 runs) and bowling bonus points \" +\n            \"(3, 5, 7, 9 wickets) from the first innings. Eight rounds, no final: the top of the table are the champions.\"\n        FORD_ID -> \"Four points for a win, two each for a tie or no result. The top side goes straight to the Grand Final; the second and third play an \" +\n            \"Elimination Final, and its winner meets the top side in the Grand Final at the Basin Reserve.\"\n        else -> \"Four points for a win, two each for a tie or no result. The second and third sides play an Elimination Final, and its winner meets the top \" +\n            \"side in the Final at Kennards Hire Community Oval in Auckland.\"\n    }\n\n    // ---------------------------------------------------------------- teams and grounds\n\n    private class Entry(val name: String, val flags: String, val role: Char, val bowl: String)\n\n    private class TeamDef(val id: String, val name: String, val shortName: String, val home: String, val tier: Int, val squad: List<Entry>)\n\n    private fun parseEntry(text: String): Entry {\n        val p = text.split(\"~\")\n        return Entry(p[0].trim(), p.getOrElse(1) { \"\" }, p.getOrNull(2)?.firstOrNull() ?: '-', p.getOrNull(4) ?: \"\")\n    }\n\n    private val DEFS: List<TeamDef> by lazy {\n        TEAM_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n            val p = line.split(\"|\")\n            TeamDef(\"nz_\" + p[0], p[1], p[2], p[3], p[4].toInt(), p[5].split(\";\").map { parseEntry(it) })\n        }\n    }\n\n    fun isTeam(teamId: String): Boolean = DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = DEFS.find { it.id == teamId }?.shortName\n\n    fun homeGround(teamId: String): String = DEFS.find { it.id == teamId }?.home ?: \"basin-reserve\"\n\n    private val GROUND = mapOf(\n        \"sd\" to \"seddon-park\", \"fz\" to \"fitzherbert-park\", \"uo\" to \"university-oval\", \"by\" to \"bay-oval\", \"ka\" to \"kennards-oval\",\n        \"mc\" to \"mclean-park-napier\", \"ho\" to \"hagley-oval\", \"br\" to \"basin-reserve\", \"cm\" to \"colin-maiden-park\", \"sx\" to \"saxton-oval\",\n        \"ck\" to \"cobham-oval\", \"pk\" to \"pukekura-park\", \"qt\" to \"sir-john-davies-oval\", \"iv\" to \"queens-park-invercargill\", \"ml\" to \"molyneux-park\"\n    )\n\n    private fun pitchOf(c: Char): PitchType = when (c) {\n        'B' -> PitchType.BATTING\n        'D' -> PitchType.DUSTY\n        'G' -> PitchType.GREEN\n        'O' -> PitchType.BOWLING\n        else -> PitchType.BALANCED\n    }\n\n    private fun pitchText(t: PitchType): String = when (t) {\n        PitchType.BATTING -> \"A flat, true surface that generally favors batters.\"\n        PitchType.GREEN -> \"A grassy surface with seam movement early on.\"\n        PitchType.DUSTY -> \"A dry, dusty surface that turns as the match goes on.\"\n        PitchType.BOWLING -> \"A surface that helps the bowlers.\"\n        else -> \"A balanced surface with something for everyone.\"\n    }\n\n    private fun boundaryOf(c: Char): BoundarySize = when (c) {\n        'S' -> BoundarySize.SMALL\n        'L' -> BoundarySize.LARGE\n        else -> BoundarySize.MEDIUM\n    }\n\n    /** The grounds the game did not have already (estimated ratings). Eden Park, Seddon Park, the Basin Reserve, Hagley Oval ... are in StadiumData. */\n    val stadiums: List<Stadium> by lazy {\n        VENUE_TEXT.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->\n            val p = line.split(\"|\")\n            val pitch = pitchOf(p[3][0])\n            Stadium(\n                id = p[0], name = p[1], city = p[2], country = \"New Zealand\", homeTeamIds = emptyList(),\n                pitchType = pitch, pitchDescription = pitchText(pitch), boundarySize = boundaryOf(p[4][0]),\n                altitudeM = p[5].toInt(), dewFactor = 0.1, avgT20FirstInningsScore = 160,\n                climate = StadiumClimate(0.35, 65, 18, 10, \"Mild conditions with a chance of showers.\")\n            )\n        }\n    }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    fun stadiumsFor(id: String): List<Stadium> {\n        val finals = when (id) { FORD_ID -> listOf(FORD_FINALS_GROUND); SMASH_ID -> listOf(SMASH_FINALS_GROUND); else -> emptyList() }\n        return (buildSchedule(id).map { it.stadiumId } + finals).distinct().mapNotNull { CplData.stadium(it) }\n    }\n\n    // ---------------------------------------------------------------- players\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    private fun jit(name: String, salt: Int, range: Int): Int {\n        var h = salt * 7919\n        for (c in name) h = h * 31 + c.code\n        return (h and 0x7fffffff) % (2 * range + 1) - range\n    }\n\n    private val SHORT_FIRST = mapOf(\n        \"mitchell\" to \"mitch\", \"matthew\" to \"matt\", \"steven\" to \"steve\", \"joshua\" to \"josh\", \"nicholas\" to \"nick\",\n        \"benjamin\" to \"ben\", \"samuel\" to \"sam\", \"alexander\" to \"alex\", \"thomas\" to \"tom\", \"william\" to \"will\",\n        \"timothy\" to \"tim\", \"daniel\" to \"dan\", \"christopher\" to \"chris\", \"james\" to \"jimmy\", \"jacob\" to \"jake\"\n    )\n\n    private fun lookup(known: Map<String, Player>, name: String): Player? {\n        known[norm(name)]?.let { return it }\n        val parts = name.split(\" \")\n        if (parts.size >= 2) {\n            val first = norm(parts[0])\n            val rest = parts.drop(1).joinToString(\"\") { norm(it) }\n            SHORT_FIRST[first]?.let { s -> known[s + rest]?.let { return it } }\n            SHORT_FIRST.entries.firstOrNull { it.value == first }?.let { e -> known[e.key + rest]?.let { return it } }\n        }\n        return null\n    }\n\n    private fun assignRoles(entries: List<Entry>): List<PlayerRole> {\n        val n = entries.size\n        val roles = entries.mapIndexed { i, e ->\n            when {\n                e.flags.contains(\"wk\") || e.role == 'W' -> WK\n                e.role == 'B' -> BAT\n                e.role == 'A' -> AR\n                e.role == 'L' -> BWL\n                i < (n * 4) / 10 -> BAT\n                i < (n * 6) / 10 -> AR\n                else -> BWL\n            }\n        }.toMutableList()\n        if (roles.none { it == WK }) {\n            val pick = (0 until n).firstOrNull { roles[it] == BAT } ?: 0\n            roles[pick] = WK\n        }\n        var need = 5 - roles.count { it == BWL || it == AR }\n        var k = n - 1\n        while (need > 0 && k >= 0) {\n            if (roles[k] == BAT) { roles[k] = BWL; need-- }\n            k--\n        }\n        return roles\n    }\n\n    private fun styleOf(code: String, name: String, role: PlayerRole): BowlingStyle = when (code) {\n        \"RF\", \"RFM\", \"RMF\", \"RM\", \"LF\", \"LFM\", \"LMF\", \"LM\" -> PACE\n        \"OB\", \"LB\", \"SLA\", \"SLC\" -> SPIN\n        else -> if (role == BWL || role == AR) (if (jit(name, 3, 4) % 3 == 0) SPIN else PACE) else PACE\n    }\n\n    /** The six associations. A player already in the game is copied with his ratings; the rest get estimates by the team's strength. */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val known = HashMap<String, Player>()\n        fun addAll(players: List<Player>) {\n            for (p in players) known.putIfAbsent(norm(p.name), p)\n        }\n        addAll(CricketData.getAllTeams().flatMap { it.players })\n        addAll(BigBashLeague.buildTeams().first.flatMap { it.players })\n        addAll(MajorLeagueCricket.buildTeams().first.flatMap { it.players })\n        addAll(Sa20.buildTeams().first.flatMap { it.players })\n        addAll(CplData.buildTeams().first.flatMap { it.players })\n        addAll(AbuDhabiT10.buildTeams().first.flatMap { it.players })\n        addAll(LankaPremierLeague.buildTeams().first.flatMap { it.players })\n        addAll(InternationalLeagueT20.buildTeams().first.flatMap { it.players })\n        addAll(IplData.buildPool().map { it.player })\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = DEFS.map { def ->\n            val roles = assignRoles(def.squad)\n            val tierDelta = when (def.tier) { 5 -> 7; 4 -> 3; 3 -> 0; 2 -> -4; else -> -9 }\n            val base = 56 + tierDelta\n            val players = def.squad.mapIndexed { index, e ->\n                val id = \"${def.id}_${index + 1}\"\n                val found = lookup(known, e.name)\n                val player = if (found != null) {\n                    found.copy(id = id, teamId = def.id, name = e.name)\n                } else {\n                    val role = roles[index]\n                    val bat = when (role) {\n                        BAT -> base + 12 + jit(e.name, 1, 6) + (if (index < 6) 2 else 0)\n                        WK -> base + 9 + jit(e.name, 1, 6)\n                        AR -> base + 3 + jit(e.name, 1, 6)\n                        else -> base - 22 + jit(e.name, 1, 5)\n                    }.coerceIn(8, 92)\n                    val bowl = when (role) {\n                        BWL -> base + 8 + jit(e.name, 2, 6)\n                        AR -> base + 1 + jit(e.name, 2, 6)\n                        WK -> 8\n                        else -> 14 + jit(e.name, 2, 5)\n                    }.coerceIn(5, 92)\n                    val fixed = PlayerProfiles.role(e.name, role)\n                    Player(\n                        id = id, teamId = def.id, name = e.name, role = fixed,\n                        battingRating = bat, bowlingRating = bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(fixed, bat, bowl),\n                        bowlingStyle = PlayerProfiles.style(e.name, styleOf(e.bowl, e.name, role))\n                    )\n                }\n                tags[id] = SquadTag.DOMESTIC\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.shortName,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Customisation.applyToBuilt(Pair(teams, tags), true)\n    }\n\n    // ---------------------------------------------------------------- fixtures\n\n    private fun rows(text: String): List<List<String>> = text.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { it.split(\"|\") }\n\n    /** The published league matches in the published order. The finals are added by [advance]. */\n    fun buildSchedule(id: String): List<TournamentFixture> =\n        rows(when (id) { PLUNKET_ID -> PLUNKET_TEXT; FORD_ID -> FORD_TEXT; else -> SMASH_TEXT }).mapIndexed { i, p ->\n            TournamentFixture(i, i + 1, CplData.LEAGUE, \"nz_\" + p[0], \"nz_\" + p[1], GROUND.getValue(p[2]))\n        }\n\n    fun newTournament(id: String, userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = id,\n            name = when (id) { PLUNKET_ID -> PLUNKET_NAME; FORD_ID -> FORD_NAME; else -> SMASH_NAME },\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(id),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n\n    // ---------------------------------------------------------------- Plunket Shield points and table\n\n    private fun battingBonus(runs: Int): Int = (if (runs >= 200) 1 else 0) + (if (runs >= 250) 1 else 0) + (if (runs >= 300) 1 else 0) + (if (runs >= 350) 1 else 0)\n\n    private fun bowlingBonus(wickets: Int): Int = (if (wickets >= 3) 1 else 0) + (if (wickets >= 5) 1 else 0) + (if (wickets >= 7) 1 else 0) + (if (wickets >= 9) 1 else 0)\n\n    /** 12 for a win, 6 for a tie, 0 for a draw, plus the first-innings batting and bowling bonus points. */\n    fun points(s: MatchState, teamId: String): Int {\n        val base = when (FirstClass.kind(s)) {\n            \"WIN\" -> if (s.winnerId == teamId) 12 else 0\n            \"TIE\" -> 6\n            else -> 0\n        }\n        val list = s.test?.completed ?: return base\n        val mine = list.firstOrNull { it.data.battingTeamId == teamId }\n        val theirs = list.firstOrNull { it.data.battingTeamId != teamId }\n        return base + (if (mine != null) battingBonus(mine.score.runs) else 0) + (if (theirs != null) bowlingBonus(theirs.score.wickets) else 0)\n    }\n\n    /** The Plunket Shield table: points, then wins, then net runs per wicket. */\n    fun plunketTable(state: TournamentState): List<FcRow> {\n        val rows = state.teams.map { team ->\n            var played = 0\n            var won = 0\n            var drawn = 0\n            var lost = 0\n            var tied = 0\n            var pts = 0\n            var runsFor = 0\n            var wicketsLost = 0\n            var runsAgainst = 0\n            var wicketsTaken = 0\n            for (f in state.fixtures) {\n                if (f.stage != CplData.LEAGUE) continue\n                val r = f.result ?: continue\n                if (f.homeId != team.id && f.awayId != team.id) continue\n                played++\n                pts += if (f.homeId == team.id) r.homePoints else r.awayPoints\n                when (r.fcKind) {\n                    \"WIN\" -> if (r.winnerId == team.id) won++ else lost++\n                    \"TIE\" -> tied++\n                    else -> drawn++\n                }\n                for (i in r.fcInnings) {\n                    if (i.teamId == team.id) {\n                        runsFor += i.runs\n                        wicketsLost += i.wickets\n                    } else {\n                        runsAgainst += i.runs\n                        wicketsTaken += i.wickets\n                    }\n                }\n            }\n            val scored = runsFor.toDouble() / maxOf(1, wicketsLost)\n            val conceded = runsAgainst.toDouble() / maxOf(1, wicketsTaken)\n            val quotient = if (conceded <= 0.0) (if (scored > 0.0) 99.0 else 0.0) else scored / conceded\n            FcRow(team, played, won, drawn, lost, tied, pts, quotient)\n        }\n        return rows.sortedWith(compareByDescending<FcRow> { it.points }.thenByDescending { it.won }.thenByDescending { it.quotient })\n    }\n\n    /** The Plunket Shield champions: the top of the table once all 24 matches are played. */\n    fun champion(state: TournamentState): Team? {\n        if (state.fixtures.isEmpty() || state.fixtures.any { it.result == null }) return null\n        return plunketTable(state).firstOrNull()?.team\n    }\n\n    fun seasonEndLines(state: TournamentState): List<String> {\n        val c = champion(state) ?: return emptyList()\n        return listOf(\"${c.name} are the Plunket Shield champions.\")\n    }\n\n    /** The Ford Trophy and Super Smash league table: 4 points for a win, 2 for a tie or no result. */\n    fun limitedTable(state: TournamentState): List<StandingRow> =\n        CplData.standings(state, CplData.LEAGUE).map { it.copy(points = it.won * 4 + it.noResult * 2) }\n\n    // ---------------------------------------------------------------- the finals\n\n    private fun winnerOf(fx: List<TournamentFixture>, stage: String): String? =\n        fx.firstOrNull { it.stage == stage }?.result?.winnerId\n\n    /** Adds the Elimination Final (2nd v 3rd) once the league is over, then the Final (1st v the winner). Safe after every match. */\n    fun advance(state: TournamentState): TournamentState {\n        if (state.tournamentId == PLUNKET_ID) return state\n        var fx = state.fixtures\n        val ground = if (state.tournamentId == FORD_ID) FORD_FINALS_GROUND else SMASH_FINALS_GROUND\n        val league = fx.filter { it.stage == CplData.LEAGUE }\n        if (league.isNotEmpty() && league.all { it.result != null } && fx.none { it.stage == ELIM }) {\n            val top = limitedTable(state.copy(fixtures = fx)).map { it.team.id }\n            if (top.size >= 3) fx = fx + TournamentFixture(fx.size, fx.size + 1, ELIM, top[1], top[2], ground)\n        }\n        if (fx.none { it.stage == FINAL } && fx.any { it.stage == ELIM }) {\n            val w = winnerOf(fx, ELIM)\n            val top = limitedTable(state.copy(fixtures = fx)).map { it.team.id }\n            if (w != null && top.isNotEmpty()) fx = fx + TournamentFixture(fx.size, fx.size + 1, FINAL, top[0], w, ground)\n        }\n        return state.copy(fixtures = fx)\n    }\n\n    // ---------------------------------------------------------------- the data\n\n    // code | name | short | home ground | strength tier (1-5) | squad: name ~ flags ~ role (B batter, A all-rounder, W keeper, L bowler, - unknown) ~ - ~ bowling style\n    private const val TEAM_TEXT = \"\"\"\nauc|Auckland Aces|AUC|kennards-oval|3|Adithya Ashok~~L~~LB;Angus Olliver~~L~~RM;Ben Lister~~L~~RM;Bevon Jacobs~~B~~;Cam Fletcher~wk~W~~;Dale Phillips~~B~~OB;Jimmy Neesham~~A~~RM;Jock McKenzie~~L~~RM;Lachlan Stackpole~~B~~SLA;Luke Watson~~B~~;Rohit Kumar~~-~~;Ryan Harrison~~L~~RM;Jordan Sussex~~-~~;Samrath Singh~~-~~;Sean Solia~~-~~;Simon Keene~~B~~;Mark Chapman~~A~~SLA\ncan|Canterbury Kings|CAN|hagley-oval|5|Matt Boyle~~B~~LB;Chad Bowes~~B~~;Leo Carter~~B~~;Sean Davey~~L~~RM;Jesse Frew~~-~~;Lachie Harper~~A~~RM;Scott Janett~~-~~;Ish Sodhi~~L~~LB;Rhys Mariu~~B~~;Cole McConchie~~A~~OB;Gus McKenzie~~L~~RM;Cam Paul~~B~~;Michael Rae~~L~~RM;Matt Rowe~~L~~RM;Fraser Sheat~~L~~RM;Raunaq Kapur~~-~~;Zak Foulkes~~A~~RM;Mitch Hay~wk~W~~;Matt Henry~~L~~RM;Kyle Jamieson~~L~~RM;Tom Latham~wk~W~~;Daryl Mitchell~~A~~RM;Henry Nicholls~~B~~OB;Will O'Rourke~~L~~RM\ncen|Central Stags|CEN|mclean-park-napier|4|Taylor Bettelheim~~B~~;Tom Bruce~~B~~OB;Sam Cassidy~~B~~;Josh Clarkson~~A~~RM;Dane Cleaver~wk~W~~LB;Joey Field~~L~~RM;Toby Findlay~~-~~;Dean Foxcroft~~B~~OB;Jake Gibson~~A~~RM;Curtis Heaphy~~B~~;Jayden Lennox~~L~~SLA;Ajaz Patel~~L~~SLA;Brett Randell~~L~~RM;Brad Schmulian~~B~~LB;Angus Schaw~~-~~;Ray Toole~~L~~RM;Blair Tickner~~L~~RM;Will Young~~B~~OB\nnd|Northern Districts|ND|seddon-park|4|Xavier Bell~~B~~;Josh Brown~~B~~;Joe Carter~~B~~;Katene Clarke~~L~~RM;Kristian Clarke~~L~~RM;Henry Cooper~~B~~;Matt Fisher~~L~~RM;Zak Gibson~~L~~RM;Brett Hampton~~B~~;Nick Kelly~~B~~;Scott Kuggeleijn~~A~~RM;James Naylor~~B~~;Robbie O'Donnell~~B~~;Ben Pomare~~L~~RM;Tim Pringle~~-~~;Snehith Reddy~~-~~;Mitchell Santner~~A~~SLA\nota|Otago Volts|OTA|university-oval|4|Matt Bacon~~-~~;Jack Boyle~~A~~RM;Max Chu~wk~W~~;Mason Clarke~~L~~RM;Jacob Cumming~~B~~;Zac Cumming~~L~~LB;Danru Ferns~~L~~RM;Luke Georgeson~~B~~;Toby Hart~~L~~RM;Troy Johnson~~A~~OB;Tom Jones~~B~~;Ben Lockrose~~L~~RM;Jarrod McKay~~L~~RM;Thomas O'Connor~~L~~RM;Thorn Parkes~~-~~;Jamal Todd~~-~~;Jacob Duffy~~L~~RM;Glenn Phillips~~A~~OB\nwel|Wellington Firebirds|WEL|basin-reserve|4|Callum McLachlan~wk~W~~;Gareth Severin~~B~~RM;Henry Shipley~~L~~RM;James Hartshorn~~L~~RM;Jesse Tashkoff~~A~~SLA;Liam Dudding~~L~~RM;Logan van Beek~~A~~RM;Muhammad Abbas~~B~~RM;Nick Greenwood~~B~~OB;Oscar Jackson~~B~~;Peter Younghusband~~A~~LB;Sam Mycock~~-~~;Samuel Morgan~~-~~;Amogh Paranjpe~~B~~;Tim Robinson~~B~~;Yahya Zeb~~-~~;Tom Blundell~wk~W~~;Michael Bracewell~~A~~OB;Devon Conway~wk~W~~;Rachin Ravindra~~A~~SLA;Ben Sears~~L~~RM;Nathan Smith~~A~~RM\n\"\"\"\n\n    // id | name | city | pitch (B batting, G green, D dusty, O bowling) | boundary (S, M, L) | altitude in metres\n    private const val VENUE_TEXT = \"\"\"\nfitzherbert-park|Fitzherbert Park|Palmerston North|B|M|30\ncobham-oval|Cobham Oval|Whangarei|B|M|20\nkennards-oval|Kennards Hire Community Oval|Auckland|B|S|30\ncolin-maiden-park|Colin Maiden Park|Auckland|B|M|30\npukekura-park|Pukekura Park|New Plymouth|B|S|40\nsaxton-oval|Saxton Oval|Nelson|B|M|10\nsir-john-davies-oval|Sir John Davies Oval|Queenstown|G|L|330\nqueens-park-invercargill|Queen's Park|Invercargill|G|M|10\nmolyneux-park|Molyneux Park|Alexandra|G|M|140\n\"\"\"\n\n    // home team | visiting team | ground, in the published order\n    private const val PLUNKET_TEXT = \"\"\"\nnd|auc|sd\ncen|wel|fz\nota|can|uo\nnd|cen|by\nota|wel|uo\nauc|can|ka\nauc|wel|ka\nnd|can|sd\ncen|ota|mc\ncen|auc|mc\ncan|wel|ho\nota|nd|uo\ncen|nd|mc\nwel|can|br\nota|auc|uo\nauc|cen|cm\nwel|ota|br\ncan|nd|ho\nnd|ota|sd\nwel|cen|br\ncan|auc|ho\nauc|ota|cm\nwel|nd|br\ncan|cen|ho\n\"\"\"\n\n    private const val FORD_TEXT = \"\"\"\nauc|can|ka\ncen|nd|sx\nwel|ota|br\nnd|auc|by\nwel|can|br\nota|cen|uo\ncen|auc|sx\nwel|nd|br\nota|can|uo\nnd|ota|ck\nwel|auc|br\ncen|can|mc\nauc|ota|ka\ncen|wel|mc\ncan|nd|ho\nauc|wel|ka\ncen|can|pk\nota|nd|qt\ncan|auc|ho\nnd|wel|ck\ncen|ota|pk\nauc|cen|ka\nnd|can|ck\nota|wel|uo\nnd|cen|by\ncan|wel|ho\nota|auc|iv\nauc|nd|ka\nwel|cen|br\ncan|ota|ho\n\"\"\"\n\n    private const val SMASH_TEXT = \"\"\"\ncen|wel|fz\nauc|nd|ka\nota|can|ml\ncan|auc|ho\nota|wel|ml\nnd|cen|sd\ncen|can|pk\nnd|auc|sd\nwel|ota|br\nwel|nd|br\nauc|cen|ka\ncan|ota|ho\ncan|nd|ho\nwel|cen|br\nota|auc|uo\ncen|auc|sx\nota|nd|uo\ncan|wel|ho\nnd|ota|by\nauc|wel|ka\ncan|cen|ho\ncen|ota|pk\nauc|can|ka\nnd|wel|sd\nwel|can|br\nauc|ota|ka\ncen|nd|mc\nwel|auc|br\nota|cen|uo\nnd|can|sd\n\"\"\"\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/NzTable.kt",
+      "content": "package com.cricketsim.ui.tournament\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.remember\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.NzDomestic\nimport com.cricketsim.logic.TournamentState\n\n/**\n * The table of the Plunket Shield, the Ford Trophy or the Super Smash: one line per team that a screen reader reads whole\n * (\"1. Canterbury Kings. Played 3, won 2, drawn 1, lost 0. 31 points.\"), and for the Plunket Shield the champions at the end.\n */\n@Composable\nfun NzTableTab(state: TournamentState) {\n    val id = state.tournamentId\n    val plunket = NzDomestic.isPlunket(id)\n    val shield = remember(state) { if (plunket) NzDomestic.plunketTable(state) else emptyList() }\n    val limited = remember(state) { if (plunket) emptyList() else NzDomestic.limitedTable(state) }\n    val endLines = remember(state) { if (plunket) NzDomestic.seasonEndLines(state) else emptyList() }\n    Column(modifier = Modifier.padding(vertical = 8.dp)) {\n        Text(text = NzDomestic.introOf(id), style = MaterialTheme.typography.bodyMedium)\n        Spacer(modifier = Modifier.height(12.dp))\n        Text(text = \"Table\", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n        Spacer(modifier = Modifier.height(4.dp))\n        if (plunket) {\n            shield.forEachIndexed { index, row ->\n                val mine = if (row.team.id == state.userTeamId) \" Your team.\" else \"\"\n                Text(\n                    text = \"${index + 1}. ${row.team.name}. Played ${row.played}, won ${row.won}, drawn ${row.drawn}, lost ${row.lost}\" +\n                        (if (row.tied > 0) \", tied ${row.tied}\" else \"\") + \". ${row.points} points.$mine\",\n                    style = MaterialTheme.typography.bodyMedium,\n                    modifier = Modifier.padding(vertical = 2.dp)\n                )\n            }\n        } else {\n            limited.forEachIndexed { index, row ->\n                val mine = if (row.team.id == state.userTeamId) \" Your team.\" else \"\"\n                Text(\n                    text = \"${index + 1}. ${row.team.name}. Played ${row.played}, won ${row.won}, lost ${row.lost}, no result ${row.noResult}\" +\n                        \". ${row.points} points. Net run rate ${\"%.3f\".format(row.netRunRate)}.$mine\",\n                    style = MaterialTheme.typography.bodyMedium,\n                    modifier = Modifier.padding(vertical = 2.dp)\n                )\n            }\n        }\n        if (endLines.isNotEmpty()) {\n            Spacer(modifier = Modifier.height(12.dp))\n            Text(text = \"End of the season\", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n            endLines.forEach { Text(text = it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp)) }\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "NEW_ZEALAND_DOMESTIC.md",
+      "content": "# New Zealand domestic cricket 2026-27: the Plunket Shield, the Ford Trophy and the Super Smash\n\nTournament > Domestic tournament now also lists the **Plunket Shield 2026-27** (four-day), the **Ford Trophy 2026-27** (50 overs) and the **Super Smash 2026-27** (T20). Code: `logic/NzDomestic.kt`, `ui/tournament/NzTable.kt`. Own saved tournament each. The six major associations: Auckland Aces, Canterbury Kings, Central Stags, Northern Districts, Otago Volts, Wellington Firebirds (names are the same in all three; Northern Districts are the Northern Brave in the real Super Smash, Canterbury the Kings).\n\n## What is real\n- **Fixtures**: NZC's published lists, in the real order, with the real grounds (NZC 17 August, 1 September and 12 October 2026). Plunket Shield: 8 rounds, 24 matches, starting 19 November (the first four rounds before the Christmas break, the last four from 1 March), no final. Ford Trophy: 10 rounds and two finals (Elimination Final 19 February, Grand Final 21 February, both at the Basin Reserve). Super Smash: the last season in its current form, 10 rounds from 27 December, Elimination Final and Final at Kennards Hire Community Oval, Auckland on 28 and 30 January.\n- **The Ford Trophy has already begun in real life** (28 October); the game starts all three competitions from the beginning and simulates every result. The three Auckland home matches in rounds 6, 8 and 10 have \"ground not specified\" in the official list: the game plays them at Kennards Hire Community Oval.\n- **Squads**: the 16-man association contract lists for 2026-27 (NZC, 9 July 2026) plus the BLACKCAPS on central contracts, each with his association (for example Latham, Conway, Santner, Phillips, Conway). Players already in the game keep their ratings; the rest are new with **estimated ratings**; several have a guessed role. The final contract each association adds later, and uncontracted players, are not included.\n- **Grounds**: Eden Park, Seddon Park, the Basin Reserve, Hagley Oval, Bay Oval, University Oval and McLean Park were in the game; **added** (estimated ratings): Fitzherbert Park, Cobham Oval, Kennards Hire Community Oval, Colin Maiden Park, Pukekura Park, Saxton Oval, Sir John Davies Oval (Queenstown), Queen's Park (Invercargill), Molyneux Park (Alexandra).\n\n## Rules\n- **Plunket Shield points** (NZC): 12 for a win, 6 for a tie, 0 for a draw or a loss; batting bonus 1 point each at 200, 250, 300 and 350 runs; bowling bonus 1 point each for 3, 5, 7 and 9 wickets, from each side's first innings. The real rule counts only the first 110 overs of the innings; the game counts the whole innings. Order: points, wins, then net runs per wicket.\n- **Ford Trophy and Super Smash**: 4 points for a win, 2 for a tie or no result; the real Ford Trophy bonus point is not built, and the Super Smash points are an assumption. The top side goes straight to the final, the second and third play an Elimination Final. A tied Ford Trophy league match is shared; a Super Smash tie goes to a Super Over. No DRS.\n\n## Not built\nThe real results so far, the Ford Trophy bonus point, the women's competitions (Hallyburton Johnstone Shield and women's Super Smash), the planned NZ20.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: SaDomestic.stadium(id) ?:",
+      "replace": "?: SaDomestic.stadium(id) ?: NzDomestic.stadium(id) ?:",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: SaDomestic.shortNameOrNull(teamId) ?:",
+      "replace": "?: SaDomestic.shortNameOrNull(teamId) ?: NzDomestic.shortNameOrNull(teamId) ?:",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "else if (SaDomestic.isTeam(teamId)) SaDomestic.homeGround(teamId)",
+      "replace": "else if (SaDomestic.isTeam(teamId)) SaDomestic.homeGround(teamId)\n        else if (NzDomestic.isTeam(teamId)) NzDomestic.homeGround(teamId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "SaDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "SaDomestic.rulesFor(tournamentId, stage)?.let { return it }\n        // New Zealand: the Ford Trophy and the Super Smash. The Plunket Shield gets its four days from DomesticFc above.\n        NzDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "if (SaDomestic.isSa(state.tournamentId)) return SaDomestic.advance(state)",
+      "replace": "if (SaDomestic.isSa(state.tournamentId)) return SaDomestic.advance(state)\n        if (NzDomestic.isNz(state.tournamentId)) return NzDomestic.advance(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "if (CountyCricket.isChampionship(state.tournamentId)) return CountyCricket.champion(state)",
+      "replace": "if (CountyCricket.isChampionship(state.tournamentId)) return CountyCricket.champion(state)\n        // The Plunket Shield has no final either: the top of the table.\n        if (NzDomestic.isPlunket(state.tournamentId)) return NzDomestic.champion(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "SaDomestic.FOURDAY_ID -> SaDomestic.daysFor(stage)",
+      "replace": "SaDomestic.FOURDAY_ID -> SaDomestic.daysFor(stage)\n        NzDomestic.PLUNKET_ID -> NzDomestic.DAYS",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "|| AusDomestic.isShield(id) || SaDomestic.isFourDay(id)\n",
+      "replace": "|| AusDomestic.isShield(id) || SaDomestic.isFourDay(id) || NzDomestic.isPlunket(id)\n\n    /** Points of the countries that score a first-class match their own way, picked by the team ids (\"nz_\" ...); null for the others. */\n    fun otherPoints(s: MatchState, teamId: String): Int? =\n        if (teamId.startsWith(\"nz_\")) NzDomestic.points(s, teamId) else null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticFc.kt",
+      "find": "else !CountyCricket.isChampionship(id)",
+      "replace": "else !(CountyCricket.isChampionship(id) || NzDomestic.isPlunket(id))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "val homePoints = if (sa) SaDomestic.points(finished, home.id) else if (shield)",
+      "replace": "val homePoints = DomesticFc.otherPoints(finished, home.id) ?: if (sa) SaDomestic.points(finished, home.id) else if (shield)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "val awayPoints = if (sa) SaDomestic.points(finished, away.id) else if (shield)",
+      "replace": "val awayPoints = DomesticFc.otherPoints(finished, away.id) ?: if (sa) SaDomestic.points(finished, away.id) else if (shield)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.SaDomestic\n",
+      "replace": "import com.cricketsim.logic.NzDomestic\nimport com.cricketsim.logic.SaDomestic\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val pro20MatchStore = remember { MatchSaveStore(context, \"saved_pro20c_match.json\") }",
+      "replace": "val pro20MatchStore = remember { MatchSaveStore(context, \"saved_pro20c_match.json\") }\n    val plunketStore = remember { TournamentSaveStore(context, \"saved_tournament_plunket2026.json\") }\n    val plunketMatchStore = remember { MatchSaveStore(context, \"saved_plunket_match.json\") }\n    val fordStore = remember { TournamentSaveStore(context, \"saved_tournament_ford2026.json\") }\n    val fordMatchStore = remember { MatchSaveStore(context, \"saved_ford_match.json\") }\n    val smashStore = remember { TournamentSaveStore(context, \"saved_tournament_smash2026.json\") }\n    val smashMatchStore = remember { MatchSaveStore(context, \"saved_smash_match.json\") }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa50c2026\" -> sa50Store; \"pro20c2026\" -> pro20Store;",
+      "replace": "\"sa50c2026\" -> sa50Store; \"pro20c2026\" -> pro20Store; \"plunket2026\" -> plunketStore; \"ford2026\" -> fordStore; \"smash2026\" -> smashStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa50c2026\" -> sa50MatchStore; \"pro20c2026\" -> pro20MatchStore;",
+      "replace": "\"sa50c2026\" -> sa50MatchStore; \"pro20c2026\" -> pro20MatchStore; \"plunket2026\" -> plunketMatchStore; \"ford2026\" -> fordMatchStore; \"smash2026\" -> smashMatchStore;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val saDomBuilt = remember { lazy { SaDomestic.buildTeams() } }",
+      "replace": "val saDomBuilt = remember { lazy { SaDomestic.buildTeams() } }\n    // The three New Zealand tournaments share their six associations (built only when one is opened).\n    val nzBuilt = remember { lazy { NzDomestic.buildTeams() } }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa4d2026\", \"sa50c2026\", \"pro20c2026\" -> saDomBuilt.value;",
+      "replace": "\"sa4d2026\", \"sa50c2026\", \"pro20c2026\" -> saDomBuilt.value; \"plunket2026\", \"ford2026\", \"smash2026\" -> nzBuilt.value;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onSa4d = {",
+      "replace": "onPlunket = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"plunket2026\"\n                    page = TPage.Adt\n                },\n                onFord = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"ford2026\"\n                    page = TPage.Adt\n                },\n                onSmash = {\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"smash2026\"\n                    page = TPage.Adt\n                },\n                onSa4d = {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val isSa4d = kind == \"sa4d2026\"",
+      "replace": "val isPlunket = kind == \"plunket2026\"\n            val isFord = kind == \"ford2026\"\n            val isSmash = kind == \"smash2026\"\n            val isSa4d = kind == \"sa4d2026\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "|| isSa4d || isSa50 || isPro20",
+      "replace": "|| isSa4d || isSa50 || isPro20 || isPlunket || isFord || isSmash",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isPro20 -> SaDomestic.T20_NAME",
+      "replace": "isPro20 -> SaDomestic.T20_NAME\n                isPlunket -> NzDomestic.PLUNKET_NAME\n                isFord -> NzDomestic.FORD_NAME\n                isSmash -> NzDomestic.SMASH_NAME",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isCustomKind -> CustomTournaments.introOf(customId)",
+      "replace": "isPlunket -> \"The Plunket Shield 2026-27, four-day matches: New Zealand's six major associations, eight rounds with the published fixtures, no final: the top of the table are the champions. \" +\n                        \"Twelve points for a win, plus bonus points from the first innings. The game simulates every result.\"\n                    isFord -> \"The Ford Trophy 2026-27, 50 overs a side: six associations, ten rounds with the published fixtures, then an Elimination Final and the Grand Final at the Basin Reserve. \" +\n                        \"The real competition has already begun; the game simulates every result.\"\n                    isSmash -> \"The Super Smash 2026-27, 20 overs a side, the last season in its current form: six associations, ten rounds with the published fixtures, then the Elimination Final and the Final in Auckland. \" +\n                        \"The game simulates every result.\"\n                    isCustomKind -> CustomTournaments.introOf(customId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"sa4d2026\" || kind == \"sa50c2026\" || kind == \"pro20c2026\" || isCustomKind) TPage.Adt else TPage.Cpl",
+      "replace": "kind == \"sa4d2026\" || kind == \"sa50c2026\" || kind == \"pro20c2026\" || kind == \"plunket2026\" || kind == \"ford2026\" || kind == \"smash2026\" || isCustomKind) TPage.Adt else TPage.Cpl",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"pro20c2026\" -> SaDomestic.newTournament(SaDomestic.T20_ID, teamId, built)",
+      "replace": "\"pro20c2026\" -> SaDomestic.newTournament(SaDomestic.T20_ID, teamId, built)\n                        \"plunket2026\" -> NzDomestic.newTournament(NzDomestic.PLUNKET_ID, teamId, built)\n                        \"ford2026\" -> NzDomestic.newTournament(NzDomestic.FORD_ID, teamId, built)\n                        \"smash2026\" -> NzDomestic.newTournament(NzDomestic.SMASH_ID, teamId, built)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind != \"sa4d2026\" && kind != \"sa50c2026\" && kind != \"pro20c2026\" && !isCustomKind,",
+      "replace": "kind != \"sa4d2026\" && kind != \"sa50c2026\" && kind != \"pro20c2026\" && kind != \"plunket2026\" && kind != \"ford2026\" && kind != \"smash2026\" && !isCustomKind,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa4d2026\", \"sa50c2026\", \"pro20c2026\" -> TPage.Adt;",
+      "replace": "\"sa4d2026\", \"sa50c2026\", \"pro20c2026\", \"plunket2026\", \"ford2026\", \"smash2026\" -> TPage.Adt;",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onSa4d: () -> Unit, onSa50: () -> Unit, onPro20: () -> Unit, onBack: () -> Unit) {",
+      "replace": "onSa4d: () -> Unit, onSa50: () -> Unit, onPro20: () -> Unit, onPlunket: () -> Unit, onFord: () -> Unit, onSmash: () -> Unit, onBack: () -> Unit) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "onClick = onPro20",
+      "replace": "onClick = onPro20\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Plunket Shield 2026-27 (New Zealand)\",\n                description = \"The New Zealand four-day competition: six associations, eight rounds with the published fixtures, no final.\",\n                enabled = true,\n                onClick = onPlunket\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Ford Trophy 2026-27 (New Zealand)\",\n                description = \"The New Zealand 50-over competition: six associations, ten rounds, then the Elimination Final and the Grand Final.\",\n                enabled = true,\n                onClick = onFord\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Super Smash 2026-27 (New Zealand)\",\n                description = \"The New Zealand T20 competition, the last season in its current form: six associations, ten rounds, then the finals in Auckland.\",\n                enabled = true,\n                onClick = onSmash",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "if (SaDomestic.isSa(state.tournamentId)) {\n        SaTableTab(state)\n        return\n    }",
+      "replace": "if (SaDomestic.isSa(state.tournamentId)) {\n        SaTableTab(state)\n        return\n    }\n    if (NzDomestic.isNz(state.tournamentId)) {\n        NzTableTab(state)\n        return\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "SaDomestic.FOURDAY_ID, SaDomestic.ODC_ID, SaDomestic.T20_ID -> SaDomestic.stadiumsFor(state.tournamentId)",
+      "replace": "SaDomestic.FOURDAY_ID, SaDomestic.ODC_ID, SaDomestic.T20_ID -> SaDomestic.stadiumsFor(state.tournamentId)\n                NzDomestic.PLUNKET_ID, NzDomestic.FORD_ID, NzDomestic.SMASH_ID -> NzDomestic.stadiumsFor(state.tournamentId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "and the South African 4-Day Series, Pro50 Cup and Pro20 Cup 2026-27.\"",
+      "replace": "the South African 4-Day Series, Pro50 Cup and Pro20 Cup 2026-27; and the New Zealand Plunket Shield, Ford Trophy and Super Smash 2026-27.\"",
+      "count": 1
+    }
+  ]
+}
