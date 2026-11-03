@@ -23,11 +23,11 @@ object DomesticFc {
     fun isSmall(id: String?): Boolean = id == DULEEP_ID || id == IRANI_ID
 
     /** The Ranji Trophy, the Duleep Trophy or the Irani Cup: matches played with the first-class rules. */
-    fun isFirstClass(id: String?): Boolean = Ranji.isRanji(id) || isSmall(id) || CountyCricket.isChampionship(id) || AusDomestic.isShield(id) || SaDomestic.isFourDay(id) || NzDomestic.isPlunket(id)
+    fun isFirstClass(id: String?): Boolean = Ranji.isRanji(id) || isSmall(id) || CountyCricket.isChampionship(id) || AusDomestic.isShield(id) || SaDomestic.isFourDay(id) || NzDomestic.isPlunket(id) || WiDomestic.isFourDay(id)
 
     /** Points of the countries that score a first-class match their own way, picked by the team ids ("nz_" ...); null for the others. */
     fun otherPoints(s: MatchState, teamId: String): Int? =
-        if (teamId.startsWith("nz_")) NzDomestic.points(s, teamId) else null
+        if (teamId.startsWith("nz_")) NzDomestic.points(s, teamId) else if (teamId.startsWith("wi_")) WiDomestic.points(s, teamId) else null
 
     fun daysFor(id: String?, stage: String): Int = when (id) {
         IRANI_ID -> IRANI_DAYS
@@ -36,11 +36,12 @@ object DomesticFc {
         AusDomestic.SHIELD_ID -> AusDomestic.daysFor(stage)
         SaDomestic.FOURDAY_ID -> SaDomestic.daysFor(stage)
         NzDomestic.PLUNKET_ID -> NzDomestic.DAYS
+        WiDomestic.FOURDAY_ID -> WiDomestic.DAYS
         else -> Ranji.daysFor(stage)
     }
 
     /** In a knockout a drawn match goes to the first-innings leader; only the Ranji league stage can be drawn. */
-    fun isKnockout(id: String?, stage: String): Boolean = if (Ranji.isRanji(id)) !Ranji.isGroupStage(stage) else if (AusDomestic.isShield(id) || SaDomestic.isFourDay(id)) stage == "Final" else !(CountyCricket.isChampionship(id) || NzDomestic.isPlunket(id))
+    fun isKnockout(id: String?, stage: String): Boolean = if (Ranji.isRanji(id)) !Ranji.isGroupStage(stage) else if (AusDomestic.isShield(id) || SaDomestic.isFourDay(id)) stage == "Final" else if (WiDomestic.isFourDay(id)) (stage == "Playoff" || stage == "Final") else !(CountyCricket.isChampionship(id) || NzDomestic.isPlunket(id))
 
     fun rulesFor(id: String?, stage: String?): MatchRules? =
         if (isFirstClass(id)) TestMatch.rulesForDays(daysFor(id, stage ?: Ranji.STAGES[0])) else null

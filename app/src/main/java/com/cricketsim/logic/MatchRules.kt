@@ -100,6 +100,8 @@ object TournamentRules {
         SaDomestic.rulesFor(tournamentId, stage)?.let { return it }
         // New Zealand: the Ford Trophy and the Super Smash. The Plunket Shield gets its four days from DomesticFc above.
         NzDomestic.rulesFor(tournamentId, stage)?.let { return it }
+        // West Indies: the Super50 Cup. The Championship gets its four days from DomesticFc above.
+        WiDomestic.rulesFor(tournamentId, stage)?.let { return it }
         if (isCustom(tournamentId)) {
             val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null
             val base = rulesForFormat(def.formatKey) ?: return null

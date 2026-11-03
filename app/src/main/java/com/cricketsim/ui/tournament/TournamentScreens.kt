@@ -58,6 +58,7 @@ import com.cricketsim.logic.MajorLeagueCricket
 import com.cricketsim.logic.DomesticFc
 import com.cricketsim.logic.AusDomestic
 import com.cricketsim.logic.NzDomestic
+import com.cricketsim.logic.WiDomestic
 import com.cricketsim.logic.SaDomestic
 import com.cricketsim.logic.CountyCricket
 import com.cricketsim.logic.DomesticWhiteBall
@@ -217,6 +218,10 @@ fun TournamentFlow(onExit: () -> Unit) {
     val fordMatchStore = remember { MatchSaveStore(context, "saved_ford_match.json") }
     val smashStore = remember { TournamentSaveStore(context, "saved_tournament_smash2026.json") }
     val smashMatchStore = remember { MatchSaveStore(context, "saved_smash_match.json") }
+    val wi4dStore = remember { TournamentSaveStore(context, "saved_tournament_wi4d2027.json") }
+    val wi4dMatchStore = remember { MatchSaveStore(context, "saved_wi4d_match.json") }
+    val wi50Store = remember { TournamentSaveStore(context, "saved_tournament_wi50c2026.json") }
+    val wi50MatchStore = remember { MatchSaveStore(context, "saved_wi50c_match.json") }
     val mlcStore = remember { TournamentSaveStore(context, "saved_tournament_mlc2026.json") }
     val mlcMatchStore = remember { MatchSaveStore(context, "saved_mlc_match.json") }
     val wcStore = remember { TournamentSaveStore(context, "saved_tournament_t20wc2026.json") }
@@ -232,8 +237,8 @@ fun TournamentFlow(onExit: () -> Unit) {
     val customId = GameTournaments.idForKind(kind)
     val customStore = remember(customId) { TournamentSaveStore(context, "saved_tournament_$customId.json") }
     val customMatchStore = remember(customId) { MatchSaveStore(context, "saved_${customId}_match.json") }
-    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; "ilt" -> iltStore; "bbl" -> bblStore; "mlc" -> mlcStore; "sa20" -> saStore; "ranji2027" -> ranjiStore; "duleep2026" -> duleepStore; "irani2026" -> iraniStore; "smat2026" -> smatStore; "vht2026" -> vhtStore; "odc2027" -> odcStore; "blast2027" -> blastStore; "cc2027" -> ccStore; "shield2026" -> shieldStore; "audc2026" -> audcStore; "sa4d2026" -> sa4dStore; "sa50c2026" -> sa50Store; "pro20c2026" -> pro20Store; "plunket2026" -> plunketStore; "ford2026" -> fordStore; "smash2026" -> smashStore; "wc2026" -> wcStore; "ct2025" -> ctStore; "asia2025" -> acStore; "ag2026" -> agStore; else -> if (isCustomKind) customStore else cplStore }
-    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; "ilt" -> iltMatchStore; "bbl" -> bblMatchStore; "mlc" -> mlcMatchStore; "sa20" -> saMatchStore; "ranji2027" -> ranjiMatchStore; "duleep2026" -> duleepMatchStore; "irani2026" -> iraniMatchStore; "smat2026" -> smatMatchStore; "vht2026" -> vhtMatchStore; "odc2027" -> odcMatchStore; "blast2027" -> blastMatchStore; "cc2027" -> ccMatchStore; "shield2026" -> shieldMatchStore; "audc2026" -> audcMatchStore; "sa4d2026" -> sa4dMatchStore; "sa50c2026" -> sa50MatchStore; "pro20c2026" -> pro20MatchStore; "plunket2026" -> plunketMatchStore; "ford2026" -> fordMatchStore; "smash2026" -> smashMatchStore; "wc2026" -> wcMatchStore; "ct2025" -> ctMatchStore; "asia2025" -> acMatchStore; "ag2026" -> agMatchStore; else -> if (isCustomKind) customMatchStore else cplMatchStore }
+    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; "ilt" -> iltStore; "bbl" -> bblStore; "mlc" -> mlcStore; "sa20" -> saStore; "ranji2027" -> ranjiStore; "duleep2026" -> duleepStore; "irani2026" -> iraniStore; "smat2026" -> smatStore; "vht2026" -> vhtStore; "odc2027" -> odcStore; "blast2027" -> blastStore; "cc2027" -> ccStore; "shield2026" -> shieldStore; "audc2026" -> audcStore; "sa4d2026" -> sa4dStore; "sa50c2026" -> sa50Store; "pro20c2026" -> pro20Store; "plunket2026" -> plunketStore; "ford2026" -> fordStore; "smash2026" -> smashStore; "wi4d2027" -> wi4dStore; "wi50c2026" -> wi50Store; "wc2026" -> wcStore; "ct2025" -> ctStore; "asia2025" -> acStore; "ag2026" -> agStore; else -> if (isCustomKind) customStore else cplStore }
+    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; "ilt" -> iltMatchStore; "bbl" -> bblMatchStore; "mlc" -> mlcMatchStore; "sa20" -> saMatchStore; "ranji2027" -> ranjiMatchStore; "duleep2026" -> duleepMatchStore; "irani2026" -> iraniMatchStore; "smat2026" -> smatMatchStore; "vht2026" -> vhtMatchStore; "odc2027" -> odcMatchStore; "blast2027" -> blastMatchStore; "cc2027" -> ccMatchStore; "shield2026" -> shieldMatchStore; "audc2026" -> audcMatchStore; "sa4d2026" -> sa4dMatchStore; "sa50c2026" -> sa50MatchStore; "pro20c2026" -> pro20MatchStore; "plunket2026" -> plunketMatchStore; "ford2026" -> fordMatchStore; "smash2026" -> smashMatchStore; "wi4d2027" -> wi4dMatchStore; "wi50c2026" -> wi50MatchStore; "wc2026" -> wcMatchStore; "ct2025" -> ctMatchStore; "asia2025" -> acMatchStore; "ag2026" -> agMatchStore; else -> if (isCustomKind) customMatchStore else cplMatchStore }
     val scope = rememberCoroutineScope()
     val cplBuilt = remember { CplData.buildTeams() }
     val adtBuilt = remember { AbuDhabiT10.buildTeams() }
@@ -257,12 +262,14 @@ fun TournamentFlow(onExit: () -> Unit) {
     val saDomBuilt = remember { lazy { SaDomestic.buildTeams() } }
     // The three New Zealand tournaments share their six associations (built only when one is opened).
     val nzBuilt = remember { lazy { NzDomestic.buildTeams() } }
+    // The two West Indies tournaments share their six teams (built only when one is opened).
+    val wiDomBuilt = remember { lazy { WiDomestic.buildTeams() } }
     val wcBuilt = remember { T20WorldCup.buildTeams() }
     val ctBuilt = remember { ChampionsTrophy.buildTeams() }
     val acBuilt = remember { AsiaCup.buildTeams() }
     val agBuilt = remember { AsianGames.buildTeams() }
     val customBuilt = remember(customId) { if (isCustomKind) CustomTournaments.buildTeams(customId) else cplBuilt }
-    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; "ilt" -> iltBuilt; "bbl" -> bblBuilt; "mlc" -> mlcBuilt; "sa20" -> saBuilt; "ranji2027" -> ranjiBuilt.value; "duleep2026" -> duleepBuilt.value; "irani2026" -> iraniBuilt.value; "smat2026", "vht2026" -> whiteBallBuilt.value; "odc2027", "blast2027", "cc2027" -> countyBuilt.value; "shield2026", "audc2026" -> ausBuilt.value; "sa4d2026", "sa50c2026", "pro20c2026" -> saDomBuilt.value; "plunket2026", "ford2026", "smash2026" -> nzBuilt.value; "wc2026" -> wcBuilt; "ct2025" -> ctBuilt; "asia2025" -> acBuilt; "ag2026" -> agBuilt; else -> if (isCustomKind) customBuilt else cplBuilt }
+    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; "ilt" -> iltBuilt; "bbl" -> bblBuilt; "mlc" -> mlcBuilt; "sa20" -> saBuilt; "ranji2027" -> ranjiBuilt.value; "duleep2026" -> duleepBuilt.value; "irani2026" -> iraniBuilt.value; "smat2026", "vht2026" -> whiteBallBuilt.value; "odc2027", "blast2027", "cc2027" -> countyBuilt.value; "shield2026", "audc2026" -> ausBuilt.value; "sa4d2026", "sa50c2026", "pro20c2026" -> saDomBuilt.value; "plunket2026", "ford2026", "smash2026" -> nzBuilt.value; "wi4d2027", "wi50c2026" -> wiDomBuilt.value; "wc2026" -> wcBuilt; "ct2025" -> ctBuilt; "asia2025" -> acBuilt; "ag2026" -> agBuilt; else -> if (isCustomKind) customBuilt else cplBuilt }
 
     var page by remember { mutableStateOf<TPage>(TPage.Menu) }
     // The "menu open" sound for each menu-type page (not the toss, the match, the celebration or the IPL
@@ -441,6 +448,20 @@ fun TournamentFlow(onExit: () -> Unit) {
                     pendingMatch = null
                     loaded = false
                     kind = "odc2027"
+                    page = TPage.Adt
+                },
+                onWi4d = {
+                    saved = null
+                    pendingMatch = null
+                    loaded = false
+                    kind = "wi4d2027"
+                    page = TPage.Adt
+                },
+                onWi50 = {
+                    saved = null
+                    pendingMatch = null
+                    loaded = false
+                    kind = "wi50c2026"
                     page = TPage.Adt
                 },
                 onPlunket = {
@@ -655,6 +676,8 @@ fun TournamentFlow(onExit: () -> Unit) {
             val isOdc = kind == "odc2027"
             val isBlast = kind == "blast2027"
             val isCc = kind == "cc2027"
+            val isWi4d = kind == "wi4d2027"
+            val isWi50 = kind == "wi50c2026"
             val isPlunket = kind == "plunket2026"
             val isFord = kind == "ford2026"
             val isSmash = kind == "smash2026"
@@ -663,7 +686,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             val isPro20 = kind == "pro20c2026"
             val isShield = kind == "shield2026"
             val isAudc = kind == "audc2026"
-            val isDomestic = isRanji || isDuleep || isIrani || isSmat || isVht || isOdc || isBlast || isCc || isShield || isAudc || isSa4d || isSa50 || isPro20 || isPlunket || isFord || isSmash
+            val isDomestic = isRanji || isDuleep || isIrani || isSmat || isVht || isOdc || isBlast || isCc || isShield || isAudc || isSa4d || isSa50 || isPro20 || isPlunket || isFord || isSmash || isWi4d || isWi50
             val tournamentLabel = when {
                 isAdt -> AbuDhabiT10.TOURNAMENT_NAME
                 isLpl -> LankaPremierLeague.TOURNAMENT_NAME
@@ -691,6 +714,8 @@ fun TournamentFlow(onExit: () -> Unit) {
                 isPlunket -> NzDomestic.PLUNKET_NAME
                 isFord -> NzDomestic.FORD_NAME
                 isSmash -> NzDomestic.SMASH_NAME
+                isWi4d -> WiDomestic.FOURDAY_NAME
+                isWi50 -> WiDomestic.ODC_NAME
                 isCustomKind -> CustomTournaments.nameOf(customId)
                 else -> "CPL 2026"
             }.let { Customisation.tournamentName(GameTournaments.idForKind(kind), it) }
@@ -766,6 +791,10 @@ fun TournamentFlow(onExit: () -> Unit) {
                         "The real competition has already begun; the game simulates every result."
                     isSmash -> "The Super Smash 2026-27, 20 overs a side, the last season in its current form: six associations, ten rounds with the published fixtures, then the Elimination Final and the Final in Auckland. " +
                         "The game simulates every result."
+                    isWi4d -> "The West Indies Championship 2027, four-day matches: Barbados, Guyana, Jamaica, Leeward Islands, Trinidad and Tobago and Windward Islands in three bilateral series, then a Playoff and the Final in Antigua. " +
+                        "Cricket West Indies has not published the next fixtures, so the game makes the schedule in the 2026 format. Squads are the 2026 squads."
+                    isWi50 -> "The West Indies Super50 Cup 2026-27, 50 overs a side: the six regional teams each play the other five once, then a Final. " +
+                        "Cricket West Indies has not published the next fixtures, so the game makes the schedule in the 2025-26 format. Squads are the 2026 squads."
                     isCustomKind -> CustomTournaments.introOf(customId)
                     isAg -> "The men's cricket event of the 2026 Asian Games in Nisshin, Japan: ten teams, two groups of three, the quarter-finals with India, Pakistan, Sri Lanka and Bangladesh seeded, the semi-finals, the bronze medal match and the gold medal match."
                     isAc -> "The men's T20 Asia Cup 2025: the eight real teams and squads in two groups of four, the real group fixtures in Dubai and Abu Dhabi, then the Super 4 and the Final."
@@ -813,7 +842,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             }
         }
         is TPage.TeamSelect -> {
-            val back = { page = if (kind == "adt10" || kind == "lpl" || kind == "ilt" || kind == "bbl" || kind == "mlc" || kind == "sa20" || kind == "wc2026" || kind == "ct2025" || kind == "asia2025" || kind == "ag2026" || kind == "ranji2027" || kind == "duleep2026" || kind == "irani2026" || kind == "smat2026" || kind == "vht2026" || kind == "odc2027" || kind == "blast2027" || kind == "cc2027" || kind == "shield2026" || kind == "audc2026" || kind == "sa4d2026" || kind == "sa50c2026" || kind == "pro20c2026" || kind == "plunket2026" || kind == "ford2026" || kind == "smash2026" || isCustomKind) TPage.Adt else TPage.Cpl }
+            val back = { page = if (kind == "adt10" || kind == "lpl" || kind == "ilt" || kind == "bbl" || kind == "mlc" || kind == "sa20" || kind == "wc2026" || kind == "ct2025" || kind == "asia2025" || kind == "ag2026" || kind == "ranji2027" || kind == "duleep2026" || kind == "irani2026" || kind == "smat2026" || kind == "vht2026" || kind == "odc2027" || kind == "blast2027" || kind == "cc2027" || kind == "shield2026" || kind == "audc2026" || kind == "sa4d2026" || kind == "sa50c2026" || kind == "pro20c2026" || kind == "plunket2026" || kind == "ford2026" || kind == "smash2026" || kind == "wi4d2027" || kind == "wi50c2026" || isCustomKind) TPage.Adt else TPage.Cpl }
             BackHandler(onBack = back)
             TeamSelectPage(
                 teams = built.first,
@@ -846,6 +875,8 @@ fun TournamentFlow(onExit: () -> Unit) {
                         "plunket2026" -> NzDomestic.newTournament(NzDomestic.PLUNKET_ID, teamId, built)
                         "ford2026" -> NzDomestic.newTournament(NzDomestic.FORD_ID, teamId, built)
                         "smash2026" -> NzDomestic.newTournament(NzDomestic.SMASH_ID, teamId, built)
+                        "wi4d2027" -> WiDomestic.newTournament(WiDomestic.FOURDAY_ID, teamId, built)
+                        "wi50c2026" -> WiDomestic.newTournament(WiDomestic.ODC_ID, teamId, built)
                         else -> if (isCustomKind) CustomTournaments.newTournament(customId, teamId, built) else CplData.newTournament(teamId, built, Random.Default)
                     }
                     saved = state
@@ -861,7 +892,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             val team = built.first.find { it.id == current.teamId }
             if (team != null) {
                 SquadPage(
-                    team = team, tags = built.second, showOrigin = kind != "adt10" && kind != "wc2026" && kind != "ct2025" && kind != "asia2025" && kind != "ag2026" && kind != "ranji2027" && kind != "duleep2026" && kind != "irani2026" && kind != "smat2026" && kind != "vht2026" && kind != "odc2027" && kind != "blast2027" && kind != "cc2027" && kind != "shield2026" && kind != "audc2026" && kind != "sa4d2026" && kind != "sa50c2026" && kind != "pro20c2026" && kind != "plunket2026" && kind != "ford2026" && kind != "smash2026" && !isCustomKind,
+                    team = team, tags = built.second, showOrigin = kind != "adt10" && kind != "wc2026" && kind != "ct2025" && kind != "asia2025" && kind != "ag2026" && kind != "ranji2027" && kind != "duleep2026" && kind != "irani2026" && kind != "smat2026" && kind != "vht2026" && kind != "odc2027" && kind != "blast2027" && kind != "cc2027" && kind != "shield2026" && kind != "audc2026" && kind != "sa4d2026" && kind != "sa50c2026" && kind != "pro20c2026" && kind != "plunket2026" && kind != "ford2026" && kind != "smash2026" && kind != "wi4d2027" && kind != "wi50c2026" && !isCustomKind,
                     domesticLabel = when (kind) { "lpl" -> "Sri Lanka"; "bbl" -> "Australia"; "sa20" -> "South Africa"; else -> "West Indies" },
                     breakoutLabel = if (kind == "lpl") "Sri Lanka, under 23" else "Breakout player",
                     onBack = back
@@ -869,7 +900,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             } else back()
         }
         is TPage.Hub -> {
-            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10", "lpl", "ilt", "bbl", "mlc", "sa20", "wc2026", "ct2025", "asia2025", "ag2026", "ranji2027", "duleep2026", "irani2026", "smat2026", "vht2026", "odc2027", "blast2027", "cc2027", "shield2026", "audc2026", "sa4d2026", "sa50c2026", "pro20c2026", "plunket2026", "ford2026", "smash2026" -> TPage.Adt; else -> if (isCustomKind) TPage.Adt else TPage.Cpl } }
+            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10", "lpl", "ilt", "bbl", "mlc", "sa20", "wc2026", "ct2025", "asia2025", "ag2026", "ranji2027", "duleep2026", "irani2026", "smat2026", "vht2026", "odc2027", "blast2027", "cc2027", "shield2026", "audc2026", "sa4d2026", "sa50c2026", "pro20c2026", "plunket2026", "ford2026", "smash2026", "wi4d2027", "wi50c2026" -> TPage.Adt; else -> if (isCustomKind) TPage.Adt else TPage.Cpl } }
             BackHandler(onBack = back)
             val state = saved
             if (state != null) {
@@ -1154,7 +1185,7 @@ private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onCustom
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow("League tournament", "Play a full league season, saved as you go.", enabled = true, onClick = onLeague)
             Spacer(modifier = Modifier.height(12.dp))
-            ChoiceRow("Domestic tournament", "The Ranji Trophy, the Duleep Trophy and the Irani Cup, then the Syed Mushtaq Ali Trophy (T20) and the Vijay Hazare Trophy (50 overs), 2026-27, with the real teams and fixtures; the English County Championship, One-Day Cup and Vitality Blast 2027; the Australian Sheffield Shield and One-Day Cup 2026-27; the South African 4-Day Series, Pro50 Cup and Pro20 Cup 2026-27; and the New Zealand Plunket Shield, Ford Trophy and Super Smash 2026-27.", enabled = true, onClick = onDomestic)
+            ChoiceRow("Domestic tournament", "The Ranji Trophy, the Duleep Trophy and the Irani Cup, then the Syed Mushtaq Ali Trophy (T20) and the Vijay Hazare Trophy (50 overs), 2026-27, with the real teams and fixtures; the English County Championship, One-Day Cup and Vitality Blast 2027; the Australian Sheffield Shield and One-Day Cup 2026-27; the South African 4-Day Series, Pro50 Cup and Pro20 Cup 2026-27; the New Zealand Plunket Shield, Ford Trophy and Super Smash 2026-27; and the West Indies Championship and Super50 Cup.", enabled = true, onClick = onDomestic)
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow("Custom tournaments", "Play the tournaments you designed in Advanced Customisation.", enabled = true, onClick = onCustom)
         }
@@ -1164,7 +1195,7 @@ private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onCustom
 }
 
 @Composable
-private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () -> Unit, onSmat: () -> Unit, onVht: () -> Unit, onOdc: () -> Unit, onBlast: () -> Unit, onCc: () -> Unit, onShield: () -> Unit, onAudc: () -> Unit, onSa4d: () -> Unit, onSa50: () -> Unit, onPro20: () -> Unit, onPlunket: () -> Unit, onFord: () -> Unit, onSmash: () -> Unit, onBack: () -> Unit) {
+private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () -> Unit, onSmat: () -> Unit, onVht: () -> Unit, onOdc: () -> Unit, onBlast: () -> Unit, onCc: () -> Unit, onShield: () -> Unit, onAudc: () -> Unit, onSa4d: () -> Unit, onSa50: () -> Unit, onPro20: () -> Unit, onPlunket: () -> Unit, onFord: () -> Unit, onSmash: () -> Unit, onWi4d: () -> Unit, onWi50: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         PageTitle("Domestic tournaments")
         Spacer(modifier = Modifier.height(16.dp))
@@ -1279,6 +1310,20 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
                 description = "The New Zealand T20 competition, the last season in its current form: six associations, ten rounds, then the finals in Auckland.",
                 enabled = true,
                 onClick = onSmash
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ChoiceRow(
+                title = "West Indies Championship 2027",
+                description = "The West Indies four-day competition: six regional teams in three bilateral series, then a Playoff and the Final. The next fixtures are not published, so the game makes the schedule.",
+                enabled = true,
+                onClick = onWi4d
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ChoiceRow(
+                title = "Super50 Cup 2026-27 (West Indies)",
+                description = "The West Indies 50-over competition: six regional teams, each playing the other five, then the Final. The game makes the schedule.",
+                enabled = true,
+                onClick = onWi50
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -1891,6 +1936,10 @@ private fun TableTab(state: TournamentState) {
         NzTableTab(state)
         return
     }
+    if (WiDomestic.isWi(state.tournamentId)) {
+        WiTableTab(state)
+        return
+    }
     // The World Cup has a table for every group, in its own file.
     if (state.tournamentId == T20WorldCup.TOURNAMENT_ID || state.tournamentId == ChampionsTrophy.TOURNAMENT_ID || state.tournamentId == AsiaCup.TOURNAMENT_ID || state.tournamentId == AsianGames.TOURNAMENT_ID || DomesticWhiteBall.isWhiteBall(state.tournamentId) || CountyCricket.isCounty(state.tournamentId) || TournamentRules.isCustom(state.tournamentId)) {
         WorldCupTableTab(state)
@@ -1971,6 +2020,7 @@ private fun VenuesTab(state: TournamentState) {
                 AusDomestic.SHIELD_ID, AusDomestic.ODC_ID -> AusDomestic.stadiumsFor(state.tournamentId)
                 SaDomestic.FOURDAY_ID, SaDomestic.ODC_ID, SaDomestic.T20_ID -> SaDomestic.stadiumsFor(state.tournamentId)
                 NzDomestic.PLUNKET_ID, NzDomestic.FORD_ID, NzDomestic.SMASH_ID -> NzDomestic.stadiumsFor(state.tournamentId)
+                WiDomestic.FOURDAY_ID, WiDomestic.ODC_ID -> WiDomestic.stadiumsFor(state.tournamentId)
                 T20WorldCup.TOURNAMENT_ID -> T20WorldCup.stadiums
                 ChampionsTrophy.TOURNAMENT_ID -> ChampionsTrophy.stadiums
                 AsiaCup.TOURNAMENT_ID -> AsiaCup.stadiums

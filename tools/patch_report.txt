@@ -1,6 +1,6 @@
-Patch run: 41555320983
-Timestamp (UTC): 2026-11-03T00:47:29Z
+Patch run: 41620197002
+Timestamp (UTC): 2026-11-03T10:33:18Z
 Result: OK
 -----
-Patch 2026-11-02-070-new-zealand-domestic.json
-  applied 34 operation(s) to 8 file(s)
+Patch 2026-11-03-071-west-indies-domestic.json
+  applied 32 operation(s) to 8 file(s)

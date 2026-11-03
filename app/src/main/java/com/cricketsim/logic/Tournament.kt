@@ -166,7 +166,7 @@ object CplData {
     fun stadium(id: String): Stadium? =
         stadiums.find { it.id == id } ?: IplSeason.stadium(id) ?: AbuDhabiT10.stadium(id) ?: LankaPremierLeague.stadium(id)
             ?: InternationalLeagueT20.stadium(id) ?: BigBashLeague.stadium(id) ?: MajorLeagueCricket.stadium(id)
-            ?: Sa20.stadium(id) ?: Ranji.stadium(id) ?: CountyCricket.stadium(id) ?: AusDomestic.stadium(id) ?: SaDomestic.stadium(id) ?: NzDomestic.stadium(id) ?: DomesticFc.stadium(id) ?: T20WorldCup.stadium(id) ?: ChampionsTrophy.stadium(id) ?: AsiaCup.stadium(id) ?: AsianGames.stadium(id) ?: StadiumData.getStadiumById(id)
+            ?: Sa20.stadium(id) ?: Ranji.stadium(id) ?: CountyCricket.stadium(id) ?: AusDomestic.stadium(id) ?: SaDomestic.stadium(id) ?: NzDomestic.stadium(id) ?: WiDomestic.stadium(id) ?: DomesticFc.stadium(id) ?: T20WorldCup.stadium(id) ?: ChampionsTrophy.stadium(id) ?: AsiaCup.stadium(id) ?: AsianGames.stadium(id) ?: StadiumData.getStadiumById(id)
 
     /** Grounds that are nobody's home: a few league matches are played there, as the real CPL tours. */
     private val NEUTRAL_VENUES = listOf("arnos-vale-st-vincent", "queens-park-oval", "national-stadium-grenada")
@@ -252,7 +252,7 @@ object CplData {
         DEFS.find { it.id == teamId }?.shortName ?: AbuDhabiT10.shortNameOrNull(teamId)
             ?: LankaPremierLeague.shortNameOrNull(teamId) ?: InternationalLeagueT20.shortNameOrNull(teamId)
             ?: BigBashLeague.shortNameOrNull(teamId) ?: MajorLeagueCricket.shortNameOrNull(teamId)
-            ?: Sa20.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId) ?: CountyCricket.shortNameOrNull(teamId) ?: AusDomestic.shortNameOrNull(teamId) ?: SaDomestic.shortNameOrNull(teamId) ?: NzDomestic.shortNameOrNull(teamId) ?: DomesticFc.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId) ?: ChampionsTrophy.shortNameOrNull(teamId) ?: AsiaCup.shortNameOrNull(teamId) ?: AsianGames.shortNameOrNull(teamId) ?: CustomTournaments.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
+            ?: Sa20.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId) ?: CountyCricket.shortNameOrNull(teamId) ?: AusDomestic.shortNameOrNull(teamId) ?: SaDomestic.shortNameOrNull(teamId) ?: NzDomestic.shortNameOrNull(teamId) ?: WiDomestic.shortNameOrNull(teamId) ?: DomesticFc.shortNameOrNull(teamId) ?: T20WorldCup.shortNameOrNull(teamId) ?: ChampionsTrophy.shortNameOrNull(teamId) ?: AsiaCup.shortNameOrNull(teamId) ?: AsianGames.shortNameOrNull(teamId) ?: CustomTournaments.shortNameOrNull(teamId) ?: IplData.shortName(teamId)
 
     fun homeStadiumId(teamId: String): String = DEFS.find { it.id == teamId }?.homeStadiumId
         ?: if (AbuDhabiT10.isTeam(teamId)) AbuDhabiT10.GROUND_ID
@@ -266,6 +266,7 @@ object CplData {
         else if (AusDomestic.isTeam(teamId)) AusDomestic.homeGround(teamId)
         else if (SaDomestic.isTeam(teamId)) SaDomestic.homeGround(teamId)
         else if (NzDomestic.isTeam(teamId)) NzDomestic.homeGround(teamId)
+        else if (WiDomestic.isTeam(teamId)) WiDomestic.homeGround(teamId)
         else if (DomesticFc.isTeam(teamId)) DomesticFc.homeGround(teamId)
         else if (T20WorldCup.isTeam(teamId) || ChampionsTrophy.isTeam(teamId) || AsiaCup.isTeam(teamId) || AsianGames.isTeam(teamId)) "" // national teams have no home ground
         else if (IplData.team(teamId) != null) IplSeason.homeStadiumId(teamId) else "kensington-oval"

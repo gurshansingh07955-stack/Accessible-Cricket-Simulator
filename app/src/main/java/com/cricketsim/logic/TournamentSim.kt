@@ -498,6 +498,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (AusDomestic.isAus(state.tournamentId)) return AusDomestic.advance(state)
         if (SaDomestic.isSa(state.tournamentId)) return SaDomestic.advance(state)
         if (NzDomestic.isNz(state.tournamentId)) return NzDomestic.advance(state)
+        if (WiDomestic.isWi(state.tournamentId)) return WiDomestic.advance(state)
         if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
