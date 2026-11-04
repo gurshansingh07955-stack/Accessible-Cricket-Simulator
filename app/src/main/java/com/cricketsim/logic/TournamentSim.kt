@@ -430,6 +430,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (CountyCricket.isChampionship(state.tournamentId)) return CountyCricket.champion(state)
         // The Plunket Shield has no final either: the top of the table.
         if (NzDomestic.isPlunket(state.tournamentId)) return NzDomestic.champion(state)
+        if (BdDomestic.isNcl(state.tournamentId)) return BdDomestic.champion(state)
         val finalMatch = state.fixtures.firstOrNull { it.stage == "Final" } ?: return null
         val id = finalMatch.result?.winnerId ?: return null
         return state.teams.find { it.id == id }
@@ -500,6 +501,8 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (NzDomestic.isNz(state.tournamentId)) return NzDomestic.advance(state)
         if (WiDomestic.isWi(state.tournamentId)) return WiDomestic.advance(state)
         if (PakDomestic.isPak(state.tournamentId)) return PakDomestic.advance(state)
+        // The National Cricket League has no later stage: the table decides the champions.
+        if (BdDomestic.isNcl(state.tournamentId)) return state
         if (TournamentRules.isCustom(state.tournamentId) && !CustomTournaments.usesDefaultPlayoffs(state.tournamentId)) return CustomTournaments.advance(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
