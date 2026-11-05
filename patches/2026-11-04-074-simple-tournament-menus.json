@@ -1,0 +1,132 @@
+{
+  "name": "Simple tournament menus",
+  "message": "The Tournament menu and its lists show names only, no explanations; shorter tournament names",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "/** A big tappable row: title and description read together as one item; dimmed when unavailable. */",
+      "replace": "/** True on the Tournament menu and its lists of tournaments: they show names only, with no explanations. */\nprivate var simpleRows = false\n\n/** A big tappable row: title and description read together as one item; dimmed when unavailable. */",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        Spacer(modifier = Modifier.height(4.dp))\n        Text(text = description, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)",
+      "replace": "        if (!simpleRows) {\n            Spacer(modifier = Modifier.height(4.dp))\n            Text(text = description, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    when (val current = page) {",
+      "replace": "    // The Tournament menu and its lists of tournaments show names only, no explanations.\n    simpleRows = page is TPage.Menu || page is TPage.Leagues || page is TPage.International || page is TPage.Domestic || page is TPage.CustomList\n    when (val current = page) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"One-Day Cup 2027 (England)\",",
+      "replace": "title = \"English One-Day Cup 2027\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"Vitality Blast 2027 (England)\",",
+      "replace": "title = \"Vitality Blast 2027\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"County Championship 2027 (England)\",",
+      "replace": "title = \"County Championship 2027\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"Sheffield Shield 2026-27 (Australia)\",",
+      "replace": "title = \"Sheffield Shield 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"One-Day Cup 2026-27 (Australia)\",",
+      "replace": "title = \"Australian One-Day Cup 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"CSA 4-Day Series Division 1 2026-27 (South Africa)\",",
+      "replace": "title = \"South Africa 4-Day Series 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"CSA Pro50 Cup 2026-27 (South Africa)\",",
+      "replace": "title = \"Pro50 Cup 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"CSA Pro20 Cup 2026-27 (South Africa)\",",
+      "replace": "title = \"Pro20 Cup 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"Plunket Shield 2026-27 (New Zealand)\",",
+      "replace": "title = \"Plunket Shield 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"Ford Trophy 2026-27 (New Zealand)\",",
+      "replace": "title = \"Ford Trophy 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"Super Smash 2026-27 (New Zealand)\",",
+      "replace": "title = \"Super Smash 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"Super50 Cup 2026-27 (West Indies)\",",
+      "replace": "title = \"West Indies Super50 Cup 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"Quaid-e-Azam Trophy Gold 2026-27 (Pakistan)\",",
+      "replace": "title = \"Quaid-e-Azam Trophy Gold 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"Quaid-e-Azam Trophy Silver 2026-27 (Pakistan)\",",
+      "replace": "title = \"Quaid-e-Azam Trophy Silver 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "title = \"National Cricket League 2026-27 (Bangladesh)\",",
+      "replace": "title = \"National Cricket League 2026-27\",",
+      "count": 1
+    }
+  ]
+}
