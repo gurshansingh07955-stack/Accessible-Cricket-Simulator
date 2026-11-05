@@ -1,0 +1,145 @@
+{
+  "name": "Rain back in limited-overs domestic tournaments; bowled sound in LBW review; louder shot sounds",
+  "message": "Undoes the no-rain rule of patch 076; plays the bowled sound when an LBW review shows the ball hitting the stumps; boosts 1-2-3, four, six and bowled sounds",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        DomesticFc.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "replace": "        DomesticFc.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "replace": "        DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        CountyCricket.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "replace": "        CountyCricket.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        AusDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "replace": "        AusDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        SaDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "replace": "        SaDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        NzDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "replace": "        NzDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        WiDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "replace": "        WiDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        // EVERY domestic tournament below plays without rain (rainEnabled = false is forced on each result), as well as without DRS.\n",
+      "replace": "",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticWhiteBall.kt",
+      "find": "return base.copy(drsReviews = 0, rainEnabled = false, noSuperOver = id == VHT_ID && league)",
+      "replace": "return base.copy(drsReviews = 0, noSuperOver = id == VHT_ID && league)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DomesticWhiteBall.kt",
+      "find": "no DRS and no rain, as in Indian domestic cricket.",
+      "replace": "no DRS, rain as in the game's other limited-overs matches.",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "    /** The sound of what just happened on the ball, with the crowd's reaction. Web mapping, see the class comment. */",
+      "replace": "    /** The stumps are hit: your \"bowled\" sound (the old wicket sound if it is missing). Played in an LBW review at \"Wickets: hitting\". */\n    fun playBowledHit() {\n        if (!settings.soundEffects) return\n        if (!playRecorded(RecordedAsset.US_BOWLED, HIGHLIGHT_GAIN)) playPcm(Fx.WICKET, MASTER)\n        duckFor(300)\n    }\n\n    /** The sound of what just happened on the ball, with the crowd's reaction. Web mapping, see the class comment. */",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/DrsScreens.kt",
+      "find": "                services?.announceSpoken(step.spoken)\n                delay(1500)\n            }\n        }\n        elapsedMs = DrsSystem.REVIEW_DURATION_MS\n",
+      "replace": "                services?.announceSpoken(step.spoken)\n                delay(1500)\n            }\n            // The ball is hitting the stumps: the bowled sound, as the third umpire's line ends.\n            if (step.spoken == \"Wickets: hitting.\") {\n                currentServices?.sound?.playBowledHit()\n                delay(900)\n            }\n        }\n        elapsedMs = DrsSystem.REVIEW_DURATION_MS\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "        const val USER_SOUND_GAIN = 0.9f\n",
+      "replace": "        const val USER_SOUND_GAIN = 0.9f\n\n        /**\n         * Playing level of the sounds that must stand out (1, 2 or 3 runs, a four, a six, a bowled batter): the loudest a\n         * sound can be played. The extra loudness comes from the boost tools/fetch_audio.sh gives those four files\n         * (HIGHLIGHT_BOOST_DB there), so run \"Fetch audio into the app\" again to hear it.\n         */\n        const val HIGHLIGHT_GAIN = 1.0f\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "if (!(stumpsHit && playRecorded(RecordedAsset.US_BOWLED, USER_SOUND_GAIN))) playPcm(Fx.WICKET, MASTER)",
+      "replace": "if (!(stumpsHit && playRecorded(RecordedAsset.US_BOWLED, HIGHLIGHT_GAIN))) playPcm(Fx.WICKET, MASTER)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_SIX_RUNS\n                if (!playRecorded(ownSound, USER_SOUND_GAIN)) playPcm(Fx.BOUNDARY, MASTER)",
+      "replace": "val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_SIX_RUNS\n                if (!playRecorded(ownSound, if (isEdge) USER_SOUND_GAIN else HIGHLIGHT_GAIN)) playPcm(Fx.BOUNDARY, MASTER)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_FOUR_RUNS\n                if (!playRecorded(ownSound, USER_SOUND_GAIN)) playPcm(Fx.BOUNDARY, MASTER)",
+      "replace": "val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_FOUR_RUNS\n                if (!playRecorded(ownSound, if (isEdge) USER_SOUND_GAIN else HIGHLIGHT_GAIN)) playPcm(Fx.BOUNDARY, MASTER)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/SoundEngine.kt",
+      "find": "if (!playRecorded(ownSound, USER_SOUND_GAIN) && !playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) {",
+      "replace": "if (!playRecorded(ownSound, if (ownSound == RecordedAsset.US_RUNS_1_2_3) HIGHLIGHT_GAIN else USER_SOUND_GAIN) && !playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "    esac\n  done\nfi\necho \"Your own sounds packed: $user_count\"",
+      "replace": "    esac\n    # The sounds that must stand out (1, 2 or 3 runs, a four, a six, a bowled batter) are made louder: a boost in\n    # decibels, with a limiter so a loud recording cannot distort. Change HIGHLIGHT_BOOST_DB to taste (0 = no boost).\n    case \"$user_name\" in\n      runs_1_2_3|four_runs|six_runs|bowled)\n        if [ \"$HIGHLIGHT_BOOST_DB\" != \"0\" ] && [ -s \"$user_dest\" ] && command -v ffmpeg >/dev/null 2>&1 \\\n            && ffmpeg -nostdin -loglevel error -y -i \"$user_dest\" -vn -af \"volume=${HIGHLIGHT_BOOST_DB}dB,alimiter=limit=0.95\" -ar 44100 -b:a 128k \"$SCRATCH_DIR/boost_tmp.m4a.mp3\" \\\n            && [ -s \"$SCRATCH_DIR/boost_tmp.m4a.mp3\" ]; then\n          mv \"$SCRATCH_DIR/boost_tmp.m4a.mp3\" \"$user_dest\"\n        else\n          rm -f \"$SCRATCH_DIR/boost_tmp.m4a.mp3\"\n        fi\n        ;;\n    esac\n  done\nfi\necho \"Your own sounds packed: $user_count\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "tools/fetch_audio.sh",
+      "find": "user_count=0\nif [ -d tools/user_sounds ]; then",
+      "replace": "user_count=0\nHIGHLIGHT_BOOST_DB=6\nif [ -d tools/user_sounds ]; then",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "RAIN_REVIEW_SOUND_LOUDER_SHOTS.md",
+      "content": "# Rain in domestic tournaments, the bowled sound in LBW reviews, louder shot sounds\n\n**Rain.** Every domestic tournament that is limited-overs (Syed Mushtaq Ali, Vijay Hazare, One-Day Cup, Vitality Blast,\nAustralian One-Day Cup, Pro50, Pro20, Ford Trophy, Super Smash, Super50) has rain again, as in the game's T20 and\nODI matches (one interruption, a revised overs limit and a DLS target). The first-class and four-day tournaments\n(Ranji, Duleep, Irani, County Championship, Sheffield Shield, 4-Day Series, Plunket Shield, WI Championship,\nQuaid-e-Azam, National Cricket League) still have no rain: the Test engine has no rain model, so a rain break there\nneeds its own design (lost overs from a day).\n\n**LBW review.** At the step \"Wickets: hitting.\" the third umpire's line is followed by your `bowled` sound\n(`SoundEngine.playBowledHit`). \"Umpire's call\" and \"missing\" do not play it.\n\n**Louder sounds.** `runs_1_2_3`, `four_runs`, `six_runs` and `bowled` are played at `HIGHLIGHT_GAIN` (1.0, the loudest a\nsound can be played) and boosted by `HIGHLIGHT_BOOST_DB` (6 dB, with a limiter) when \"Fetch audio into the app\" packs them.\nRaise or lower the boost in `tools/fetch_audio.sh`.\n",
+      "mustNotExist": true
+    }
+  ]
+}
