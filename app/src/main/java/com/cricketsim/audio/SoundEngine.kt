@@ -438,6 +438,13 @@ class SoundEngine(context: Context) {
         return was
     }
 
+    /** The stumps are hit: your "bowled" sound (the old wicket sound if it is missing). Played in an LBW review at "Wickets: hitting". */
+    fun playBowledHit() {
+        if (!settings.soundEffects) return
+        if (!playRecorded(RecordedAsset.US_BOWLED, HIGHLIGHT_GAIN)) playPcm(Fx.WICKET, MASTER)
+        duckFor(300)
+    }
+
     /** The sound of what just happened on the ball, with the crowd's reaction. Web mapping, see the class comment. */
     fun playOutcomeSounds(
         isWicket: Boolean,
@@ -451,7 +458,7 @@ class SoundEngine(context: Context) {
         when {
             isWicket -> {
                 // Bowled, stumped and run out use your "bowled" recording; caught and lbw keep the old wicket sound.
-                if (!(stumpsHit && playRecorded(RecordedAsset.US_BOWLED, USER_SOUND_GAIN))) playPcm(Fx.WICKET, MASTER)
+                if (!(stumpsHit && playRecorded(RecordedAsset.US_BOWLED, HIGHLIGHT_GAIN))) playPcm(Fx.WICKET, MASTER)
                 crowdReact(CrowdEngine.Reaction.WICKET)
                 duckFor(300)
                 swellCrowd(2200)
@@ -460,7 +467,7 @@ class SoundEngine(context: Context) {
             runs == 6 -> {
                 // A clean six has its own sound; a six off the edge plays the edge sound.
                 val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_SIX_RUNS
-                if (!playRecorded(ownSound, USER_SOUND_GAIN)) playPcm(Fx.BOUNDARY, MASTER)
+                if (!playRecorded(ownSound, if (isEdge) USER_SOUND_GAIN else HIGHLIGHT_GAIN)) playPcm(Fx.BOUNDARY, MASTER)
                 crowdReact(CrowdEngine.Reaction.SIX)
                 duckFor(180)
                 swellCrowd(2400)
@@ -469,7 +476,7 @@ class SoundEngine(context: Context) {
             runs >= 4 -> {
                 // A four that is not off the edge has its own sound; an edged four plays the edge sound.
                 val ownSound = if (isEdge) RecordedAsset.US_EDGE_OF_BAT else RecordedAsset.US_FOUR_RUNS
-                if (!playRecorded(ownSound, USER_SOUND_GAIN)) playPcm(Fx.BOUNDARY, MASTER)
+                if (!playRecorded(ownSound, if (isEdge) USER_SOUND_GAIN else HIGHLIGHT_GAIN)) playPcm(Fx.BOUNDARY, MASTER)
                 crowdReact(CrowdEngine.Reaction.FOUR)
                 duckFor(180)
                 swellCrowd(2400)
@@ -491,7 +498,7 @@ class SoundEngine(context: Context) {
                     runs == 0 -> RecordedAsset.US_DEFENSIVE_SHOT
                     else -> RecordedAsset.US_RUNS_1_2_3
                 }
-                if (!playRecorded(ownSound, USER_SOUND_GAIN) && !playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) {
+                if (!playRecorded(ownSound, if (ownSound == RecordedAsset.US_RUNS_1_2_3) HIGHLIGHT_GAIN else USER_SOUND_GAIN) && !playRecorded(RecordedAsset.BAT_HIT, 0.9f * MASTER)) {
                     playPcm(Fx.BAT_HIT, MASTER)
                 }
                 // A dot ball in a tense moment draws a group "ooh" now and then.
@@ -1595,6 +1602,13 @@ class SoundEngine(context: Context) {
 
         /** Loudness of your short sounds (the old effects are 0.5 x 0.9); lower it if they are louder than the rest. */
         const val USER_SOUND_GAIN = 0.9f
+
+        /**
+         * Playing level of the sounds that must stand out (1, 2 or 3 runs, a four, a six, a bowled batter): the loudest a
+         * sound can be played. The extra loudness comes from the boost tools/fetch_audio.sh gives those four files
+         * (HIGHLIGHT_BOOST_DB there), so run "Fetch audio into the app" again to hear it.
+         */
+        const val HIGHLIGHT_GAIN = 1.0f
 
         /** The crowd loop's full level at 100% on the "Crowd volume" slider, and how far it dips under speech and the no-ball sound. */
         const val BACKGROUND_LOOP_GAIN = 0.8f

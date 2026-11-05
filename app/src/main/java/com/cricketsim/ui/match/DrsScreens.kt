@@ -320,6 +320,11 @@ private fun DrsProcessStage(
                 services?.announceSpoken(step.spoken)
                 delay(1500)
             }
+            // The ball is hitting the stumps: the bowled sound, as the third umpire's line ends.
+            if (step.spoken == "Wickets: hitting.") {
+                currentServices?.sound?.playBowledHit()
+                delay(900)
+            }
         }
         elapsedMs = DrsSystem.REVIEW_DURATION_MS
         currentServices?.sound?.stopDrsReviewAudio()

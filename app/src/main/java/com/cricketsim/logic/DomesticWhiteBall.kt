@@ -50,7 +50,7 @@ object DomesticWhiteBall {
     fun isVht(id: String?): Boolean = id == VHT_ID
     fun isWhiteBall(id: String?): Boolean = id == SMAT_ID || id == VHT_ID
 
-    /** 20 overs (T20) or 50 overs, no DRS and no rain, as in Indian domestic cricket. In the 50-over event a tied league match is shared. */
+    /** 20 overs (T20) or 50 overs, no DRS, rain as in the game's other limited-overs matches. In the 50-over event a tied league match is shared. */
     fun rulesFor(id: String?, stage: String?): MatchRules? {
         val key = when (id) {
             SMAT_ID -> "T20"
@@ -59,7 +59,7 @@ object DomesticWhiteBall {
         }
         val base = TournamentRules.rulesForFormat(key) ?: return null
         val league = stage != null && (stage in ELITE || stage == PLATE)
-        return base.copy(drsReviews = 0, rainEnabled = false, noSuperOver = id == VHT_ID && league)
+        return base.copy(drsReviews = 0, noSuperOver = id == VHT_ID && league)
     }
 
     fun introOf(id: String?): String =

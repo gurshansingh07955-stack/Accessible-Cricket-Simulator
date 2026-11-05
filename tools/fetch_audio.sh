@@ -228,6 +228,7 @@ echo "== Packing your own sounds from tools/user_sounds =="
 # Each file, in any format, becomes us_<name>.mp3 (the name lower-cased, spaces to underscores), so a name can
 # never clash with one of the game's own clips. mp3 files are copied as they are; anything else is converted.
 user_count=0
+HIGHLIGHT_BOOST_DB=6
 if [ -d tools/user_sounds ]; then
   for src in tools/user_sounds/*; do
     [ -f "$src" ] || continue
@@ -247,6 +248,19 @@ if [ -d tools/user_sounds ]; then
         else
           rm -f "$user_dest"
           missing+=("us_${user_name}.mp3 (could not convert $user_file)")
+        fi
+        ;;
+    esac
+    # The sounds that must stand out (1, 2 or 3 runs, a four, a six, a bowled batter) are made louder: a boost in
+    # decibels, with a limiter so a loud recording cannot distort. Change HIGHLIGHT_BOOST_DB to taste (0 = no boost).
+    case "$user_name" in
+      runs_1_2_3|four_runs|six_runs|bowled)
+        if [ "$HIGHLIGHT_BOOST_DB" != "0" ] && [ -s "$user_dest" ] && command -v ffmpeg >/dev/null 2>&1 \
+            && ffmpeg -nostdin -loglevel error -y -i "$user_dest" -vn -af "volume=${HIGHLIGHT_BOOST_DB}dB,alimiter=limit=0.95" -ar 44100 -b:a 128k "$SCRATCH_DIR/boost_tmp.m4a.mp3" \
+            && [ -s "$SCRATCH_DIR/boost_tmp.m4a.mp3" ]; then
+          mv "$SCRATCH_DIR/boost_tmp.m4a.mp3" "$user_dest"
+        else
+          rm -f "$SCRATCH_DIR/boost_tmp.m4a.mp3"
         fi
         ;;
     esac

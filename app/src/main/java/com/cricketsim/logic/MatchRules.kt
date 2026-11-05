@@ -88,21 +88,20 @@ object TournamentRules {
 
     fun rulesFor(tournamentId: String?, stage: String? = null): MatchRules? {
         if (tournamentId == null) return null
-        // EVERY domestic tournament below plays without rain (rainEnabled = false is forced on each result), as well as without DRS.
         // The Ranji Trophy: first-class matches (four days, five in the knockouts), no DRS, no rain.
-        DomesticFc.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }
+        DomesticFc.rulesFor(tournamentId, stage)?.let { return it }
         // The Syed Mushtaq Ali Trophy (20 overs) and the Vijay Hazare Trophy (50 overs): no DRS, no rain.
-        DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }
+        DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it }
         // English county cricket: the One-Day Cup (50 overs) and the Vitality Blast (20 overs).
-        CountyCricket.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }
+        CountyCricket.rulesFor(tournamentId, stage)?.let { return it }
         // Australia: the One-Day Cup (50 overs). The Sheffield Shield gets its four and five days from DomesticFc above.
-        AusDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }
+        AusDomestic.rulesFor(tournamentId, stage)?.let { return it }
         // South Africa: the Pro50 Cup and the Pro20 Cup. The 4-Day Series gets its days from DomesticFc above.
-        SaDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }
+        SaDomestic.rulesFor(tournamentId, stage)?.let { return it }
         // New Zealand: the Ford Trophy and the Super Smash. The Plunket Shield gets its four days from DomesticFc above.
-        NzDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }
+        NzDomestic.rulesFor(tournamentId, stage)?.let { return it }
         // West Indies: the Super50 Cup. The Championship gets its four days from DomesticFc above.
-        WiDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }
+        WiDomestic.rulesFor(tournamentId, stage)?.let { return it }
         if (isCustom(tournamentId)) {
             val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null
             val base = rulesForFormat(def.formatKey) ?: return null
