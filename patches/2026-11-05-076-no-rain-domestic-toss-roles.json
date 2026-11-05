@@ -1,0 +1,121 @@
+{
+  "name": "No rain in domestic tournaments; who calls and who flips the coin",
+  "message": "Every domestic tournament plays without rain; the toss has a flip mode and a call mode, home side calls, neutral grounds 50-50",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        DomesticFc.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "        DomesticFc.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "        DomesticWhiteBall.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        CountyCricket.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "        CountyCricket.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        AusDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "        AusDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        SaDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "        SaDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        NzDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "        NzDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        WiDomestic.rulesFor(tournamentId, stage)?.let { return it }",
+      "replace": "        WiDomestic.rulesFor(tournamentId, stage)?.let { return it.copy(rainEnabled = false) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        // The Ranji Trophy: first-class matches (four days, five in the knockouts), no DRS, no rain.",
+      "replace": "        // EVERY domestic tournament below plays without rain (rainEnabled = false is forced on each result), as well as without DRS.\n        // The Ranji Trophy: first-class matches (four days, five in the knockouts), no DRS, no rain.",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "        MatchInfoLine(\"Chance of rain: ${w.rainChancePercent} percent.\")",
+      "replace": "        if (state.rules?.rainEnabled != false) MatchInfoLine(\"Chance of rain: ${w.rainChancePercent} percent.\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "        MatchInfoLine(\"${ScorecardText.weatherName(w.condition)}, ${w.temperatureC}",
+      "replace": "        // A tournament without rain (the domestic competitions) never shows rain in the weather.\n        val shownCondition = if (state.rules?.rainEnabled == false && w.condition == com.cricketsim.logic.WeatherCondition.LIGHT_RAIN) com.cricketsim.logic.WeatherCondition.OVERCAST else w.condition\n        MatchInfoLine(\"${ScorecardText.weatherName(shownCondition)}, ${w.temperatureC}",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/TossRoles.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * Who calls the coin and who flips it. At a ground that is one side's home (and not the other's) the HOME side\n * calls heads or tails and the visitors flip; at a neutral ground it is settled by chance (50-50).\n * Set HOME_TEAM_CALLS to false for the real-cricket custom instead (the home captain flips, the visitors call).\n */\nobject TossRoles {\n    const val HOME_TEAM_CALLS = true\n\n    /** true = the user calls heads or tails (the other captain flips); false = the user flips (the other captain calls); null = neutral. */\n    fun userCalls(userHome: Boolean, opponentHome: Boolean): Boolean? = when {\n        userHome && !opponentHome -> HOME_TEAM_CALLS\n        opponentHome && !userHome -> !HOME_TEAM_CALLS\n        else -> null\n    }\n\n    fun userCalls(user: Team, opponent: Team, stadium: Stadium): Boolean? =\n        userCalls(user.id in stadium.homeTeamIds, opponent.id in stadium.homeTeamIds)\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/TossScreen.kt",
+      "content": "package com.cricketsim.ui.setup\n\nimport androidx.compose.foundation.clickable\nimport androidx.compose.foundation.layout.Arrangement\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.LaunchedEffect\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Alignment\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.LiveRegionMode\nimport androidx.compose.ui.semantics.Role\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.liveRegion\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.audio.LocalGameServices\nimport com.cricketsim.logic.CoinSide\nimport com.cricketsim.logic.CommentaryCategory\nimport com.cricketsim.logic.Team\nimport com.cricketsim.logic.TossDecision\nimport com.cricketsim.logic.TossResult\nimport kotlin.random.Random\n\n/**\n * Step 5 of the pre-match setup flow: the toss, plus a bat/bowl decision for the user when they win it.\n *\n * WHO CALLS AND WHO FLIPS (logic/TossRoles.kt): sometimes the user calls heads or tails and the other captain\n * flips the coin; sometimes the user flips (\"Flip the coin\" button) and the other captain calls it in the air.\n * [userCalls] says which: true = the user calls, false = the user flips, null = a neutral ground, settled by\n * chance once for this toss. After the coin lands, the screen says what was called and what the coin showed.\n *\n * Sub-steps, each a flat single-swipe list or a short result readout:\n * 1. The user calls Heads/Tails, OR flips the coin.\n * 2a. The user's side won: pick bat or bowl first.\n * 2b. The opponent won: a readout of what the AI decided (a live region, so it is announced on arrival).\n *\n * AUDIO: the coin-flip sound plays when the coin is flipped, and the toss commentary is queued once the\n * decision is known (the user's own choice, or as soon as the AI's readout appears).\n */\n@Composable\nfun TossScreen(userTeam: Team, opponentTeam: Team, onTossComplete: (TossResult) -> Unit, onBack: () -> Unit, userCalls: Boolean? = null) {\n    val services = LocalGameServices.current\n    val userCallsCoin = remember { userCalls ?: Random.nextBoolean() }\n    var tossResult by remember { mutableStateOf<TossResult?>(null) }\n    var coinNote by remember { mutableStateOf(\"\") }\n    val result = tossResult\n\n    if (result == null) {\n        if (userCallsCoin) {\n            CoinCallStep(\n                flipperName = opponentTeam.name,\n                onCoinCalled = { choice ->\n                    services?.sound?.playCoinFlip()\n                    val coin = randomSide()\n                    coinNote = \"You called ${sideName(choice)}. The coin landed ${sideName(coin)}.\"\n                    tossResult = makeToss(userTeam, opponentTeam, userWon = choice == coin)\n                },\n                onBack = onBack\n            )\n        } else {\n            CoinFlipStep(\n                callerName = opponentTeam.name,\n                onFlip = {\n                    services?.sound?.playCoinFlip()\n                    val aiCall = randomSide()\n                    val coin = randomSide()\n                    coinNote = \"${opponentTeam.name} called ${sideName(aiCall)}. The coin landed ${sideName(coin)}.\"\n                    tossResult = makeToss(userTeam, opponentTeam, userWon = coin != aiCall)\n                },\n                onBack = onBack\n            )\n        }\n        return\n    }\n\n    val userWonToss = result.winnerId == userTeam.id\n    val winnerName = if (userWonToss) userTeam.name else opponentTeam.name\n\n    if (userWonToss) {\n        BatBowlChoiceStep(\n            winnerName = winnerName,\n            note = coinNote,\n            onChoice = { decision ->\n                services?.sound?.enqueueCommentary(\n                    if (decision == TossDecision.BAT) CommentaryCategory.TOSS_BAT else CommentaryCategory.TOSS_BOWL\n                )\n                onTossComplete(result.copy(decision = decision))\n            },\n            onBack = { tossResult = null }\n        )\n    } else {\n        LaunchedEffect(result) {\n            services?.sound?.enqueueCommentary(\n                if (result.decision == TossDecision.BAT) CommentaryCategory.TOSS_BAT else CommentaryCategory.TOSS_BOWL\n            )\n        }\n        TossResultStep(\n            winnerName = winnerName,\n            note = coinNote,\n            decision = result.decision,\n            onContinue = { onTossComplete(result) }\n        )\n    }\n}\n\nprivate fun randomSide(): CoinSide = if (Random.nextDouble() < 0.5) CoinSide.HEADS else CoinSide.TAILS\n\nprivate fun sideName(side: CoinSide): String = if (side == CoinSide.HEADS) \"heads\" else \"tails\"\n\n/** The toss outcome. A user win carries a placeholder decision (BAT) that the bat/bowl step overwrites; the AI picks at random. */\nprivate fun makeToss(userTeam: Team, opponentTeam: Team, userWon: Boolean): TossResult {\n    val aiDecision = if (Random.nextDouble() > 0.5) TossDecision.BAT else TossDecision.BOWL\n    return TossResult(\n        winnerId = if (userWon) userTeam.id else opponentTeam.id,\n        decision = if (userWon) TossDecision.BAT else aiDecision\n    )\n}\n\n@Composable\nprivate fun CoinCallStep(flipperName: String, onCoinCalled: (CoinSide) -> Unit, onBack: () -> Unit) {\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .padding(24.dp)\n    ) {\n        Text(\n            text = \"Call the coin\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\"The $flipperName captain will flip the coin. Call heads or tails.\")\n        Spacer(modifier = Modifier.height(16.dp))\n\n        Text(\n            text = \"Heads\",\n            style = MaterialTheme.typography.titleMedium,\n            modifier = Modifier\n                .fillMaxWidth()\n                .clickable(\n                    onClickLabel = \"Call heads\",\n                    role = Role.Button,\n                    onClick = { onCoinCalled(CoinSide.HEADS) }\n                )\n                .padding(vertical = 14.dp, horizontal = 8.dp)\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            text = \"Tails\",\n            style = MaterialTheme.typography.titleMedium,\n            modifier = Modifier\n                .fillMaxWidth()\n                .clickable(\n                    onClickLabel = \"Call tails\",\n                    role = Role.Button,\n                    onClick = { onCoinCalled(CoinSide.TAILS) }\n                )\n                .padding(vertical = 14.dp, horizontal = 8.dp)\n        )\n\n        Spacer(modifier = Modifier.weight(1f))\n        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Back\")\n        }\n    }\n}\n\n/** The user flips the coin; the other captain calls it. */\n@Composable\nprivate fun CoinFlipStep(callerName: String, onFlip: () -> Unit, onBack: () -> Unit) {\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .padding(24.dp)\n    ) {\n        Text(\n            text = \"Flip the coin\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\"You flip the coin. The $callerName captain will call it in the air.\")\n        Spacer(modifier = Modifier.height(16.dp))\n        Button(onClick = onFlip, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Flip the coin\")\n        }\n\n        Spacer(modifier = Modifier.weight(1f))\n        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Back\")\n        }\n    }\n}\n\n@Composable\nprivate fun BatBowlChoiceStep(winnerName: String, note: String, onChoice: (TossDecision) -> Unit, onBack: () -> Unit) {\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .padding(24.dp)\n    ) {\n        Text(\n            text = \"$note $winnerName won the toss\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\"What would you like to do?\")\n        Spacer(modifier = Modifier.height(16.dp))\n\n        Text(\n            text = \"Bat First\",\n            style = MaterialTheme.typography.titleMedium,\n            modifier = Modifier\n                .fillMaxWidth()\n                .clickable(\n                    onClickLabel = \"Choose to bat first\",\n                    role = Role.Button,\n                    onClick = { onChoice(TossDecision.BAT) }\n                )\n                .padding(vertical = 14.dp, horizontal = 8.dp)\n        )\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            text = \"Bowl First\",\n            style = MaterialTheme.typography.titleMedium,\n            modifier = Modifier\n                .fillMaxWidth()\n                .clickable(\n                    onClickLabel = \"Choose to bowl first\",\n                    role = Role.Button,\n                    onClick = { onChoice(TossDecision.BOWL) }\n                )\n                .padding(vertical = 14.dp, horizontal = 8.dp)\n        )\n\n        Spacer(modifier = Modifier.weight(1f))\n        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Back\")\n        }\n    }\n}\n\n@Composable\nprivate fun TossResultStep(winnerName: String, note: String, decision: TossDecision, onContinue: () -> Unit) {\n    val decisionLabel = if (decision == TossDecision.BAT) \"bat\" else \"bowl\"\n\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .padding(24.dp),\n        horizontalAlignment = Alignment.CenterHorizontally,\n        verticalArrangement = Arrangement.Center\n    ) {\n        Text(\n            text = \"$note $winnerName won the toss and chose to $decisionLabel first.\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics {\n                heading()\n                liveRegion = LiveRegionMode.Polite\n            }\n        )\n        Spacer(modifier = Modifier.height(24.dp))\n        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Continue\")\n        }\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "                opponentTeam = current.opponentTeam,\n                onTossComplete = { toss ->\n                    // The anthems come between",
+      "replace": "                opponentTeam = current.opponentTeam,\n                userCalls = com.cricketsim.logic.TossRoles.userCalls(current.userTeam, current.opponentTeam, current.stadium),\n                onTossComplete = { toss ->\n                    // The anthems come between",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    opponentTeam = opponentSquad,\n                    onTossComplete = { toss -> page = TPage.PickXI(current.fixtureId, toss = toss) },",
+      "replace": "                    opponentTeam = opponentSquad,\n                    userCalls = tossCaller(kind, userSquad, opponentSquad, fixture?.stadiumId),\n                    onTossComplete = { toss -> page = TPage.PickXI(current.fixtureId, toss = toss) },",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                opponentTeam = current.opponentXI,\n                onTossComplete = { toss ->\n                    // The international tournaments play",
+      "replace": "                opponentTeam = current.opponentXI,\n                userCalls = tossCaller(kind, current.userXI, current.opponentXI, saved?.fixtures?.find { it.id == current.fixtureId }?.stadiumId),\n                onTossComplete = { toss ->\n                    // The international tournaments play",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "private fun tagLabelFor(tag: SquadTag?, domestic: String, breakout: String): String = when (tag) {",
+      "replace": "/**\n * Who calls the coin in the user's match: true = the user calls (the other captain flips), false = the user flips,\n * null = neither side is at home (settled by chance). A side is at home on its own ground, or when the ground lists it.\n * Custom tournaments are always neutral.\n */\nprivate fun tossCaller(kind: String, user: Team, opponent: Team, stadiumId: String?): Boolean? {\n    if (stadiumId == null || kind.startsWith(\"custom:\")) return null\n    val stadium = CplData.stadium(stadiumId)\n    fun atHome(team: Team): Boolean {\n        val own = CplData.homeStadiumId(team.id)\n        return (stadium != null && team.id in stadium.homeTeamIds) || (own.isNotEmpty() && own == stadiumId)\n    }\n    return com.cricketsim.logic.TossRoles.userCalls(atHome(user), atHome(opponent))\n}\n\nprivate fun tagLabelFor(tag: SquadTag?, domestic: String, breakout: String): String = when (tag) {",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "TOSS_AND_NO_RAIN.md",
+      "content": "# No rain in domestic tournaments, and who calls the coin\n\n**Rain.** Every domestic tournament (Indian, English, Australian, South African, New Zealand, West Indies, Pakistani,\nBangladeshi) plays without rain: `TournamentRules.rulesFor` forces `rainEnabled = false` on each. Match info then hides\nthe chance of rain and never shows \"light rain\". Custom tournaments keep their own rain switch.\n\n**The toss.** `TossScreen` has two modes: the user calls heads or tails (the other captain flips), or the user flips\n(a \"Flip the coin\" button; the other captain calls it). After the coin lands the screen says what was called and what\nthe coin showed. Who does what: `logic/TossRoles.kt`. At a ground that is one side's home, the HOME side calls and the\nvisitors flip (`TossRoles.HOME_TEAM_CALLS`; set it to false for the real-cricket custom, where the home captain\nflips). At a neutral ground (neither or both sides at home, any custom tournament) it is settled 50-50 for each toss.\nA tournament side is at home on its own home ground (`CplData.homeStadiumId`) or when the ground lists it.\n",
+      "mustNotExist": true
+    }
+  ]
+}
