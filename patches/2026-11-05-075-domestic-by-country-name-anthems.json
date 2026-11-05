@@ -1,0 +1,299 @@
+{
+  "name": "Domestic menu by country, tournament name in matches, anthems in international tournaments",
+  "message": "Domestic tournaments grouped by country; the tournament name shown in the match and in the shared scorecard; national anthems in the four international tournaments (five more anthems added)",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "    val test: TestState? = null\n)",
+      "replace": "    val test: TestState? = null,\n    // The tournament (and stage, for example \"Big Bash League 2026-27, Final\") this match belongs to; null = a normal match.\n    val tournamentName: String? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    rules: MatchRules? = null\n) {",
+      "replace": "    rules: MatchRules? = null,\n    /** The tournament (and stage) this match belongs to: shown on the match screens and in the shared scorecard. Null = a normal match. */\n    tournamentName: String? = null\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }\n",
+      "replace": "            )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }\n                .let { if (!tournamentName.isNullOrBlank() && it.tournamentName == null) it.copy(tournamentName = tournamentName) else it }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            text = \"${userTeam.name} vs ${opponentTeam.name}\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n",
+      "replace": "            text = \"${userTeam.name} vs ${opponentTeam.name}\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        matchState.tournamentName?.let { tournament ->\n            Spacer(modifier = Modifier.height(4.dp))\n            Text(text = tournament, style = MaterialTheme.typography.titleMedium)\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            summaryLines = MatchLines.resultSummaryLines(matchState) + ImpactPlayer.summaryLines(matchState),",
+      "replace": "            summaryLines = listOfNotNull(matchState.tournamentName?.let { \"Tournament: $it.\" }) + MatchLines.resultSummaryLines(matchState) + ImpactPlayer.summaryLines(matchState),",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "                    \"${userTeam.name} vs ${opponentTeam.name} scorecard\",",
+      "replace": "                    (matchState.tournamentName?.let { \"$it: \" } ?: \"\") + \"${userTeam.name} vs ${opponentTeam.name} scorecard\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "        MatchInfoHeading(\"Teams\")\n",
+      "replace": "        MatchInfoHeading(\"Teams\")\n        state.tournamentName?.let { MatchInfoLine(\"Tournament: $it.\") }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardScreen.kt",
+      "find": "            text = \"Scorecard\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n",
+      "replace": "            text = \"Scorecard\",\n            style = MaterialTheme.typography.headlineSmall,\n            modifier = Modifier.semantics { heading() }\n        )\n        state.tournamentName?.let { tournament ->\n            Spacer(modifier = Modifier.height(4.dp))\n            Text(text = tournament, style = MaterialTheme.typography.titleMedium)\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": "        sb.append(\"SCORECARD\\n\")",
+      "replace": "        sb.append(\"SCORECARD\\n\")\n        state.tournamentName?.let { sb.append(\"Tournament: \").append(it).append(\"\\n\") }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.DomesticFc\n",
+      "replace": "import com.cricketsim.logic.Anthems\nimport com.cricketsim.logic.DomesticFc\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.ui.match.ImpactSelectionScreen\n",
+      "replace": "import com.cricketsim.ui.match.AnthemScreen\nimport com.cricketsim.ui.match.ImpactSelectionScreen\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    object Domestic : TPage",
+      "replace": "    object Domestic : TPage\n    /** One country's domestic tournaments (the page opened from the Domestic tournaments list of countries). */\n    data class DomesticIn(val country: String) : TPage\n    /** International tournaments only: the national anthems between the toss and the first ball. */\n    data class Anthem(val fixtureId: Int, val userXI: Team, val opponentXI: Team, val toss: TossResult, val impact: ImpactSetup? = null) : TPage",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "page is TPage.Domestic || page is TPage.CustomList",
+      "replace": "page is TPage.Domestic || page is TPage.DomesticIn || page is TPage.CustomList",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        is TPage.Domestic -> {\n            val back = { page = TPage.Menu }\n            BackHandler(onBack = back)\n            DomesticPage(\n",
+      "replace": "        is TPage.Domestic -> {\n            val back = { page = TPage.Menu }\n            BackHandler(onBack = back)\n            DomesticCountriesPage(onCountry = { page = TPage.DomesticIn(it) }, onBack = back)\n        }\n        is TPage.DomesticIn -> {\n            val back = { page = TPage.Domestic }\n            BackHandler(onBack = back)\n            DomesticPage(\n                country = current.country,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val back = {\n                if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc || isCt || isAc || isAg || isDomestic || isCustomKind) {",
+      "replace": "            val back = {\n                // Read before the kind is reset below: a domestic tournament returns to its own country's list.\n                val backCountry = domesticCountryOf(kind)\n                if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc || isCt || isAc || isAg || isDomestic || isCustomKind) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "isDomestic) TPage.Domestic else if",
+      "replace": "isDomestic) TPage.DomesticIn(backCountry) else if",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "opened !is TPage.PlayMatch && opened !is TPage.Toss && ",
+      "replace": "opened !is TPage.PlayMatch && opened !is TPage.Anthem && opened !is TPage.Toss && ",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "val crowdWanted = shownPage is TPage.Toss || shownPage is TPage.TossFirst || shownPage is TPage.PlayMatch ||",
+      "replace": "val crowdWanted = shownPage is TPage.Toss || shownPage is TPage.TossFirst || shownPage is TPage.PlayMatch || shownPage is TPage.Anthem ||",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onTossComplete = { toss -> page = TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, toss, impact = current.impact) },",
+      "replace": "                onTossComplete = { toss ->\n                    // The international tournaments play the national anthems after the toss, as a normal match does.\n                    val international = kind == \"wc2026\" || kind == \"ct2025\" || kind == \"asia2025\" || kind == \"ag2026\"\n                    page = if (international && Anthems.hasAny(current.userXI, current.opponentXI)) {\n                        TPage.Anthem(current.fixtureId, current.userXI, current.opponentXI, toss, current.impact)\n                    } else {\n                        TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, toss, impact = current.impact)\n                    }\n                },",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        is TPage.PlayMatch -> {\n            // Leaving mid-match: the match has saved itself, so read it back for the Resume buttons.",
+      "replace": "        is TPage.Anthem -> {\n            // The national anthems, home side first (random at a neutral ground); Skip anthems or Back moves straight on.\n            val anthemStadium = saved?.fixtures?.find { it.id == current.fixtureId }?.let { CplData.stadium(it.stadiumId) }\n            val anthemOrder = remember(current.fixtureId) {\n                if (anthemStadium != null) Anthems.order(current.userXI, current.opponentXI, anthemStadium) else listOf(current.userXI, current.opponentXI)\n            }\n            AnthemScreen(\n                teams = anthemOrder,\n                onFinished = { page = TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, current.toss, impact = current.impact) }\n            )\n        }\n        is TPage.PlayMatch -> {\n            // Leaving mid-match: the match has saved itself, so read it back for the Resume buttons.",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    format = AbuDhabiT10.formatFor(saved?.tournamentId),\n                    rules = TournamentRules.rulesFor(",
+      "replace": "                    tournamentName = tournamentNameForKind(kind, customId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),\n                    format = AbuDhabiT10.formatFor(saved?.tournamentId),\n                    rules = TournamentRules.rulesFor(",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "private fun tagLabelFor(tag: SquadTag?, domestic: String, breakout: String): String = when (tag) {",
+      "replace": "/** The countries whose domestic tournaments the Domestic tournaments menu lists, in order. */\nprivate val DOMESTIC_COUNTRIES = listOf(\"India\", \"England\", \"Australia\", \"South Africa\", \"New Zealand\", \"West Indies\", \"Pakistan\", \"Bangladesh\")\n\nprivate fun domesticCountryTitle(country: String): String = when (country) {\n    \"India\" -> \"Indian domestic tournaments\"\n    \"England\" -> \"English domestic tournaments\"\n    \"Australia\" -> \"Australian domestic tournaments\"\n    \"South Africa\" -> \"South African domestic tournaments\"\n    \"New Zealand\" -> \"New Zealand domestic tournaments\"\n    \"West Indies\" -> \"West Indies domestic tournaments\"\n    \"Pakistan\" -> \"Pakistani domestic tournaments\"\n    \"Bangladesh\" -> \"Bangladeshi domestic tournaments\"\n    else -> \"Domestic tournaments\"\n}\n\nprivate fun domesticCountryBlurb(country: String): String = when (country) {\n    \"India\" -> \"The Ranji Trophy, Duleep Trophy, Irani Cup, Syed Mushtaq Ali Trophy and Vijay Hazare Trophy.\"\n    \"England\" -> \"The County Championship, One-Day Cup and Vitality Blast.\"\n    \"Australia\" -> \"The Sheffield Shield and One-Day Cup.\"\n    \"South Africa\" -> \"The 4-Day Series, Pro50 Cup and Pro20 Cup.\"\n    \"New Zealand\" -> \"The Plunket Shield, Ford Trophy and Super Smash.\"\n    \"West Indies\" -> \"The Championship and Super50 Cup.\"\n    \"Pakistan\" -> \"The Quaid-e-Azam Trophy Gold and Silver.\"\n    \"Bangladesh\" -> \"The National Cricket League.\"\n    else -> \"\"\n}\n\n/** Which country's list a domestic tournament kind belongs to, so Back from a tournament returns to its own country. */\nprivate fun domesticCountryOf(kind: String): String = when (kind) {\n    \"ranji2027\", \"duleep2026\", \"irani2026\", \"smat2026\", \"vht2026\" -> \"India\"\n    \"odc2027\", \"blast2027\", \"cc2027\" -> \"England\"\n    \"shield2026\", \"audc2026\" -> \"Australia\"\n    \"sa4d2026\", \"sa50c2026\", \"pro20c2026\" -> \"South Africa\"\n    \"plunket2026\", \"ford2026\", \"smash2026\" -> \"New Zealand\"\n    \"wi4d2027\", \"wi50c2026\" -> \"West Indies\"\n    \"qeag2026\", \"qeas2026\" -> \"Pakistan\"\n    \"ncl2026\" -> \"Bangladesh\"\n    else -> \"\"\n}\n\n/** The first Domestic tournaments page: one row per country; a country opens its own list of tournaments. */\n@Composable\nprivate fun DomesticCountriesPage(onCountry: (String) -> Unit, onBack: () -> Unit) {\n    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {\n        PageTitle(\"Domestic tournaments\")\n        Spacer(modifier = Modifier.height(16.dp))\n        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {\n            DOMESTIC_COUNTRIES.forEachIndexed { index, country ->\n                if (index > 0) Spacer(modifier = Modifier.height(12.dp))\n                ChoiceRow(\n                    title = domesticCountryTitle(country),\n                    description = domesticCountryBlurb(country),\n                    enabled = true,\n                    onClick = { onCountry(country) }\n                )\n            }\n        }\n        Spacer(modifier = Modifier.height(8.dp))\n        BackButton(onBack = onBack)\n    }\n}\n\n/**\n * The tournament's name as shown inside its matches: the player's own name for it if renamed, plus the stage\n * (Qualifier 1, Final, Group A...) unless it is a plain league match.\n */\nprivate fun tournamentNameForKind(kind: String, customId: String, stage: String?): String {\n    val base = when (kind) {\n        \"adt10\" -> AbuDhabiT10.TOURNAMENT_NAME\n        \"lpl\" -> LankaPremierLeague.TOURNAMENT_NAME\n        \"ilt\" -> InternationalLeagueT20.TOURNAMENT_NAME\n        \"bbl\" -> BigBashLeague.TOURNAMENT_NAME\n        \"mlc\" -> MajorLeagueCricket.TOURNAMENT_NAME\n        \"sa20\" -> Sa20.TOURNAMENT_NAME\n        \"wc2026\" -> T20WorldCup.TOURNAMENT_NAME\n        \"ct2025\" -> ChampionsTrophy.TOURNAMENT_NAME\n        \"asia2025\" -> AsiaCup.TOURNAMENT_NAME\n        \"ag2026\" -> AsianGames.TOURNAMENT_NAME\n        \"ranji2027\" -> Ranji.TOURNAMENT_NAME\n        \"duleep2026\" -> DomesticFc.DULEEP_NAME\n        \"irani2026\" -> DomesticFc.IRANI_NAME\n        \"smat2026\" -> DomesticWhiteBall.SMAT_NAME\n        \"vht2026\" -> DomesticWhiteBall.VHT_NAME\n        \"odc2027\" -> CountyCricket.ODC_NAME\n        \"blast2027\" -> CountyCricket.BLAST_NAME\n        \"cc2027\" -> CountyCricket.CC_NAME\n        \"shield2026\" -> AusDomestic.SHIELD_NAME\n        \"audc2026\" -> AusDomestic.ODC_NAME\n        \"sa4d2026\" -> SaDomestic.FOURDAY_NAME\n        \"sa50c2026\" -> SaDomestic.ODC_NAME\n        \"pro20c2026\" -> SaDomestic.T20_NAME\n        \"plunket2026\" -> NzDomestic.PLUNKET_NAME\n        \"ford2026\" -> NzDomestic.FORD_NAME\n        \"smash2026\" -> NzDomestic.SMASH_NAME\n        \"wi4d2027\" -> WiDomestic.FOURDAY_NAME\n        \"wi50c2026\" -> WiDomestic.ODC_NAME\n        \"qeag2026\" -> PakDomestic.GOLD_NAME\n        \"qeas2026\" -> PakDomestic.SILVER_NAME\n        \"ncl2026\" -> BdDomestic.NCL_NAME\n        \"ipl\" -> \"IPL 2027\"\n        else -> if (kind.startsWith(\"custom:\")) CustomTournaments.nameOf(customId) else \"CPL 2026\"\n    }\n    val name = Customisation.tournamentName(customId, base)\n    return if (stage.isNullOrBlank() || stage == \"League\") name else \"$name, $stage\"\n}\n\nprivate fun tagLabelFor(tag: SquadTag?, domestic: String, breakout: String): String = when (tag) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "private fun DomesticPage(onRanji: () -> Unit,",
+      "replace": "private fun DomesticPage(country: String, onRanji: () -> Unit,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        PageTitle(\"Domestic tournaments\")\n        Spacer(modifier = Modifier.height(16.dp))\n        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {\n            ChoiceRow(\n                title = \"Ranji Trophy 2026-27\",",
+      "replace": "        PageTitle(domesticCountryTitle(country))\n        Spacer(modifier = Modifier.height(16.dp))\n        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {\n            if (country == \"India\") {\n            ChoiceRow(\n                title = \"Ranji Trophy 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"English One-Day Cup 2027\",",
+      "replace": "            if (country == \"England\") {\n            ChoiceRow(\n                title = \"English One-Day Cup 2027\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"Sheffield Shield 2026-27\",",
+      "replace": "            if (country == \"Australia\") {\n            ChoiceRow(\n                title = \"Sheffield Shield 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"South Africa 4-Day Series 2026-27\",",
+      "replace": "            if (country == \"South Africa\") {\n            ChoiceRow(\n                title = \"South Africa 4-Day Series 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"Plunket Shield 2026-27\",",
+      "replace": "            if (country == \"New Zealand\") {\n            ChoiceRow(\n                title = \"Plunket Shield 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"West Indies Championship 2027\",",
+      "replace": "            if (country == \"West Indies\") {\n            ChoiceRow(\n                title = \"West Indies Championship 2027\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"Quaid-e-Azam Trophy Gold 2026-27\",",
+      "replace": "            if (country == \"Pakistan\") {\n            ChoiceRow(\n                title = \"Quaid-e-Azam Trophy Gold 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            ChoiceRow(\n                title = \"National Cricket League 2026-27\",",
+      "replace": "            if (country == \"Bangladesh\") {\n            ChoiceRow(\n                title = \"National Cricket League 2026-27\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onVht\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "                onClick = onVht\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onCc\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "                onClick = onCc\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onAudc\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "                onClick = onAudc\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onPro20\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "                onClick = onPro20\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onSmash\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "                onClick = onSmash\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onWi50\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "                onClick = onWi50\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onQeas\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "                onClick = onQeas\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onNcl\n            )\n",
+      "replace": "                onClick = onNcl\n            )\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Anthems.kt",
+      "find": "Navy_Band.mp3\", \"United States Navy Band\")\n    )",
+      "replace": "Navy_Band.mp3\", \"United States Navy Band\"),\n        // Added for the international tournaments (all public domain on Wikimedia Commons).\n        Anthem(\"ITA\", \"https://upload.wikimedia.org/wikipedia/commons/b/b1/National_anthem_of_Italy_-_U.S._Navy_Band_%28short_version%29.ogg\", \"United States Navy Band\"),\n        Anthem(\"NEP\", \"https://upload.wikimedia.org/wikipedia/commons/e/ef/Sayaun_Thunga_Phool_Ka_%28instrumental%29.ogg\", \"instrumental recording\"),\n        Anthem(\"NAM\", \"https://upload.wikimedia.org/wikipedia/commons/4/40/Namibia%2C_Land_of_the_Brave_%28OGG%29.ogg\", \"recording from Wikimedia Commons\"),\n        Anthem(\"MAS\", \"https://upload.wikimedia.org/wikipedia/commons/1/17/Negaraku_instrumental_%28short%29.ogg\", \"United States Navy Band\"),\n        Anthem(\"CAN\", \"https://upload.wikimedia.org/wikipedia/commons/7/71/O_Canada_instrumental_1916.ogg\", \"Victor Military Band, 1916 recording\")\n    )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Anthems.kt",
+      "find": "Teams with no recording here (West Indies, Scotland, Nepal, UAE) have no anthem step.",
+      "replace": "Teams with no recording here (West Indies, Scotland, UAE, Hong Kong, Japan) have no anthem step.",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "DOMESTIC_MENU_NAME_AND_ANTHEMS.md",
+      "content": "# Domestic tournaments by country, the tournament name in matches, and anthems in international tournaments\n\n**Domestic menu.** Tournament > Domestic tournament now opens a list of countries (Indian, English, Australian,\nSouth African, New Zealand, West Indies, Pakistani, Bangladeshi). A country opens only its own tournaments\n(`TPage.DomesticIn` in `TournamentScreens.kt`). Back from a tournament returns to its own country's list\n(`domesticCountryOf`). A new domestic tournament needs a row in that country's group in `DomesticPage`, its kind\nin `domesticCountryOf`, and its name in `tournamentNameForKind`.\n\n**Tournament name in matches.** `MatchState.tournamentName` (null in a normal match) holds the name plus the stage\nunless it is a plain league match (\"Big Bash League 2026-27, Final\"). It is shown under the heading of the match\nscreen, on Match info, on the scorecard screen, on the result screen, and in the shared and copied scorecard text.\nIt is filled in by `MatchScreen(tournamentName = ...)`, also for a match resumed from an older save.\n\n**Anthems in international tournaments.** After the toss, the T20 World Cup, Champions Trophy, Asia Cup and Asian\nGames play the national anthems with the same `AnthemScreen` as a normal match (`TPage.Anthem`): home side first,\nrandom at a neutral ground, Skip anthems on the screen. A team with no recording is skipped. Recordings added for\nItaly, Nepal, Namibia, Malaysia and Canada (Anthems.kt). Still without one: West Indies, Scotland, UAE, Hong Kong,\nJapan. Run \"Fetch audio into the app\", then \"Build APK\", for the new recordings to be packed.\n",
+      "mustNotExist": true
+    }
+  ]
+}
