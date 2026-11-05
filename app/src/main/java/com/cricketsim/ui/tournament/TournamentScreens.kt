@@ -367,6 +367,8 @@ fun TournamentFlow(onExit: () -> Unit) {
         loaded = true
     }
 
+    // The Tournament menu and its lists of tournaments show names only, no explanations.
+    simpleRows = page is TPage.Menu || page is TPage.Leagues || page is TPage.International || page is TPage.Domestic || page is TPage.CustomList
     when (val current = page) {
         is TPage.Menu -> {
             BackHandler(onBack = onExit)
@@ -1171,6 +1173,9 @@ private fun PageTitle(text: String) {
     )
 }
 
+/** True on the Tournament menu and its lists of tournaments: they show names only, with no explanations. */
+private var simpleRows = false
+
 /** A big tappable row: title and description read together as one item; dimmed when unavailable. */
 @Composable
 private fun ChoiceRow(title: String, description: String, enabled: Boolean, onClick: () -> Unit) {
@@ -1188,8 +1193,10 @@ private fun ChoiceRow(title: String, description: String, enabled: Boolean, onCl
         verticalArrangement = Arrangement.Center
     ) {
         Text(text = title, style = MaterialTheme.typography.titleLarge)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = description, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+        if (!simpleRows) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = description, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+        }
     }
 }
 
@@ -1284,77 +1291,77 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "One-Day Cup 2027 (England)",
+                title = "English One-Day Cup 2027",
                 description = "The English county 50-over competition: 18 counties in two groups of nine, then the knockouts and the Final at Trent Bridge.",
                 enabled = true,
                 onClick = onOdc
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "Vitality Blast 2027 (England)",
+                title = "Vitality Blast 2027",
                 description = "The English county T20 competition: 18 counties in three groups of six, then the quarter-finals and Finals Day at Edgbaston.",
                 enabled = true,
                 onClick = onBlast
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "County Championship 2027 (England)",
+                title = "County Championship 2027",
                 description = "The English four-day competition: Division One of ten counties and Division Two of eight, 14 matches each, with bonus points.",
                 enabled = true,
                 onClick = onCc
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "Sheffield Shield 2026-27 (Australia)",
+                title = "Sheffield Shield 2026-27",
                 description = "The Australian four-day competition: six states, ten rounds with the real fixtures, then a five-day Final.",
                 enabled = true,
                 onClick = onShield
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "One-Day Cup 2026-27 (Australia)",
+                title = "Australian One-Day Cup 2026-27",
                 description = "The Australian 50-over competition for the Dean Jones Trophy: six states, 21 league matches, then the Final.",
                 enabled = true,
                 onClick = onAudc
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "CSA 4-Day Series Division 1 2026-27 (South Africa)",
+                title = "South Africa 4-Day Series 2026-27",
                 description = "The South African four-day competition: eight teams, 40 matches with the published fixtures, then a five-day Final.",
                 enabled = true,
                 onClick = onSa4d
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "CSA Pro50 Cup 2026-27 (South Africa)",
+                title = "Pro50 Cup 2026-27",
                 description = "The South African 50-over cup: eight teams, 28 matches with the published fixtures, then the Final.",
                 enabled = true,
                 onClick = onSa50
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "CSA Pro20 Cup 2026-27 (South Africa)",
+                title = "Pro20 Cup 2026-27",
                 description = "The new South African T20 cup: 16 teams in two pools, the Super Eights, semi-finals and the Final at Newlands.",
                 enabled = true,
                 onClick = onPro20
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "Plunket Shield 2026-27 (New Zealand)",
+                title = "Plunket Shield 2026-27",
                 description = "The New Zealand four-day competition: six associations, eight rounds with the published fixtures, no final.",
                 enabled = true,
                 onClick = onPlunket
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "Ford Trophy 2026-27 (New Zealand)",
+                title = "Ford Trophy 2026-27",
                 description = "The New Zealand 50-over competition: six associations, ten rounds, then the Elimination Final and the Grand Final.",
                 enabled = true,
                 onClick = onFord
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "Super Smash 2026-27 (New Zealand)",
+                title = "Super Smash 2026-27",
                 description = "The New Zealand T20 competition, the last season in its current form: six associations, ten rounds, then the finals in Auckland.",
                 enabled = true,
                 onClick = onSmash
@@ -1368,28 +1375,28 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "Super50 Cup 2026-27 (West Indies)",
+                title = "West Indies Super50 Cup 2026-27",
                 description = "The West Indies 50-over competition: six regional teams, each playing the other five, then the Final. The game makes the schedule.",
                 enabled = true,
                 onClick = onWi50
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "Quaid-e-Azam Trophy Gold 2026-27 (Pakistan)",
+                title = "Quaid-e-Azam Trophy Gold 2026-27",
                 description = "The Pakistani first-class championship, top division: eight regional teams, 28 matches with the published fixtures, then a five-day Final.",
                 enabled = true,
                 onClick = onQeag
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "Quaid-e-Azam Trophy Silver 2026-27 (Pakistan)",
+                title = "Quaid-e-Azam Trophy Silver 2026-27",
                 description = "The Pakistani first-class second division: twelve regional teams in two groups, then the Final.",
                 enabled = true,
                 onClick = onQeas
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
-                title = "National Cricket League 2026-27 (Bangladesh)",
+                title = "National Cricket League 2026-27",
                 description = "The Bangladeshi first-class competition: the eight divisions, 28 matches with the published fixtures, no final.",
                 enabled = true,
                 onClick = onNcl
