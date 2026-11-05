@@ -101,6 +101,10 @@ fun ScorecardScreen(state: MatchState, onBack: () -> Unit, startOnFirstInnings: 
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
+        state.tournamentName?.let { tournament ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = tournament, style = MaterialTheme.typography.titleMedium)
+        }
         Spacer(modifier = Modifier.height(8.dp))
 
         if (testInnings.isNotEmpty()) {

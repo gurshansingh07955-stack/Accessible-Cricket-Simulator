@@ -187,7 +187,9 @@ data class MatchState(
     // A custom tournament's rules (overs, fielding restriction, DRS, rain); null = the format's own rules.
     val rules: MatchRules? = null,
     // A five-day Test's innings, sessions and rules (logic/TestMatch.kt); null = not a five-day Test.
-    val test: TestState? = null
+    val test: TestState? = null,
+    // The tournament (and stage, for example "Big Bash League 2026-27, Final") this match belongs to; null = a normal match.
+    val tournamentName: String? = null
 )
 
 object MatchStateMachine {

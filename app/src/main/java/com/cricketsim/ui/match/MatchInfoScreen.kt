@@ -78,6 +78,7 @@ fun MatchInfoScreen(
         )
 
         MatchInfoHeading("Teams")
+        state.tournamentName?.let { MatchInfoLine("Tournament: $it.") }
         MatchInfoLine("${user.name} (your team) versus ${opponent.name}.")
         val overs = if (state.format == MatchFormat.TEST) "" else " ${countOf(state.oversLimit, "over")} an innings."
         MatchInfoLine("Format: ${ScorecardText.formatNameFor(state)}.$overs")

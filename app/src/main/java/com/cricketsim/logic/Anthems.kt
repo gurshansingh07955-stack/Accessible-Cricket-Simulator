@@ -12,7 +12,7 @@ package com.cricketsim.logic
  * anthem_<code>.mp3 (see the "Fetch audio into the app" workflow). Until that has been run, the
  * anthems are missing from the pack and are simply skipped.
  *
- * Teams with no recording here (West Indies, Scotland, Nepal, UAE) have no anthem step.
+ * Teams with no recording here (West Indies, Scotland, UAE, Hong Kong, Japan) have no anthem step.
  * To add one, add an Anthem line with a public-domain or licensed recording's direct URL.
  */
 object Anthems {
@@ -33,7 +33,13 @@ object Anthems {
         Anthem("ZIM", "https://upload.wikimedia.org/wikipedia/commons/e/e5/National_Anthem_of_Zimbabwe%2C_performed_by_the_Royal_Australian_Navy_Band.ogg", "Royal Australian Navy Band"),
         Anthem("NED", "https://upload.wikimedia.org/wikipedia/commons/2/2e/United_States_Navy_Band_-_Het_Wilhelmus.ogg", "United States Navy Band"),
         Anthem("OMA", "https://upload.wikimedia.org/wikipedia/commons/5/5a/Peace_to_the_Sultan_%28%D9%86%D8%B4%D9%8A%D8%AF_%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85_%D8%A7%D9%84%D8%B3%D9%84%D8%B7%D8%A7%D9%86%D9%8A%29.ogg", "recording from Wikimedia Commons"),
-        Anthem("USA", "https://upload.wikimedia.org/wikipedia/commons/2/25/%22The_Star-Spangled_Banner%22_performed_by_the_United_States_Navy_Band.mp3", "United States Navy Band")
+        Anthem("USA", "https://upload.wikimedia.org/wikipedia/commons/2/25/%22The_Star-Spangled_Banner%22_performed_by_the_United_States_Navy_Band.mp3", "United States Navy Band"),
+        // Added for the international tournaments (all public domain on Wikimedia Commons).
+        Anthem("ITA", "https://upload.wikimedia.org/wikipedia/commons/b/b1/National_anthem_of_Italy_-_U.S._Navy_Band_%28short_version%29.ogg", "United States Navy Band"),
+        Anthem("NEP", "https://upload.wikimedia.org/wikipedia/commons/e/ef/Sayaun_Thunga_Phool_Ka_%28instrumental%29.ogg", "instrumental recording"),
+        Anthem("NAM", "https://upload.wikimedia.org/wikipedia/commons/4/40/Namibia%2C_Land_of_the_Brave_%28OGG%29.ogg", "recording from Wikimedia Commons"),
+        Anthem("MAS", "https://upload.wikimedia.org/wikipedia/commons/1/17/Negaraku_instrumental_%28short%29.ogg", "United States Navy Band"),
+        Anthem("CAN", "https://upload.wikimedia.org/wikipedia/commons/7/71/O_Canada_instrumental_1916.ogg", "Victor Military Band, 1916 recording")
     )
 
     /** The packed file name for a team's anthem. */

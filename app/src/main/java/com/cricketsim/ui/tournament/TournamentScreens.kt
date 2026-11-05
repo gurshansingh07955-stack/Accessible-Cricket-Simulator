@@ -55,6 +55,7 @@ import com.cricketsim.logic.InternationalLeagueT20
 import com.cricketsim.logic.IplSeason
 import com.cricketsim.logic.LankaPremierLeague
 import com.cricketsim.logic.MajorLeagueCricket
+import com.cricketsim.logic.Anthems
 import com.cricketsim.logic.DomesticFc
 import com.cricketsim.logic.AusDomestic
 import com.cricketsim.logic.NzDomestic
@@ -91,6 +92,7 @@ import com.cricketsim.persistence.MatchSnapshot
 import com.cricketsim.persistence.TournamentSaveStore
 import com.cricketsim.persistence.summary
 import com.cricketsim.ui.ipl.IplFlow
+import com.cricketsim.ui.match.AnthemScreen
 import com.cricketsim.ui.match.ImpactSelectionScreen
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.match.ScorecardScreen
@@ -134,6 +136,10 @@ private sealed interface TPage {
     object CustomList : TPage
     /** The domestic tournaments: the Ranji Trophy, the Duleep Trophy and the Irani Cup. */
     object Domestic : TPage
+    /** One country's domestic tournaments (the page opened from the Domestic tournaments list of countries). */
+    data class DomesticIn(val country: String) : TPage
+    /** International tournaments only: the national anthems between the toss and the first ball. */
+    data class Anthem(val fixtureId: Int, val userXI: Team, val opponentXI: Team, val toss: TossResult, val impact: ImpactSetup? = null) : TPage
     object Cpl : TPage
     /** The Abu Dhabi T10 page (the same page as the CPL's, for the T10 tournament). */
     object Adt : TPage
@@ -289,7 +295,7 @@ fun TournamentFlow(onExit: () -> Unit) {
     val menuSoundServices = LocalGameServices.current
     LaunchedEffect(page::class) {
         val opened = page
-        if (opened !is TPage.PlayMatch && opened !is TPage.Toss && opened !is TPage.TossFirst && opened !is TPage.Celebration && opened !is TPage.Ipl) {
+        if (opened !is TPage.PlayMatch && opened !is TPage.Anthem && opened !is TPage.Toss && opened !is TPage.TossFirst && opened !is TPage.Celebration && opened !is TPage.Ipl) {
             menuSoundServices?.sound?.playMenuOpen()
         }
     }
@@ -297,7 +303,7 @@ fun TournamentFlow(onExit: () -> Unit) {
     // Player screens that follow it (the IPL holds the toss first) to the end of the match. The match screen's own start
     // request is then a no-op, and it stops the crowd when the match ends or is left. Backing out of the toss stops it.
     val shownPage = page
-    val crowdWanted = shownPage is TPage.Toss || shownPage is TPage.TossFirst || shownPage is TPage.PlayMatch ||
+    val crowdWanted = shownPage is TPage.Toss || shownPage is TPage.TossFirst || shownPage is TPage.PlayMatch || shownPage is TPage.Anthem ||
         shownPage is TPage.Impact || (shownPage is TPage.PickXI && shownPage.toss != null)
     val crowdEffectsOn = menuSoundServices?.settings?.soundEffects ?: false
     LaunchedEffect(crowdWanted, crowdEffectsOn) {
@@ -368,7 +374,7 @@ fun TournamentFlow(onExit: () -> Unit) {
     }
 
     // The Tournament menu and its lists of tournaments show names only, no explanations.
-    simpleRows = page is TPage.Menu || page is TPage.Leagues || page is TPage.International || page is TPage.Domestic || page is TPage.CustomList
+    simpleRows = page is TPage.Menu || page is TPage.Leagues || page is TPage.International || page is TPage.Domestic || page is TPage.DomesticIn || page is TPage.CustomList
     when (val current = page) {
         is TPage.Menu -> {
             BackHandler(onBack = onExit)
@@ -434,7 +440,13 @@ fun TournamentFlow(onExit: () -> Unit) {
         is TPage.Domestic -> {
             val back = { page = TPage.Menu }
             BackHandler(onBack = back)
+            DomesticCountriesPage(onCountry = { page = TPage.DomesticIn(it) }, onBack = back)
+        }
+        is TPage.DomesticIn -> {
+            val back = { page = TPage.Domestic }
+            BackHandler(onBack = back)
             DomesticPage(
+                country = current.country,
                 onRanji = {
                     // Each domestic tournament has its own saved tournament and match slot.
                     saved = null
@@ -761,6 +773,8 @@ fun TournamentFlow(onExit: () -> Unit) {
                 else -> "CPL 2026"
             }.let { Customisation.tournamentName(GameTournaments.idForKind(kind), it) }
             val back = {
+                // Read before the kind is reset below: a domestic tournament returns to its own country's list.
+                val backCountry = domesticCountryOf(kind)
                 if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc || isCt || isAc || isAg || isDomestic || isCustomKind) {
                     // Back to the league list: the CPL is the tournament in hand again.
                     when {
@@ -777,7 +791,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                     loaded = false
                     kind = "cpl"
                 }
-                page = if (isCustomKind) TPage.CustomList else if (isDomestic) TPage.Domestic else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues
+                page = if (isCustomKind) TPage.CustomList else if (isDomestic) TPage.DomesticIn(backCountry) else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues
             }
             BackHandler(onBack = back)
             CplPage(
@@ -1092,8 +1106,27 @@ fun TournamentFlow(onExit: () -> Unit) {
             TossScreen(
                 userTeam = current.userXI,
                 opponentTeam = current.opponentXI,
-                onTossComplete = { toss -> page = TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, toss, impact = current.impact) },
+                onTossComplete = { toss ->
+                    // The international tournaments play the national anthems after the toss, as a normal match does.
+                    val international = kind == "wc2026" || kind == "ct2025" || kind == "asia2025" || kind == "ag2026"
+                    page = if (international && Anthems.hasAny(current.userXI, current.opponentXI)) {
+                        TPage.Anthem(current.fixtureId, current.userXI, current.opponentXI, toss, current.impact)
+                    } else {
+                        TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, toss, impact = current.impact)
+                    }
+                },
                 onBack = back
+            )
+        }
+        is TPage.Anthem -> {
+            // The national anthems, home side first (random at a neutral ground); Skip anthems or Back moves straight on.
+            val anthemStadium = saved?.fixtures?.find { it.id == current.fixtureId }?.let { CplData.stadium(it.stadiumId) }
+            val anthemOrder = remember(current.fixtureId) {
+                if (anthemStadium != null) Anthems.order(current.userXI, current.opponentXI, anthemStadium) else listOf(current.userXI, current.opponentXI)
+            }
+            AnthemScreen(
+                teams = anthemOrder,
+                onFinished = { page = TPage.PlayMatch(current.fixtureId, current.userXI, current.opponentXI, current.toss, impact = current.impact) }
             )
         }
         is TPage.PlayMatch -> {
@@ -1107,6 +1140,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                 ?: saved?.fixtures?.find { it.id == current.fixtureId }?.let { CplData.stadium(it.stadiumId) }
             if (stadium != null) {
                 MatchScreen(
+                    tournamentName = tournamentNameForKind(kind, customId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),
                     format = AbuDhabiT10.formatFor(saved?.tournamentId),
                     rules = TournamentRules.rulesFor(saved?.tournamentId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),
                     stadium = stadium,
@@ -1212,6 +1246,112 @@ private fun roleLabel(role: PlayerRole): String = when (role) {
     PlayerRole.WICKETKEEPER -> "Wicketkeeper"
 }
 
+/** The countries whose domestic tournaments the Domestic tournaments menu lists, in order. */
+private val DOMESTIC_COUNTRIES = listOf("India", "England", "Australia", "South Africa", "New Zealand", "West Indies", "Pakistan", "Bangladesh")
+
+private fun domesticCountryTitle(country: String): String = when (country) {
+    "India" -> "Indian domestic tournaments"
+    "England" -> "English domestic tournaments"
+    "Australia" -> "Australian domestic tournaments"
+    "South Africa" -> "South African domestic tournaments"
+    "New Zealand" -> "New Zealand domestic tournaments"
+    "West Indies" -> "West Indies domestic tournaments"
+    "Pakistan" -> "Pakistani domestic tournaments"
+    "Bangladesh" -> "Bangladeshi domestic tournaments"
+    else -> "Domestic tournaments"
+}
+
+private fun domesticCountryBlurb(country: String): String = when (country) {
+    "India" -> "The Ranji Trophy, Duleep Trophy, Irani Cup, Syed Mushtaq Ali Trophy and Vijay Hazare Trophy."
+    "England" -> "The County Championship, One-Day Cup and Vitality Blast."
+    "Australia" -> "The Sheffield Shield and One-Day Cup."
+    "South Africa" -> "The 4-Day Series, Pro50 Cup and Pro20 Cup."
+    "New Zealand" -> "The Plunket Shield, Ford Trophy and Super Smash."
+    "West Indies" -> "The Championship and Super50 Cup."
+    "Pakistan" -> "The Quaid-e-Azam Trophy Gold and Silver."
+    "Bangladesh" -> "The National Cricket League."
+    else -> ""
+}
+
+/** Which country's list a domestic tournament kind belongs to, so Back from a tournament returns to its own country. */
+private fun domesticCountryOf(kind: String): String = when (kind) {
+    "ranji2027", "duleep2026", "irani2026", "smat2026", "vht2026" -> "India"
+    "odc2027", "blast2027", "cc2027" -> "England"
+    "shield2026", "audc2026" -> "Australia"
+    "sa4d2026", "sa50c2026", "pro20c2026" -> "South Africa"
+    "plunket2026", "ford2026", "smash2026" -> "New Zealand"
+    "wi4d2027", "wi50c2026" -> "West Indies"
+    "qeag2026", "qeas2026" -> "Pakistan"
+    "ncl2026" -> "Bangladesh"
+    else -> ""
+}
+
+/** The first Domestic tournaments page: one row per country; a country opens its own list of tournaments. */
+@Composable
+private fun DomesticCountriesPage(onCountry: (String) -> Unit, onBack: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        PageTitle("Domestic tournaments")
+        Spacer(modifier = Modifier.height(16.dp))
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            DOMESTIC_COUNTRIES.forEachIndexed { index, country ->
+                if (index > 0) Spacer(modifier = Modifier.height(12.dp))
+                ChoiceRow(
+                    title = domesticCountryTitle(country),
+                    description = domesticCountryBlurb(country),
+                    enabled = true,
+                    onClick = { onCountry(country) }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        BackButton(onBack = onBack)
+    }
+}
+
+/**
+ * The tournament's name as shown inside its matches: the player's own name for it if renamed, plus the stage
+ * (Qualifier 1, Final, Group A...) unless it is a plain league match.
+ */
+private fun tournamentNameForKind(kind: String, customId: String, stage: String?): String {
+    val base = when (kind) {
+        "adt10" -> AbuDhabiT10.TOURNAMENT_NAME
+        "lpl" -> LankaPremierLeague.TOURNAMENT_NAME
+        "ilt" -> InternationalLeagueT20.TOURNAMENT_NAME
+        "bbl" -> BigBashLeague.TOURNAMENT_NAME
+        "mlc" -> MajorLeagueCricket.TOURNAMENT_NAME
+        "sa20" -> Sa20.TOURNAMENT_NAME
+        "wc2026" -> T20WorldCup.TOURNAMENT_NAME
+        "ct2025" -> ChampionsTrophy.TOURNAMENT_NAME
+        "asia2025" -> AsiaCup.TOURNAMENT_NAME
+        "ag2026" -> AsianGames.TOURNAMENT_NAME
+        "ranji2027" -> Ranji.TOURNAMENT_NAME
+        "duleep2026" -> DomesticFc.DULEEP_NAME
+        "irani2026" -> DomesticFc.IRANI_NAME
+        "smat2026" -> DomesticWhiteBall.SMAT_NAME
+        "vht2026" -> DomesticWhiteBall.VHT_NAME
+        "odc2027" -> CountyCricket.ODC_NAME
+        "blast2027" -> CountyCricket.BLAST_NAME
+        "cc2027" -> CountyCricket.CC_NAME
+        "shield2026" -> AusDomestic.SHIELD_NAME
+        "audc2026" -> AusDomestic.ODC_NAME
+        "sa4d2026" -> SaDomestic.FOURDAY_NAME
+        "sa50c2026" -> SaDomestic.ODC_NAME
+        "pro20c2026" -> SaDomestic.T20_NAME
+        "plunket2026" -> NzDomestic.PLUNKET_NAME
+        "ford2026" -> NzDomestic.FORD_NAME
+        "smash2026" -> NzDomestic.SMASH_NAME
+        "wi4d2027" -> WiDomestic.FOURDAY_NAME
+        "wi50c2026" -> WiDomestic.ODC_NAME
+        "qeag2026" -> PakDomestic.GOLD_NAME
+        "qeas2026" -> PakDomestic.SILVER_NAME
+        "ncl2026" -> BdDomestic.NCL_NAME
+        "ipl" -> "IPL 2027"
+        else -> if (kind.startsWith("custom:")) CustomTournaments.nameOf(customId) else "CPL 2026"
+    }
+    val name = Customisation.tournamentName(customId, base)
+    return if (stage.isNullOrBlank() || stage == "League") name else "$name, $stage"
+}
+
 private fun tagLabelFor(tag: SquadTag?, domestic: String, breakout: String): String = when (tag) {
     SquadTag.OVERSEAS -> "Overseas"
     SquadTag.BREAKOUT -> breakout
@@ -1250,11 +1390,12 @@ private fun MenuPage(onLeague: () -> Unit, onInternational: () -> Unit, onCustom
 }
 
 @Composable
-private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () -> Unit, onSmat: () -> Unit, onVht: () -> Unit, onOdc: () -> Unit, onBlast: () -> Unit, onCc: () -> Unit, onShield: () -> Unit, onAudc: () -> Unit, onSa4d: () -> Unit, onSa50: () -> Unit, onPro20: () -> Unit, onPlunket: () -> Unit, onFord: () -> Unit, onSmash: () -> Unit, onWi4d: () -> Unit, onWi50: () -> Unit, onQeag: () -> Unit, onQeas: () -> Unit, onNcl: () -> Unit, onBack: () -> Unit) {
+private fun DomesticPage(country: String, onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () -> Unit, onSmat: () -> Unit, onVht: () -> Unit, onOdc: () -> Unit, onBlast: () -> Unit, onCc: () -> Unit, onShield: () -> Unit, onAudc: () -> Unit, onSa4d: () -> Unit, onSa50: () -> Unit, onPro20: () -> Unit, onPlunket: () -> Unit, onFord: () -> Unit, onSmash: () -> Unit, onWi4d: () -> Unit, onWi50: () -> Unit, onQeag: () -> Unit, onQeas: () -> Unit, onNcl: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        PageTitle("Domestic tournaments")
+        PageTitle(domesticCountryTitle(country))
         Spacer(modifier = Modifier.height(16.dp))
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            if (country == "India") {
             ChoiceRow(
                 title = "Ranji Trophy 2026-27",
                 description = "38 teams in four Elite groups and the Plate group, the real fixtures, then the knockouts. Four-day matches.",
@@ -1290,6 +1431,8 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
                 onClick = onVht
             )
             Spacer(modifier = Modifier.height(12.dp))
+            }
+            if (country == "England") {
             ChoiceRow(
                 title = "English One-Day Cup 2027",
                 description = "The English county 50-over competition: 18 counties in two groups of nine, then the knockouts and the Final at Trent Bridge.",
@@ -1311,6 +1454,8 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
                 onClick = onCc
             )
             Spacer(modifier = Modifier.height(12.dp))
+            }
+            if (country == "Australia") {
             ChoiceRow(
                 title = "Sheffield Shield 2026-27",
                 description = "The Australian four-day competition: six states, ten rounds with the real fixtures, then a five-day Final.",
@@ -1325,6 +1470,8 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
                 onClick = onAudc
             )
             Spacer(modifier = Modifier.height(12.dp))
+            }
+            if (country == "South Africa") {
             ChoiceRow(
                 title = "South Africa 4-Day Series 2026-27",
                 description = "The South African four-day competition: eight teams, 40 matches with the published fixtures, then a five-day Final.",
@@ -1346,6 +1493,8 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
                 onClick = onPro20
             )
             Spacer(modifier = Modifier.height(12.dp))
+            }
+            if (country == "New Zealand") {
             ChoiceRow(
                 title = "Plunket Shield 2026-27",
                 description = "The New Zealand four-day competition: six associations, eight rounds with the published fixtures, no final.",
@@ -1367,6 +1516,8 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
                 onClick = onSmash
             )
             Spacer(modifier = Modifier.height(12.dp))
+            }
+            if (country == "West Indies") {
             ChoiceRow(
                 title = "West Indies Championship 2027",
                 description = "The West Indies four-day competition: six regional teams in three bilateral series, then a Playoff and the Final. The next fixtures are not published, so the game makes the schedule.",
@@ -1381,6 +1532,8 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
                 onClick = onWi50
             )
             Spacer(modifier = Modifier.height(12.dp))
+            }
+            if (country == "Pakistan") {
             ChoiceRow(
                 title = "Quaid-e-Azam Trophy Gold 2026-27",
                 description = "The Pakistani first-class championship, top division: eight regional teams, 28 matches with the published fixtures, then a five-day Final.",
@@ -1395,12 +1548,15 @@ private fun DomesticPage(onRanji: () -> Unit, onDuleep: () -> Unit, onIrani: () 
                 onClick = onQeas
             )
             Spacer(modifier = Modifier.height(12.dp))
+            }
+            if (country == "Bangladesh") {
             ChoiceRow(
                 title = "National Cricket League 2026-27",
                 description = "The Bangladeshi first-class competition: the eight divisions, 28 matches with the published fixtures, no final.",
                 enabled = true,
                 onClick = onNcl
             )
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
         BackButton(onBack = onBack)

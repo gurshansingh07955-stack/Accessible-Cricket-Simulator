@@ -201,7 +201,9 @@ fun MatchScreen(
     /** The Big Bash League's Power Surge is part of this match. */
     powerSurge: Boolean = false,
     /** A custom tournament's rules (overs, restriction, DRS, rain); null = the format's own. */
-    rules: MatchRules? = null
+    rules: MatchRules? = null,
+    /** The tournament (and stage) this match belongs to: shown on the match screens and in the shared scorecard. Null = a normal match. */
+    tournamentName: String? = null
 ) {
     val services = LocalGameServices.current
     val matchContext = LocalContext.current
@@ -222,6 +224,7 @@ fun MatchScreen(
                 impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) },
                 rules = rules
             )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }
+                .let { if (!tournamentName.isNullOrBlank() && it.tournamentName == null) it.copy(tournamentName = tournamentName) else it }
                 .also { FieldingSystem.applyRules(it.rules) }
         )
     }
@@ -733,14 +736,14 @@ fun MatchScreen(
         // by intercepting back into a redundant path.
         MatchResultScreen(
             resultText = resultText ?: "Match complete.",
-            summaryLines = MatchLines.resultSummaryLines(matchState) + ImpactPlayer.summaryLines(matchState),
+            summaryLines = listOfNotNull(matchState.tournamentName?.let { "Tournament: $it." }) + MatchLines.resultSummaryLines(matchState) + ImpactPlayer.summaryLines(matchState),
             lastBall = recentCommentary.lastOrNull(),
             onScorecard = { showScorecard = true },
             onHome = onMatchFinished,
             onShare = {
                 ScorecardText.share(
                     matchContext,
-                    "${userTeam.name} vs ${opponentTeam.name} scorecard",
+                    (matchState.tournamentName?.let { "$it: " } ?: "") + "${userTeam.name} vs ${opponentTeam.name} scorecard",
                     ScorecardText.build(matchState, stadium, resultText)
                 )
             },
@@ -1040,6 +1043,10 @@ fun MatchScreen(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
+        matchState.tournamentName?.let { tournament ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = tournament, style = MaterialTheme.typography.titleMedium)
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         // Leave match / Settings / Scorecard: the three navigation

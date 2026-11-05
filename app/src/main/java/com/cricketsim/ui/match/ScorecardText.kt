@@ -133,6 +133,7 @@ object ScorecardText {
         val full = state.regulationState ?: state
         val sb = StringBuilder()
         sb.append("SCORECARD\n")
+        state.tournamentName?.let { sb.append("Tournament: ").append(it).append("\n") }
         sb.append(state.userTeam.name).append(" vs ").append(state.opponentTeam.name).append("\n")
         sb.append(formatNameFor(state)).append(" match at ").append(stadium.name)
             .append(", ").append(stadium.city).append(", ").append(stadium.country).append("\n")
