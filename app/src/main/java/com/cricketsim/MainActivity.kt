@@ -260,6 +260,7 @@ fun CricketSimApp() {
             TossScreen(
                 userTeam = current.userTeam,
                 opponentTeam = current.opponentTeam,
+                userCalls = com.cricketsim.logic.TossRoles.userCalls(current.userTeam, current.opponentTeam, current.stadium),
                 onTossComplete = { toss ->
                     // The anthems come between the toss and the first ball (skipped if neither team has one).
                     screen = if (Anthems.hasAny(current.userTeam, current.opponentTeam)) {

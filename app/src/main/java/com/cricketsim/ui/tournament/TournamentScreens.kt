@@ -1019,6 +1019,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                 TossScreen(
                     userTeam = userSquad,
                     opponentTeam = opponentSquad,
+                    userCalls = tossCaller(kind, userSquad, opponentSquad, fixture?.stadiumId),
                     onTossComplete = { toss -> page = TPage.PickXI(current.fixtureId, toss = toss) },
                     onBack = back
                 )
@@ -1106,6 +1107,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             TossScreen(
                 userTeam = current.userXI,
                 opponentTeam = current.opponentXI,
+                userCalls = tossCaller(kind, current.userXI, current.opponentXI, saved?.fixtures?.find { it.id == current.fixtureId }?.stadiumId),
                 onTossComplete = { toss ->
                     // The international tournaments play the national anthems after the toss, as a normal match does.
                     val international = kind == "wc2026" || kind == "ct2025" || kind == "asia2025" || kind == "ag2026"
@@ -1350,6 +1352,21 @@ private fun tournamentNameForKind(kind: String, customId: String, stage: String?
     }
     val name = Customisation.tournamentName(customId, base)
     return if (stage.isNullOrBlank() || stage == "League") name else "$name, $stage"
+}
+
+/**
+ * Who calls the coin in the user's match: true = the user calls (the other captain flips), false = the user flips,
+ * null = neither side is at home (settled by chance). A side is at home on its own ground, or when the ground lists it.
+ * Custom tournaments are always neutral.
+ */
+private fun tossCaller(kind: String, user: Team, opponent: Team, stadiumId: String?): Boolean? {
+    if (stadiumId == null || kind.startsWith("custom:")) return null
+    val stadium = CplData.stadium(stadiumId)
+    fun atHome(team: Team): Boolean {
+        val own = CplData.homeStadiumId(team.id)
+        return (stadium != null && team.id in stadium.homeTeamIds) || (own.isNotEmpty() && own == stadiumId)
+    }
+    return com.cricketsim.logic.TossRoles.userCalls(atHome(user), atHome(opponent))
 }
 
 private fun tagLabelFor(tag: SquadTag?, domestic: String, breakout: String): String = when (tag) {

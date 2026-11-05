@@ -101,8 +101,10 @@ fun MatchInfoScreen(
 
         MatchInfoHeading("Weather today")
         val w = state.weather
-        MatchInfoLine("${ScorecardText.weatherName(w.condition)}, ${w.temperatureC} degrees Celsius, humidity ${w.humidityPercent} percent, wind ${w.windKph} kilometres an hour.")
-        MatchInfoLine("Chance of rain: ${w.rainChancePercent} percent.")
+        // A tournament without rain (the domestic competitions) never shows rain in the weather.
+        val shownCondition = if (state.rules?.rainEnabled == false && w.condition == com.cricketsim.logic.WeatherCondition.LIGHT_RAIN) com.cricketsim.logic.WeatherCondition.OVERCAST else w.condition
+        MatchInfoLine("${ScorecardText.weatherName(shownCondition)}, ${w.temperatureC} degrees Celsius, humidity ${w.humidityPercent} percent, wind ${w.windKph} kilometres an hour.")
+        if (state.rules?.rainEnabled != false) MatchInfoLine("Chance of rain: ${w.rainChancePercent} percent.")
         MatchInfoLine(if (w.isDayNight) "A day-night match, under lights for at least the second innings." else "A day match.")
 
         listOf(user, opponent).forEach { team ->

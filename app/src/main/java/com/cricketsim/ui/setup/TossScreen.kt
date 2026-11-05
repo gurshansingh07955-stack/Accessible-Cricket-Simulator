@@ -28,60 +28,60 @@ import androidx.compose.ui.unit.dp
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CoinSide
 import com.cricketsim.logic.CommentaryCategory
-import com.cricketsim.logic.MatchEngine
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossDecision
 import com.cricketsim.logic.TossResult
+import kotlin.random.Random
 
 /**
- * Step 5 of the pre-match setup flow: the toss
- * (MatchEngine.simulateToss), plus a bat/bowl decision for the user
- * when they win it.
+ * Step 5 of the pre-match setup flow: the toss, plus a bat/bowl decision for the user when they win it.
  *
- * Three sequential sub-steps, each a flat single-swipe list or a
- * short result readout, following the established setup-flow
- * patterns:
- * 1. Call the coin (Heads/Tails) — a one-way pick-and-advance list,
- *    same `Modifier.clickable(..., role = Role.Button)` pattern as
- *    every other one-shot choice in this flow.
- * 2a. If the user's side won the toss: a second pick-and-advance list
- *     to choose bat or bowl first. `MatchEngine.simulateToss` already
- *     returns a placeholder `TossDecision.BAT` for a user win (its own
- *     doc comment says this is meant to be overwritten by the UI) —
- *     this step is exactly that override, replacing it with the
- *     user's real choice via `TossResult.copy(decision = ...)`.
- * 2b. If the opponent won: a short result readout announcing what the
- *     AI decided (already resolved by simulateToss, nothing left for
- *     the user to choose) before continuing on.
+ * WHO CALLS AND WHO FLIPS (logic/TossRoles.kt): sometimes the user calls heads or tails and the other captain
+ * flips the coin; sometimes the user flips ("Flip the coin" button) and the other captain calls it in the air.
+ * [userCalls] says which: true = the user calls, false = the user flips, null = a neutral ground, settled by
+ * chance once for this toss. After the coin lands, the screen says what was called and what the coin showed.
  *
- * The result readout in 2b uses `liveRegion = LiveRegionMode.Polite`
- * on its heading — unlike every earlier setup screen, this text
- * appears already-resolved on screen entry rather than being the
- * result of an action just taken on the same screen, so a live region
- * ensures it's actually announced rather than requiring the user to
- * navigate to it manually.
+ * Sub-steps, each a flat single-swipe list or a short result readout:
+ * 1. The user calls Heads/Tails, OR flips the coin.
+ * 2a. The user's side won: pick bat or bowl first.
+ * 2b. The opponent won: a readout of what the AI decided (a live region, so it is announced on arrival).
  *
- * AUDIO (as the web's play-match.tsx does it): the coin-flip sound plays
- * when the coin is called, and the toss commentary ("they've won the
- * toss and will bat first" / "send the opposition in") is queued once the
- * decision is known — on the user's own choice, or as soon as the AI's
- * result readout appears. It keeps playing into the match until the
- * first ball cuts it off.
+ * AUDIO: the coin-flip sound plays when the coin is flipped, and the toss commentary is queued once the
+ * decision is known (the user's own choice, or as soon as the AI's readout appears).
  */
 @Composable
-fun TossScreen(userTeam: Team, opponentTeam: Team, onTossComplete: (TossResult) -> Unit, onBack: () -> Unit) {
+fun TossScreen(userTeam: Team, opponentTeam: Team, onTossComplete: (TossResult) -> Unit, onBack: () -> Unit, userCalls: Boolean? = null) {
     val services = LocalGameServices.current
+    val userCallsCoin = remember { userCalls ?: Random.nextBoolean() }
     var tossResult by remember { mutableStateOf<TossResult?>(null) }
+    var coinNote by remember { mutableStateOf("") }
     val result = tossResult
 
     if (result == null) {
-        CoinCallStep(
-            onCoinCalled = { choice ->
-                services?.sound?.playCoinFlip()
-                tossResult = MatchEngine.simulateToss(userTeam, opponentTeam, choice)
-            },
-            onBack = onBack
-        )
+        if (userCallsCoin) {
+            CoinCallStep(
+                flipperName = opponentTeam.name,
+                onCoinCalled = { choice ->
+                    services?.sound?.playCoinFlip()
+                    val coin = randomSide()
+                    coinNote = "You called ${sideName(choice)}. The coin landed ${sideName(coin)}."
+                    tossResult = makeToss(userTeam, opponentTeam, userWon = choice == coin)
+                },
+                onBack = onBack
+            )
+        } else {
+            CoinFlipStep(
+                callerName = opponentTeam.name,
+                onFlip = {
+                    services?.sound?.playCoinFlip()
+                    val aiCall = randomSide()
+                    val coin = randomSide()
+                    coinNote = "${opponentTeam.name} called ${sideName(aiCall)}. The coin landed ${sideName(coin)}."
+                    tossResult = makeToss(userTeam, opponentTeam, userWon = coin != aiCall)
+                },
+                onBack = onBack
+            )
+        }
         return
     }
 
@@ -91,6 +91,7 @@ fun TossScreen(userTeam: Team, opponentTeam: Team, onTossComplete: (TossResult) 
     if (userWonToss) {
         BatBowlChoiceStep(
             winnerName = winnerName,
+            note = coinNote,
             onChoice = { decision ->
                 services?.sound?.enqueueCommentary(
                     if (decision == TossDecision.BAT) CommentaryCategory.TOSS_BAT else CommentaryCategory.TOSS_BOWL
@@ -107,14 +108,28 @@ fun TossScreen(userTeam: Team, opponentTeam: Team, onTossComplete: (TossResult) 
         }
         TossResultStep(
             winnerName = winnerName,
+            note = coinNote,
             decision = result.decision,
             onContinue = { onTossComplete(result) }
         )
     }
 }
 
+private fun randomSide(): CoinSide = if (Random.nextDouble() < 0.5) CoinSide.HEADS else CoinSide.TAILS
+
+private fun sideName(side: CoinSide): String = if (side == CoinSide.HEADS) "heads" else "tails"
+
+/** The toss outcome. A user win carries a placeholder decision (BAT) that the bat/bowl step overwrites; the AI picks at random. */
+private fun makeToss(userTeam: Team, opponentTeam: Team, userWon: Boolean): TossResult {
+    val aiDecision = if (Random.nextDouble() > 0.5) TossDecision.BAT else TossDecision.BOWL
+    return TossResult(
+        winnerId = if (userWon) userTeam.id else opponentTeam.id,
+        decision = if (userWon) TossDecision.BAT else aiDecision
+    )
+}
+
 @Composable
-private fun CoinCallStep(onCoinCalled: (CoinSide) -> Unit, onBack: () -> Unit) {
+private fun CoinCallStep(flipperName: String, onCoinCalled: (CoinSide) -> Unit, onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -125,6 +140,8 @@ private fun CoinCallStep(onCoinCalled: (CoinSide) -> Unit, onBack: () -> Unit) {
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("The $flipperName captain will flip the coin. Call heads or tails.")
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
@@ -160,15 +177,42 @@ private fun CoinCallStep(onCoinCalled: (CoinSide) -> Unit, onBack: () -> Unit) {
     }
 }
 
+/** The user flips the coin; the other captain calls it. */
 @Composable
-private fun BatBowlChoiceStep(winnerName: String, onChoice: (TossDecision) -> Unit, onBack: () -> Unit) {
+private fun CoinFlipStep(callerName: String, onFlip: () -> Unit, onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
     ) {
         Text(
-            text = "$winnerName won the toss",
+            text = "Flip the coin",
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.semantics { heading() }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("You flip the coin. The $callerName captain will call it in the air.")
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = onFlip, modifier = Modifier.fillMaxWidth()) {
+            Text("Flip the coin")
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text("Back")
+        }
+    }
+}
+
+@Composable
+private fun BatBowlChoiceStep(winnerName: String, note: String, onChoice: (TossDecision) -> Unit, onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
+        Text(
+            text = "$note $winnerName won the toss",
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
@@ -210,7 +254,7 @@ private fun BatBowlChoiceStep(winnerName: String, onChoice: (TossDecision) -> Un
 }
 
 @Composable
-private fun TossResultStep(winnerName: String, decision: TossDecision, onContinue: () -> Unit) {
+private fun TossResultStep(winnerName: String, note: String, decision: TossDecision, onContinue: () -> Unit) {
     val decisionLabel = if (decision == TossDecision.BAT) "bat" else "bowl"
 
     Column(
@@ -221,7 +265,7 @@ private fun TossResultStep(winnerName: String, decision: TossDecision, onContinu
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "$winnerName won the toss and chose to $decisionLabel first.",
+            text = "$note $winnerName won the toss and chose to $decisionLabel first.",
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics {
                 heading()
