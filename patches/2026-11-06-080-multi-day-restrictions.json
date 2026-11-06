@@ -1,0 +1,62 @@
+{
+  "name": "Fielding restrictions are available again in multi-day custom formats",
+  "message": "A multi-day custom format asks for fielding restrictions (overs and fielders outside) after the new ball, and applies them to each innings",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "{ newBallOn = false; step = Step.Summary }",
+      "replace": "{ newBallOn = false; step = Step.Restrictions }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "            onContinue = { step = Step.Summary },\n            onBack = { step = Step.NewBall }",
+      "replace": "            onContinue = { step = Step.Restrictions },\n            onBack = { step = Step.NewBall }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "        Step.Restrictions -> {\n            BackHandler(onBack = { step = Step.Overs })\n            PageColumn {\n                BackButton { step = Step.Overs }",
+      "replace": "        Step.Restrictions -> {\n            // One day: after the overs. Several days: the last question, after the new ball.\n            val back = { step = if (days > 1) (if (newBallOn) Step.NewBallOvers else Step.NewBall) else Step.Overs }\n            BackHandler(onBack = back)\n            PageColumn {\n                BackButton(back)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "            val back = { step = if (days > 1) (if (newBallOn) Step.NewBallOvers else Step.NewBall) else if (restrict) Step.Fielders else Step.Restrictions }",
+      "replace": "            val back = { step = if (restrict) Step.Fielders else Step.Restrictions }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "restrictionsEnabled = days == 1 && restrict, restrictionOvers = if (days == 1 && restrict) restrictOvers else 0, fieldersOutside = fielders,",
+      "replace": "restrictionsEnabled = restrict, restrictionOvers = if (restrict) restrictOvers else 0, fieldersOutside = fielders,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomFormat.kt",
+      "find": "        sb.append(if (newBallEnabled) \"A new ball is available after $newBallOvers overs with the old one. \" else \"No new ball. \")",
+      "replace": "        sb.append(if (newBallEnabled) \"A new ball is available after $newBallOvers overs with the old one. \" else \"No new ball. \")\n        if (restrictionsEnabled) {\n            val period = if (restrictionOvers == 1) \"the first over\" else \"the first $restrictionOvers overs\"\n            sb.append(\"Fielding restrictions for $period of each innings: \").append(\n                when (fieldersOutside) {\n                    0 -> \"no fielders may stand outside the circle. \"\n                    1 -> \"1 fielder may stand outside the circle. \"\n                    else -> \"$fieldersOutside fielders may stand outside the circle. \"\n                }\n            )\n        } else {\n            sb.append(\"No fielding restrictions. \")\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomFormat.kt",
+      "find": "have a fielding restriction (one day only)",
+      "replace": "have a fielding restriction",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "overs = cf.days * cf.overs, restrictionBalls = 0, fieldersOutside = 5,",
+      "replace": "overs = cf.days * cf.overs, restrictionBalls = if (cf.restrictionsEnabled) cf.restrictionOvers * 6 else 0,\n                    fieldersOutside = if (cf.restrictionsEnabled) cf.fieldersOutside else 5,",
+      "count": 1
+    }
+  ]
+}
