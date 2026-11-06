@@ -87,7 +87,7 @@ import java.io.FileOutputStream
  *
  * What the edits change is explained in logic/Customisation.kt.
  */
-internal enum class TeamKind { International, League, Custom }
+internal enum class TeamKind { International, Tournament, League, Domestic, Custom }
 
 private sealed interface CtPage {
     object Hub : CtPage
@@ -129,7 +129,7 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
                 Spacer(modifier = Modifier.height(12.dp))
                 OptionButton(
                     title = "Edit teams",
-                    description = "Change teams and players: international, league and your own custom teams.",
+                    description = "Change teams and players: international, international tournament, league, domestic and your own custom teams.",
                     enabled = true,
                     emphasised = false,
                     onClick = { message = null; page = CtPage.EditList }
@@ -289,9 +289,23 @@ internal fun leagueGroups(): List<Pair<String, List<Team>>> = listOf(
     "SA20" to Sa20.buildTeams().first
 )
 
+/**
+ * The id a page uses for a team that is listed in a tournament's group: an international tournament's squad has the same id as the
+ * national team, so the group's name goes with it. (A team's edits are still kept under its own id.)
+ */
+internal fun teamKey(group: String, id: String): String = "$group::$id"
+
+internal fun findInGroups(groups: List<Pair<String, List<Team>>>, key: String): Team? {
+    val group = key.substringBefore("::")
+    val id = key.substringAfter("::")
+    return groups.find { it.first == group }?.second?.find { it.id == id }
+}
+
 private fun findTeam(kind: TeamKind, id: String): Team? = when (kind) {
     TeamKind.International -> CricketData.getTeamById(id)
+    TeamKind.Tournament -> findInGroups(TeamGroups.tournamentGroups(), id)
     TeamKind.League -> leagueGroups().flatMap { it.second }.find { it.id == id }
+    TeamKind.Domestic -> findInGroups(TeamGroups.domesticGroups(), id)
     TeamKind.Custom -> Customisation.customTeamsAsTeams().find { it.id == id }
 }
 
@@ -436,6 +450,8 @@ private fun EditTeamsPage(
 ) {
     val international = remember(version) { internationalTeams() }
     val leagues = remember(version, tab) { if (tab == TeamKind.League) leagueGroups() else emptyList() }
+    val tournaments = remember(version, tab) { if (tab == TeamKind.Tournament) TeamGroups.tournamentGroups() else emptyList() }
+    val domestic = remember(version, tab) { if (tab == TeamKind.Domestic) TeamGroups.domesticGroups() else emptyList() }
     val custom = remember(version) { Customisation.customTeamsAsTeams() }
     PageColumn {
         BackButton(onBack)
@@ -448,7 +464,12 @@ private fun EditTeamsPage(
         Spacer(modifier = Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TabButton("International teams", tab == TeamKind.International, Modifier.weight(1f)) { onTab(TeamKind.International) }
+            TabButton("International tournament teams", tab == TeamKind.Tournament, Modifier.weight(1f)) { onTab(TeamKind.Tournament) }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TabButton("League teams", tab == TeamKind.League, Modifier.weight(1f)) { onTab(TeamKind.League) }
+            TabButton("Domestic teams", tab == TeamKind.Domestic, Modifier.weight(1f)) { onTab(TeamKind.Domestic) }
             TabButton("Custom teams", tab == TeamKind.Custom, Modifier.weight(1f)) { onTab(TeamKind.Custom) }
         }
         message?.let {
@@ -476,6 +497,25 @@ private fun EditTeamsPage(
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(league, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                     teams.forEach { t -> TeamRow(t.name, "${t.players.size} players", { onOpen(tab, t.id) }, { onRename(tab, t) }) }
+                }
+            }
+            TeamKind.Tournament -> {
+                Text(
+                    text = "These are the squads of the real tournaments. A player edited here is changed in his national team too.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                tournaments.forEach { (group, teams) ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(group, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                    teams.forEach { t -> TeamRow(t.name, "${t.players.size} players", { onOpen(tab, teamKey(group, t.id)) }, { onRename(tab, t) }) }
+                }
+            }
+            TeamKind.Domestic -> {
+                domestic.forEach { (group, teams) ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(group, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                    teams.forEach { t -> TeamRow(t.name, "${t.players.size} players", { onOpen(tab, teamKey(group, t.id)) }, { onRename(tab, t) }) }
                 }
             }
             TeamKind.Custom -> {
@@ -601,7 +641,9 @@ private fun TeamPage(
         Text(
             text = when (kind) {
                 TeamKind.International -> "International team"
+                TeamKind.Tournament -> "International tournament squad"
                 TeamKind.League -> "League team"
+                TeamKind.Domestic -> "Domestic team"
                 TeamKind.Custom -> "Custom team"
             } + ". ${team.players.size} players. Press and hold the name to rename the team." +
                 (if (kind == TeamKind.Custom) (Customisation.playProblem(team)?.let { " Not ready to play: $it." } ?: " Ready to play.") else ""),
@@ -652,15 +694,24 @@ private fun TeamPage(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
-        OutlinedButton(
-            onClick = onAddPlayers,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
-        ) { Text("Add players from other teams") }
-        Spacer(modifier = Modifier.height(12.dp))
-        Button(
-            onClick = onCreatePlayer,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
-        ) { Text("Create a new player") }
+        if (kind == TeamKind.Tournament) {
+            // A real tournament's squad is fixed: new and added players join the national team, not this squad.
+            Text(
+                text = "Players cannot be added to a real tournament's squad. Add them to the national team, or edit the players here.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            OutlinedButton(
+                onClick = onAddPlayers,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            ) { Text("Add players from other teams") }
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onCreatePlayer,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            ) { Text("Create a new player") }
+        }
     }
     if (confirmDelete) {
         AlertDialog(

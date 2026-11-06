@@ -110,7 +110,16 @@ object TournamentFormats {
 }
 
 /** One of the game's own tournaments, as listed by Edit Tournament. */
-data class GameTournament(val id: String, val name: String, val formatKey: String, val group: String)
+data class GameTournament(
+    val id: String,
+    val name: String,
+    val formatKey: String,
+    val group: String,
+    /** Plain-language format for a tournament whose format is not one of [TournamentFormats] (the domestic ones). */
+    val formatText: String? = null,
+    /** False = Edit Tournament lets the player rename it but not change its format. */
+    val formatEditable: Boolean = true
+)
 
 object GameTournaments {
     /** The tournament id behind a Tournament page "kind" (a custom tournament's kind is "custom:<id>"). */
@@ -127,6 +136,27 @@ object GameTournaments {
         "ct2025" -> ChampionsTrophy.TOURNAMENT_ID
         "asia2025" -> AsiaCup.TOURNAMENT_ID
         "ag2026" -> AsianGames.TOURNAMENT_ID
+        "ranji2027" -> Ranji.TOURNAMENT_ID
+        "duleep2026" -> DomesticFc.DULEEP_ID
+        "irani2026" -> DomesticFc.IRANI_ID
+        "smat2026" -> DomesticWhiteBall.SMAT_ID
+        "vht2026" -> DomesticWhiteBall.VHT_ID
+        "odc2027" -> CountyCricket.ODC_ID
+        "blast2027" -> CountyCricket.BLAST_ID
+        "cc2027" -> CountyCricket.CC_ID
+        "shield2026" -> AusDomestic.SHIELD_ID
+        "audc2026" -> AusDomestic.ODC_ID
+        "sa4d2026" -> SaDomestic.FOURDAY_ID
+        "sa50c2026" -> SaDomestic.ODC_ID
+        "pro20c2026" -> SaDomestic.T20_ID
+        "plunket2026" -> NzDomestic.PLUNKET_ID
+        "ford2026" -> NzDomestic.FORD_ID
+        "smash2026" -> NzDomestic.SMASH_ID
+        "wi4d2027" -> WiDomestic.FOURDAY_ID
+        "wi50c2026" -> WiDomestic.ODC_ID
+        "qeag2026" -> PakDomestic.GOLD_ID
+        "qeas2026" -> PakDomestic.SILVER_ID
+        "ncl2026" -> BdDomestic.NCL_ID
         else -> kind.removePrefix("custom:")
     }
 
@@ -144,6 +174,46 @@ object GameTournaments {
             GameTournament(ChampionsTrophy.TOURNAMENT_ID, ChampionsTrophy.TOURNAMENT_NAME, "ODI", "International tournaments"),
             GameTournament(AsiaCup.TOURNAMENT_ID, AsiaCup.TOURNAMENT_NAME, "T20", "International tournaments"),
             GameTournament(AsianGames.TOURNAMENT_ID, AsianGames.TOURNAMENT_NAME, "T20", "International tournaments")
+        ) + domestic()
+    }
+
+    private const val FC = "First-class matches over several days, with their own rules"
+    private const val T20_TEXT = "20 overs a side, with the competition's own rules"
+    private const val FIFTY_TEXT = "50 overs a side, with the competition's own rules"
+
+    /** The domestic tournaments, by country. Their formats are their own, so Edit Tournament lets the player rename them only. */
+    private fun domestic(): List<GameTournament> {
+        fun g(id: String, name: String, text: String, group: String) = GameTournament(id, name, "DOMESTIC", group, text, false)
+        val india = "Indian domestic tournaments"
+        val england = "English domestic tournaments"
+        val australia = "Australian domestic tournaments"
+        val southAfrica = "South African domestic tournaments"
+        val newZealand = "New Zealand domestic tournaments"
+        val westIndies = "West Indies domestic tournaments"
+        val pakistan = "Pakistani domestic tournaments"
+        val bangladesh = "Bangladeshi domestic tournaments"
+        return listOf(
+            g(Ranji.TOURNAMENT_ID, Ranji.TOURNAMENT_NAME, FC, india),
+            g(DomesticFc.DULEEP_ID, DomesticFc.DULEEP_NAME, FC, india),
+            g(DomesticFc.IRANI_ID, DomesticFc.IRANI_NAME, FC, india),
+            g(DomesticWhiteBall.SMAT_ID, DomesticWhiteBall.SMAT_NAME, T20_TEXT, india),
+            g(DomesticWhiteBall.VHT_ID, DomesticWhiteBall.VHT_NAME, FIFTY_TEXT, india),
+            g(CountyCricket.CC_ID, CountyCricket.CC_NAME, FC, england),
+            g(CountyCricket.ODC_ID, CountyCricket.ODC_NAME, FIFTY_TEXT, england),
+            g(CountyCricket.BLAST_ID, CountyCricket.BLAST_NAME, T20_TEXT, england),
+            g(AusDomestic.SHIELD_ID, AusDomestic.SHIELD_NAME, FC, australia),
+            g(AusDomestic.ODC_ID, AusDomestic.ODC_NAME, FIFTY_TEXT, australia),
+            g(SaDomestic.FOURDAY_ID, SaDomestic.FOURDAY_NAME, FC, southAfrica),
+            g(SaDomestic.ODC_ID, SaDomestic.ODC_NAME, FIFTY_TEXT, southAfrica),
+            g(SaDomestic.T20_ID, SaDomestic.T20_NAME, T20_TEXT, southAfrica),
+            g(NzDomestic.PLUNKET_ID, NzDomestic.PLUNKET_NAME, FC, newZealand),
+            g(NzDomestic.FORD_ID, NzDomestic.FORD_NAME, FIFTY_TEXT, newZealand),
+            g(NzDomestic.SMASH_ID, NzDomestic.SMASH_NAME, T20_TEXT, newZealand),
+            g(WiDomestic.FOURDAY_ID, WiDomestic.FOURDAY_NAME, FC, westIndies),
+            g(WiDomestic.ODC_ID, WiDomestic.ODC_NAME, FIFTY_TEXT, westIndies),
+            g(PakDomestic.GOLD_ID, PakDomestic.GOLD_NAME, FC, pakistan),
+            g(PakDomestic.SILVER_ID, PakDomestic.SILVER_NAME, FC, pakistan),
+            g(BdDomestic.NCL_ID, BdDomestic.NCL_NAME, FC, bangladesh)
         )
     }
 }
@@ -158,6 +228,7 @@ object TeamCatalog {
     const val INTERNATIONAL = "int"
     const val TOURNAMENT = "tour"
     const val LEAGUE = "league"
+    const val DOMESTIC = "dom"
     const val CUSTOM = "custom"
 
     private fun entry(kind: String, group: String, t: Team) = TeamEntry("$kind|$group|${t.id}", kind, group, t)
@@ -166,12 +237,7 @@ object TeamCatalog {
     fun load(): List<TeamEntry> {
         val out = ArrayList<TeamEntry>()
         CricketData.getAllTeams().sortedBy { it.name }.forEach { out.add(entry(INTERNATIONAL, "International teams", it)) }
-        listOf(
-            T20WorldCup.TOURNAMENT_NAME to T20WorldCup.buildTeams().first,
-            ChampionsTrophy.TOURNAMENT_NAME to ChampionsTrophy.buildTeams().first,
-            AsiaCup.TOURNAMENT_NAME to AsiaCup.buildTeams().first,
-            AsianGames.TOURNAMENT_NAME to AsianGames.buildTeams().first
-        ).forEach { (title, teams) -> teams.forEach { out.add(entry(TOURNAMENT, title, it)) } }
+        TeamGroups.tournamentGroups().forEach { (title, teams) -> teams.forEach { out.add(entry(TOURNAMENT, title, it)) } }
         listOf(
             "Caribbean Premier League" to CplData.buildTeams().first,
             "Abu Dhabi T10" to AbuDhabiT10.buildTeams().first,
@@ -181,6 +247,7 @@ object TeamCatalog {
             "Major League Cricket" to MajorLeagueCricket.buildTeams().first,
             "SA20" to Sa20.buildTeams().first
         ).forEach { (title, teams) -> teams.forEach { out.add(entry(LEAGUE, title, it)) } }
+        TeamGroups.domesticGroups().forEach { (title, teams) -> teams.forEach { out.add(entry(DOMESTIC, title, it)) } }
         Customisation.customTeamsAsTeams().forEach { out.add(entry(CUSTOM, "Custom teams", it)) }
         return out
     }

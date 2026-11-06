@@ -72,6 +72,7 @@ private val TEAM_TABS = listOf(
     TeamCatalog.INTERNATIONAL to "International Teams",
     TeamCatalog.TOURNAMENT to "International Tournament Teams",
     TeamCatalog.LEAGUE to "League Teams",
+    TeamCatalog.DOMESTIC to "Domestic Teams",
     TeamCatalog.CUSTOM to "Custom Teams"
 )
 
@@ -163,7 +164,7 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
                     Text(group, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                     list.forEach { g ->
                         val shownName = Customisation.tournamentName(g.id, g.name)
-                        val fmt = TournamentFormats.find(Customisation.tournamentFormatKey(g.id, g.formatKey), customFormats)?.name ?: "Unknown format"
+                        val fmt = g.formatText ?: TournamentFormats.find(Customisation.tournamentFormatKey(g.id, g.formatKey), customFormats)?.name ?: "Unknown format"
                         TournamentRow(shownName, "Format: $fmt") { editingId = g.id; message = null; step = TStep.EditOne }
                     }
                 }
@@ -189,6 +190,8 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
                     startFormat = if (game != null) Customisation.tournamentFormatKey(game.id, game.formatKey) else custom!!.formatKey,
                     isCustom = custom != null,
                     isEdited = game != null && Customisation.tournamentEdit(game.id) != null,
+                    formatEditable = game?.formatEditable ?: true,
+                    formatText = game?.formatText,
                     formats = formats,
                     otherNames = Customisation.customTournaments().filter { it.id != editingId }.map { it.name },
                     onBack = { step = TStep.EditList },
@@ -330,7 +333,7 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
             val picked = cat?.filter { it.key in teamKeys } ?: emptyList()
             val n = teamKeys.size
             val formatName = TournamentFormats.find(formatKey, customFormats)?.name ?: formatKey
-            val stadiumNames = stadiumIds.mapNotNull { StadiumData.getStadiumById(it)?.name }
+            val stadiumNames = stadiumIds.mapNotNull { com.cricketsim.logic.CplData.stadium(it)?.name }
             PageColumn {
                 BackButton { step = TStep.Rules }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -389,6 +392,8 @@ private fun EditTournamentPage(
     startFormat: String,
     isCustom: Boolean,
     isEdited: Boolean,
+    formatEditable: Boolean,
+    formatText: String?,
     formats: List<com.cricketsim.logic.FormatOption>,
     otherNames: List<String>,
     onBack: () -> Unit,
@@ -415,8 +420,15 @@ private fun EditTournamentPage(
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text("Format", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-        Column(modifier = Modifier.selectableGroup()) {
-            formats.forEach { f -> ChoiceRadio(f.name, f.description, format == f.key) { error = null; format = f.key } }
+        if (formatEditable) {
+            Column(modifier = Modifier.selectableGroup()) {
+                formats.forEach { f -> ChoiceRadio(f.name, f.description, format == f.key) { error = null; format = f.key } }
+            }
+        } else {
+            Text(
+                text = "${formatText ?: "Its own format"}. The format of a domestic tournament cannot be changed, only its name.",
+                style = MaterialTheme.typography.bodyLarge
+            )
         }
         error?.let {
             Spacer(modifier = Modifier.height(8.dp))
@@ -548,7 +560,7 @@ private fun TeamsPage(
 
 @Composable
 private fun StadiumsPage(selected: Set<String>, onSelected: (Set<String>) -> Unit, onBack: () -> Unit, onContinue: () -> Unit) {
-    val byCountry = remember { StadiumData.getAllStadiums().groupBy { it.country }.toSortedMap() }
+    val byCountry = remember { com.cricketsim.logic.AllStadiums.list().groupBy { it.country }.toSortedMap() }
     var country by remember { mutableStateOf(byCountry.keys.firstOrNull() ?: "") }
     var open by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }

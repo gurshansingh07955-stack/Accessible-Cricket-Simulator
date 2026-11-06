@@ -142,6 +142,7 @@ private fun changedGameTeams(): List<Pair<String, Team>> {
     val out = ArrayList<Pair<String, Team>>()
     internationalTeams().filter { it.id in ids }.forEach { out.add("International teams" to it) }
     leagueGroups().forEach { (league, teams) -> teams.filter { it.id in ids }.forEach { out.add(league to it) } }
+    TeamGroups.domesticGroups().forEach { (group, teams) -> teams.filter { it.id in ids }.forEach { out.add(group to it) } }
     return out
 }
 
@@ -250,10 +251,18 @@ internal fun AddPlayersPage(dest: Team, onBack: () -> Unit, onDone: (String) -> 
         if (kind == TeamKind.League) leagueGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
     }
     val custom = remember { Customisation.customTeamsAsTeams().filter { it.id != dest.id } }
+    val tournaments = remember(kind) {
+        if (kind == TeamKind.Tournament) TeamGroups.tournamentGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
+    }
+    val domestic = remember(kind) {
+        if (kind == TeamKind.Domestic) TeamGroups.domesticGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
+    }
     val sourceTeam: Team? = sourceId?.let { id ->
         when (kind) {
             TeamKind.International -> international.find { it.id == id }
+            TeamKind.Tournament -> findInGroups(tournaments, id)
             TeamKind.League -> leagues.flatMap { it.second }.find { it.id == id }
+            TeamKind.Domestic -> findInGroups(domestic, id)
             TeamKind.Custom -> custom.find { it.id == id }
         }
     }
@@ -284,7 +293,9 @@ internal fun AddPlayersPage(dest: Team, onBack: () -> Unit, onDone: (String) -> 
         if (sourceTeam == null) {
             listOf(
                 TeamKind.International to "International teams",
+                TeamKind.Tournament to "International tournament teams",
                 TeamKind.League to "League teams",
+                TeamKind.Domestic to "Domestic teams",
                 TeamKind.Custom to "Custom teams"
             ).forEach { (k, label) ->
                 val on = kind == k
@@ -295,7 +306,9 @@ internal fun AddPlayersPage(dest: Team, onBack: () -> Unit, onDone: (String) -> 
             }
             val groups: List<Pair<String, List<Team>>> = when (kind) {
                 TeamKind.International -> listOf("International teams" to international)
+                TeamKind.Tournament -> tournaments
                 TeamKind.League -> leagues
+                TeamKind.Domestic -> domestic
                 TeamKind.Custom -> listOf("Custom teams" to custom)
             }
             if (kind == TeamKind.Custom && custom.isEmpty()) {
@@ -306,7 +319,7 @@ internal fun AddPlayersPage(dest: Team, onBack: () -> Unit, onDone: (String) -> 
                 Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                 teams.forEach { t ->
                     OutlinedButton(
-                        onClick = { sourceId = t.id },
+                        onClick = { sourceId = if (kind == TeamKind.Tournament || kind == TeamKind.Domestic) teamKey(title, t.id) else t.id },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 2.dp)
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {

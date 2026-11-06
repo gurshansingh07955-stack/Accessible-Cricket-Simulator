@@ -80,6 +80,9 @@ object Customisation {
     private val writer = Executors.newSingleThreadExecutor { r -> Thread(r, "customisation-writer").apply { isDaemon = true } }
 
     @Volatile private var data = CustomData()
+
+    /** Goes up by one every time anything the player customised changes (lets other code keep built teams until then). */
+    @Volatile var revision: Int = 0
     @Volatile private var editIndex: Map<String, PlayerEdit> = emptyMap()
     @Volatile private var addedById: Map<String, AddedPlayer> = emptyMap()
     @Volatile private var addedByTeam: Map<String, List<AddedPlayer>> = emptyMap()
@@ -100,6 +103,7 @@ object Customisation {
             CustomData()
         }
         reindex()
+        revision++
     }
 
     private fun reindex() {
@@ -114,6 +118,7 @@ object Customisation {
         synchronized(this) {
             data = change(data)
             reindex()
+            revision++
             val json = gson.toJson(data)
             val f = file ?: return
             writer.execute {

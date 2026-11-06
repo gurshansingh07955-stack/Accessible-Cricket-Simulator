@@ -25,7 +25,7 @@ object CustomTournaments {
     }
 
     fun stadiumsFor(tournamentId: String): List<Stadium>? =
-        def(tournamentId)?.stadiumIds?.mapNotNull { StadiumData.getStadiumById(it) }
+        def(tournamentId)?.stadiumIds?.mapNotNull { CplData.stadium(it) }
 
     /** A three-letter name for a custom team (the other teams already have theirs). */
     fun shortNameOrNull(teamId: String): String? =

@@ -1,6 +1,6 @@
-Patch run: 42203644866
-Timestamp (UTC): 2026-11-06T10:34:10Z
+Patch run: 42223649077
+Timestamp (UTC): 2026-11-06T13:12:48Z
 Result: OK
 -----
-Patch 2026-11-06-080-multi-day-restrictions.json
-  applied 8 operation(s) to 3 file(s)
+Patch 2026-11-06-081-domestic-edit-tabs-stadiums.json
+  applied 33 operation(s) to 9 file(s)
