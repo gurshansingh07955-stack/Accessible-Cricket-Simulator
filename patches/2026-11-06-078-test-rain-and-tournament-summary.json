@@ -1,0 +1,179 @@
+{
+  "name": "Rain in Tests and first-class matches; share and copy the finished tournament",
+  "message": "Test rain on the match clock (lost overs, rain pop-up, more draws); celebration screen gets Share and Copy tournament summary",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    val days: Int = 5\n)",
+      "replace": "    val days: Int = 5,\n    /** Balls of play lost to rain so far. They use up the match clock (see [TestMatch.clockBalls]) but are never bowled. */\n    val lostBalls: Int = 0,\n    /** Rain stoppages so far in this match. */\n    val rainStops: Int = 0,\n    /** The lines of the rain pop-up while [breakPhase] is 3; null otherwise (and on old saves). */\n    val rainLines: List<String>? = null\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        rainEnabled = false, maxOversPerBowler = 999, noSuperOver = true, testDays = days",
+      "replace": "        rainEnabled = true, maxOversPerBowler = 999, noSuperOver = true, testDays = days",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "(no DRS, no rain, no Super Over)",
+      "replace": "(no DRS, no Super Over; rain as in a Test)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    fun ballsLeft(s: MatchState): Int = (totalBalls(s) - matchBalls(s)).coerceAtLeast(0)",
+      "replace": "    /**\n     * The match clock: balls bowled plus balls lost to rain. Sessions, days, the overs that remain and the draw all run on it,\n     * so a rain stoppage uses up time exactly as it does in a real match.\n     */\n    fun clockBalls(s: MatchState): Int = matchBalls(s) + (s.test?.lostBalls ?: 0)\n\n    fun ballsLeft(s: MatchState): Int = (totalBalls(s) - clockBalls(s)).coerceAtLeast(0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        return matchBalls(s) >= totalBalls(s) && (t.currentRecorded || s.score.balls == 0)",
+      "replace": "        return clockBalls(s) >= totalBalls(s) && (t.currentRecorded || s.score.balls == 0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val base = (matchBalls(s).toDouble() / totalBalls(s)).coerceIn(0.0, 1.0)",
+      "replace": "        val base = (clockBalls(s).toDouble() / totalBalls(s)).coerceIn(0.0, 1.0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val mb = matchBalls(s)\n        return mb < totalBalls(s) && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION",
+      "replace": "        val mb = clockBalls(s)\n        return mb < totalBalls(s) && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val mb = matchBalls(s)\n        return s.score.balls == 0 && (mb % BALLS_PER_SESSION) in 90..95",
+      "replace": "        val mb = clockBalls(s)\n        return s.score.balls == 0 && (mb % BALLS_PER_SESSION) in 90..95",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val today = (((t.breaksDone / 3) + 1) * BALLS_PER_DAY - matchBalls(s)).coerceIn(0, BALLS_PER_DAY) / 6",
+      "replace": "        val today = (((t.breaksDone / 3) + 1) * BALLS_PER_DAY - clockBalls(s)).coerceIn(0, BALLS_PER_DAY) / 6",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    fun continueBreak(s: MatchState): MatchState {\n        val t = s.test ?: return s\n",
+      "replace": "    fun continueBreak(s: MatchState): MatchState {\n        val t = s.test ?: return s\n        // The rain pop-up has one step: Resume play.\n        if (t.breakPhase == 3) return s.copy(test = t.copy(breakPhase = 0, rainLines = null))\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val t = s.test ?: return \"\"\n        val k = t.breaksDone\n        return if (t.breakPhase == 2) {",
+      "replace": "        val t = s.test ?: return \"\"\n        if (t.breakPhase == 3) return \"Rain delay\"\n        val k = t.breaksDone\n        return if (t.breakPhase == 2) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val k = t.breaksDone\n        val lines = ArrayList<String>()\n        if (t.breakPhase == 1) {",
+      "replace": "        val k = t.breaksDone\n        if (t.breakPhase == 3) return t.rainLines ?: emptyList()\n        val lines = ArrayList<String>()\n        if (t.breakPhase == 1) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "(outcome(rec) ?: TestOutcome(null, drawText(rec))).text",
+      "replace": "(outcome(rec) ?: TestOutcome(null, drawText(rec) + rainSuffix(rec))).text",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val out = outcome(rec) ?: TestOutcome(null, drawText(rec))",
+      "replace": "        val out = outcome(rec) ?: TestOutcome(null, drawText(rec) + rainSuffix(rec))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        lines.add(ballLine(s))\n        if (t.followOn) lines.add(\"The follow-on was enforced.\")",
+      "replace": "        lines.add(ballLine(s))\n        if (t.lostBalls > 0) lines.add(\"${plural(t.lostBalls / 6, \"over\")} have been lost to rain so far.\")\n        if (t.followOn) lines.add(\"The follow-on was enforced.\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    // ---------------------------------------------------------------- innings\n",
+      "replace": "    // ---------------------------------------------------------------- rain\n\n    /** Expected rain stoppages in a match = RAIN_FACTOR x the match's chance of rain (a 30 percent chance gives about 0.6). A dial. */\n    const val RAIN_FACTOR = 2.0\n\n    /** At most this many stoppages in one match. */\n    const val RAIN_MAX_STOPS = 4\n\n    /** Rain never takes the last overs of the match: the game still gets a finish. */\n    const val RAIN_KEEP_OVERS = 6\n\n    /**\n     * Rolled once at the end of every over (MatchSimulation, also for the computer's own first-class matches). If it rains,\n     * a stretch of the match is lost: usually 8 to 20 overs, sometimes 20 to 40 (a session), now and then the rest of the\n     * day. The lost overs use up the match clock (so lunch, tea, stumps and the draw all move), and a pop-up (break phase 3)\n     * tells the player. There is no overs cut and no DLS in a Test: only less time to win. Null = no rain.\n     */\n    fun rainStoppage(s: MatchState, stadium: Stadium): MatchState? {\n        val t = s.test ?: return null\n        if (t.breakPhase != 0 || t.followOnPending || t.currentRecorded || t.rainStops >= RAIN_MAX_STOPS) return null\n        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.superOverRound != 0 || s.score.balls != 0) return null\n        if (s.activeRainDelay != null || s.drinksBreak != null) return null\n        if (oversLeft(s) <= RAIN_KEEP_OVERS + 12) return null\n        val wet = if (s.weather.condition == WeatherCondition.LIGHT_RAIN) 1.5 else 1.0\n        val perOver = s.weather.rainChancePercent / 100.0 * wet * RAIN_FACTOR / (t.days * OVERS_PER_DAY)\n        if (Random.nextDouble() >= perOver) return null\n\n        val clock = clockBalls(s)\n        val toDayEnd = (BALLS_PER_DAY - clock % BALLS_PER_DAY) / 6\n        val roll = Random.nextDouble()\n        val wanted = when {\n            roll < 0.5 -> 8 + Random.nextInt(13)\n            roll < 0.85 -> 20 + Random.nextInt(21)\n            else -> maxOf(toDayEnd, 12)\n        }\n        val lostOvers = wanted.coerceAtMost(oversLeft(s) - RAIN_KEEP_OVERS).coerceAtLeast(1)\n        val lost = lostOvers * 6\n        // Breaks the lost time ran through are not taken: play simply resumes in the session the clock has reached.\n        val breaks = maxOf(t.breaksDone, (clock + lost) / BALLS_PER_SESSION)\n        val after = t.copy(lostBalls = t.lostBalls + lost, rainStops = t.rainStops + 1, breaksDone = breaks, breakPhase = 3)\n        val moved = s.copy(test = after)\n        val resume = if (breaks % 3 == 0) \"Play will resume on day ${breaks / 3 + 1}.\"\n        else \"Play resumes in the ${sessionName(breaks % 3 + 1)} session of day ${breaks / 3 + 1}.\"\n        val lines = listOf(\"Rain has stopped play.\") + scoreLines(moved) +\n            listOf(\"${plural(lostOvers, \"over\")} of the match were lost to rain.\", resume, timeLine(moved))\n        return moved.copy(test = after.copy(rainLines = lines))\n    }\n\n    /** Added to a drawn result when rain took overs. */\n    private fun rainSuffix(s: MatchState): String {\n        val lost = (s.test?.lostBalls ?: 0) / 6\n        return if (lost > 0) \" Rain cost ${plural(lost, \"over\")}.\" else \"\"\n    }\n\n    // ---------------------------------------------------------------- innings\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "        if (state.rules?.rainEnabled == false) return state\n        val triggers = WeatherSystem.shouldTriggerRainInterruption(",
+      "replace": "        if (state.rules?.rainEnabled == false) return state\n        // A Test or first-class match has its own kind of rain: overs lost on the match clock, no DLS (TestMatch.rainStoppage).\n        if (state.test != null) return com.cricketsim.logic.TestMatch.rainStoppage(state, stadium) ?: state\n        val triggers = WeatherSystem.shouldTriggerRainInterruption(",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/DrinksBreak.kt",
+      "find": "        if (state.activeRainDelay != null) return state\n        val interval = intervalFor(state.format) ?: return state",
+      "replace": "        if (state.activeRainDelay != null || state.test?.breakPhase == 3) return state\n        val interval = intervalFor(state.format) ?: return state",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            if (s.activeRainDelay != null) s = MatchStateMachine.resumeFromRainDelay(s)\n            if (s.pendingDismissal != null) {\n                val next = MatchStateMachine.getAvailableBatsmen(s).firstOrNull()\n                s = if (next != null) MatchSimulation.completeWicketReplacement",
+      "replace": "            if (s.activeRainDelay != null) s = MatchStateMachine.resumeFromRainDelay(s)\n            // A rain stoppage in the computer's own first-class match: the overs are lost, play goes on.\n            if (s.test?.breakPhase == 3) s = TestMatch.continueBreak(s)\n            if (s.pendingDismissal != null) {\n                val next = MatchStateMachine.getAvailableBatsmen(s).firstOrNull()\n                s = if (next != null) MatchSimulation.completeWicketReplacement",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    // The new ball: the computer takes it once it is available; you are told once, and take it from Match info.",
+      "replace": "    // Rain has stopped play in a Test or first-class match: the rain sound and commentary, then the lost overs are read out.\n    LaunchedEffect(matchState.test?.breakPhase, matchState.test?.rainStops) {\n        val t = matchState.test ?: return@LaunchedEffect\n        if (t.breakPhase != 3) return@LaunchedEffect\n        director?.onRainStarted()\n        director?.speakWhenQuiet(TestMatch.breakSpoken(matchState)) { services?.announceSpoken(it) }\n    }\n\n    // The new ball: the computer takes it once it is available; you are told once, and take it from Match info.",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "                    val next = TestMatch.continueBreak(matchState)\n                    matchState = next\n",
+      "replace": "                    if (testNow.breakPhase == 3) {\n                        director?.onRainResumed(false)\n                        services?.announceSpoken(\"Play resumes.\")\n                    }\n                    val next = TestMatch.continueBreak(matchState)\n                    matchState = next\n",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentSummaryText.kt",
+      "content": "package com.cricketsim.ui.tournament\n\nimport android.content.ClipData\nimport android.content.ClipboardManager\nimport android.content.Context\nimport android.content.Intent\nimport android.widget.Toast\nimport com.cricketsim.logic.CplData\nimport com.cricketsim.logic.CplSimulator\nimport com.cricketsim.logic.IplSeason\nimport com.cricketsim.logic.TournamentState\nimport java.util.Locale\n\n/**\n * The finished tournament as clear PLAIN TEXT, for the Share and Copy buttons of the celebration screen: the champions,\n * the runners-up, the Final, the Player of the Match in the Final, the Player of the Series, your team's record, the points\n * table (or tables) and the leaders of every statistic.\n */\ninternal object TournamentSummaryText {\n\n    // A stage with one of these words in its name is a knockout match, not a table.\n    private val NOT_A_TABLE = listOf(\n        \"final\", \"qualifier\", \"eliminator\", \"knockout\", \"challenger\", \"semi\", \"quarter\", \"bronze\",\n        \"play-off\", \"playoff\", \"preliminary\", \"medal\"\n    )\n\n    private fun nrr(v: Double): String = String.format(Locale.US, \"%+.3f\", v)\n\n    fun build(state: TournamentState): String {\n        val sb = StringBuilder()\n        sb.append(state.name.uppercase(Locale.ROOT)).append(\": TOURNAMENT SUMMARY\\n\\n\")\n\n        // ---- The result\n        val champion = CplSimulator.champion(state)\n        if (champion != null) sb.append(\"Champions: \").append(champion.name).append(\"\\n\")\n        val finalMatch = state.fixtures.firstOrNull { it.stage == \"Final\" }\n        val finalResult = finalMatch?.result\n        if (finalMatch != null && finalResult != null) {\n            val winnerId = finalResult.winnerId\n            if (winnerId != null) {\n                val loserId = if (finalMatch.homeId == winnerId) finalMatch.awayId else finalMatch.homeId\n                state.teams.find { it.id == loserId }?.let { sb.append(\"Runners-up: \").append(it.name).append(\"\\n\") }\n            }\n            if (finalResult.summary.isNotBlank()) sb.append(\"Final: \").append(finalResult.summary).append(\"\\n\")\n            val finalAward = finalResult.playerOfMatch\n            if (!finalAward.isNullOrEmpty()) sb.append(\"Player of the Match in the Final: \").append(finalAward).append(\"\\n\")\n        }\n        val series = CplSimulator.playerOfTheSeries(state)\n        if (series != null) {\n            sb.append(\"Player of the Series: \").append(series.name).append(\", \").append(CplData.shortName(series.teamId))\n                .append(\", with \").append(series.runs).append(\" runs and \").append(series.wickets).append(\" wickets\\n\")\n        }\n        val isIpl = state.tournamentId == IplSeason.TOURNAMENT_ID\n        if (isIpl) {\n            IplSeason.orangeCap(state.playerStats.values)?.let {\n                sb.append(\"Orange Cap (most runs): \").append(it.name).append(\", \").append(CplData.shortName(it.teamId))\n                    .append(\", \").append(it.runs).append(\" runs\\n\")\n            }\n            IplSeason.purpleCap(state.playerStats.values)?.let {\n                sb.append(\"Purple Cap (most wickets): \").append(it.name).append(\", \").append(CplData.shortName(it.teamId))\n                    .append(\", \").append(it.wickets).append(\" wickets\\n\")\n            }\n        }\n\n        // ---- Your team\n        val userName = state.teams.find { it.id == state.userTeamId }?.name\n        if (userName != null) {\n            val mine = state.fixtures.filter { it.result != null && (it.homeId == state.userTeamId || it.awayId == state.userTeamId) }\n            val won = mine.count { it.result?.winnerId == state.userTeamId }\n            val noResult = mine.count { it.result?.winnerId == null }\n            val lost = mine.size - won - noResult\n            sb.append(\"\\nYOUR TEAM\\n\").append(userName).append(\": played \").append(mine.size).append(\", won \").append(won)\n                .append(\", lost \").append(lost).append(\", no result or drawn \").append(noResult).append(\"\\n\")\n        }\n\n        // ---- The points table(s)\n        val firstClass = state.fixtures.filter { it.result?.fcKind?.isNotEmpty() == true }\n        if (firstClass.isNotEmpty()) {\n            class Row(val name: String) {\n                var played = 0\n                var won = 0\n                var drawn = 0\n                var points = 0\n            }\n            val rows = HashMap<String, Row>()\n            for (f in firstClass) {\n                val r = f.result ?: continue\n                for ((id, pts) in listOf(f.homeId to r.homePoints, f.awayId to r.awayPoints)) {\n                    if (id == null) continue\n                    val teamName = state.teams.find { it.id == id }?.name ?: continue\n                    val row = rows.getOrPut(id) { Row(teamName) }\n                    row.played++\n                    row.points += pts\n                    if (r.winnerId == id) row.won++ else if (r.winnerId == null && r.fcKind == \"DRAW\") row.drawn++\n                }\n            }\n            sb.append(\"\\nPOINTS TABLE\\n\")\n            rows.values.sortedWith(compareByDescending<Row> { it.points }.thenByDescending { it.won }.thenBy { it.name })\n                .forEachIndexed { i, row ->\n                    sb.append(i + 1).append(\". \").append(row.name).append(\": played \").append(row.played).append(\", won \").append(row.won)\n                        .append(\", drawn \").append(row.drawn).append(\", points \").append(row.points).append(\"\\n\")\n                }\n        } else {\n            val stages = state.fixtures.map { it.stage }.distinct()\n                .filter { stage -> NOT_A_TABLE.none { stage.lowercase(Locale.ROOT).contains(it) } }\n            for (stage in stages) {\n                val ids = state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()\n                val table = CplData.standings(state, stage).filter { it.team.id in ids && it.played > 0 }\n                if (table.isEmpty()) continue\n                sb.append(\"\\n\").append(if (stages.size > 1) stage.uppercase(Locale.ROOT) + \" TABLE\" else \"POINTS TABLE\").append(\"\\n\")\n                table.forEachIndexed { i, r ->\n                    sb.append(i + 1).append(\". \").append(r.team.name).append(\": played \").append(r.played).append(\", won \").append(r.won)\n                        .append(\", lost \").append(r.lost).append(\", no result \").append(r.noResult).append(\", points \").append(r.points)\n                        .append(\", net run rate \").append(nrr(r.netRunRate)).append(\"\\n\")\n                }\n            }\n        }\n\n        // ---- The statistics\n        val categories = CplData.statCategories(state.playerStats.values, teamNameOf = { CplData.shortName(it) }, caps = isIpl)\n            .filter { it.entries.isNotEmpty() }\n        if (categories.isNotEmpty()) {\n            sb.append(\"\\nTOURNAMENT STATS (top five of each)\\n\")\n            for (c in categories) {\n                sb.append(\"\\n\").append(c.title).append(\"\\n\")\n                c.entries.forEachIndexed { i, e ->\n                    sb.append(i + 1).append(\". \").append(e.name).append(\", \").append(e.teamName).append(\": \").append(e.value).append(\"\\n\")\n                }\n            }\n        }\n        return sb.toString().trimEnd() + \"\\n\"\n    }\n\n    /** Opens the phone's share sheet with the summary. */\n    fun share(context: Context, subject: String, text: String) {\n        val send = Intent(Intent.ACTION_SEND).apply {\n            type = \"text/plain\"\n            putExtra(Intent.EXTRA_SUBJECT, subject)\n            putExtra(Intent.EXTRA_TEXT, text)\n        }\n        val chooser = Intent.createChooser(send, \"Share the tournament summary\").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }\n        runCatching { context.startActivity(chooser) }\n    }\n\n    /** Puts the summary on the clipboard and says so. */\n    fun copy(context: Context, text: String) {\n        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager\n        clipboard?.setPrimaryClip(ClipData.newPlainText(\"Tournament summary\", text))\n        Toast.makeText(context, \"The tournament summary is copied. You can paste it anywhere.\", Toast.LENGTH_SHORT).show()\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    BackHandler(onBack = onContinue)\n\n    LaunchedEffect(Unit) {\n        val sound = services?.sound\n        sound?.playTournamentCelebration()",
+      "replace": "    BackHandler(onBack = onContinue)\n    val context = LocalContext.current\n    // The whole tournament as plain text for Share and Copy: champions, the Final, the awards, the tables and the stats.\n    val summaryText = remember(state) { TournamentSummaryText.build(state) }\n\n    LaunchedEffect(Unit) {\n        val sound = services?.sound\n        sound?.playTournamentCelebration()",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        Spacer(modifier = Modifier.height(20.dp))\n        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text(\"Continue to the tournament\") }",
+      "replace": "        Spacer(modifier = Modifier.height(20.dp))\n        OutlinedButton(\n            onClick = { TournamentSummaryText.share(context, \"${state.name} summary\", summaryText) },\n            modifier = Modifier.fillMaxWidth()\n        ) { Text(\"Share tournament summary\") }\n        Spacer(modifier = Modifier.height(8.dp))\n        OutlinedButton(\n            onClick = { TournamentSummaryText.copy(context, summaryText) },\n            modifier = Modifier.fillMaxWidth()\n        ) { Text(\"Copy tournament summary\") }\n        Spacer(modifier = Modifier.height(8.dp))\n        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text(\"Continue to the tournament\") }",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "TEST_RAIN_AND_TOURNAMENT_SUMMARY.md",
+      "content": "# Rain in Test and first-class matches; share and copy a finished tournament\n\n**Rain in a Test (and every first-class match: Ranji, Duleep, Irani, County Championship, Sheffield Shield, 4-Day Series,\nPlunket Shield, West Indies Championship, Quaid-e-Azam, National Cricket League).**\nAt the end of every over `TestMatch.rainStoppage` rolls for rain, from the match's chance of rain (the weather shown on\nMatch info; light rain on the day makes it likelier). The dial is `RAIN_FACTOR`: expected stoppages per match = 2 x the chance\nof rain, at most `RAIN_MAX_STOPS` (4), never in the last 18 overs. A stoppage loses 8 to 20 overs (half the time), 20 to 40\n(a session, a third) or the rest of the day (one in seven). Lost overs run the match CLOCK (`clockBalls` = balls bowled + balls\nlost): sessions, lunch, tea, stumps, the day count, the overs that remain and the draw all move with it, so rain makes draws\nlikelier. A \"Rain delay\" pop-up (break phase 3) says what was lost and when play resumes; rain sound and commentary play, and\n\"Resume play\" ends it. A drawn result says \"Rain cost N overs.\" Match info shows the overs lost. There is no overs cut and no\nDLS in a Test. Computer-v-computer first-class matches roll for rain too (the stoppage is applied and play goes on).\n\n**Share and copy.** The celebration screen (shown once when a tournament ends) has two more buttons: \"Share tournament\nsummary\" and \"Copy tournament summary\". The plain text (`TournamentSummaryText`) has: champions, runners-up, the Final, the\nPlayer of the Match in the Final, the Player of the Series (and the IPL's Orange and Purple Caps), your team's record, the\npoints table or tables (first-class tournaments show points, drawn and won), and the top five of every statistic.\n",
+      "mustNotExist": true
+    }
+  ]
+}
