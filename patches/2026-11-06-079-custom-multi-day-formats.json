@@ -1,0 +1,416 @@
+{
+  "name": "Custom formats of two to five days: days, overs a day, innings, declarations, follow-on, new ball",
+  "message": "Create Custom Format asks for days; more than one day plays like a Test with sessions, declarations, follow-on and new ball chosen by the player; works in tournaments with DRS and rain",
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomFormat.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * A match format the player designs themselves (Home > Advanced Customisation > Create Custom Format).\n *\n * A custom format is NOT one of the game's [MatchFormat]s: it is never shown on the Play match format screen and\n * it works only inside tournaments (custom tournaments, or a game tournament given the format in Edit Tournament).\n *\n * ONE DAY (the default): a limited-overs match. [overs] is the overs each side bats; the fielding restriction\n * fields apply.\n *\n * MORE THAN ONE DAY ([days] 2 to 5): played like a Test match, with sessions (lunch, tea, stumps). [overs] is then the\n * overs bowled each DAY (6 to 90), the day being three sessions. The rest of the multi-day settings: [testInnings]\n * (2 = one innings each, 4 = two each), [declarations], [followOnEnabled] with [followOnLead] (only with four innings),\n * [newBallEnabled] with [newBallOvers]. DRS and rain are tournament settings and work for these formats too.\n * Old saved formats have days 0 (read as one day).\n *\n * @param restrictionsEnabled whether the first [restrictionOvers] overs of each innings have a fielding restriction (one day only)\n * @param restrictionOvers how many overs the restriction lasts (0 when there is none)\n * @param fieldersOutside how many fielders may stay outside the fielding circle during the restriction\n */\ndata class CustomFormat(\n    val id: String,\n    val name: String,\n    val overs: Int,\n    val restrictionsEnabled: Boolean = false,\n    val restrictionOvers: Int = 0,\n    val fieldersOutside: Int = 2,\n    val days: Int = 1,\n    val testInnings: Int = 4,\n    val declarations: Boolean = true,\n    val followOnEnabled: Boolean = true,\n    val followOnLead: Int = 200,\n    val newBallEnabled: Boolean = true,\n    val newBallOvers: Int = 80\n) {\n    /** True for a format of two to five days, played like a Test match. */\n    val isMultiDay: Boolean get() = days > 1\n\n    /** One fifth of the innings, rounded up, as in the game's own formats (4 of 20, 10 of 50). A multi-day match has no limit. */\n    val maxOversPerBowler: Int get() = if (isMultiDay) 999 else (overs + 4) / 5\n\n    /** A plain-language description, spoken as it stands on the summary and in the saved list. */\n    fun description(): String {\n        if (isMultiDay) return multiDayDescription()\n        val oversText = if (overs == 1) \"1 over a side\" else \"$overs overs a side\"\n        val restriction = if (restrictionsEnabled) {\n            val period = if (restrictionOvers == 1) \"the first over\" else \"the first $restrictionOvers overs\"\n            val fielders = when (fieldersOutside) {\n                0 -> \"no fielders may stand outside the circle\"\n                1 -> \"1 fielder may stand outside the circle\"\n                else -> \"$fieldersOutside fielders may stand outside the circle\"\n            }\n            \"Fielding restrictions for $period: $fielders.\"\n        } else {\n            \"No fielding restrictions.\"\n        }\n        return \"$oversText. $restriction\"\n    }\n\n    private fun multiDayDescription(): String {\n        val sb = StringBuilder()\n        sb.append(\"$days days, \").append(if (overs == 1) \"1 over a day\" else \"$overs overs a day\")\n            .append(\", in three sessions: lunch, tea and stumps. \")\n        sb.append(if (testInnings == 2) \"Two innings: one for each side. \" else \"Four innings: two for each side. \")\n        sb.append(if (declarations) \"Declarations are allowed. \" else \"No declarations. \")\n        if (testInnings == 4) {\n            sb.append(\n                if (followOnEnabled) \"Follow-on: a side that bats first and leads by $followOnLead runs or more may make the other side follow on. \"\n                else \"No follow-on. \"\n            )\n        }\n        sb.append(if (newBallEnabled) \"A new ball is available after $newBallOvers overs with the old one. \" else \"No new ball. \")\n        sb.append(\"The match is drawn if the time runs out.\")\n        return sb.toString()\n    }\n\n    companion object {\n        const val MAX_NAME_LENGTH = 30\n        const val MIN_OVERS = 1\n        const val MAX_OVERS = 50\n        /** Overs a day in a multi-day format: three sessions, so at least two overs each. */\n        const val MIN_OVERS_PER_DAY = 6\n        const val MAX_OVERS_PER_DAY = 90\n        const val MAX_DAYS = 5\n        const val MAX_FOLLOW_ON_LEAD = 500\n        /** The most fielders the player can allow outside the circle (the game's own restrictions use 2 or 3). */\n        const val MAX_FIELDERS_OUTSIDE = 5\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "    val testDays: Int = 0\n)",
+      "replace": "    val testDays: Int = 0,\n    /** Multi-day custom formats: overs bowled in a day (90 in a Test). Only read when a match starts. */\n    val oversPerDay: Int = 90,\n    /** 2 = one innings each, 4 = two each (a Test). */\n    val testInnings: Int = 4,\n    val declarations: Boolean = true,\n    val followOn: Boolean = true,\n    /** Runs of first-innings lead that allow the follow-on (0 = the Test's 200, or 150 in a four-day match). */\n    val followOnLead: Int = 0,\n    val newBall: Boolean = true,\n    val newBallOvers: Int = 80\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "            val cf = Customisation.customFormats().find { it.id == id } ?: return null\n",
+      "replace": "            val cf = Customisation.customFormats().find { it.id == id } ?: return null\n            // A format of two to five days plays like a Test (logic/TestMatch.kt) with the player's own days, overs, innings and rules.\n            if (cf.isMultiDay) {\n                return MatchRules(\n                    overs = cf.days * cf.overs, restrictionBalls = 0, fieldersOutside = 5,\n                    drsReviews = DrsSystem.reviewsPerInnings(MatchFormat.TEST), rainEnabled = true, maxOversPerBowler = 999,\n                    noSuperOver = true, testDays = cf.days, oversPerDay = cf.overs, testInnings = cf.testInnings,\n                    declarations = cf.declarations, followOn = cf.followOnEnabled && cf.testInnings == 4,\n                    followOnLead = if (cf.followOnEnabled) cf.followOnLead else 0, newBall = cf.newBallEnabled, newBallOvers = cf.newBallOvers\n                )\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "                noSuperOver = def.noSuperOver && isLeagueStage(stage)",
+      "replace": "                noSuperOver = base.testDays > 0 || (def.noSuperOver && isLeagueStage(stage))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "    fun baseFormatFor(tournamentId: String?): MatchFormat? = rulesFor(tournamentId)?.let { baseFormatForOvers(it.overs) }",
+      "replace": "    fun baseFormatFor(tournamentId: String?): MatchFormat? = rulesFor(tournamentId)?.let { if (it.testDays > 0) MatchFormat.TEST else baseFormatForOvers(it.overs) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    val rainLines: List<String>? = null\n)",
+      "replace": "    val rainLines: List<String>? = null,\n    // The settings of a custom multi-day format. Each is stored so that 0 / false means \"a Test's own\" (old saves read right).\n    /** Overs a day when it is not the Test's 90; 0 = 90. */\n    val oversPerDayCustom: Int = 0,\n    /** Two innings (one each) instead of four. */\n    val twoInnings: Boolean = false,\n    val noDeclarations: Boolean = false,\n    val noFollowOn: Boolean = false,\n    /** Lead that allows the follow-on; 0 = 200 (150 in a four-day match). */\n    val followOnLeadCustom: Int = 0,\n    val noNewBall: Boolean = false,\n    /** Overs with the old ball before the new one is available when it is not 80; 0 = 80. */\n    val newBallOversCustom: Int = 0\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    fun start(rules: MatchRules? = null): TestState = TestState(days = rules?.testDays?.takeIf { it > 0 } ?: DAYS)",
+      "replace": "    fun start(rules: MatchRules? = null): TestState {\n        val r = rules?.takeIf { it.testDays > 0 }\n        return TestState(\n            days = r?.testDays ?: DAYS,\n            oversPerDayCustom = r?.oversPerDay?.takeIf { it in 1..89 } ?: 0,\n            twoInnings = r?.testInnings == 2,\n            noDeclarations = r != null && !r.declarations,\n            noFollowOn = r != null && !r.followOn,\n            followOnLeadCustom = r?.followOnLead?.takeIf { it > 0 } ?: 0,\n            noNewBall = r != null && !r.newBall,\n            newBallOversCustom = r?.newBallOvers?.takeIf { it > 0 && it != NEW_BALL_OVERS } ?: 0\n        )\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "    fun totalBalls(s: MatchState): Int = (s.test?.days ?: DAYS) * BALLS_PER_DAY\n\n    /** 200 in a five-day match, 150 in a four-day one. */\n    fun followOnLead(s: MatchState): Int = if ((s.test?.days ?: DAYS) >= 5) FOLLOW_ON_LEAD else 150\n",
+      "replace": "    fun totalBalls(s: MatchState): Int = (s.test?.days ?: DAYS) * dayBalls(s)\n\n    /** Overs bowled in a day: 90 in a Test, or the custom format's own. */\n    fun perDayOvers(s: MatchState): Int = s.test?.oversPerDayCustom?.takeIf { it > 0 } ?: OVERS_PER_DAY\n\n    fun dayBalls(s: MatchState): Int = perDayOvers(s) * 6\n\n    /** 1.0 for a 90-over day: the dials written for a Test day are scaled by this for a shorter one. */\n    private fun dayScale(s: MatchState): Double = perDayOvers(s) / 90.0\n\n    /** Two innings (one each) or four. */\n    fun inningsCount(s: MatchState): Int = if (s.test?.twoInnings == true) 2 else 4\n\n    /** Overs with the old ball before the new one is available: 80 in a Test. */\n    fun newBallOvers(s: MatchState): Int = s.test?.newBallOversCustom?.takeIf { it > 0 } ?: NEW_BALL_OVERS\n\n    /**\n     * The clock ball at which break number k is due (1 = day one's lunch, 2 = tea, 3 = stumps, 4 = day two's lunch...):\n     * a day is three sessions of a third each, and the last session ends exactly on the day's last over.\n     */\n    fun breakAt(s: MatchState, k: Int): Int {\n        if (k <= 0) return 0\n        val d = perDayOvers(s)\n        val day = (k - 1) / 3\n        val pos = (k - 1) % 3 + 1\n        return (day * d + pos * d / 3) * 6\n    }\n\n    /** How many breaks the clock has already run through. */\n    fun breaksReached(s: MatchState, clock: Int): Int {\n        var k = 0\n        while (k < 60 && breakAt(s, k + 1) <= clock) k++\n        return k\n    }\n\n    /** 200 in a five-day match, 150 in a four-day one, or the custom format's own. */\n    fun followOnLead(s: MatchState): Int =\n        s.test?.followOnLeadCustom?.takeIf { it > 0 } ?: if ((s.test?.days ?: DAYS) >= 5) FOLLOW_ON_LEAD else 150\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        return mb < totalBalls(s) && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION",
+      "replace": "        return mb < totalBalls(s) && mb >= breakAt(s, t.breaksDone + 1)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val mb = clockBalls(s)\n        return s.score.balls == 0 && (mb % BALLS_PER_SESSION) in 90..95",
+      "replace": "        val mb = clockBalls(s)\n        val k = breaksReached(s, mb)\n        val start = breakAt(s, k)\n        val size = breakAt(s, k + 1) - start\n        if (size < 48) return false // a session of fewer than 8 overs has no drinks break\n        return s.score.balls == 0 && (mb - start) in (size / 2) until (size / 2 + 6)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val today = (((t.breaksDone / 3) + 1) * BALLS_PER_DAY - clockBalls(s)).coerceIn(0, BALLS_PER_DAY) / 6",
+      "replace": "        val today = (((t.breaksDone / 3) + 1) * dayBalls(s) - clockBalls(s)).coerceIn(0, dayBalls(s)) / 6",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val perOver = s.weather.rainChancePercent / 100.0 * wet * RAIN_FACTOR / (t.days * OVERS_PER_DAY)",
+      "replace": "        val perOver = s.weather.rainChancePercent / 100.0 * wet * RAIN_FACTOR / (totalBalls(s) / 6.0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val toDayEnd = (BALLS_PER_DAY - clock % BALLS_PER_DAY) / 6",
+      "replace": "        val toDayEnd = (dayBalls(s) - clock % dayBalls(s)) / 6",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val lostOvers = wanted.coerceAtMost(oversLeft(s) - RAIN_KEEP_OVERS).coerceAtLeast(1)",
+      "replace": "        // A shorter day loses proportionally fewer overs to a stoppage (the day-ending washout is already in the day's own length).\n        val scaled = if (roll < 0.85) (wanted * minOf(1.0, dayScale(s))).toInt() else wanted\n        val lostOvers = scaled.coerceAtMost(oversLeft(s) - RAIN_KEEP_OVERS).coerceAtLeast(1)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val breaks = maxOf(t.breaksDone, (clock + lost) / BALLS_PER_SESSION)",
+      "replace": "        val breaks = maxOf(t.breaksDone, breaksReached(s, clock + lost))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val n = list.size\n        if (n < 3) return null\n",
+      "replace": "        val n = list.size\n        val total = inningsCount(s)\n        if (n < total - 1 || (n == total - 1 && total != 4)) return null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (n == 3) {\n            if (!(last.allOut || last.declared)) return null",
+      "replace": "        if (n == 3 && total == 4) {\n            if (!(last.allOut || last.declared)) return null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (t.completed.size == 4 && target != null) {",
+      "replace": "        if (t.completed.size == inningsCount(s) && target != null) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (s.currentInnings == 4 && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val inHand",
+      "replace": "        if (s.currentInnings == inningsCount(s) && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val inHand",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (t.completed.size != 2 || !t.currentRecorded) return false\n        return t.completed[0].score.runs",
+      "replace": "        if (t.completed.size != 2 || !t.currentRecorded || t.twoInnings || t.noFollowOn) return false\n        return t.completed[0].score.runs",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "            oversLeft(s) < 90 -> 0.0\n            oversLeft(s) < 130 -> if (lead >= 300) 0.4 else 0.15",
+      "replace": "            oversLeft(s) < perDayOvers(s) -> 0.0\n            oversLeft(s) < perDayOvers(s) * 13 / 9 -> if (lead >= 300) 0.4 else 0.15",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val target: Int? = if (next == 4) {",
+      "replace": "        val target: Int? = if (next == inningsCount(s)) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        return !t.currentRecorded && t.breakPhase == 0 && !t.followOnPending &&\n            s.matchStatus == MatchStatus.IN_PROGRESS && s.battingTeam.id == s.userTeam.id &&\n            s.currentInnings in 1..3 && s.pendingDismissal == null",
+      "replace": "        return !t.currentRecorded && !t.noDeclarations && t.breakPhase == 0 && !t.followOnPending &&\n            s.matchStatus == MatchStatus.IN_PROGRESS && s.battingTeam.id == s.userTeam.id &&\n            s.currentInnings in 1 until inningsCount(s) && s.pendingDismissal == null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (t.currentRecorded || t.breakPhase != 0 || t.followOnPending) return false\n        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.battingTeam.id == s.userTeam.id) return false",
+      "replace": "        if (t.currentRecorded || t.noDeclarations || t.breakPhase != 0 || t.followOnPending) return false\n        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.battingTeam.id == s.userTeam.id) return false",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (s.currentInnings !in 1..3 || s.score.balls != 0 || s.pendingDismissal != null) return false\n        if (s.score.overs < 40) return false",
+      "replace": "        if (s.currentInnings !in 1 until inningsCount(s) || s.score.balls != 0 || s.pendingDismissal != null) return false\n        if (s.score.overs < (40 * dayScale(s)).toInt()) return false",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "            return s.score.runs >= 520 && s.score.overs >= 120 && Random.nextDouble() < 0.3",
+      "replace": "            return s.score.runs >= (520 * dayScale(s)).toInt() && s.score.overs >= (120 * dayScale(s)).toInt() && Random.nextDouble() < 0.3",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (timeLeft < 50) return false",
+      "replace": "        if (timeLeft < (50 * dayScale(s)).toInt()) return false",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val required = maxOf(120.0, 4.2 * (timeLeft - 48))",
+      "replace": "        val required = maxOf(120.0 * dayScale(s), 4.2 * (timeLeft - 48 * dayScale(s)))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (s.currentInnings == 4 && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val rate = need / (left / 6.0)",
+      "replace": "        if (s.currentInnings == inningsCount(s) && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val rate = need / (left / 6.0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "            if (lead > 150 && left < 660) bias = 0.3",
+      "replace": "            if (lead > 150 && left < (660 * dayScale(s)).toInt()) bias = 0.3",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        if (s.currentInnings == 4 && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val rate = need / (ballsLeft(s).coerceAtLeast(1) / 6.0)",
+      "replace": "        if (s.currentInnings == inningsCount(s) && target != null) {\n            val need = (target - s.score.runs).coerceAtLeast(0)\n            val rate = need / (ballsLeft(s).coerceAtLeast(1) / 6.0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        return !t.currentRecorded && ballAge(s) >= NEW_BALL_OVERS * 6",
+      "replace": "        if (t.noNewBall) return false\n        return !t.currentRecorded && ballAge(s) >= newBallOvers(s) * 6",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": "        val overs = ballAge(s) / 6\n        return if (newBallAvailable(s)) \"The ball is ${overs} overs old. The new ball is available.\"\n        else \"The ball is ${overs} overs old. The new ball is due in ${NEW_BALL_OVERS - overs} overs.\"",
+      "replace": "        val overs = ballAge(s) / 6\n        if (s.test?.noNewBall == true) return \"The ball is ${overs} overs old.\"\n        return if (newBallAvailable(s)) \"The ball is ${overs} overs old. The new ball is available.\"\n        else \"The ball is ${overs} overs old. The new ball is due in ${newBallOvers(s) - overs} overs.\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TestMatch.kt",
+      "find": ". Innings ${s.currentInnings} of 4.\")",
+      "replace": ". Innings ${s.currentInnings} of ${inningsCount(s)}.\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "return state.currentInnings == (if (state.test != null) 4 else 2) && state.score.runs >= target",
+      "replace": "return state.currentInnings == (if (state.test != null) com.cricketsim.logic.TestMatch.inningsCount(state) else 2) && state.score.runs >= target",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "        if (state.currentInnings != (if (state.test != null) 4 else 2)) return null",
+      "replace": "        if (state.currentInnings != (if (state.test != null) com.cricketsim.logic.TestMatch.inningsCount(state) else 2)) return null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "if (state.target == null || state.currentInnings != (if (state.test != null) 4 else 2)) return null",
+      "replace": "if (state.target == null || state.currentInnings != (if (state.test != null) com.cricketsim.logic.TestMatch.inningsCount(state) else 2)) return null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "if (test && state.currentInnings == 4 && target != null) {",
+      "replace": "if (test && state.currentInnings == TestMatch.inningsCount(state) && target != null) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        sa: Boolean = false\n    ): SimResult? {",
+      "replace": "        sa: Boolean = false,\n        /** The rules of a custom multi-day format (null = the Ranji-style first-class rules for [days]). */\n        rules: MatchRules? = null\n    ): SimResult? {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            rules = TestMatch.rulesForDays(days)\n        )",
+      "replace": "            rules = rules ?: TestMatch.rulesForDays(days)\n        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val result = buildFirstClassResult(finished, home, away, knockout, county, shield, sa) ?: return null",
+      "replace": "        val result = buildFirstClassResult(finished, home, away, knockout, county, shield, sa, custom = rules != null) ?: return null",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "shield: Boolean = false, sa: Boolean = false): FixtureResult? {",
+      "replace": "shield: Boolean = false, sa: Boolean = false, custom: Boolean = false): FixtureResult? {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "withPoints = !knockout && !shield && !sa) +",
+      "replace": "withPoints = !knockout && !shield && !sa && !custom) +",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, DomesticFc.isKnockout(state.tournamentId, fixture.stage), CountyCricket.isChampionship(state.tournamentId), AusDomestic.isShield(state.tournamentId), SaDomestic.isFourDay(state.tournamentId))",
+      "replace": "buildFirstClassResult(TestMatch.recordIfTest(finished), home, away, DomesticFc.isKnockout(state.tournamentId, fixture.stage) || (!DomesticFc.isFirstClass(state.tournamentId) && !TournamentRules.isLeagueStage(fixture.stage)), CountyCricket.isChampionship(state.tournamentId), AusDomestic.isShield(state.tournamentId), SaDomestic.isFourDay(state.tournamentId), custom = !DomesticFc.isFirstClass(state.tournamentId))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        } else {\n            simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),",
+      "replace": "        } else if (TournamentRules.rulesFor(state.tournamentId, fixture.stage)?.let { it.testDays > 0 } == true) {\n            // A custom multi-day format: played like a Test, with the player's own days, overs, innings and rules.\n            val customRules = TournamentRules.rulesFor(state.tournamentId, fixture.stage)\n            simulateFirstClass(home, away, state.tags, stadium, random, customRules?.testDays ?: 4, !TournamentRules.isLeagueStage(fixture.stage), rules = customRules)\n        } else {\n            simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentSummaryText.kt",
+      "find": "        val firstClass = state.fixtures.filter { it.result?.fcKind?.isNotEmpty() == true }",
+      "replace": "        val firstClass = if (TournamentRules.isCustom(state.tournamentId)) emptyList() else state.fixtures.filter { it.result?.fcKind?.isNotEmpty() == true }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentSummaryText.kt",
+      "find": "import com.cricketsim.logic.TournamentState\n",
+      "replace": "import com.cricketsim.logic.TournamentRules\nimport com.cricketsim.logic.TournamentState\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "            it.description() + \" A bowler bowls up to ${it.maxOversPerBowler} overs.\"",
+      "replace": "            it.description() + (if (it.isMultiDay) \"\" else \" A bowler bowls up to ${it.maxOversPerBowler} overs.\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "private enum class Step { List, Name, Overs, Restrictions, RestrictionOvers, Fielders, Summary }",
+      "replace": "private enum class Step { List, Name, Days, Overs, Innings, Declarations, FollowOn, FollowOnRuns, NewBall, NewBallOvers, Restrictions, RestrictionOvers, Fielders, Summary }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "    var fielders by remember { mutableStateOf(2) }\n\n    LaunchedEffect(Unit) { formats = store.load() }",
+      "replace": "    var fielders by remember { mutableStateOf(2) }\n    // The multi-day settings (a format of two to five days plays like a Test match).\n    var days by remember { mutableStateOf(1) }\n    var testInnings by remember { mutableStateOf(4) }\n    var declarations by remember { mutableStateOf(true) }\n    var followOnOn by remember { mutableStateOf(true) }\n    var followOnText by remember { mutableStateOf(\"200\") }\n    var newBallOn by remember { mutableStateOf(true) }\n    var newBallText by remember { mutableStateOf(\"80\") }\n\n    LaunchedEffect(Unit) { formats = store.load() }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "        fielders = 2\n        message = null\n        step = Step.Name",
+      "replace": "        fielders = 2\n        days = 1\n        testInnings = 4\n        declarations = true\n        followOnOn = true\n        followOnText = \"200\"\n        newBallOn = true\n        newBallText = \"80\"\n        message = null\n        step = Step.Name",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "    val draft = CustomFormat(\n        id = \"\", name = name.trim(), overs = overs,\n        restrictionsEnabled = restrict, restrictionOvers = if (restrict) restrictOvers else 0, fieldersOutside = fielders\n    )",
+      "replace": "    val draft = CustomFormat(\n        id = \"\", name = name.trim(), overs = overs,\n        restrictionsEnabled = days == 1 && restrict, restrictionOvers = if (days == 1 && restrict) restrictOvers else 0, fieldersOutside = fielders,\n        days = days, testInnings = testInnings, declarations = declarations,\n        followOnEnabled = followOnOn, followOnLead = followOnText.toIntOrNull() ?: 200,\n        newBallEnabled = newBallOn, newBallOvers = newBallText.toIntOrNull() ?: 80\n    )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "            onContinue = { step = Step.Overs },\n            onBack = { step = Step.List }",
+      "replace": "            onContinue = { step = Step.Days },\n            onBack = { step = Step.List }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "        Step.Overs -> TextInputPage(\n            title = \"Number of overs\",\n            hint = \"How many overs does each side bat? Type a number from ${CustomFormat.MIN_OVERS} to ${CustomFormat.MAX_OVERS}.\",\n            label = \"Overs per side\",\n            value = oversText,\n            onValueChange = { oversText = it.filter(Char::isDigit).take(3) },\n            numeric = true,\n            validate = { v ->\n                val n = v.toIntOrNull()\n                if (n == null || n < CustomFormat.MIN_OVERS || n > CustomFormat.MAX_OVERS) {\n                    \"Please type a number from ${CustomFormat.MIN_OVERS} to ${CustomFormat.MAX_OVERS}.\"\n                } else null\n            },\n            onContinue = { step = Step.Restrictions },\n            onBack = { step = Step.Name }\n        )\n",
+      "replace": "        Step.Days -> {\n            val back = { step = Step.Name }\n            BackHandler(onBack = back)\n            PageColumn {\n                BackButton(back)\n                Spacer(modifier = Modifier.height(16.dp))\n                PageHeading(\"Number of days\")\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(\n                    text = \"How many days does a match last? One day is a limited-overs match. More than one day is played like a Test match, with sessions.\",\n                    style = MaterialTheme.typography.bodyLarge\n                )\n                Spacer(modifier = Modifier.height(16.dp))\n                for (n in 1..CustomFormat.MAX_DAYS) {\n                    OptionButton(\n                        title = if (n == 1) \"1 day (the default)\" else \"$n days\",\n                        description = if (n == 1) \"A limited-overs match with the overs you choose next.\" else \"A multi-day match with lunch, tea and stumps every day.\",\n                        enabled = true,\n                        emphasised = n == days,\n                        onClick = { days = n; step = Step.Overs }\n                    )\n                    Spacer(modifier = Modifier.height(8.dp))\n                }\n            }\n        }\n\n        Step.Overs -> TextInputPage(\n            title = if (days > 1) \"Overs per day\" else \"Number of overs\",\n            hint = if (days > 1) {\n                \"How many overs are bowled each day? Type a number from ${CustomFormat.MIN_OVERS_PER_DAY} to ${CustomFormat.MAX_OVERS_PER_DAY}. Each day has three sessions: lunch, tea and stumps.\"\n            } else {\n                \"How many overs does each side bat? Type a number from ${CustomFormat.MIN_OVERS} to ${CustomFormat.MAX_OVERS}.\"\n            },\n            label = if (days > 1) \"Overs per day\" else \"Overs per side\",\n            value = oversText,\n            onValueChange = { oversText = it.filter(Char::isDigit).take(3) },\n            numeric = true,\n            validate = { v ->\n                val n = v.toIntOrNull()\n                val low = if (days > 1) CustomFormat.MIN_OVERS_PER_DAY else CustomFormat.MIN_OVERS\n                val high = if (days > 1) CustomFormat.MAX_OVERS_PER_DAY else CustomFormat.MAX_OVERS\n                if (n == null || n < low || n > high) \"Please type a number from $low to $high.\" else null\n            },\n            onContinue = { step = if (days > 1) Step.Innings else Step.Restrictions },\n            onBack = { step = Step.Days }\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "        Step.Restrictions -> {\n            BackHandler(onBack = { step = Step.Overs })",
+      "replace": "        Step.Innings -> {\n            val back = { step = Step.Overs }\n            BackHandler(onBack = back)\n            PageColumn {\n                BackButton(back)\n                Spacer(modifier = Modifier.height(16.dp))\n                PageHeading(\"Number of innings\")\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(\n                    text = \"How many innings does the match have? Two innings is one for each side. Four innings is two for each side, as in a Test match.\",\n                    style = MaterialTheme.typography.bodyLarge\n                )\n                Spacer(modifier = Modifier.height(16.dp))\n                OptionButton(\"Two innings\", \"One innings for each side. There is no follow-on.\", true, testInnings == 2) { testInnings = 2; step = Step.Declarations }\n                Spacer(modifier = Modifier.height(8.dp))\n                OptionButton(\"Four innings\", \"Two innings for each side, as in a Test match.\", true, testInnings == 4) { testInnings = 4; step = Step.Declarations }\n            }\n        }\n\n        Step.Declarations -> {\n            val back = { step = Step.Innings }\n            BackHandler(onBack = back)\n            PageColumn {\n                BackButton(back)\n                Spacer(modifier = Modifier.height(16.dp))\n                PageHeading(\"Declarations\")\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(\n                    text = \"Can a batting captain declare an innings closed before the side is all out?\",\n                    style = MaterialTheme.typography.bodyLarge\n                )\n                Spacer(modifier = Modifier.height(16.dp))\n                OptionButton(\"Declarations on\", \"A captain may declare, and the computer's captain does too.\", true, declarations) {\n                    declarations = true\n                    step = if (testInnings == 4) Step.FollowOn else Step.NewBall\n                }\n                Spacer(modifier = Modifier.height(8.dp))\n                OptionButton(\"Declarations off\", \"Every innings ends only when the side is all out or time runs out.\", true, !declarations) {\n                    declarations = false\n                    step = if (testInnings == 4) Step.FollowOn else Step.NewBall\n                }\n            }\n        }\n\n        Step.FollowOn -> {\n            val back = { step = Step.Declarations }\n            BackHandler(onBack = back)\n            PageColumn {\n                BackButton(back)\n                Spacer(modifier = Modifier.height(16.dp))\n                PageHeading(\"Follow-on\")\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(\n                    text = \"Can the side that bats first make the other side follow on when it leads by enough runs?\",\n                    style = MaterialTheme.typography.bodyLarge\n                )\n                Spacer(modifier = Modifier.height(16.dp))\n                OptionButton(\"Follow-on on\", \"You choose how many runs of lead are needed next.\", true, followOnOn) { followOnOn = true; step = Step.FollowOnRuns }\n                Spacer(modifier = Modifier.height(8.dp))\n                OptionButton(\"Follow-on off\", \"Each side always bats in turn.\", true, !followOnOn) { followOnOn = false; step = Step.NewBall }\n            }\n        }\n\n        Step.FollowOnRuns -> TextInputPage(\n            title = \"Runs for the follow-on\",\n            hint = \"After how many runs of lead after the first innings may the follow-on be enforced? Type a number from 1 to ${CustomFormat.MAX_FOLLOW_ON_LEAD}. A Test match uses 200.\",\n            label = \"Runs of lead\",\n            value = followOnText,\n            onValueChange = { followOnText = it.filter(Char::isDigit).take(3) },\n            numeric = true,\n            validate = { v ->\n                val n = v.toIntOrNull()\n                if (n == null || n < 1 || n > CustomFormat.MAX_FOLLOW_ON_LEAD) \"Please type a number from 1 to ${CustomFormat.MAX_FOLLOW_ON_LEAD}.\" else null\n            },\n            onContinue = { step = Step.NewBall },\n            onBack = { step = Step.FollowOn }\n        )\n\n        Step.NewBall -> {\n            val back = { step = if (testInnings == 4) (if (followOnOn) Step.FollowOnRuns else Step.FollowOn) else Step.Declarations }\n            BackHandler(onBack = back)\n            PageColumn {\n                BackButton(back)\n                Spacer(modifier = Modifier.height(16.dp))\n                PageHeading(\"New ball\")\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(\n                    text = \"Can the fielding side take a new ball once the old one has been used for a number of overs?\",\n                    style = MaterialTheme.typography.bodyLarge\n                )\n                Spacer(modifier = Modifier.height(16.dp))\n                OptionButton(\"New ball on\", \"You choose after how many overs it is available next.\", true, newBallOn) { newBallOn = true; step = Step.NewBallOvers }\n                Spacer(modifier = Modifier.height(8.dp))\n                OptionButton(\"New ball off\", \"The same ball is used for the whole innings.\", true, !newBallOn) { newBallOn = false; step = Step.Summary }\n            }\n        }\n\n        Step.NewBallOvers -> TextInputPage(\n            title = \"Overs for the new ball\",\n            hint = \"After how many overs with the old ball is the new ball available? Type a number from 1 to ${maxOf(overs * days, 1)}. A Test match uses 80.\",\n            label = \"Overs with the old ball\",\n            value = newBallText,\n            onValueChange = { newBallText = it.filter(Char::isDigit).take(3) },\n            numeric = true,\n            validate = { v ->\n                val n = v.toIntOrNull()\n                val high = maxOf(overs * days, 1)\n                if (n == null || n < 1 || n > high) \"Please type a number from 1 to $high.\" else null\n            },\n            onContinue = { step = Step.Summary },\n            onBack = { step = Step.NewBall }\n        )\n\n        Step.Restrictions -> {\n            BackHandler(onBack = { step = Step.Overs })",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "            val back = { step = if (restrict) Step.Fielders else Step.Restrictions }",
+      "replace": "            val back = { step = if (days > 1) (if (newBallOn) Step.NewBallOvers else Step.NewBall) else if (restrict) Step.Fielders else Step.Restrictions }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "                    Text(\n                        text = \"Each bowler can bowl at most ${draft.maxOversPerBowler} overs (a fifth of the innings, rounded up).\",\n                        style = MaterialTheme.typography.bodyMedium,\n                        color = MaterialTheme.colorScheme.onSurfaceVariant\n                    )",
+      "replace": "                    if (!draft.isMultiDay) Text(\n                        text = \"Each bowler can bowl at most ${draft.maxOversPerBowler} overs (a fifth of the innings, rounded up).\",\n                        style = MaterialTheme.typography.bodyMedium,\n                        color = MaterialTheme.colorScheme.onSurfaceVariant\n                    )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/AdvancedCustomisationScreens.kt",
+      "find": "                        text = f.description() + \" Each bowler can bowl at most ${f.maxOversPerBowler} overs.\",",
+      "replace": "                        text = f.description() + (if (f.isMultiDay) \"\" else \" Each bowler can bowl at most ${f.maxOversPerBowler} overs.\"),",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CUSTOM_MULTI_DAY_FORMATS.md",
+      "content": "# Custom formats of two to five days\n\n**Create Custom Format** now asks, after the name: the number of days (1 to 5, default 1). One day is the limited-overs flow\nas before. For two or more days the format plays like a Test match: overs per day (6 to 90), number of innings (two or four),\ndeclarations on or off, follow-on on or off with the runs of lead that allow it (four innings only), and the new ball on or off\nwith the overs after which it is available. DRS and rain are the tournament's own settings and apply to these formats too\n(rain: see TEST_RAIN_AND_TOURNAMENT_SUMMARY.md).\n\nHow it works: `CustomFormat` (days, testInnings, declarations, followOnEnabled/Lead, newBallEnabled/Overs) -> `TournamentRules.rulesForFormat`\nmakes a `MatchRules` with `testDays > 0` -> the match is a Test (`TestMatch.start(rules)` copies the settings into `TestState`).\n`TestMatch` runs on the format's own day length: a day is three sessions (a third of the overs each, the last ending on the day's\nlast over), so lunch, tea, stumps, drinks, rain and the draw all follow it. Two innings: the second innings is the chase of the first\ninnings' total; a side that does not finish by the end of the last day draws. Computer-v-computer matches use\n`CplSimulator.simulateFirstClass(rules = ...)`. In a custom tournament a drawn league match is shared (a point each, the table's\nusual no-result rule); a drawn knockout match goes to the side ahead on the first innings.\n\nThe Test dials (`SCALE_*`, the new-ball effect, the computer's declaration rule) were written for 90-over days; the computer's\ndeclaration thresholds are scaled by the day length, nothing else was re-measured for short days.\n",
+      "mustNotExist": true
+    }
+  ]
+}
