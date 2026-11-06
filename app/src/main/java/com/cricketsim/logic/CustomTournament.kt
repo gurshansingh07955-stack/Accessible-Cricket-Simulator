@@ -100,7 +100,7 @@ object TournamentFormats {
     fun custom(formats: List<CustomFormat>): List<FormatOption> = formats.map {
         FormatOption(
             "custom:" + it.id, it.name + " (custom)",
-            it.description() + " A bowler bowls up to ${it.maxOversPerBowler} overs."
+            it.description() + (if (it.isMultiDay) "" else " A bowler bowls up to ${it.maxOversPerBowler} overs.")
         )
     }
 

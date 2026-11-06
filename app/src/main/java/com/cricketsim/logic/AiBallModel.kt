@@ -180,7 +180,7 @@ object AiBallModel {
             }
         }
         // The fourth innings of a first-class match: go for it when the runs are within reach, block for the draw when they are not.
-        if (test && state.currentInnings == 4 && target != null) {
+        if (test && state.currentInnings == TestMatch.inningsCount(state) && target != null) {
             val need = target - state.score.runs
             val ballsLeft = maxOf(1, TestMatch.ballsLeft(state))
             val required = need * 6.0 / ballsLeft

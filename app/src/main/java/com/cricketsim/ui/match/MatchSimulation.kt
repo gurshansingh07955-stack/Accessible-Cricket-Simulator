@@ -470,7 +470,7 @@ object MatchSimulation {
     /** True once the second innings has reached (or passed) the target — the chase is won. */
     fun isTargetReached(state: MatchState): Boolean {
         val target = state.target ?: return false
-        return state.currentInnings == (if (state.test != null) 4 else 2) && state.score.runs >= target
+        return state.currentInnings == (if (state.test != null) com.cricketsim.logic.TestMatch.inningsCount(state) else 2) && state.score.runs >= target
     }
 
     /**

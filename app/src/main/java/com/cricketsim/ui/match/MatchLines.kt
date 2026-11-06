@@ -72,7 +72,7 @@ object MatchLines {
      */
     private fun chase(state: MatchState): Chase? {
         val target = state.target ?: return null
-        if (state.currentInnings != (if (state.test != null) 4 else 2)) return null
+        if (state.currentInnings != (if (state.test != null) com.cricketsim.logic.TestMatch.inningsCount(state) else 2)) return null
         val runsNeeded = maxOf(target - state.score.runs, 0)
         val ballsBowled = state.score.overs * 6 + state.score.balls
         val ballsRemaining = if (state.test != null) com.cricketsim.logic.TestMatch.ballsLeft(state) else maxOf(state.oversLimit * 6 - ballsBowled, 0)
@@ -98,7 +98,7 @@ object MatchLines {
      * rather than smoothly.
      */
     fun winProbabilityLine(state: MatchState): String? {
-        if (state.target == null || state.currentInnings != (if (state.test != null) 4 else 2)) return null
+        if (state.target == null || state.currentInnings != (if (state.test != null) com.cricketsim.logic.TestMatch.inningsCount(state) else 2)) return null
         val percent = MatchEngine.calculateWinProbability(state)
         return "Win probability: $percent percent for ${state.battingTeam.name}."
     }

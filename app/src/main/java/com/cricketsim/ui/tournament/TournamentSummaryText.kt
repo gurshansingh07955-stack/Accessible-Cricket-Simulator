@@ -8,6 +8,7 @@ import android.widget.Toast
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.CplSimulator
 import com.cricketsim.logic.IplSeason
+import com.cricketsim.logic.TournamentRules
 import com.cricketsim.logic.TournamentState
 import java.util.Locale
 
@@ -74,7 +75,7 @@ internal object TournamentSummaryText {
         }
 
         // ---- The points table(s)
-        val firstClass = state.fixtures.filter { it.result?.fcKind?.isNotEmpty() == true }
+        val firstClass = if (TournamentRules.isCustom(state.tournamentId)) emptyList() else state.fixtures.filter { it.result?.fcKind?.isNotEmpty() == true }
         if (firstClass.isNotEmpty()) {
             class Row(val name: String) {
                 var played = 0

@@ -1,6 +1,6 @@
-Patch run: 42140085649
-Timestamp (UTC): 2026-11-06T00:53:53Z
+Patch run: 42185909584
+Timestamp (UTC): 2026-11-06T08:11:39Z
 Result: OK
 -----
-Patch 2026-11-06-078-test-rain-and-tournament-summary.json
-  applied 25 operation(s) to 8 file(s)
+Patch 2026-11-06-079-custom-multi-day-formats.json
+  applied 59 operation(s) to 11 file(s)

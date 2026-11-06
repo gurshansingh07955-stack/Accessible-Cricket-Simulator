@@ -21,7 +21,17 @@ data class MatchRules(
     /** True = a tied match is not settled by a Super Over (the result is a tie). */
     val noSuperOver: Boolean = false,
     /** 0 = not a Test; 4 or 5 = the days of a first-class match (logic/TestMatch.kt). */
-    val testDays: Int = 0
+    val testDays: Int = 0,
+    /** Multi-day custom formats: overs bowled in a day (90 in a Test). Only read when a match starts. */
+    val oversPerDay: Int = 90,
+    /** 2 = one innings each, 4 = two each (a Test). */
+    val testInnings: Int = 4,
+    val declarations: Boolean = true,
+    val followOn: Boolean = true,
+    /** Runs of first-innings lead that allow the follow-on (0 = the Test's 200, or 150 in a four-day match). */
+    val followOnLead: Int = 0,
+    val newBall: Boolean = true,
+    val newBallOvers: Int = 80
 )
 
 /**
@@ -74,6 +84,16 @@ object TournamentRules {
         if (key.startsWith("custom:")) {
             val id = key.removePrefix("custom:")
             val cf = Customisation.customFormats().find { it.id == id } ?: return null
+            // A format of two to five days plays like a Test (logic/TestMatch.kt) with the player's own days, overs, innings and rules.
+            if (cf.isMultiDay) {
+                return MatchRules(
+                    overs = cf.days * cf.overs, restrictionBalls = 0, fieldersOutside = 5,
+                    drsReviews = DrsSystem.reviewsPerInnings(MatchFormat.TEST), rainEnabled = true, maxOversPerBowler = 999,
+                    noSuperOver = true, testDays = cf.days, oversPerDay = cf.overs, testInnings = cf.testInnings,
+                    declarations = cf.declarations, followOn = cf.followOnEnabled && cf.testInnings == 4,
+                    followOnLead = if (cf.followOnEnabled) cf.followOnLead else 0, newBall = cf.newBallEnabled, newBallOvers = cf.newBallOvers
+                )
+            }
             return MatchRules(
                 overs = cf.overs,
                 restrictionBalls = if (cf.restrictionsEnabled) cf.restrictionOvers * 6 else 0,
@@ -108,7 +128,7 @@ object TournamentRules {
             return base.copy(
                 drsReviews = if (def.drsEnabled) def.drsReviews else 0,
                 rainEnabled = def.rainEnabled,
-                noSuperOver = def.noSuperOver && isLeagueStage(stage)
+                noSuperOver = base.testDays > 0 || (def.noSuperOver && isLeagueStage(stage))
             )
         }
         val key = Customisation.tournamentEdit(tournamentId)?.formatKey ?: return null
@@ -116,7 +136,7 @@ object TournamentRules {
     }
 
     /** The game format to play the tournament as (null = the tournament's own format, unchanged). */
-    fun baseFormatFor(tournamentId: String?): MatchFormat? = rulesFor(tournamentId)?.let { baseFormatForOvers(it.overs) }
+    fun baseFormatFor(tournamentId: String?): MatchFormat? = rulesFor(tournamentId)?.let { if (it.testDays > 0) MatchFormat.TEST else baseFormatForOvers(it.overs) }
 
     /** Balls in a full innings, for net run rate (null = unchanged). */
     fun ballsFor(tournamentId: String?): Int? = rulesFor(tournamentId)?.let { it.overs * 6 }

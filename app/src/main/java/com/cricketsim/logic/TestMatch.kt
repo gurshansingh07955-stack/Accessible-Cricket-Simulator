@@ -42,7 +42,19 @@ data class TestState(
     /** Rain stoppages so far in this match. */
     val rainStops: Int = 0,
     /** The lines of the rain pop-up while [breakPhase] is 3; null otherwise (and on old saves). */
-    val rainLines: List<String>? = null
+    val rainLines: List<String>? = null,
+    // The settings of a custom multi-day format. Each is stored so that 0 / false means "a Test's own" (old saves read right).
+    /** Overs a day when it is not the Test's 90; 0 = 90. */
+    val oversPerDayCustom: Int = 0,
+    /** Two innings (one each) instead of four. */
+    val twoInnings: Boolean = false,
+    val noDeclarations: Boolean = false,
+    val noFollowOn: Boolean = false,
+    /** Lead that allows the follow-on; 0 = 200 (150 in a four-day match). */
+    val followOnLeadCustom: Int = 0,
+    val noNewBall: Boolean = false,
+    /** Overs with the old ball before the new one is available when it is not 80; 0 = 80. */
+    val newBallOversCustom: Int = 0
 )
 
 data class TestOutcome(val winnerId: String?, val text: String)
@@ -88,7 +100,19 @@ object TestMatch {
     fun applies(format: MatchFormat, rules: MatchRules?): Boolean =
         FIVE_DAY_TEST && format == MatchFormat.TEST && (rules == null || rules.testDays > 0)
 
-    fun start(rules: MatchRules? = null): TestState = TestState(days = rules?.testDays?.takeIf { it > 0 } ?: DAYS)
+    fun start(rules: MatchRules? = null): TestState {
+        val r = rules?.takeIf { it.testDays > 0 }
+        return TestState(
+            days = r?.testDays ?: DAYS,
+            oversPerDayCustom = r?.oversPerDay?.takeIf { it in 1..89 } ?: 0,
+            twoInnings = r?.testInnings == 2,
+            noDeclarations = r != null && !r.declarations,
+            noFollowOn = r != null && !r.followOn,
+            followOnLeadCustom = r?.followOnLead?.takeIf { it > 0 } ?: 0,
+            noNewBall = r != null && !r.newBall,
+            newBallOversCustom = r?.newBallOvers?.takeIf { it > 0 && it != NEW_BALL_OVERS } ?: 0
+        )
+    }
 
     /** The rules of a first-class match of this many days played by two computer sides (no DRS, no Super Over; rain as in a Test). */
     fun rulesForDays(days: Int): MatchRules = MatchRules(
@@ -96,10 +120,44 @@ object TestMatch {
         rainEnabled = true, maxOversPerBowler = 999, noSuperOver = true, testDays = days
     )
 
-    fun totalBalls(s: MatchState): Int = (s.test?.days ?: DAYS) * BALLS_PER_DAY
+    fun totalBalls(s: MatchState): Int = (s.test?.days ?: DAYS) * dayBalls(s)
 
-    /** 200 in a five-day match, 150 in a four-day one. */
-    fun followOnLead(s: MatchState): Int = if ((s.test?.days ?: DAYS) >= 5) FOLLOW_ON_LEAD else 150
+    /** Overs bowled in a day: 90 in a Test, or the custom format's own. */
+    fun perDayOvers(s: MatchState): Int = s.test?.oversPerDayCustom?.takeIf { it > 0 } ?: OVERS_PER_DAY
+
+    fun dayBalls(s: MatchState): Int = perDayOvers(s) * 6
+
+    /** 1.0 for a 90-over day: the dials written for a Test day are scaled by this for a shorter one. */
+    private fun dayScale(s: MatchState): Double = perDayOvers(s) / 90.0
+
+    /** Two innings (one each) or four. */
+    fun inningsCount(s: MatchState): Int = if (s.test?.twoInnings == true) 2 else 4
+
+    /** Overs with the old ball before the new one is available: 80 in a Test. */
+    fun newBallOvers(s: MatchState): Int = s.test?.newBallOversCustom?.takeIf { it > 0 } ?: NEW_BALL_OVERS
+
+    /**
+     * The clock ball at which break number k is due (1 = day one's lunch, 2 = tea, 3 = stumps, 4 = day two's lunch...):
+     * a day is three sessions of a third each, and the last session ends exactly on the day's last over.
+     */
+    fun breakAt(s: MatchState, k: Int): Int {
+        if (k <= 0) return 0
+        val d = perDayOvers(s)
+        val day = (k - 1) / 3
+        val pos = (k - 1) % 3 + 1
+        return (day * d + pos * d / 3) * 6
+    }
+
+    /** How many breaks the clock has already run through. */
+    fun breaksReached(s: MatchState, clock: Int): Int {
+        var k = 0
+        while (k < 60 && breakAt(s, k + 1) <= clock) k++
+        return k
+    }
+
+    /** 200 in a five-day match, 150 in a four-day one, or the custom format's own. */
+    fun followOnLead(s: MatchState): Int =
+        s.test?.followOnLeadCustom?.takeIf { it > 0 } ?: if ((s.test?.days ?: DAYS) >= 5) FOLLOW_ON_LEAD else 150
 
     private fun ballsOf(score: MatchScore): Int = score.overs * 6 + score.balls
 
@@ -209,7 +267,7 @@ object TestMatch {
         if (s.matchStatus != MatchStatus.IN_PROGRESS || s.superOverRound != 0) return false
         if (s.score.balls != 0 || s.pendingDismissal != null || s.activeRainDelay != null || s.drinksBreak != null) return false
         val mb = clockBalls(s)
-        return mb < totalBalls(s) && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION
+        return mb < totalBalls(s) && mb >= breakAt(s, t.breaksDone + 1)
     }
 
     fun beginBreak(s: MatchState): MatchState {
@@ -233,7 +291,11 @@ object TestMatch {
     fun drinksDue(s: MatchState): Boolean {
         if (s.test == null) return false
         val mb = clockBalls(s)
-        return s.score.balls == 0 && (mb % BALLS_PER_SESSION) in 90..95
+        val k = breaksReached(s, mb)
+        val start = breakAt(s, k)
+        val size = breakAt(s, k + 1) - start
+        if (size < 48) return false // a session of fewer than 8 overs has no drinks break
+        return s.score.balls == 0 && (mb - start) in (size / 2) until (size / 2 + 6)
     }
 
     /** The break that has just been called (or the one that has just ended) is stumps, not lunch or tea. */
@@ -260,7 +322,7 @@ object TestMatch {
         val bat = s.battingTeam
         if (s.currentInnings == 1) return "${bat.name} are batting first."
         val target = s.target
-        if (s.currentInnings == 4 && target != null) {
+        if (s.currentInnings == inningsCount(s) && target != null) {
             val need = (target - s.score.runs).coerceAtLeast(0)
             val inHand = bat.players.size - 1 - s.score.wickets
             return "${bat.name} need ${plural(need, "run")} to win, with ${plural(inHand, "wicket")} in hand."
@@ -275,7 +337,7 @@ object TestMatch {
 
     private fun timeLine(s: MatchState): String {
         val t = s.test ?: return ""
-        val today = (((t.breaksDone / 3) + 1) * BALLS_PER_DAY - clockBalls(s)).coerceIn(0, BALLS_PER_DAY) / 6
+        val today = (((t.breaksDone / 3) + 1) * dayBalls(s) - clockBalls(s)).coerceIn(0, dayBalls(s)) / 6
         return "${plural(oversLeft(s), "over")} remain in the match, ${today} of them today."
     }
 
@@ -332,21 +394,23 @@ object TestMatch {
         if (s.activeRainDelay != null || s.drinksBreak != null) return null
         if (oversLeft(s) <= RAIN_KEEP_OVERS + 12) return null
         val wet = if (s.weather.condition == WeatherCondition.LIGHT_RAIN) 1.5 else 1.0
-        val perOver = s.weather.rainChancePercent / 100.0 * wet * RAIN_FACTOR / (t.days * OVERS_PER_DAY)
+        val perOver = s.weather.rainChancePercent / 100.0 * wet * RAIN_FACTOR / (totalBalls(s) / 6.0)
         if (Random.nextDouble() >= perOver) return null
 
         val clock = clockBalls(s)
-        val toDayEnd = (BALLS_PER_DAY - clock % BALLS_PER_DAY) / 6
+        val toDayEnd = (dayBalls(s) - clock % dayBalls(s)) / 6
         val roll = Random.nextDouble()
         val wanted = when {
             roll < 0.5 -> 8 + Random.nextInt(13)
             roll < 0.85 -> 20 + Random.nextInt(21)
             else -> maxOf(toDayEnd, 12)
         }
-        val lostOvers = wanted.coerceAtMost(oversLeft(s) - RAIN_KEEP_OVERS).coerceAtLeast(1)
+        // A shorter day loses proportionally fewer overs to a stoppage (the day-ending washout is already in the day's own length).
+        val scaled = if (roll < 0.85) (wanted * minOf(1.0, dayScale(s))).toInt() else wanted
+        val lostOvers = scaled.coerceAtMost(oversLeft(s) - RAIN_KEEP_OVERS).coerceAtLeast(1)
         val lost = lostOvers * 6
         // Breaks the lost time ran through are not taken: play simply resumes in the session the clock has reached.
-        val breaks = maxOf(t.breaksDone, (clock + lost) / BALLS_PER_SESSION)
+        val breaks = maxOf(t.breaksDone, breaksReached(s, clock + lost))
         val after = t.copy(lostBalls = t.lostBalls + lost, rainStops = t.rainStops + 1, breaksDone = breaks, breakPhase = 3)
         val moved = s.copy(test = after)
         val resume = if (breaks % 3 == 0) "Play will resume on day ${breaks / 3 + 1}."
@@ -406,10 +470,11 @@ object TestMatch {
         if (!t.currentRecorded) return null
         val list = t.completed
         val n = list.size
-        if (n < 3) return null
+        val total = inningsCount(s)
+        if (n < total - 1 || (n == total - 1 && total != 4)) return null
         val last = list[n - 1]
         fun runsOf(teamId: String): Int = list.filter { it.data.battingTeamId == teamId }.sumOf { it.score.runs }
-        if (n == 3) {
+        if (n == 3 && total == 4) {
             if (!(last.allOut || last.declared)) return null
             val twice = teamOf(s, last.data.battingTeamId)
             val once = otherTeam(s, twice.id)
@@ -432,7 +497,7 @@ object TestMatch {
         val t = s.test ?: return "Match drawn."
         val last = t.completed.lastOrNull() ?: return "Match drawn."
         val target = s.target
-        if (t.completed.size == 4 && target != null) {
+        if (t.completed.size == inningsCount(s) && target != null) {
             val need = (target - last.score.runs).coerceAtLeast(0)
             return "Match drawn. ${last.data.battingTeamName} finished on ${last.score.runs} for ${last.score.wickets}, needing ${plural(need, "more run")}."
         }
@@ -457,7 +522,7 @@ object TestMatch {
 
     fun followOnAvailable(s: MatchState): Boolean {
         val t = s.test ?: return false
-        if (t.completed.size != 2 || !t.currentRecorded) return false
+        if (t.completed.size != 2 || !t.currentRecorded || t.twoInnings || t.noFollowOn) return false
         return t.completed[0].score.runs - t.completed[1].score.runs >= followOnLead(s)
     }
 
@@ -487,8 +552,8 @@ object TestMatch {
         if (t.completed.size < 2) return false
         val lead = t.completed[0].score.runs - t.completed[1].score.runs
         val p = when {
-            oversLeft(s) < 90 -> 0.0
-            oversLeft(s) < 130 -> if (lead >= 300) 0.4 else 0.15
+            oversLeft(s) < perDayOvers(s) -> 0.0
+            oversLeft(s) < perDayOvers(s) * 13 / 9 -> if (lead >= 300) 0.4 else 0.15
             else -> if (lead >= 300) 0.9 else 0.6
         }
         return Random.nextDouble() < p
@@ -508,7 +573,7 @@ object TestMatch {
             else -> if (t.followOn) a else b
         }
         val bowling = otherTeam(s, batting.id)
-        val target: Int? = if (next == 4) {
+        val target: Int? = if (next == inningsCount(s)) {
             val own = t.completed.filter { it.data.battingTeamId == batting.id }.sumOf { it.score.runs }
             val opposition = t.completed.filter { it.data.battingTeamId != batting.id }.sumOf { it.score.runs }
             opposition - own + 1
@@ -552,26 +617,26 @@ object TestMatch {
     /** The user's side is batting in the first three innings and the ball is dead. */
     fun canDeclare(s: MatchState): Boolean {
         val t = s.test ?: return false
-        return !t.currentRecorded && t.breakPhase == 0 && !t.followOnPending &&
+        return !t.currentRecorded && !t.noDeclarations && t.breakPhase == 0 && !t.followOnPending &&
             s.matchStatus == MatchStatus.IN_PROGRESS && s.battingTeam.id == s.userTeam.id &&
-            s.currentInnings in 1..3 && s.pendingDismissal == null && !s.needsOpenerSelection &&
+            s.currentInnings in 1 until inningsCount(s) && s.pendingDismissal == null && !s.needsOpenerSelection &&
             s.ballByBall.isNotEmpty()
     }
 
     /** The computer declares at the start of an over, when its lead is safe for the time left. */
     fun aiShouldDeclare(s: MatchState): Boolean {
         val t = s.test ?: return false
-        if (t.currentRecorded || t.breakPhase != 0 || t.followOnPending) return false
+        if (t.currentRecorded || t.noDeclarations || t.breakPhase != 0 || t.followOnPending) return false
         if (s.matchStatus != MatchStatus.IN_PROGRESS || s.battingTeam.id == s.userTeam.id) return false
-        if (s.currentInnings !in 1..3 || s.score.balls != 0 || s.pendingDismissal != null) return false
-        if (s.score.overs < 40) return false
+        if (s.currentInnings !in 1 until inningsCount(s) || s.score.balls != 0 || s.pendingDismissal != null) return false
+        if (s.score.overs < (40 * dayScale(s)).toInt()) return false
         if (s.currentInnings == 1) {
-            return s.score.runs >= 520 && s.score.overs >= 120 && Random.nextDouble() < 0.3
+            return s.score.runs >= (520 * dayScale(s)).toInt() && s.score.overs >= (120 * dayScale(s)).toInt() && Random.nextDouble() < 0.3
         }
         val timeLeft = oversLeft(s)
-        if (timeLeft < 50) return false
+        if (timeLeft < (50 * dayScale(s)).toInt()) return false
         val lead = teamRuns(s, s.battingTeam.id) - teamRuns(s, s.bowlingTeam.id)
-        val required = maxOf(120.0, 4.2 * (timeLeft - 48))
+        val required = maxOf(120.0 * dayScale(s), 4.2 * (timeLeft - 48 * dayScale(s)))
         return lead >= required && Random.nextDouble() < 0.5
     }
 
@@ -581,7 +646,7 @@ object TestMatch {
         var bias = -0.3
         val target = s.target
         val left = ballsLeft(s).coerceAtLeast(1)
-        if (s.currentInnings == 4 && target != null) {
+        if (s.currentInnings == inningsCount(s) && target != null) {
             val need = (target - s.score.runs).coerceAtLeast(0)
             val rate = need / (left / 6.0)
             bias = when {
@@ -592,7 +657,7 @@ object TestMatch {
             }
         } else if (s.currentInnings >= 2) {
             val lead = teamRuns(s, s.battingTeam.id) - teamRuns(s, s.bowlingTeam.id)
-            if (lead > 150 && left < 660) bias = 0.3
+            if (lead > 150 && left < (660 * dayScale(s)).toInt()) bias = 0.3
         }
         if (s.score.wickets >= 8) bias -= 0.1
         if (s.currentBowler.bowlingRating < 65) bias += 0.15
@@ -603,7 +668,7 @@ object TestMatch {
         var bias = 0.0
         if (s.score.wickets >= 7) bias += 0.3
         val target = s.target
-        if (s.currentInnings == 4 && target != null) {
+        if (s.currentInnings == inningsCount(s) && target != null) {
             val need = (target - s.score.runs).coerceAtLeast(0)
             val rate = need / (ballsLeft(s).coerceAtLeast(1) / 6.0)
             if (rate < 3.0) bias += 0.2 else if (rate > 6.0) bias -= 0.3
@@ -621,7 +686,8 @@ object TestMatch {
 
     fun newBallAvailable(s: MatchState): Boolean {
         val t = s.test ?: return false
-        return !t.currentRecorded && ballAge(s) >= NEW_BALL_OVERS * 6
+        if (t.noNewBall) return false
+        return !t.currentRecorded && ballAge(s) >= newBallOvers(s) * 6
     }
 
     /** The user is bowling, the old ball is 80 overs old and the ball is dead. */
@@ -664,8 +730,9 @@ object TestMatch {
 
     fun ballLine(s: MatchState): String {
         val overs = ballAge(s) / 6
+        if (s.test?.noNewBall == true) return "The ball is ${overs} overs old."
         return if (newBallAvailable(s)) "The ball is ${overs} overs old. The new ball is available."
-        else "The ball is ${overs} overs old. The new ball is due in ${NEW_BALL_OVERS - overs} overs."
+        else "The ball is ${overs} overs old. The new ball is due in ${newBallOvers(s) - overs} overs."
     }
 
     // ---------------------------------------------------------------- Match info
@@ -674,7 +741,7 @@ object TestMatch {
         val t = s.test ?: return emptyList()
         val k = t.breaksDone
         val lines = ArrayList<String>()
-        lines.add("Day ${k / 3 + 1} of ${t.days}, ${sessionName(k % 3 + 1)} session. Innings ${s.currentInnings} of 4.")
+        lines.add("Day ${k / 3 + 1} of ${t.days}, ${sessionName(k % 3 + 1)} session. Innings ${s.currentInnings} of ${inningsCount(s)}.")
         situationLine(s)?.let { lines.add(it) }
         lines.add(timeLine(s))
         lines.add(pitchReport(s))

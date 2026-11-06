@@ -104,7 +104,7 @@ private fun AdvancedMenu(onCreateFormat: () -> Unit, onCreateTeams: () -> Unit, 
     }
 }
 
-private enum class Step { List, Name, Overs, Restrictions, RestrictionOvers, Fielders, Summary }
+private enum class Step { List, Name, Days, Overs, Innings, Declarations, FollowOn, FollowOnRuns, NewBall, NewBallOvers, Restrictions, RestrictionOvers, Fielders, Summary }
 
 @Composable
 private fun CustomFormatFlow(onExit: () -> Unit) {
@@ -122,6 +122,14 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
     var restrict by remember { mutableStateOf(false) }
     var restrictOversText by remember { mutableStateOf("") }
     var fielders by remember { mutableStateOf(2) }
+    // The multi-day settings (a format of two to five days plays like a Test match).
+    var days by remember { mutableStateOf(1) }
+    var testInnings by remember { mutableStateOf(4) }
+    var declarations by remember { mutableStateOf(true) }
+    var followOnOn by remember { mutableStateOf(true) }
+    var followOnText by remember { mutableStateOf("200") }
+    var newBallOn by remember { mutableStateOf(true) }
+    var newBallText by remember { mutableStateOf("80") }
 
     LaunchedEffect(Unit) { formats = store.load() }
 
@@ -131,6 +139,13 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
         restrict = false
         restrictOversText = ""
         fielders = 2
+        days = 1
+        testInnings = 4
+        declarations = true
+        followOnOn = true
+        followOnText = "200"
+        newBallOn = true
+        newBallText = "80"
         message = null
         step = Step.Name
     }
@@ -139,7 +154,10 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
     val restrictOvers = restrictOversText.toIntOrNull() ?: 0
     val draft = CustomFormat(
         id = "", name = name.trim(), overs = overs,
-        restrictionsEnabled = restrict, restrictionOvers = if (restrict) restrictOvers else 0, fieldersOutside = fielders
+        restrictionsEnabled = days == 1 && restrict, restrictionOvers = if (days == 1 && restrict) restrictOvers else 0, fieldersOutside = fielders,
+        days = days, testInnings = testInnings, declarations = declarations,
+        followOnEnabled = followOnOn, followOnLead = followOnText.toIntOrNull() ?: 200,
+        newBallEnabled = newBallOn, newBallOvers = newBallText.toIntOrNull() ?: 80
     )
 
     when (step) {
@@ -182,7 +200,7 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(text = f.name, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = f.description() + " Each bowler can bowl at most ${f.maxOversPerBowler} overs.",
+                        text = f.description() + (if (f.isMultiDay) "" else " Each bowler can bowl at most ${f.maxOversPerBowler} overs."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -226,25 +244,168 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
                     else -> null
                 }
             },
-            onContinue = { step = Step.Overs },
+            onContinue = { step = Step.Days },
             onBack = { step = Step.List }
         )
 
+        Step.Days -> {
+            val back = { step = Step.Name }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Number of days")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "How many days does a match last? One day is a limited-overs match. More than one day is played like a Test match, with sessions.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                for (n in 1..CustomFormat.MAX_DAYS) {
+                    OptionButton(
+                        title = if (n == 1) "1 day (the default)" else "$n days",
+                        description = if (n == 1) "A limited-overs match with the overs you choose next." else "A multi-day match with lunch, tea and stumps every day.",
+                        enabled = true,
+                        emphasised = n == days,
+                        onClick = { days = n; step = Step.Overs }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+
         Step.Overs -> TextInputPage(
-            title = "Number of overs",
-            hint = "How many overs does each side bat? Type a number from ${CustomFormat.MIN_OVERS} to ${CustomFormat.MAX_OVERS}.",
-            label = "Overs per side",
+            title = if (days > 1) "Overs per day" else "Number of overs",
+            hint = if (days > 1) {
+                "How many overs are bowled each day? Type a number from ${CustomFormat.MIN_OVERS_PER_DAY} to ${CustomFormat.MAX_OVERS_PER_DAY}. Each day has three sessions: lunch, tea and stumps."
+            } else {
+                "How many overs does each side bat? Type a number from ${CustomFormat.MIN_OVERS} to ${CustomFormat.MAX_OVERS}."
+            },
+            label = if (days > 1) "Overs per day" else "Overs per side",
             value = oversText,
             onValueChange = { oversText = it.filter(Char::isDigit).take(3) },
             numeric = true,
             validate = { v ->
                 val n = v.toIntOrNull()
-                if (n == null || n < CustomFormat.MIN_OVERS || n > CustomFormat.MAX_OVERS) {
-                    "Please type a number from ${CustomFormat.MIN_OVERS} to ${CustomFormat.MAX_OVERS}."
-                } else null
+                val low = if (days > 1) CustomFormat.MIN_OVERS_PER_DAY else CustomFormat.MIN_OVERS
+                val high = if (days > 1) CustomFormat.MAX_OVERS_PER_DAY else CustomFormat.MAX_OVERS
+                if (n == null || n < low || n > high) "Please type a number from $low to $high." else null
             },
-            onContinue = { step = Step.Restrictions },
-            onBack = { step = Step.Name }
+            onContinue = { step = if (days > 1) Step.Innings else Step.Restrictions },
+            onBack = { step = Step.Days }
+        )
+
+        Step.Innings -> {
+            val back = { step = Step.Overs }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Number of innings")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "How many innings does the match have? Two innings is one for each side. Four innings is two for each side, as in a Test match.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OptionButton("Two innings", "One innings for each side. There is no follow-on.", true, testInnings == 2) { testInnings = 2; step = Step.Declarations }
+                Spacer(modifier = Modifier.height(8.dp))
+                OptionButton("Four innings", "Two innings for each side, as in a Test match.", true, testInnings == 4) { testInnings = 4; step = Step.Declarations }
+            }
+        }
+
+        Step.Declarations -> {
+            val back = { step = Step.Innings }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Declarations")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Can a batting captain declare an innings closed before the side is all out?",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OptionButton("Declarations on", "A captain may declare, and the computer's captain does too.", true, declarations) {
+                    declarations = true
+                    step = if (testInnings == 4) Step.FollowOn else Step.NewBall
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OptionButton("Declarations off", "Every innings ends only when the side is all out or time runs out.", true, !declarations) {
+                    declarations = false
+                    step = if (testInnings == 4) Step.FollowOn else Step.NewBall
+                }
+            }
+        }
+
+        Step.FollowOn -> {
+            val back = { step = Step.Declarations }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Follow-on")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Can the side that bats first make the other side follow on when it leads by enough runs?",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OptionButton("Follow-on on", "You choose how many runs of lead are needed next.", true, followOnOn) { followOnOn = true; step = Step.FollowOnRuns }
+                Spacer(modifier = Modifier.height(8.dp))
+                OptionButton("Follow-on off", "Each side always bats in turn.", true, !followOnOn) { followOnOn = false; step = Step.NewBall }
+            }
+        }
+
+        Step.FollowOnRuns -> TextInputPage(
+            title = "Runs for the follow-on",
+            hint = "After how many runs of lead after the first innings may the follow-on be enforced? Type a number from 1 to ${CustomFormat.MAX_FOLLOW_ON_LEAD}. A Test match uses 200.",
+            label = "Runs of lead",
+            value = followOnText,
+            onValueChange = { followOnText = it.filter(Char::isDigit).take(3) },
+            numeric = true,
+            validate = { v ->
+                val n = v.toIntOrNull()
+                if (n == null || n < 1 || n > CustomFormat.MAX_FOLLOW_ON_LEAD) "Please type a number from 1 to ${CustomFormat.MAX_FOLLOW_ON_LEAD}." else null
+            },
+            onContinue = { step = Step.NewBall },
+            onBack = { step = Step.FollowOn }
+        )
+
+        Step.NewBall -> {
+            val back = { step = if (testInnings == 4) (if (followOnOn) Step.FollowOnRuns else Step.FollowOn) else Step.Declarations }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("New ball")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Can the fielding side take a new ball once the old one has been used for a number of overs?",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OptionButton("New ball on", "You choose after how many overs it is available next.", true, newBallOn) { newBallOn = true; step = Step.NewBallOvers }
+                Spacer(modifier = Modifier.height(8.dp))
+                OptionButton("New ball off", "The same ball is used for the whole innings.", true, !newBallOn) { newBallOn = false; step = Step.Summary }
+            }
+        }
+
+        Step.NewBallOvers -> TextInputPage(
+            title = "Overs for the new ball",
+            hint = "After how many overs with the old ball is the new ball available? Type a number from 1 to ${maxOf(overs * days, 1)}. A Test match uses 80.",
+            label = "Overs with the old ball",
+            value = newBallText,
+            onValueChange = { newBallText = it.filter(Char::isDigit).take(3) },
+            numeric = true,
+            validate = { v ->
+                val n = v.toIntOrNull()
+                val high = maxOf(overs * days, 1)
+                if (n == null || n < 1 || n > high) "Please type a number from 1 to $high." else null
+            },
+            onContinue = { step = Step.Summary },
+            onBack = { step = Step.NewBall }
         )
 
         Step.Restrictions -> {
@@ -314,7 +475,7 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
         }
 
         Step.Summary -> {
-            val back = { step = if (restrict) Step.Fielders else Step.Restrictions }
+            val back = { step = if (days > 1) (if (newBallOn) Step.NewBallOvers else Step.NewBall) else if (restrict) Step.Fielders else Step.Restrictions }
             BackHandler(onBack = back)
             PageColumn {
                 BackButton(back)
@@ -326,7 +487,7 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = draft.description(), style = MaterialTheme.typography.bodyLarge)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
+                    if (!draft.isMultiDay) Text(
                         text = "Each bowler can bowl at most ${draft.maxOversPerBowler} overs (a fifth of the innings, rounded up).",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
