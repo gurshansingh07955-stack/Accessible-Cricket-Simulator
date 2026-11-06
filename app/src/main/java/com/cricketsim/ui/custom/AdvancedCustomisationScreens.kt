@@ -154,7 +154,7 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
     val restrictOvers = restrictOversText.toIntOrNull() ?: 0
     val draft = CustomFormat(
         id = "", name = name.trim(), overs = overs,
-        restrictionsEnabled = days == 1 && restrict, restrictionOvers = if (days == 1 && restrict) restrictOvers else 0, fieldersOutside = fielders,
+        restrictionsEnabled = restrict, restrictionOvers = if (restrict) restrictOvers else 0, fieldersOutside = fielders,
         days = days, testInnings = testInnings, declarations = declarations,
         followOnEnabled = followOnOn, followOnLead = followOnText.toIntOrNull() ?: 200,
         newBallEnabled = newBallOn, newBallOvers = newBallText.toIntOrNull() ?: 80
@@ -388,7 +388,7 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
                 Spacer(modifier = Modifier.height(16.dp))
                 OptionButton("New ball on", "You choose after how many overs it is available next.", true, newBallOn) { newBallOn = true; step = Step.NewBallOvers }
                 Spacer(modifier = Modifier.height(8.dp))
-                OptionButton("New ball off", "The same ball is used for the whole innings.", true, !newBallOn) { newBallOn = false; step = Step.Summary }
+                OptionButton("New ball off", "The same ball is used for the whole innings.", true, !newBallOn) { newBallOn = false; step = Step.Restrictions }
             }
         }
 
@@ -404,14 +404,16 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
                 val high = maxOf(overs * days, 1)
                 if (n == null || n < 1 || n > high) "Please type a number from 1 to $high." else null
             },
-            onContinue = { step = Step.Summary },
+            onContinue = { step = Step.Restrictions },
             onBack = { step = Step.NewBall }
         )
 
         Step.Restrictions -> {
-            BackHandler(onBack = { step = Step.Overs })
+            // One day: after the overs. Several days: the last question, after the new ball.
+            val back = { step = if (days > 1) (if (newBallOn) Step.NewBallOvers else Step.NewBall) else Step.Overs }
+            BackHandler(onBack = back)
             PageColumn {
-                BackButton { step = Step.Overs }
+                BackButton(back)
                 Spacer(modifier = Modifier.height(16.dp))
                 PageHeading("Fielding restrictions")
                 Spacer(modifier = Modifier.height(8.dp))
@@ -475,7 +477,7 @@ private fun CustomFormatFlow(onExit: () -> Unit) {
         }
 
         Step.Summary -> {
-            val back = { step = if (days > 1) (if (newBallOn) Step.NewBallOvers else Step.NewBall) else if (restrict) Step.Fielders else Step.Restrictions }
+            val back = { step = if (restrict) Step.Fielders else Step.Restrictions }
             BackHandler(onBack = back)
             PageColumn {
                 BackButton(back)

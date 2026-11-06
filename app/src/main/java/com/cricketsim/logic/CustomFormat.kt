@@ -15,7 +15,7 @@ package com.cricketsim.logic
  * [newBallEnabled] with [newBallOvers]. DRS and rain are tournament settings and work for these formats too.
  * Old saved formats have days 0 (read as one day).
  *
- * @param restrictionsEnabled whether the first [restrictionOvers] overs of each innings have a fielding restriction (one day only)
+ * @param restrictionsEnabled whether the first [restrictionOvers] overs of each innings have a fielding restriction
  * @param restrictionOvers how many overs the restriction lasts (0 when there is none)
  * @param fieldersOutside how many fielders may stay outside the fielding circle during the restriction
  */
@@ -71,6 +71,18 @@ data class CustomFormat(
             )
         }
         sb.append(if (newBallEnabled) "A new ball is available after $newBallOvers overs with the old one. " else "No new ball. ")
+        if (restrictionsEnabled) {
+            val period = if (restrictionOvers == 1) "the first over" else "the first $restrictionOvers overs"
+            sb.append("Fielding restrictions for $period of each innings: ").append(
+                when (fieldersOutside) {
+                    0 -> "no fielders may stand outside the circle. "
+                    1 -> "1 fielder may stand outside the circle. "
+                    else -> "$fieldersOutside fielders may stand outside the circle. "
+                }
+            )
+        } else {
+            sb.append("No fielding restrictions. ")
+        }
         sb.append("The match is drawn if the time runs out.")
         return sb.toString()
     }

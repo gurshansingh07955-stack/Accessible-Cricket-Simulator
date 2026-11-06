@@ -87,7 +87,8 @@ object TournamentRules {
             // A format of two to five days plays like a Test (logic/TestMatch.kt) with the player's own days, overs, innings and rules.
             if (cf.isMultiDay) {
                 return MatchRules(
-                    overs = cf.days * cf.overs, restrictionBalls = 0, fieldersOutside = 5,
+                    overs = cf.days * cf.overs, restrictionBalls = if (cf.restrictionsEnabled) cf.restrictionOvers * 6 else 0,
+                    fieldersOutside = if (cf.restrictionsEnabled) cf.fieldersOutside else 5,
                     drsReviews = DrsSystem.reviewsPerInnings(MatchFormat.TEST), rainEnabled = true, maxOversPerBowler = 999,
                     noSuperOver = true, testDays = cf.days, oversPerDay = cf.overs, testInnings = cf.testInnings,
                     declarations = cf.declarations, followOn = cf.followOnEnabled && cf.testInnings == 4,

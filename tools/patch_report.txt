@@ -1,6 +1,6 @@
-Patch run: 42185909584
-Timestamp (UTC): 2026-11-06T08:11:39Z
+Patch run: 42203644866
+Timestamp (UTC): 2026-11-06T10:34:10Z
 Result: OK
 -----
-Patch 2026-11-06-079-custom-multi-day-formats.json
-  applied 59 operation(s) to 11 file(s)
+Patch 2026-11-06-080-multi-day-restrictions.json
+  applied 8 operation(s) to 3 file(s)
