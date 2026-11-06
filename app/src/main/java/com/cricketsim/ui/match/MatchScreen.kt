@@ -450,6 +450,14 @@ fun MatchScreen(
         director?.speakWhenQuiet(TestMatch.breakSpoken(matchState)) { services?.announceSpoken(it) }
     }
 
+    // Rain has stopped play in a Test or first-class match: the rain sound and commentary, then the lost overs are read out.
+    LaunchedEffect(matchState.test?.breakPhase, matchState.test?.rainStops) {
+        val t = matchState.test ?: return@LaunchedEffect
+        if (t.breakPhase != 3) return@LaunchedEffect
+        director?.onRainStarted()
+        director?.speakWhenQuiet(TestMatch.breakSpoken(matchState)) { services?.announceSpoken(it) }
+    }
+
     // The new ball: the computer takes it once it is available; you are told once, and take it from Match info.
     LaunchedEffect(matchState.score.overs, matchState.currentInnings, matchState.test?.breakPhase, matchOver, showInningsBreak) {
         if (matchOver || showInningsBreak || matchState.test == null) return@LaunchedEffect
@@ -826,6 +834,10 @@ fun MatchScreen(
                 lines = TestMatch.screenLines(matchState),
                 continueLabel = if (testNow.breakPhase == 1) "Continue" else "Resume play",
                 onContinue = {
+                    if (testNow.breakPhase == 3) {
+                        director?.onRainResumed(false)
+                        services?.announceSpoken("Play resumes.")
+                    }
                     val next = TestMatch.continueBreak(matchState)
                     matchState = next
                 },

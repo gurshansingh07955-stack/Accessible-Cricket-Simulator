@@ -40,7 +40,7 @@ object DrinksBreak {
 
     /** Starts a drinks break if one is due after the over that has just finished; otherwise returns the state unchanged. */
     fun startIfDue(state: MatchState): MatchState {
-        if (state.activeRainDelay != null) return state
+        if (state.activeRainDelay != null || state.test?.breakPhase == 3) return state
         val interval = intervalFor(state.format) ?: return state
         val overs = state.score.overs
         if (overs <= 0 || overs <= state.lastDrinksBreakOver) return state

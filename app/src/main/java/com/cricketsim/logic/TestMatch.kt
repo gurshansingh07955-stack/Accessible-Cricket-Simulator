@@ -36,7 +36,13 @@ data class TestState(
     /** The user has been told that the new ball is available. */
     val newBallNotified: Boolean = false,
     /** The length of the match: 5 days in a Test, 4 in a Ranji Trophy league match. */
-    val days: Int = 5
+    val days: Int = 5,
+    /** Balls of play lost to rain so far. They use up the match clock (see [TestMatch.clockBalls]) but are never bowled. */
+    val lostBalls: Int = 0,
+    /** Rain stoppages so far in this match. */
+    val rainStops: Int = 0,
+    /** The lines of the rain pop-up while [breakPhase] is 3; null otherwise (and on old saves). */
+    val rainLines: List<String>? = null
 )
 
 data class TestOutcome(val winnerId: String?, val text: String)
@@ -84,10 +90,10 @@ object TestMatch {
 
     fun start(rules: MatchRules? = null): TestState = TestState(days = rules?.testDays?.takeIf { it > 0 } ?: DAYS)
 
-    /** The rules of a first-class match of this many days played by two computer sides (no DRS, no rain, no Super Over). */
+    /** The rules of a first-class match of this many days played by two computer sides (no DRS, no Super Over; rain as in a Test). */
     fun rulesForDays(days: Int): MatchRules = MatchRules(
         overs = days * OVERS_PER_DAY, restrictionBalls = 0, fieldersOutside = 5, drsReviews = 0,
-        rainEnabled = false, maxOversPerBowler = 999, noSuperOver = true, testDays = days
+        rainEnabled = true, maxOversPerBowler = 999, noSuperOver = true, testDays = days
     )
 
     fun totalBalls(s: MatchState): Int = (s.test?.days ?: DAYS) * BALLS_PER_DAY
@@ -123,14 +129,20 @@ object TestMatch {
         return if (t.currentRecorded) done else done + ballsOf(s.score)
     }
 
-    fun ballsLeft(s: MatchState): Int = (totalBalls(s) - matchBalls(s)).coerceAtLeast(0)
+    /**
+     * The match clock: balls bowled plus balls lost to rain. Sessions, days, the overs that remain and the draw all run on it,
+     * so a rain stoppage uses up time exactly as it does in a real match.
+     */
+    fun clockBalls(s: MatchState): Int = matchBalls(s) + (s.test?.lostBalls ?: 0)
+
+    fun ballsLeft(s: MatchState): Int = (totalBalls(s) - clockBalls(s)).coerceAtLeast(0)
 
     fun oversLeft(s: MatchState): Int = ballsLeft(s) / 6
 
     /** The 450 overs are bowled (checked when an over ends, or when an innings ends). */
     fun timeUp(s: MatchState): Boolean {
         val t = s.test ?: return false
-        return matchBalls(s) >= totalBalls(s) && (t.currentRecorded || s.score.balls == 0)
+        return clockBalls(s) >= totalBalls(s) && (t.currentRecorded || s.score.balls == 0)
     }
 
     private fun teamRuns(s: MatchState, teamId: String): Int {
@@ -153,7 +165,7 @@ object TestMatch {
     /** 0 (day one) to about 1 (day five); a dusty pitch wears faster, a flat one slower. Used by MatchEngine. */
     fun wearFactor(s: MatchState): Double {
         if (s.test == null) return 0.0
-        val base = (matchBalls(s).toDouble() / totalBalls(s)).coerceIn(0.0, 1.0)
+        val base = (clockBalls(s).toDouble() / totalBalls(s)).coerceIn(0.0, 1.0)
         val rate = when (s.pitchType) {
             PitchType.DUSTY -> 1.3
             PitchType.BATTING -> 0.7
@@ -196,7 +208,7 @@ object TestMatch {
         if (t.breakPhase != 0 || t.followOnPending || t.currentRecorded) return false
         if (s.matchStatus != MatchStatus.IN_PROGRESS || s.superOverRound != 0) return false
         if (s.score.balls != 0 || s.pendingDismissal != null || s.activeRainDelay != null || s.drinksBreak != null) return false
-        val mb = matchBalls(s)
+        val mb = clockBalls(s)
         return mb < totalBalls(s) && mb >= (t.breaksDone + 1) * BALLS_PER_SESSION
     }
 
@@ -208,6 +220,8 @@ object TestMatch {
     /** Pop-up one (the break) moves on to pop-up two (play resumes); pop-up two ends the break. */
     fun continueBreak(s: MatchState): MatchState {
         val t = s.test ?: return s
+        // The rain pop-up has one step: Resume play.
+        if (t.breakPhase == 3) return s.copy(test = t.copy(breakPhase = 0, rainLines = null))
         return if (t.breakPhase == 1) {
             s.copy(test = t.copy(breakPhase = 2, sessionStartRuns = totalRuns(s), sessionStartWickets = totalWickets(s)))
         } else {
@@ -218,7 +232,7 @@ object TestMatch {
     /** One drinks break in the middle of each session (the 15th over of it). */
     fun drinksDue(s: MatchState): Boolean {
         if (s.test == null) return false
-        val mb = matchBalls(s)
+        val mb = clockBalls(s)
         return s.score.balls == 0 && (mb % BALLS_PER_SESSION) in 90..95
     }
 
@@ -227,6 +241,7 @@ object TestMatch {
 
     fun breakTitle(s: MatchState): String {
         val t = s.test ?: return ""
+        if (t.breakPhase == 3) return "Rain delay"
         val k = t.breaksDone
         return if (t.breakPhase == 2) {
             if (k % 3 == 0) "Day ${k / 3 + 1} begins" else "Day ${k / 3 + 1}, ${sessionName(k % 3 + 1)} session begins"
@@ -260,7 +275,7 @@ object TestMatch {
 
     private fun timeLine(s: MatchState): String {
         val t = s.test ?: return ""
-        val today = (((t.breaksDone / 3) + 1) * BALLS_PER_DAY - matchBalls(s)).coerceIn(0, BALLS_PER_DAY) / 6
+        val today = (((t.breaksDone / 3) + 1) * BALLS_PER_DAY - clockBalls(s)).coerceIn(0, BALLS_PER_DAY) / 6
         return "${plural(oversLeft(s), "over")} remain in the match, ${today} of them today."
     }
 
@@ -268,6 +283,7 @@ object TestMatch {
     fun screenLines(s: MatchState): List<String> {
         val t = s.test ?: return emptyList()
         val k = t.breaksDone
+        if (t.breakPhase == 3) return t.rainLines ?: emptyList()
         val lines = ArrayList<String>()
         if (t.breakPhase == 1) {
             lines.add(
@@ -291,6 +307,60 @@ object TestMatch {
     }
 
     fun breakSpoken(s: MatchState): String = breakTitle(s) + ". " + screenLines(s).joinToString(" ")
+
+    // ---------------------------------------------------------------- rain
+
+    /** Expected rain stoppages in a match = RAIN_FACTOR x the match's chance of rain (a 30 percent chance gives about 0.6). A dial. */
+    const val RAIN_FACTOR = 2.0
+
+    /** At most this many stoppages in one match. */
+    const val RAIN_MAX_STOPS = 4
+
+    /** Rain never takes the last overs of the match: the game still gets a finish. */
+    const val RAIN_KEEP_OVERS = 6
+
+    /**
+     * Rolled once at the end of every over (MatchSimulation, also for the computer's own first-class matches). If it rains,
+     * a stretch of the match is lost: usually 8 to 20 overs, sometimes 20 to 40 (a session), now and then the rest of the
+     * day. The lost overs use up the match clock (so lunch, tea, stumps and the draw all move), and a pop-up (break phase 3)
+     * tells the player. There is no overs cut and no DLS in a Test: only less time to win. Null = no rain.
+     */
+    fun rainStoppage(s: MatchState, stadium: Stadium): MatchState? {
+        val t = s.test ?: return null
+        if (t.breakPhase != 0 || t.followOnPending || t.currentRecorded || t.rainStops >= RAIN_MAX_STOPS) return null
+        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.superOverRound != 0 || s.score.balls != 0) return null
+        if (s.activeRainDelay != null || s.drinksBreak != null) return null
+        if (oversLeft(s) <= RAIN_KEEP_OVERS + 12) return null
+        val wet = if (s.weather.condition == WeatherCondition.LIGHT_RAIN) 1.5 else 1.0
+        val perOver = s.weather.rainChancePercent / 100.0 * wet * RAIN_FACTOR / (t.days * OVERS_PER_DAY)
+        if (Random.nextDouble() >= perOver) return null
+
+        val clock = clockBalls(s)
+        val toDayEnd = (BALLS_PER_DAY - clock % BALLS_PER_DAY) / 6
+        val roll = Random.nextDouble()
+        val wanted = when {
+            roll < 0.5 -> 8 + Random.nextInt(13)
+            roll < 0.85 -> 20 + Random.nextInt(21)
+            else -> maxOf(toDayEnd, 12)
+        }
+        val lostOvers = wanted.coerceAtMost(oversLeft(s) - RAIN_KEEP_OVERS).coerceAtLeast(1)
+        val lost = lostOvers * 6
+        // Breaks the lost time ran through are not taken: play simply resumes in the session the clock has reached.
+        val breaks = maxOf(t.breaksDone, (clock + lost) / BALLS_PER_SESSION)
+        val after = t.copy(lostBalls = t.lostBalls + lost, rainStops = t.rainStops + 1, breaksDone = breaks, breakPhase = 3)
+        val moved = s.copy(test = after)
+        val resume = if (breaks % 3 == 0) "Play will resume on day ${breaks / 3 + 1}."
+        else "Play resumes in the ${sessionName(breaks % 3 + 1)} session of day ${breaks / 3 + 1}."
+        val lines = listOf("Rain has stopped play.") + scoreLines(moved) +
+            listOf("${plural(lostOvers, "over")} of the match were lost to rain.", resume, timeLine(moved))
+        return moved.copy(test = after.copy(rainLines = lines))
+    }
+
+    /** Added to a drawn result when rain took overs. */
+    private fun rainSuffix(s: MatchState): String {
+        val lost = (s.test?.lostBalls ?: 0) / 6
+        return if (lost > 0) " Rain cost ${plural(lost, "over")}." else ""
+    }
 
     // ---------------------------------------------------------------- innings
 
@@ -372,14 +442,14 @@ object TestMatch {
     fun resultText(s: MatchState): String? {
         if (s.test == null) return null
         val rec = recordIfTest(s)
-        return (outcome(rec) ?: TestOutcome(null, drawText(rec))).text
+        return (outcome(rec) ?: TestOutcome(null, drawText(rec) + rainSuffix(rec))).text
     }
 
     /** The match is over: a result, or a draw because the overs ran out. Null when this is not a five-day Test. */
     fun finish(s: MatchState): MatchState? {
         if (s.test == null) return null
         val rec = recordIfTest(s)
-        val out = outcome(rec) ?: TestOutcome(null, drawText(rec))
+        val out = outcome(rec) ?: TestOutcome(null, drawText(rec) + rainSuffix(rec))
         return rec.copy(matchStatus = MatchStatus.COMPLETED, winnerId = out.winnerId)
     }
 
@@ -609,6 +679,7 @@ object TestMatch {
         lines.add(timeLine(s))
         lines.add(pitchReport(s))
         lines.add(ballLine(s))
+        if (t.lostBalls > 0) lines.add("${plural(t.lostBalls / 6, "over")} have been lost to rain so far.")
         if (t.followOn) lines.add("The follow-on was enforced.")
         return lines
     }

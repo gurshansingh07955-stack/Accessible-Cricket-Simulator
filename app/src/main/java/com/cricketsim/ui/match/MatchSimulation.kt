@@ -274,6 +274,8 @@ object MatchSimulation {
      */
     private fun maybeInterruptForRain(state: MatchState, stadium: Stadium): MatchState {
         if (state.rules?.rainEnabled == false) return state
+        // A Test or first-class match has its own kind of rain: overs lost on the match clock, no DLS (TestMatch.rainStoppage).
+        if (state.test != null) return com.cricketsim.logic.TestMatch.rainStoppage(state, stadium) ?: state
         val triggers = WeatherSystem.shouldTriggerRainInterruption(
             stadium, state.format, state.score.overs, state.oversLimit, state.rainInterruptionUsed
         )

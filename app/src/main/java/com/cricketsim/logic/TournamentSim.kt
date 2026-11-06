@@ -614,6 +614,8 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
             loops++
             if (s.drinksBreak != null) s = s.copy(drinksBreak = null)
             if (s.activeRainDelay != null) s = MatchStateMachine.resumeFromRainDelay(s)
+            // A rain stoppage in the computer's own first-class match: the overs are lost, play goes on.
+            if (s.test?.breakPhase == 3) s = TestMatch.continueBreak(s)
             if (s.pendingDismissal != null) {
                 val next = MatchStateMachine.getAvailableBatsmen(s).firstOrNull()
                 s = if (next != null) MatchSimulation.completeWicketReplacement(s, next, stadium) else s.copy(pendingDismissal = null)

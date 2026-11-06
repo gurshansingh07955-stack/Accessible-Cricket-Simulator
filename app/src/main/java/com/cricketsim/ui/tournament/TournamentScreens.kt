@@ -1896,6 +1896,9 @@ private fun CelebrationScreen(state: TournamentState, onContinue: () -> Unit) {
     val purpleLine = if (purple != null) "Purple Cap, most wickets: ${purple.name}, ${CplData.shortName(purple.teamId)}, with ${purple.wickets} wickets." else ""
     val services = LocalGameServices.current
     BackHandler(onBack = onContinue)
+    val context = LocalContext.current
+    // The whole tournament as plain text for Share and Copy: champions, the Final, the awards, the tables and the stats.
+    val summaryText = remember(state) { TournamentSummaryText.build(state) }
 
     LaunchedEffect(Unit) {
         val sound = services?.sound
@@ -1964,6 +1967,16 @@ private fun CelebrationScreen(state: TournamentState, onContinue: () -> Unit) {
             }
         }
         Spacer(modifier = Modifier.height(20.dp))
+        OutlinedButton(
+            onClick = { TournamentSummaryText.share(context, "${state.name} summary", summaryText) },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Share tournament summary") }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { TournamentSummaryText.copy(context, summaryText) },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Copy tournament summary") }
+        Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("Continue to the tournament") }
     }
 }
