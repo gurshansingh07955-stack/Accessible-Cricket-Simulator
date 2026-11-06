@@ -1,0 +1,20 @@
+{
+  "name": "Imports for the team tabs (goes with patch 081)",
+  "message": "Adds the TeamGroups import that patch 081's team tabs need",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "import com.cricketsim.logic.Team\n",
+      "replace": "import com.cricketsim.logic.Team\nimport com.cricketsim.logic.TeamGroups\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "import com.cricketsim.logic.Team\n",
+      "replace": "import com.cricketsim.logic.Team\nimport com.cricketsim.logic.TeamGroups\n",
+      "count": 1
+    }
+  ]
+}
