@@ -1,0 +1,234 @@
+{
+  "name": "Domestic tournaments in Edit Tournament; International tournament and Domestic team tabs; every stadium in the picker",
+  "message": "Edit Tournament lists domestic tournaments; Edit teams and the tournament team picker get International tournament and Domestic tabs; the stadium picker shows all grounds",
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/AllStadiums.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * Every ground the game has, for the stadium picker of a custom tournament: the base grounds in [StadiumData] plus the\n * grounds each tournament added for itself (the IPL's, the domestic competitions', the international tournaments'...).\n * One entry per id.\n */\nobject AllStadiums {\n    fun list(): List<Stadium> {\n        val out = LinkedHashMap<String, Stadium>()\n        fun add(grounds: List<Stadium>) {\n            for (g in grounds) out.putIfAbsent(g.id, g)\n        }\n        add(StadiumData.getAllStadiums())\n        add(CplData.stadiums)\n        add(IplSeason.stadiums)\n        add(AbuDhabiT10.stadiums)\n        add(LankaPremierLeague.stadiums)\n        add(InternationalLeagueT20.stadiums)\n        add(BigBashLeague.stadiums)\n        add(MajorLeagueCricket.stadiums)\n        add(Sa20.stadiums)\n        add(T20WorldCup.stadiums)\n        add(ChampionsTrophy.stadiums)\n        add(AsiaCup.stadiums)\n        add(AsianGames.stadiums)\n        add(Ranji.stadiums)\n        add(DomesticFc.stadiumsFor(DomesticFc.DULEEP_ID))\n        add(DomesticFc.stadiumsFor(DomesticFc.IRANI_ID))\n        add(CountyCricket.stadiums)\n        add(AusDomestic.stadiums)\n        add(SaDomestic.stadiums)\n        add(NzDomestic.stadiums)\n        add(WiDomestic.stadiums)\n        add(PakDomestic.stadiums)\n        add(BdDomestic.stadiums)\n        return out.values.toList()\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/TeamGroups.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * The squads the Edit teams and custom-tournament team pickers list besides the national and league teams:\n * the real international tournaments' squads, and every domestic competition's teams. Building them is slow (each one\n * looks the players up across every league), so the result is kept until the player changes something\n * ([Customisation.revision] moves on).\n */\nobject TeamGroups {\n    private class Kept(val revision: Int, val groups: List<Pair<String, List<Team>>>)\n\n    @Volatile private var tournament: Kept? = null\n    @Volatile private var domestic: Kept? = null\n\n    /** Each international tournament's name and its squads (the national team's id, the tournament's players). */\n    fun tournamentGroups(): List<Pair<String, List<Team>>> {\n        val rev = Customisation.revision\n        tournament?.takeIf { it.revision == rev }?.let { return it.groups }\n        val built = listOf(\n            T20WorldCup.TOURNAMENT_NAME to T20WorldCup.buildTeams().first,\n            ChampionsTrophy.TOURNAMENT_NAME to ChampionsTrophy.buildTeams().first,\n            AsiaCup.TOURNAMENT_NAME to AsiaCup.buildTeams().first,\n            AsianGames.TOURNAMENT_NAME to AsianGames.buildTeams().first\n        )\n        tournament = Kept(rev, built)\n        return built\n    }\n\n    /**\n     * Every domestic competition's teams, by country. The Syed Mushtaq Ali and Vijay Hazare Trophies use the same state teams\n     * as the Ranji Trophy, and the Pakistani Gold and Silver tournaments the same teams, so each set is listed once.\n     */\n    fun domesticGroups(): List<Pair<String, List<Team>>> {\n        val rev = Customisation.revision\n        domestic?.takeIf { it.revision == rev }?.let { return it.groups }\n        val built = listOf(\n            \"India: state teams\" to Ranji.buildTeams().first,\n            \"India: Duleep Trophy zones\" to DomesticFc.buildDuleep().first,\n            \"India: Irani Cup teams\" to DomesticFc.buildIrani().first,\n            \"England: counties\" to CountyCricket.buildTeams().first,\n            \"Australia: state teams\" to AusDomestic.buildTeams().first,\n            \"South Africa: franchises\" to SaDomestic.buildTeams().first,\n            \"New Zealand: major associations\" to NzDomestic.buildTeams().first,\n            \"West Indies: territories\" to WiDomestic.buildTeams().first,\n            \"Pakistan: domestic teams\" to PakDomestic.buildTeams().first,\n            \"Bangladesh: divisions\" to BdDomestic.buildTeams().first\n        )\n        domestic = Kept(rev, built)\n        return built\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "    @Volatile private var data = CustomData()\n",
+      "replace": "    @Volatile private var data = CustomData()\n\n    /** Goes up by one every time anything the player customised changes (lets other code keep built teams until then). */\n    @Volatile var revision: Int = 0\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "        reindex()\n    }\n\n    private fun reindex() {",
+      "replace": "        reindex()\n        revision++\n    }\n\n    private fun reindex() {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Customisation.kt",
+      "find": "            data = change(data)\n            reindex()\n",
+      "replace": "            data = change(data)\n            reindex()\n            revision++\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "data class GameTournament(val id: String, val name: String, val formatKey: String, val group: String)",
+      "replace": "data class GameTournament(\n    val id: String,\n    val name: String,\n    val formatKey: String,\n    val group: String,\n    /** Plain-language format for a tournament whose format is not one of [TournamentFormats] (the domestic ones). */\n    val formatText: String? = null,\n    /** False = Edit Tournament lets the player rename it but not change its format. */\n    val formatEditable: Boolean = true\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "        \"ag2026\" -> AsianGames.TOURNAMENT_ID\n        else -> kind.removePrefix(\"custom:\")",
+      "replace": "        \"ag2026\" -> AsianGames.TOURNAMENT_ID\n        \"ranji2027\" -> Ranji.TOURNAMENT_ID\n        \"duleep2026\" -> DomesticFc.DULEEP_ID\n        \"irani2026\" -> DomesticFc.IRANI_ID\n        \"smat2026\" -> DomesticWhiteBall.SMAT_ID\n        \"vht2026\" -> DomesticWhiteBall.VHT_ID\n        \"odc2027\" -> CountyCricket.ODC_ID\n        \"blast2027\" -> CountyCricket.BLAST_ID\n        \"cc2027\" -> CountyCricket.CC_ID\n        \"shield2026\" -> AusDomestic.SHIELD_ID\n        \"audc2026\" -> AusDomestic.ODC_ID\n        \"sa4d2026\" -> SaDomestic.FOURDAY_ID\n        \"sa50c2026\" -> SaDomestic.ODC_ID\n        \"pro20c2026\" -> SaDomestic.T20_ID\n        \"plunket2026\" -> NzDomestic.PLUNKET_ID\n        \"ford2026\" -> NzDomestic.FORD_ID\n        \"smash2026\" -> NzDomestic.SMASH_ID\n        \"wi4d2027\" -> WiDomestic.FOURDAY_ID\n        \"wi50c2026\" -> WiDomestic.ODC_ID\n        \"qeag2026\" -> PakDomestic.GOLD_ID\n        \"qeas2026\" -> PakDomestic.SILVER_ID\n        \"ncl2026\" -> BdDomestic.NCL_ID\n        else -> kind.removePrefix(\"custom:\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "            GameTournament(AsianGames.TOURNAMENT_ID, AsianGames.TOURNAMENT_NAME, \"T20\", \"International tournaments\")\n        )",
+      "replace": "            GameTournament(AsianGames.TOURNAMENT_ID, AsianGames.TOURNAMENT_NAME, \"T20\", \"International tournaments\")\n        ) + domestic()\n    }\n\n    private const val FC = \"First-class matches over several days, with their own rules\"\n    private const val T20_TEXT = \"20 overs a side, with the competition's own rules\"\n    private const val FIFTY_TEXT = \"50 overs a side, with the competition's own rules\"\n\n    /** The domestic tournaments, by country. Their formats are their own, so Edit Tournament lets the player rename them only. */\n    private fun domestic(): List<GameTournament> {\n        fun g(id: String, name: String, text: String, group: String) = GameTournament(id, name, \"DOMESTIC\", group, text, false)\n        val india = \"Indian domestic tournaments\"\n        val england = \"English domestic tournaments\"\n        val australia = \"Australian domestic tournaments\"\n        val southAfrica = \"South African domestic tournaments\"\n        val newZealand = \"New Zealand domestic tournaments\"\n        val westIndies = \"West Indies domestic tournaments\"\n        val pakistan = \"Pakistani domestic tournaments\"\n        val bangladesh = \"Bangladeshi domestic tournaments\"\n        return listOf(\n            g(Ranji.TOURNAMENT_ID, Ranji.TOURNAMENT_NAME, FC, india),\n            g(DomesticFc.DULEEP_ID, DomesticFc.DULEEP_NAME, FC, india),\n            g(DomesticFc.IRANI_ID, DomesticFc.IRANI_NAME, FC, india),\n            g(DomesticWhiteBall.SMAT_ID, DomesticWhiteBall.SMAT_NAME, T20_TEXT, india),\n            g(DomesticWhiteBall.VHT_ID, DomesticWhiteBall.VHT_NAME, FIFTY_TEXT, india),\n            g(CountyCricket.CC_ID, CountyCricket.CC_NAME, FC, england),\n            g(CountyCricket.ODC_ID, CountyCricket.ODC_NAME, FIFTY_TEXT, england),\n            g(CountyCricket.BLAST_ID, CountyCricket.BLAST_NAME, T20_TEXT, england),\n            g(AusDomestic.SHIELD_ID, AusDomestic.SHIELD_NAME, FC, australia),\n            g(AusDomestic.ODC_ID, AusDomestic.ODC_NAME, FIFTY_TEXT, australia),\n            g(SaDomestic.FOURDAY_ID, SaDomestic.FOURDAY_NAME, FC, southAfrica),\n            g(SaDomestic.ODC_ID, SaDomestic.ODC_NAME, FIFTY_TEXT, southAfrica),\n            g(SaDomestic.T20_ID, SaDomestic.T20_NAME, T20_TEXT, southAfrica),\n            g(NzDomestic.PLUNKET_ID, NzDomestic.PLUNKET_NAME, FC, newZealand),\n            g(NzDomestic.FORD_ID, NzDomestic.FORD_NAME, FIFTY_TEXT, newZealand),\n            g(NzDomestic.SMASH_ID, NzDomestic.SMASH_NAME, T20_TEXT, newZealand),\n            g(WiDomestic.FOURDAY_ID, WiDomestic.FOURDAY_NAME, FC, westIndies),\n            g(WiDomestic.ODC_ID, WiDomestic.ODC_NAME, FIFTY_TEXT, westIndies),\n            g(PakDomestic.GOLD_ID, PakDomestic.GOLD_NAME, FC, pakistan),\n            g(PakDomestic.SILVER_ID, PakDomestic.SILVER_NAME, FC, pakistan),\n            g(BdDomestic.NCL_ID, BdDomestic.NCL_NAME, FC, bangladesh)\n        )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "    const val LEAGUE = \"league\"\n",
+      "replace": "    const val LEAGUE = \"league\"\n    const val DOMESTIC = \"dom\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "        listOf(\n            T20WorldCup.TOURNAMENT_NAME to T20WorldCup.buildTeams().first,\n            ChampionsTrophy.TOURNAMENT_NAME to ChampionsTrophy.buildTeams().first,\n            AsiaCup.TOURNAMENT_NAME to AsiaCup.buildTeams().first,\n            AsianGames.TOURNAMENT_NAME to AsianGames.buildTeams().first\n        ).forEach { (title, teams) -> teams.forEach { out.add(entry(TOURNAMENT, title, it)) } }",
+      "replace": "        TeamGroups.tournamentGroups().forEach { (title, teams) -> teams.forEach { out.add(entry(TOURNAMENT, title, it)) } }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "        ).forEach { (title, teams) -> teams.forEach { out.add(entry(LEAGUE, title, it)) } }\n",
+      "replace": "        ).forEach { (title, teams) -> teams.forEach { out.add(entry(LEAGUE, title, it)) } }\n        TeamGroups.domesticGroups().forEach { (title, teams) -> teams.forEach { out.add(entry(DOMESTIC, title, it)) } }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+      "find": "        def(tournamentId)?.stadiumIds?.mapNotNull { StadiumData.getStadiumById(it) }",
+      "replace": "        def(tournamentId)?.stadiumIds?.mapNotNull { CplData.stadium(it) }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "    val byCountry = remember { StadiumData.getAllStadiums().groupBy { it.country }.toSortedMap() }",
+      "replace": "    val byCountry = remember { com.cricketsim.logic.AllStadiums.list().groupBy { it.country }.toSortedMap() }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "val stadiumNames = stadiumIds.mapNotNull { StadiumData.getStadiumById(it)?.name }",
+      "replace": "val stadiumNames = stadiumIds.mapNotNull { com.cricketsim.logic.CplData.stadium(it)?.name }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "    TeamCatalog.LEAGUE to \"League Teams\",\n    TeamCatalog.CUSTOM to \"Custom Teams\"",
+      "replace": "    TeamCatalog.LEAGUE to \"League Teams\",\n    TeamCatalog.DOMESTIC to \"Domestic Teams\",\n    TeamCatalog.CUSTOM to \"Custom Teams\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "                        val fmt = TournamentFormats.find(Customisation.tournamentFormatKey(g.id, g.formatKey), customFormats)?.name ?: \"Unknown format\"",
+      "replace": "                        val fmt = g.formatText ?: TournamentFormats.find(Customisation.tournamentFormatKey(g.id, g.formatKey), customFormats)?.name ?: \"Unknown format\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "                    isEdited = game != null && Customisation.tournamentEdit(game.id) != null,\n",
+      "replace": "                    isEdited = game != null && Customisation.tournamentEdit(game.id) != null,\n                    formatEditable = game?.formatEditable ?: true,\n                    formatText = game?.formatText,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "    isEdited: Boolean,\n    formats: List<com.cricketsim.logic.FormatOption>,",
+      "replace": "    isEdited: Boolean,\n    formatEditable: Boolean,\n    formatText: String?,\n    formats: List<com.cricketsim.logic.FormatOption>,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "        Spacer(modifier = Modifier.height(16.dp))\n        Text(\"Format\", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })\n        Column(modifier = Modifier.selectableGroup()) {\n            formats.forEach { f -> ChoiceRadio(f.name, f.description, format == f.key) { error = null; format = f.key } }\n        }",
+      "replace": "        Spacer(modifier = Modifier.height(16.dp))\n        Text(\"Format\", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })\n        if (formatEditable) {\n            Column(modifier = Modifier.selectableGroup()) {\n                formats.forEach { f -> ChoiceRadio(f.name, f.description, format == f.key) { error = null; format = f.key } }\n            }\n        } else {\n            Text(\n                text = \"${formatText ?: \"Its own format\"}. The format of a domestic tournament cannot be changed, only its name.\",\n                style = MaterialTheme.typography.bodyLarge\n            )\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "internal enum class TeamKind { International, League, Custom }",
+      "replace": "internal enum class TeamKind { International, Tournament, League, Domestic, Custom }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "                    description = \"Change teams and players: international, league and your own custom teams.\",",
+      "replace": "                    description = \"Change teams and players: international, international tournament, league, domestic and your own custom teams.\",",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "private fun findTeam(kind: TeamKind, id: String): Team? = when (kind) {\n    TeamKind.International -> CricketData.getTeamById(id)\n    TeamKind.League -> leagueGroups().flatMap { it.second }.find { it.id == id }\n    TeamKind.Custom -> Customisation.customTeamsAsTeams().find { it.id == id }\n}",
+      "replace": "/**\n * The id a page uses for a team that is listed in a tournament's group: an international tournament's squad has the same id as the\n * national team, so the group's name goes with it. (A team's edits are still kept under its own id.)\n */\ninternal fun teamKey(group: String, id: String): String = \"$group::$id\"\n\ninternal fun findInGroups(groups: List<Pair<String, List<Team>>>, key: String): Team? {\n    val group = key.substringBefore(\"::\")\n    val id = key.substringAfter(\"::\")\n    return groups.find { it.first == group }?.second?.find { it.id == id }\n}\n\nprivate fun findTeam(kind: TeamKind, id: String): Team? = when (kind) {\n    TeamKind.International -> CricketData.getTeamById(id)\n    TeamKind.Tournament -> findInGroups(TeamGroups.tournamentGroups(), id)\n    TeamKind.League -> leagueGroups().flatMap { it.second }.find { it.id == id }\n    TeamKind.Domestic -> findInGroups(TeamGroups.domesticGroups(), id)\n    TeamKind.Custom -> Customisation.customTeamsAsTeams().find { it.id == id }\n}",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "    val leagues = remember(version, tab) { if (tab == TeamKind.League) leagueGroups() else emptyList() }\n",
+      "replace": "    val leagues = remember(version, tab) { if (tab == TeamKind.League) leagueGroups() else emptyList() }\n    val tournaments = remember(version, tab) { if (tab == TeamKind.Tournament) TeamGroups.tournamentGroups() else emptyList() }\n    val domestic = remember(version, tab) { if (tab == TeamKind.Domestic) TeamGroups.domesticGroups() else emptyList() }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n            TabButton(\"International teams\", tab == TeamKind.International, Modifier.weight(1f)) { onTab(TeamKind.International) }\n            TabButton(\"League teams\", tab == TeamKind.League, Modifier.weight(1f)) { onTab(TeamKind.League) }\n            TabButton(\"Custom teams\", tab == TeamKind.Custom, Modifier.weight(1f)) { onTab(TeamKind.Custom) }\n        }",
+      "replace": "        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n            TabButton(\"International teams\", tab == TeamKind.International, Modifier.weight(1f)) { onTab(TeamKind.International) }\n            TabButton(\"International tournament teams\", tab == TeamKind.Tournament, Modifier.weight(1f)) { onTab(TeamKind.Tournament) }\n        }\n        Spacer(modifier = Modifier.height(8.dp))\n        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n            TabButton(\"League teams\", tab == TeamKind.League, Modifier.weight(1f)) { onTab(TeamKind.League) }\n            TabButton(\"Domestic teams\", tab == TeamKind.Domestic, Modifier.weight(1f)) { onTab(TeamKind.Domestic) }\n            TabButton(\"Custom teams\", tab == TeamKind.Custom, Modifier.weight(1f)) { onTab(TeamKind.Custom) }\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "            TeamKind.Custom -> {\n                if (custom.isEmpty()) {",
+      "replace": "            TeamKind.Tournament -> {\n                Text(\n                    text = \"These are the squads of the real tournaments. A player edited here is changed in his national team too.\",\n                    style = MaterialTheme.typography.bodyMedium,\n                    color = MaterialTheme.colorScheme.onSurfaceVariant\n                )\n                tournaments.forEach { (group, teams) ->\n                    Spacer(modifier = Modifier.height(12.dp))\n                    Text(group, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })\n                    teams.forEach { t -> TeamRow(t.name, \"${t.players.size} players\", { onOpen(tab, teamKey(group, t.id)) }, { onRename(tab, t) }) }\n                }\n            }\n            TeamKind.Domestic -> {\n                domestic.forEach { (group, teams) ->\n                    Spacer(modifier = Modifier.height(12.dp))\n                    Text(group, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })\n                    teams.forEach { t -> TeamRow(t.name, \"${t.players.size} players\", { onOpen(tab, teamKey(group, t.id)) }, { onRename(tab, t) }) }\n                }\n            }\n            TeamKind.Custom -> {\n                if (custom.isEmpty()) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "                TeamKind.International -> \"International team\"\n                TeamKind.League -> \"League team\"\n                TeamKind.Custom -> \"Custom team\"",
+      "replace": "                TeamKind.International -> \"International team\"\n                TeamKind.Tournament -> \"International tournament squad\"\n                TeamKind.League -> \"League team\"\n                TeamKind.Domestic -> \"Domestic team\"\n                TeamKind.Custom -> \"Custom team\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        Spacer(modifier = Modifier.height(24.dp))\n        OutlinedButton(\n            onClick = onAddPlayers,\n            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n        ) { Text(\"Add players from other teams\") }\n        Spacer(modifier = Modifier.height(12.dp))\n        Button(\n            onClick = onCreatePlayer,\n            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n        ) { Text(\"Create a new player\") }",
+      "replace": "        Spacer(modifier = Modifier.height(24.dp))\n        if (kind == TeamKind.Tournament) {\n            // A real tournament's squad is fixed: new and added players join the national team, not this squad.\n            Text(\n                text = \"Players cannot be added to a real tournament's squad. Add them to the national team, or edit the players here.\",\n                style = MaterialTheme.typography.bodyMedium,\n                color = MaterialTheme.colorScheme.onSurfaceVariant\n            )\n        } else {\n            OutlinedButton(\n                onClick = onAddPlayers,\n                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n            ) { Text(\"Add players from other teams\") }\n            Spacer(modifier = Modifier.height(12.dp))\n            Button(\n                onClick = onCreatePlayer,\n                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n            ) { Text(\"Create a new player\") }\n        }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "    leagueGroups().forEach { (league, teams) -> teams.filter { it.id in ids }.forEach { out.add(league to it) } }\n    return out",
+      "replace": "    leagueGroups().forEach { (league, teams) -> teams.filter { it.id in ids }.forEach { out.add(league to it) } }\n    TeamGroups.domesticGroups().forEach { (group, teams) -> teams.filter { it.id in ids }.forEach { out.add(group to it) } }\n    return out",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "    val custom = remember { Customisation.customTeamsAsTeams().filter { it.id != dest.id } }\n    val sourceTeam: Team? = sourceId?.let { id ->\n        when (kind) {\n            TeamKind.International -> international.find { it.id == id }\n            TeamKind.League -> leagues.flatMap { it.second }.find { it.id == id }\n            TeamKind.Custom -> custom.find { it.id == id }\n        }\n    }",
+      "replace": "    val custom = remember { Customisation.customTeamsAsTeams().filter { it.id != dest.id } }\n    val tournaments = remember(kind) {\n        if (kind == TeamKind.Tournament) TeamGroups.tournamentGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }\n    val domestic = remember(kind) {\n        if (kind == TeamKind.Domestic) TeamGroups.domesticGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }\n    val sourceTeam: Team? = sourceId?.let { id ->\n        when (kind) {\n            TeamKind.International -> international.find { it.id == id }\n            TeamKind.Tournament -> findInGroups(tournaments, id)\n            TeamKind.League -> leagues.flatMap { it.second }.find { it.id == id }\n            TeamKind.Domestic -> findInGroups(domestic, id)\n            TeamKind.Custom -> custom.find { it.id == id }\n        }\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "            listOf(\n                TeamKind.International to \"International teams\",\n                TeamKind.League to \"League teams\",\n                TeamKind.Custom to \"Custom teams\"\n            ).forEach { (k, label) ->",
+      "replace": "            listOf(\n                TeamKind.International to \"International teams\",\n                TeamKind.Tournament to \"International tournament teams\",\n                TeamKind.League to \"League teams\",\n                TeamKind.Domestic to \"Domestic teams\",\n                TeamKind.Custom to \"Custom teams\"\n            ).forEach { (k, label) ->",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "                TeamKind.International -> listOf(\"International teams\" to international)\n                TeamKind.League -> leagues\n                TeamKind.Custom -> listOf(\"Custom teams\" to custom)",
+      "replace": "                TeamKind.International -> listOf(\"International teams\" to international)\n                TeamKind.Tournament -> tournaments\n                TeamKind.League -> leagues\n                TeamKind.Domestic -> domestic\n                TeamKind.Custom -> listOf(\"Custom teams\" to custom)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "                        onClick = { sourceId = t.id },",
+      "replace": "                        onClick = { sourceId = if (kind == TeamKind.Tournament || kind == TeamKind.Domestic) teamKey(title, t.id) else t.id },",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "EDIT_TOURNAMENT_TEAM_TABS_STADIUMS.md",
+      "content": "# Domestic tournaments in Edit Tournament, team tabs and stadiums\n\n**Edit Tournament** now lists the 21 domestic tournaments, by country, after the league and international ones. A domestic tournament\ncan be renamed (the new name shows on its page, in its matches and in the shared scorecard); its format cannot be changed, because\neach one plays by its own competition's rules. `GameTournaments.idForKind` knows the domestic kinds so a rename is found.\n\n**Create Custom Teams and Players > Edit teams** has five tabs: International teams, International tournament teams (the squads of\nthe four real international tournaments), League teams, Domestic teams (every domestic competition's teams, grouped by country) and\nCustom teams. International-tournament squads cannot take new or added players (those join the national team); their players can be\nedited, and the edit changes the player in his national team too (edits are kept per team id and player name). Add players from other\nteams and Reset game teams know the new groups.\n\n**Create Custom Tournament** has a Domestic Teams tab between League Teams and Custom Teams, and the stadium picker lists EVERY\nground the game has (the IPL's, the domestic competitions', the real international tournaments' and the league grounds), not only\nthe base list (`AllStadiums`). A custom tournament finds its grounds through `CplData.stadium`, so the new ones play.\n\n`TeamGroups` keeps the built tournament and domestic squads until the player changes something (`Customisation.revision`), because\nbuilding them looks the players up across every league.\n",
+      "mustNotExist": true
+    }
+  ]
+}
