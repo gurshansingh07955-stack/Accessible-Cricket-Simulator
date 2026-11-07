@@ -129,4 +129,74 @@ object CareerSeason {
     fun champion(state: TournamentState): Team? = if (isComplete(state)) CplData.standings(state).firstOrNull()?.team else null
 
     fun nameOf(state: TournamentState, teamId: String?): String = state.teams.find { it.id == teamId }?.name ?: "?"
+
+    /** The game-player id of the career's player in the season (null on a career without club teams). */
+    fun userPlayerId(career: CareerProfile): String? {
+        val clubIndex = career.clubs.indexOfFirst { it.name == career.club }
+        if (clubIndex < 0) return null
+        val i = career.clubs[clubIndex].players.indexOfFirst { it.isUser }
+        return if (i < 0) null else "${clubId(career.id, clubIndex)}_p$i"
+    }
+
+    /** The season's copy of the player gets his current ratings (they grow as he plays). */
+    fun withUserPlayer(state: TournamentState, career: CareerProfile): TournamentState {
+        val pid = userPlayerId(career) ?: return state
+        return state.copy(teams = state.teams.map { t ->
+            if (t.players.none { it.id == pid }) t
+            else t.copy(players = t.players.map { p ->
+                if (p.id == pid) p.copy(
+                    battingRating = career.batting.coerceIn(1, 95),
+                    bowlingRating = career.bowling.coerceIn(1, 95),
+                    fieldingRating = career.fielding.coerceIn(1, 95)
+                ) else p
+            })
+        })
+    }
+
+    /** Simulates the player's own fixture with the selectors' decision: he is in the club's XI or left out of it. */
+    fun simulateMine(state: TournamentState, fixture: TournamentFixture, career: CareerProfile, random: Random): TournamentState {
+        val home = state.teams.find { it.id == fixture.homeId } ?: return state
+        val away = state.teams.find { it.id == fixture.awayId } ?: return state
+        val stadium = CplData.stadium(fixture.stadiumId) ?: return state
+        val pid = userPlayerId(career) ?: return CplSimulator.simulateFixture(state, fixture, random)
+        val selected = CareerSelection.decide(career).selected
+        val userIsHome = fixture.homeId == state.userTeamId
+        val mine = CareerSelection.squadForMatch(if (userIsHome) home else away, state.tags, stadium, pid, selected)
+        val sim = CplSimulator.simulateMatch(
+            if (userIsHome) mine else home, if (userIsHome) away else mine, state.tags, stadium, random
+        ) ?: return state
+        return state.copy(
+            fixtures = state.fixtures.map { if (it.id == fixture.id) it.copy(result = sim.result, scorecard = sim.scorecard) else it },
+            playerStats = CplSimulator.applyStats(state.playerStats, sim.finished, sim.home, sim.away)
+        )
+    }
+
+    class Advance(val state: TournamentState, val career: CareerProfile, val lines: List<String>)
+
+    /**
+     * Moves the season on. The other clubs' matches before the player's are always played. [includeMine] also simulates the player's
+     * next match (with the selectors' decision, then his form and ratings); [whole] goes on to the end of the season.
+     */
+    fun advance(state: TournamentState, career: CareerProfile, random: Random, includeMine: Boolean, whole: Boolean): Advance {
+        var s = state
+        var c = career
+        val lines = ArrayList<String>()
+        var guard = 0
+        while (guard < 100) {
+            guard++
+            s = CplSimulator.run(s, SimMode.UNTIL_MINE, random)
+            val mine = s.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, s.userTeamId) } ?: break
+            if (!includeMine && !whole) break
+            val pid = userPlayerId(c)
+            val before = if (pid != null) s.playerStats[pid] else null
+            s = simulateMine(s, mine, c, random)
+            val result = CareerProgress.afterMatch(c, before, if (pid != null) s.playerStats[pid] else null, random)
+            c = result.career
+            s = withUserPlayer(s, c)
+            lines.add("${nameOf(s, mine.homeId)} v ${nameOf(s, mine.awayId)}: ${s.fixtures.find { it.id == mine.id }?.result?.summary ?: ""} ${result.text}")
+            if (!whole) break
+        }
+        if (whole) s = CplSimulator.run(s, SimMode.ALL, random)
+        return Advance(s, c, lines)
+    }
 }

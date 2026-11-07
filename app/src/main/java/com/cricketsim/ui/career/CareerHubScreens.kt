@@ -42,7 +42,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CareerProfile
+import com.cricketsim.logic.CareerProgress
 import com.cricketsim.logic.CareerSeason
+import com.cricketsim.logic.CareerSelection
 import com.cricketsim.logic.CareerWorld
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.CplSimulator
@@ -95,7 +97,8 @@ fun CareerHub(
     onBack: () -> Unit,
     onOpenSquad: () -> Unit,
     onOpenClubs: () -> Unit,
-    onOpenProfile: () -> Unit
+    onOpenProfile: () -> Unit,
+    onCareerChanged: (CareerProfile) -> Unit
 ) {
     val context = LocalContext.current
     val services = LocalGameServices.current
@@ -113,6 +116,8 @@ fun CareerHub(
     var xiProblem by remember { mutableStateOf<String?>(null) }
     var tableTab by remember { mutableStateOf(0) }
     var statsTab by remember { mutableStateOf(0) }
+    // The selectors' decision for the player's next match (his rank in the club, the difficulty and his form).
+    val decision = CareerSelection.decide(career)
 
     LaunchedEffect(career.id) {
         val existing = seasonStore.load()
@@ -132,25 +137,20 @@ fun CareerHub(
 
     BackHandler(enabled = play == null) { if (tab != HubTab.Home) tab = HubTab.Home else onBack() }
 
-    // Simulates off the main thread, then saves. `includeMine` also plays the player's own next match.
-    val simulate: (SimMode, Boolean) -> Unit = { mode, includeMine ->
+    // Simulates off the main thread, then saves. includeMine plays the player's own next match too (the selectors' decision applies:
+    // he is in the XI or left out), whole goes on to the end of the season. His form and ratings follow what he does.
+    val simulate: (Boolean, Boolean) -> Unit = { includeMine, whole ->
         val current = season
         if (current != null && !busy) {
             busy = true
             message = "Simulating."
             scope.launch {
-                val updated = withContext(Dispatchers.Default) {
-                    var s = CplSimulator.run(current, mode, Random.Default)
-                    if (includeMine) {
-                        val mine = s.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, s.userTeamId) }
-                        if (mine != null) s = CplSimulator.simulateFixture(s, mine, Random.Default)
-                    }
-                    s
-                }
-                season = updated
-                seasonStore.save(updated)
+                val adv = withContext(Dispatchers.Default) { CareerSeason.advance(current, career, Random.Default, includeMine, whole) }
+                season = adv.state
+                seasonStore.save(adv.state)
+                if (adv.career !== career) onCareerChanged(adv.career)
                 busy = false
-                message = lastResultText(updated)
+                message = adv.lines.joinToString("\n").ifEmpty { lastResultText(adv.state) }
             }
         }
     }
@@ -236,9 +236,19 @@ fun CareerHub(
                         onMatchComplete = { finished ->
                             pendingMatch = null
                             val latest = season ?: state
-                            val updated = CplSimulator.recordPlayedMatch(latest, flow.fixtureId, finished, flow.userXI, flow.oppXI)
+                            val pid = CareerSeason.userPlayerId(career)
+                            val recorded = CplSimulator.recordPlayedMatch(latest, flow.fixtureId, finished, flow.userXI, flow.oppXI)
+                            // What the match did to the player: his form and his ratings.
+                            val progress = CareerProgress.afterMatch(
+                                career,
+                                if (pid != null) latest.playerStats[pid] else null,
+                                if (pid != null) recorded.playerStats[pid] else null,
+                                Random.Default
+                            )
+                            val updated = CareerSeason.withUserPlayer(recorded, progress.career)
                             season = updated
-                            message = lastResultText(updated)
+                            if (progress.career !== career) onCareerChanged(progress.career)
+                            message = lastResultText(updated) + " " + progress.text
                             scope.launch { seasonStore.save(updated) }
                         }
                     )
@@ -274,7 +284,7 @@ fun CareerHub(
                 .padding(20.dp)
         ) {
             when (tab) {
-                HubTab.Home -> HomeTab(career, onBack, onOpenSquad, onOpenClubs, onOpenProfile)
+                HubTab.Home -> HomeTab(career, decision, onBack, onOpenSquad, onOpenClubs, onOpenProfile)
                 HubTab.Play -> PlayTab(
                     career = career,
                     season = state,
@@ -282,6 +292,7 @@ fun CareerHub(
                     busy = busy,
                     message = message,
                     pending = pendingMatch,
+                    decision = decision,
                     onPlay = {
                         val current = season
                         if (current != null && !busy) {
@@ -293,19 +304,33 @@ fun CareerHub(
                                     matchStore.clear()
                                 }
                                 // The matches of the other clubs that come before yours are played first, so the table is up to date.
-                                val updated = withContext(Dispatchers.Default) { CplSimulator.run(current, SimMode.UNTIL_MINE, Random.Default) }
-                                season = updated
-                                seasonStore.save(updated)
+                                val adv = withContext(Dispatchers.Default) { CareerSeason.advance(current, career, Random.Default, false, false) }
+                                season = adv.state
+                                seasonStore.save(adv.state)
                                 busy = false
                                 message = ""
-                                val mine = CplSimulator.nextFixture(updated)?.takeIf { CplSimulator.involves(it, updated.userTeamId) }
-                                    ?: updated.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, updated.userTeamId) }
-                                if (mine != null) play = CPlay.PickXI(mine.id)
+                                val updated = adv.state
+                                val mine = updated.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, updated.userTeamId) }
+                                if (mine != null) {
+                                    val pid = CareerSeason.userPlayerId(career)
+                                    val chosen = CareerSelection.decide(career)
+                                    val squad = updated.teams.find { it.id == updated.userTeamId }
+                                    val oppId = if (mine.homeId == updated.userTeamId) mine.awayId else mine.homeId
+                                    val oppSquad = updated.teams.find { it.id == oppId }
+                                    val stadium = CplData.stadium(mine.stadiumId)
+                                    if (!chosen.selected) {
+                                        message = chosen.reason + " You can simulate the match instead."
+                                    } else if (pid != null && squad != null && oppSquad != null && stadium != null) {
+                                        // The selectors name the XI (you are in it): straight to the toss.
+                                        val xi = CareerSelection.matchXI(squad, updated.tags, stadium, pid)
+                                        play = CPlay.Toss(mine.id, xi, CplSimulator.pickXI(oppSquad, updated.tags, stadium))
+                                    }
+                                }
                             }
                         }
                     },
-                    onSimulateMine = { simulate(SimMode.UNTIL_MINE, true) },
-                    onSimulateAll = { simulate(SimMode.ALL, false) },
+                    onSimulateMine = { simulate(true, false) },
+                    onSimulateAll = { simulate(true, true) },
                     onResume = {
                         val snapshot = pendingMatch
                         val current = season
@@ -343,6 +368,7 @@ private fun fixtureText(state: TournamentState, f: TournamentFixture): String {
 @Composable
 private fun HomeTab(
     career: CareerProfile,
+    decision: CareerSelection.Decision,
     onBack: () -> Unit,
     onOpenSquad: () -> Unit,
     onOpenClubs: () -> Unit,
@@ -359,6 +385,14 @@ private fun HomeTab(
     if (career.plan().isNotEmpty()) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(career.plan(), style = MaterialTheme.typography.bodyMedium)
+    }
+    if (career.growthLine().isNotEmpty()) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(career.growthLine(), style = MaterialTheme.typography.bodyMedium)
+    }
+    if (career.clubs.isNotEmpty() && decision.reason.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Selection for your next match: ${decision.reason}", style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(modifier = Modifier.height(16.dp))
     if (career.clubs.isEmpty()) {
@@ -385,6 +419,7 @@ private fun PlayTab(
     busy: Boolean,
     message: String,
     pending: MatchSnapshot?,
+    decision: CareerSelection.Decision,
     onPlay: () -> Unit,
     onSimulateMine: () -> Unit,
     onSimulateAll: () -> Unit,
@@ -428,6 +463,10 @@ private fun PlayTab(
             text = "Match ${mine.number}: ${fixtureText(season, mine)}. ${CareerSeason.dateText(CareerSeason.dateMillis(season, mine))}.",
             style = MaterialTheme.typography.bodyLarge
         )
+        if (decision.reason.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(decision.reason, style = MaterialTheme.typography.bodyLarge)
+        }
         Spacer(modifier = Modifier.height(16.dp))
         if (pending != null) {
             OptionButton("Resume my match", pending.summary(), !busy, true) { onResume() }
@@ -435,9 +474,14 @@ private fun PlayTab(
             OptionButton("Discard the half-played match", "Start it again from the beginning instead.", !busy, false) { onDiscard() }
             Spacer(modifier = Modifier.height(12.dp))
         }
-        OptionButton("Play my match", "Choose your XI, toss, and play it ball by ball.", !busy, pending == null) { onPlay() }
+        OptionButton(
+            title = "Play my match",
+            description = if (decision.selected) "The selectors name the XI with you in it. Toss, then play it ball by ball, controlling the whole team for now." else "You are not in the XI, so you cannot play this match.",
+            enabled = !busy && decision.selected,
+            emphasised = pending == null
+        ) { onPlay() }
         Spacer(modifier = Modifier.height(12.dp))
-        OptionButton("Simulate my match", "The other clubs' earlier matches are played too.", !busy, false) { onSimulateMine() }
+        OptionButton("Simulate my match", "The other clubs' earlier matches are played too. You play if you are in the XI.", !busy, false) { onSimulateMine() }
     }
     if (mine != null || !CareerSeason.isComplete(season)) {
         Spacer(modifier = Modifier.height(12.dp))

@@ -1,6 +1,6 @@
-Patch run: 42365436770
-Timestamp (UTC): 2026-11-07T10:47:46Z
+Patch run: 42388039384
+Timestamp (UTC): 2026-11-07T15:47:09Z
 Result: OK
 -----
-Patch 2026-11-07-086-career-hub-tabs-and-season.json
-  applied 4 operation(s) to 4 file(s)
+Patch 2026-11-07-087-career-selection-and-growth.json
+  applied 7 operation(s) to 7 file(s)

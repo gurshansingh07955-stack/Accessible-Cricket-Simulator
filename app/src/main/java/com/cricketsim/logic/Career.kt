@@ -44,7 +44,14 @@ data class CareerProfile(
     val bowling: Int = 0,
     val fielding: Int = 0,
     /** The district clubs of the state with their made-up squads; null on a career made before they existed. */
-    val clubTeams: List<CareerClub>? = null
+    val clubTeams: List<CareerClub>? = null,
+    // Part five: the career's progress.
+    /** The impact points of the player's last matches in the XI, oldest first (at most five); the selectors read his form from them. */
+    val form: List<Double>? = null,
+    /** Matches played in the XI. */
+    val matchesPlayed: Int = 0,
+    /** The ratings [batting, bowling, fielding] the career started with; null on an older career. */
+    val startRatings: List<Int>? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
@@ -65,6 +72,13 @@ data class CareerProfile(
             "Does not bowl."
         }
         return "Role: $role. Batting: ${battingHand.lowercase()}, ${battingPosition.lowercase()}. $bowling"
+    }
+
+    /** How far the ratings have grown since the start, and the matches played. */
+    fun growthLine(): String {
+        val s = startRatings ?: return ""
+        fun d(now: Int, then: Int) = if (now >= then) "+${now - then}" else "${now - then}"
+        return "Growth since the start: batting ${d(batting, s[0])}, bowling ${d(bowling, s[1])}, fielding ${d(fielding, s[2])}. Matches played in the XI: $matchesPlayed."
     }
 
     /** One spoken line about the batting number, the fielding position, the difficulty and the ratings. */

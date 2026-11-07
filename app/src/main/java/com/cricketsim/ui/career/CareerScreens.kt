@@ -168,7 +168,8 @@ fun CareerFlow(onExit: () -> Unit) {
             batting = me.batting,
             bowling = me.bowling,
             fielding = me.fielding,
-            clubTeams = clubs
+            clubTeams = clubs,
+            startRatings = listOf(me.batting, me.bowling, me.fielding)
         )
         val updated = (list + profile).take(CareerWorld.MAX_CAREERS)
         careers = updated
@@ -667,7 +668,13 @@ fun CareerFlow(onExit: () -> Unit) {
                     onBack = back,
                     onOpenSquad = { step = CStep.MySquad },
                     onOpenClubs = { step = CStep.StateClubs },
-                    onOpenProfile = { step = CStep.Details }
+                    onOpenProfile = { step = CStep.Details },
+                    onCareerChanged = { updated ->
+                        val updatedList = list.map { if (it.id == updated.id) updated else it }
+                        careers = updatedList
+                        selected = updated
+                        scope.launch { store.save(updatedList) }
+                    }
                 )
             }
         }
