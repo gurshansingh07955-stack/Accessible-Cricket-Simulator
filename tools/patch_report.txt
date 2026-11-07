@@ -1,6 +1,6 @@
-Patch run: 42320948620
-Timestamp (UTC): 2026-11-07T00:53:38Z
+Patch run: 42322684222
+Timestamp (UTC): 2026-11-07T01:11:37Z
 Result: OK
 -----
-Patch 2026-11-07-083-career-mode-part-one.json
-  applied 11 operation(s) to 7 file(s)
+Patch 2026-11-07-084-career-playing-style-and-photo.json
+  applied 3 operation(s) to 3 file(s)

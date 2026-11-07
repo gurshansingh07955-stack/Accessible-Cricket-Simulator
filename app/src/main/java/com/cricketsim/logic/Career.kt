@@ -21,12 +21,33 @@ data class CareerProfile(
     val state: String,
     val domesticTeams: List<String>,
     val club: String,
-    val createdAt: Long
+    val createdAt: Long,
+    // Chosen after the club (part two). Empty on a career saved by part one.
+    val role: String = "",
+    val battingHand: String = "",
+    /** Empty for a batsman or wicketkeeper-batsman, who does not bowl. */
+    val bowlingHand: String = "",
+    val bowlingStyle: String = "",
+    val battingPosition: String = "",
+    val bowlingPhase: String = "",
+    /** Whether a profile photo is saved for this career (files/career_photos/<id>.png). */
+    val hasPhoto: Boolean = false
 ) {
     val fullName: String get() = "$firstName $lastName"
 
     /** One spoken line about this career. */
     fun describe(): String = "$fullName, age $age. $country, $state. $club. Jersey number $jersey."
+
+    /** One spoken line about the role and the playing style. */
+    fun playingStyle(): String {
+        if (role.isEmpty()) return "Role and playing style not chosen yet."
+        val bowling = if (bowlingStyle.isNotEmpty()) {
+            "Bowling: ${bowlingHand.lowercase()} ${bowlingStyle.lowercase()}, in the ${bowlingPhase.lowercase()}."
+        } else {
+            "Does not bowl."
+        }
+        return "Role: $role. Batting: ${battingHand.lowercase()}, ${battingPosition.lowercase()}. $bowling"
+    }
 }
 
 /** One state (or county, province, region) with its domestic teams and the places of its district clubs. */
@@ -45,6 +66,56 @@ object CareerWorld {
     const val RECOMMENDED_MAX_AGE = 19
     const val MAX_JERSEY = 999
     const val MAX_NAME_LENGTH = 20
+
+    /** One choice of a career menu: what it is called, how it is described, and (for a role) whether the player bowls. */
+    data class Option(val label: String, val description: String, val bowls: Boolean = false)
+
+    val ROLES = listOf(
+        Option("Batsman", "Scores the runs. Does not bowl.", false),
+        Option("Wicketkeeper-batsman", "Keeps wicket and bats. Does not bowl.", false),
+        Option("Bowler", "Takes the wickets. Bats low in the order.", true),
+        Option("Batting all-rounder", "Bats first and bowls some overs.", true),
+        Option("Bowling all-rounder", "Bowls first and bats usefully.", true)
+    )
+
+    fun bowls(role: String?): Boolean = ROLES.find { it.label == role }?.bowls == true
+
+    val BATTING_HANDS = listOf("Right-handed", "Left-handed")
+    val BOWLING_HANDS = listOf("Right-arm", "Left-arm")
+
+    /** The bowling styles of an arm: pace and medium, then every kind of spin. */
+    fun bowlingStyles(hand: String?): List<Option> {
+        val pace = listOf(
+            Option("Fast", "Express pace, with the new ball or in a short burst."),
+            Option("Medium-fast", "Brisk, a little below the fastest."),
+            Option("Medium", "Steady medium pace, wicket to wicket.")
+        )
+        val spin = if (hand == "Left-arm") {
+            listOf(
+                Option("Orthodox spin", "Slow left-arm orthodox: turns the ball away from the right-hander's pads."),
+                Option("Wrist spin", "Left-arm wrist spin, the chinaman: turns the other way.")
+            )
+        } else {
+            listOf(
+                Option("Off break", "Right-arm off spin: turns in to the right-hander."),
+                Option("Leg break", "Right-arm leg spin, with the googly: turns away from the right-hander.")
+            )
+        }
+        return pace + spin
+    }
+
+    val BATTING_POSITIONS = listOf(
+        Option("Top order (1 to 3)", "Opens the innings or bats at three."),
+        Option("Middle order (4 to 6)", "Builds the innings and finishes it."),
+        Option("Low order (7 to 9)", "Bats late, with the tail."),
+        Option("Lower order (10 and 11)", "The last two to bat.")
+    )
+
+    val BOWLING_PHASES = listOf(
+        Option("Starting overs", "Bowls with the new ball, in the first overs."),
+        Option("Middle overs", "Bowls through the middle of the innings."),
+        Option("Death overs", "Bowls the last overs, when the batters attack.")
+    )
 
     val COUNTRIES = listOf("India", "Pakistan", "Australia", "England", "New Zealand", "South Africa")
 
