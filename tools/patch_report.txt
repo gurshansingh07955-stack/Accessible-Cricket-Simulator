@@ -1,6 +1,6 @@
-Patch run: 42344689814
-Timestamp (UTC): 2026-11-07T05:54:49Z
+Patch run: 42365436770
+Timestamp (UTC): 2026-11-07T10:47:46Z
 Result: OK
 -----
-Patch 2026-11-07-085-career-home-and-club-teams.json
+Patch 2026-11-07-086-career-hub-tabs-and-season.json
   applied 4 operation(s) to 4 file(s)

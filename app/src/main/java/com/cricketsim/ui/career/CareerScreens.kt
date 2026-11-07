@@ -658,38 +658,17 @@ fun CareerFlow(onExit: () -> Unit) {
         CStep.Home -> {
             val career = selected
             val back = { step = CStep.Menu }
-            BackHandler(onBack = back)
-            PageColumn {
-                BackButton(back)
-                Spacer(modifier = Modifier.height(16.dp))
-                PageHeading(career?.fullName ?: "My Player")
-                Spacer(modifier = Modifier.height(8.dp))
-                if (career != null) {
-                    CareerPhoto(career)
-                    Text(
-                        text = "${career.club}, ${career.state}, ${career.country}. Jersey number ${career.jersey}.",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(career.playingStyle(), style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    if (career.clubs.isEmpty()) {
-                        Text(
-                            text = "This career was made before the club teams existed, so it has no squads. Delete it from the player profile and start a new one.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    } else {
-                        OptionButton("My club squad", "${career.club}: ${career.myClub?.players?.size ?: 0} players.", true, true) { step = CStep.MySquad }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OptionButton("Clubs of ${career.state}", "${career.clubs.size} district clubs and their squads.", true, false) { step = CStep.StateClubs }
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-                    OptionButton("Matches", "Coming in the next parts: your club's matches and the domestic season.", false, false) { }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OptionButton("Player profile", "Your details, ratings and choices. Delete this career here.", true, false) { step = CStep.Details }
-                }
+            if (career == null) {
+                PageColumn { BackButton(back) }
+            } else {
+                // The career's home: four tabs (Home, Game play, Calendar, Points table) at the bottom of the screen.
+                CareerHub(
+                    career = career,
+                    onBack = back,
+                    onOpenSquad = { step = CStep.MySquad },
+                    onOpenClubs = { step = CStep.StateClubs },
+                    onOpenProfile = { step = CStep.Details }
+                )
             }
         }
 
@@ -878,7 +857,7 @@ private fun NamePage(
 
 /** The career's profile photo, when it has one: decoration with a description, shown above the details. */
 @Composable
-private fun CareerPhoto(career: CareerProfile) {
+internal fun CareerPhoto(career: CareerProfile) {
     val context = LocalContext.current
     val image = remember(career.id, career.hasPhoto) {
         if (career.hasPhoto) BitmapFactory.decodeFile(photoFile(context, career.id).path)?.asImageBitmap() else null
