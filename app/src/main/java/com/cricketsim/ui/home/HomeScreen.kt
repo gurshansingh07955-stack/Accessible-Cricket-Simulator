@@ -80,6 +80,7 @@ fun HomeScreen(
     onResume: () -> Unit,
     onTournament: () -> Unit,
     onAdvanced: () -> Unit,
+    onCareer: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit
 ) {
@@ -149,6 +150,14 @@ fun HomeScreen(
                 emphasised = false,
                 enabled = true,
                 onClick = onAdvanced
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            MenuButton(
+                title = "My Player",
+                description = "Create your own player and follow his career.",
+                emphasised = false,
+                enabled = true,
+                onClick = onCareer
             )
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(

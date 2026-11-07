@@ -1,6 +1,6 @@
-Patch run: 42244989599
-Timestamp (UTC): 2026-11-06T15:39:06Z
+Patch run: 42320948620
+Timestamp (UTC): 2026-11-07T00:53:38Z
 Result: OK
 -----
-Patch 2026-11-06-082-team-groups-imports.json
-  applied 2 operation(s) to 2 file(s)
+Patch 2026-11-07-083-career-mode-part-one.json
+  applied 11 operation(s) to 7 file(s)
