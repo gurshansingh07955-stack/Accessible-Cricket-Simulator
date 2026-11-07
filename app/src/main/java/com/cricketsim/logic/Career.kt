@@ -31,8 +31,26 @@ data class CareerProfile(
     val battingPosition: String = "",
     val bowlingPhase: String = "",
     /** Whether a profile photo is saved for this career (files/career_photos/<id>.png). */
-    val hasPhoto: Boolean = false
+    val hasPhoto: Boolean = false,
+    // Part three: the choices after the playing style, the starting ratings and the random club teams of the state.
+    /** The batting number chosen inside the batting position (1 to 11); 0 on an older career. */
+    val battingNumber: Int = 0,
+    /** The preferred fielding position; "Wicketkeeper" for a wicketkeeper-batsman. */
+    val fieldingPosition: String = "",
+    /** Very easy, Easy, Medium, Hard or Legend: how hard selection is (see [CareerWorld.selectionFactor]). */
+    val difficulty: String = "",
+    /** The player's own ratings, 1 to 95 like the game's players; they start modest and grow as he plays. */
+    val batting: Int = 0,
+    val bowling: Int = 0,
+    val fielding: Int = 0,
+    /** The district clubs of the state with their made-up squads; null on a career made before they existed. */
+    val clubTeams: List<CareerClub>? = null
 ) {
+    val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
+
+    /** The squad of the player's own district club. */
+    val myClub: CareerClub? get() = clubs.find { it.name == club }
+
     val fullName: String get() = "$firstName $lastName"
 
     /** One spoken line about this career. */
@@ -48,7 +66,38 @@ data class CareerProfile(
         }
         return "Role: $role. Batting: ${battingHand.lowercase()}, ${battingPosition.lowercase()}. $bowling"
     }
+
+    /** One spoken line about the batting number, the fielding position, the difficulty and the ratings. */
+    fun plan(): String {
+        if (difficulty.isEmpty()) return ""
+        val number = if (battingNumber > 0) "Batting number $battingNumber. " else ""
+        val field = if (fieldingPosition.isNotEmpty()) "Fielding: ${fieldingPosition.lowercase()}. " else ""
+        return "$number${field}Difficulty: ${difficulty.lowercase()}. Ratings: batting $batting, bowling $bowling, fielding $fielding."
+    }
 }
+
+/** One player of a district club, made up when the career starts. Ratings run 1 to 95 like the game's players. */
+data class CareerPlayer(
+    val name: String,
+    val role: String,
+    val battingHand: String,
+    /** Empty for a player who does not bowl. */
+    val bowlingHand: String,
+    val bowlingStyle: String,
+    val batting: Int,
+    val bowling: Int,
+    val fielding: Int,
+    /** True for the player of the career. */
+    val isUser: Boolean = false
+) {
+    fun describe(): String {
+        val bowl = if (bowlingStyle.isNotEmpty()) "${bowlingHand.lowercase()} ${bowlingStyle.lowercase()}" else "does not bowl"
+        return "$name${if (isUser) " (you)" else ""}, ${role.lowercase()}. ${battingHand.lowercase()}, $bowl. Batting $batting, bowling $bowling, fielding $fielding."
+    }
+}
+
+/** A district club and its squad. */
+data class CareerClub(val name: String, val players: List<CareerPlayer>)
 
 /** One state (or county, province, region) with its domestic teams and the places of its district clubs. */
 data class CareerState(val name: String, val domesticTeams: List<String>, val places: List<String>)
@@ -116,6 +165,71 @@ object CareerWorld {
         Option("Middle overs", "Bowls through the middle of the innings."),
         Option("Death overs", "Bowls the last overs, when the batters attack.")
     )
+
+    /** The batting numbers inside a chosen batting position: Top order 1 to 3, Middle order 4 to 6, Low order 7 to 9, Lower order 10 and 11. */
+    fun battingNumbers(position: String?): List<Int> = when {
+        position?.startsWith("Top") == true -> listOf(1, 2, 3)
+        position?.startsWith("Middle") == true -> listOf(4, 5, 6)
+        position?.startsWith("Low order") == true -> listOf(7, 8, 9)
+        else -> listOf(10, 11)
+    }
+
+    fun numberDescription(n: Int): String = when (n) {
+        1 -> "Opens the innings and faces the first ball."
+        2 -> "Opens the innings, the second opener."
+        3 -> "The first wicket-down batter."
+        4 -> "The first of the middle order."
+        5 -> "Builds the innings in the middle."
+        6 -> "Finishes the innings."
+        7 -> "The first of the tail, often a keeper or an all-rounder."
+        8 -> "Bats with the tail."
+        9 -> "Bats late, usually a bowler."
+        10 -> "Bats at ten."
+        else -> "The last man in."
+    }
+
+    /** The positions a fielder can prefer (a wicketkeeper-batsman keeps wicket and is not asked). */
+    val FIELDING_POSITIONS = listOf(
+        Option("First slip", "Close catching: edges off the fast bowlers."),
+        Option("Gully", "Close catching: the fast, square catches."),
+        Option("Point", "Saves the cut and the square drive, close to the bat."),
+        Option("Cover", "The classic inner-ring position on the off side."),
+        Option("Mid-off", "Straight on the off side, near the bowler."),
+        Option("Mid-on", "Straight on the leg side, near the bowler."),
+        Option("Mid-wicket", "Saves the flick and the pull on the leg side."),
+        Option("Square leg", "Square on the leg side."),
+        Option("Short leg", "Close catching on the leg side, brave and quick."),
+        Option("Fine leg", "Behind square on the leg side, near the boundary."),
+        Option("Third man", "Behind square on the off side, near the boundary."),
+        Option("Deep cover", "On the boundary, covering the off-side drive."),
+        Option("Long-off", "On the boundary, straight on the off side."),
+        Option("Long-on", "On the boundary, straight on the leg side."),
+        Option("Deep mid-wicket", "On the boundary, covering the big leg-side hits."),
+        Option("Deep square leg", "On the boundary, square on the leg side.")
+    )
+
+    const val WICKETKEEPER = "Wicketkeeper"
+
+    /** The career difficulties, easiest first. They decide how hard it is to be selected as the player moves up the levels. */
+    val DIFFICULTIES = listOf(
+        Option("Very easy", "Selection is very easy: the selectors pick you readily, even after a quiet spell."),
+        Option("Easy", "Selection is easy: steady form keeps you in the team."),
+        Option("Medium", "Selection is fair: you need regular good form."),
+        Option("Hard", "Selection is hard: you need strong, consistent performances to move up."),
+        Option("Legend", "Selection is very hard: only outstanding performances move you up the levels.")
+    )
+
+    /**
+     * How demanding the selectors are, from 0.6 (Very easy) to 1.6 (Legend). The later parts of career mode (selection for the
+     * district club, the state and the national side) will scale the form a player needs by this number. A dial.
+     */
+    fun selectionFactor(difficulty: String?): Double = when (difficulty) {
+        "Very easy" -> 0.6
+        "Easy" -> 0.8
+        "Hard" -> 1.25
+        "Legend" -> 1.6
+        else -> 1.0
+    }
 
     val COUNTRIES = listOf("India", "Pakistan", "Australia", "England", "New Zealand", "South Africa")
 

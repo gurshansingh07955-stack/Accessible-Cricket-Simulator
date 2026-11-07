@@ -26,11 +26,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.cricketsim.logic.CareerGenerator
+import com.cricketsim.logic.CareerPlayer
 import com.cricketsim.logic.CareerProfile
 import com.cricketsim.logic.CareerWorld
 import com.cricketsim.persistence.CareerStore
@@ -55,7 +58,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
-private enum class CStep { Menu, Resume, Details, Name, Age, Gender, Jersey, Country, State, Club, Role, BatHand, BowlHand, BowlStyle, BatPosition, BowlPhase, Created }
+private enum class CStep { Menu, Resume, Details, Name, Age, Gender, Jersey, Country, State, Club, Role, BatHand, BowlHand, BowlStyle, BatPosition, BowlPhase, BatNumber, Fielding, Difficulty, Summary, Home, MySquad, StateClubs, ClubSquad }
 
 /**
  * Home > My Player: the career mode. PART ONE: the menu (Start new career, Resume career), up to five saved careers, and the
@@ -90,6 +93,10 @@ fun CareerFlow(onExit: () -> Unit) {
     var bowlStyle by remember { mutableStateOf<String?>(null) }
     var batPosition by remember { mutableStateOf<String?>(null) }
     var bowlPhase by remember { mutableStateOf<String?>(null) }
+    var batNumber by remember { mutableStateOf<Int?>(null) }
+    var fieldPos by remember { mutableStateOf<String?>(null) }
+    var difficulty by remember { mutableStateOf<String?>(null) }
+    var clubIndex by remember { mutableStateOf(0) }
     // The optional profile photo, chosen on the name page (from the gallery or the files); saved with the career.
     var photo by remember { mutableStateOf<Bitmap?>(null) }
     var photoError by remember { mutableStateOf<String?>(null) }
@@ -113,13 +120,29 @@ fun CareerFlow(onExit: () -> Unit) {
         return
     }
 
-    // Makes the career from everything chosen, saves it (and the photo), and shows the confirmation.
+    // Makes the career from everything chosen: the player's starting ratings and the random club teams of his state; saves it (and
+    // the photo) and opens the career's home page.
     val createCareer: () -> Unit = {
         val chosenCountry = country ?: CareerWorld.COUNTRIES.first()
         val chosenState = stateName ?: ""
         val bowls = CareerWorld.bowls(role)
         val id = UUID.randomUUID().toString()
         val bitmap = photo
+        val fullName = "${firstName.trim()} ${lastName.trim()}"
+        val random = java.util.Random(System.nanoTime() xor id.hashCode().toLong())
+        val ratings = CareerGenerator.startingRatings(role ?: "", random)
+        val me = CareerPlayer(
+            name = fullName,
+            role = role ?: "",
+            battingHand = batHand ?: "",
+            bowlingHand = if (bowls) bowlHand ?: "" else "",
+            bowlingStyle = if (bowls) bowlStyle ?: "" else "",
+            batting = ratings[0],
+            bowling = ratings[1],
+            fielding = ratings[2],
+            isUser = true
+        )
+        val clubs = CareerGenerator.generateClubs(chosenCountry, chosenState, clubName ?: "", me, random)
         val profile = CareerProfile(
             id = id,
             firstName = firstName.trim(),
@@ -134,16 +157,23 @@ fun CareerFlow(onExit: () -> Unit) {
             createdAt = System.currentTimeMillis(),
             role = role ?: "",
             battingHand = batHand ?: "",
-            bowlingHand = if (bowls) bowlHand ?: "" else "",
-            bowlingStyle = if (bowls) bowlStyle ?: "" else "",
+            bowlingHand = me.bowlingHand,
+            bowlingStyle = me.bowlingStyle,
             battingPosition = batPosition ?: "",
             bowlingPhase = if (bowls) bowlPhase ?: "" else "",
-            hasPhoto = bitmap != null
+            hasPhoto = bitmap != null,
+            battingNumber = batNumber ?: 0,
+            fieldingPosition = fieldPos ?: "",
+            difficulty = difficulty ?: "",
+            batting = me.batting,
+            bowling = me.bowling,
+            fielding = me.fielding,
+            clubTeams = clubs
         )
         val updated = (list + profile).take(CareerWorld.MAX_CAREERS)
         careers = updated
         selected = profile
-        step = CStep.Created
+        step = CStep.Home
         scope.launch {
             if (bitmap != null) withContext(Dispatchers.IO) { savePhoto(context, id, bitmap) }
             store.save(updated)
@@ -173,6 +203,7 @@ fun CareerFlow(onExit: () -> Unit) {
                     firstName = ""; lastName = ""; ageText = ""; jerseyText = ""; country = null; stateName = null
                     clubName = null; role = null; batHand = null; bowlHand = null; bowlStyle = null; batPosition = null; bowlPhase = null
                     photo = null; photoError = null
+                    batNumber = null; fieldPos = null; difficulty = null
                     step = CStep.Name
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -198,7 +229,7 @@ fun CareerFlow(onExit: () -> Unit) {
                 list.forEach { c ->
                     OptionButton(c.fullName, "Age ${c.age}. ${c.country}, ${c.state}. ${c.club}. Jersey number ${c.jersey}.", true, false) {
                         selected = c
-                        step = CStep.Details
+                        step = CStep.Home
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -207,7 +238,7 @@ fun CareerFlow(onExit: () -> Unit) {
 
         CStep.Details -> {
             val career = selected
-            val back = { step = if (list.isEmpty()) CStep.Menu else CStep.Resume }
+            val back = { step = if (career == null) CStep.Menu else CStep.Home }
             BackHandler(onBack = back)
             PageColumn {
                 BackButton(back)
@@ -220,6 +251,10 @@ fun CareerFlow(onExit: () -> Unit) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(career.playingStyle(), style = MaterialTheme.typography.bodyLarge)
                     Spacer(modifier = Modifier.height(8.dp))
+                    if (career.plan().isNotEmpty()) {
+                        Text(career.plan(), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                     Text(
                         text = "Domestic team${if (career.domesticTeams.size > 1) "s" else ""} of your state: ${career.domesticTeams.joinToString(", ")}.",
                         style = MaterialTheme.typography.bodyLarge
@@ -485,7 +520,7 @@ fun CareerFlow(onExit: () -> Unit) {
                 CareerWorld.BATTING_POSITIONS.forEach { o ->
                     OptionButton(o.label, o.description, true, o.label == batPosition) {
                         batPosition = o.label
-                        if (CareerWorld.bowls(role)) step = CStep.BowlPhase else createCareer()
+                        step = if (CareerWorld.bowls(role)) CStep.BowlPhase else CStep.BatNumber
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -505,39 +540,230 @@ fun CareerFlow(onExit: () -> Unit) {
                 CareerWorld.BOWLING_PHASES.forEach { o ->
                     OptionButton(o.label, o.description, true, o.label == bowlPhase) {
                         bowlPhase = o.label
-                        createCareer()
+                        step = CStep.BatNumber
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
 
-        CStep.Created -> {
+        CStep.BatNumber -> {
+            val back = { step = if (CareerWorld.bowls(role)) CStep.BowlPhase else CStep.BatPosition }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Your batting number")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "You chose ${(batPosition ?: "").lowercase()}. Which number do you want to bat at?",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                CareerWorld.battingNumbers(batPosition).forEach { n ->
+                    OptionButton("Number $n", CareerWorld.numberDescription(n), true, n == batNumber) {
+                        batNumber = n
+                        if (role == "Wicketkeeper-batsman") {
+                            fieldPos = CareerWorld.WICKETKEEPER
+                            step = CStep.Difficulty
+                        } else {
+                            step = CStep.Fielding
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+
+        CStep.Fielding -> {
+            val back = { step = CStep.BatNumber }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Your fielding position")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Where do you like to field?", style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                CareerWorld.FIELDING_POSITIONS.forEach { o ->
+                    OptionButton(o.label, o.description, true, o.label == fieldPos) {
+                        fieldPos = o.label
+                        step = CStep.Difficulty
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+
+        CStep.Difficulty -> {
+            val back = { step = if (role == "Wicketkeeper-batsman") CStep.BatNumber else CStep.Fielding }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Career difficulty")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "How hard should it be to be selected as you move up the levels? The easier the difficulty, the more easily the selectors pick you; on Legend it is very hard.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                CareerWorld.DIFFICULTIES.forEach { o ->
+                    OptionButton(o.label, o.description, true, o.label == difficulty) {
+                        difficulty = o.label
+                        step = CStep.Summary
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+
+        CStep.Summary -> {
+            val back = { step = CStep.Difficulty }
+            BackHandler(onBack = back)
+            val bowls = CareerWorld.bowls(role)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Your career summary")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Check everything, then start your career. Use Back to change a choice.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(12.dp))
+                val lines = listOfNotNull(
+                    "Name: ${firstName.trim()} ${lastName.trim()}",
+                    "Age: ${ageText.toIntOrNull() ?: ""}",
+                    "Gender: Male",
+                    "Jersey number: ${jerseyText.toIntOrNull() ?: 0}",
+                    "Profile photo: ${if (photo != null) "chosen" else "none"}",
+                    "Country: ${country ?: ""}",
+                    "State: ${stateName ?: ""}",
+                    "District club: ${clubName ?: ""}",
+                    "Role: ${role ?: ""}",
+                    "Batting hand: ${batHand ?: ""}",
+                    if (bowls) "Bowling: ${(bowlHand ?: "").lowercase()} ${(bowlStyle ?: "").lowercase()}" else "Bowling: does not bowl",
+                    "Batting position: ${batPosition ?: ""}, number ${batNumber ?: 0}",
+                    if (bowls) "Bowling phase: ${bowlPhase ?: ""}" else null,
+                    "Fielding position: ${fieldPos ?: ""}",
+                    "Difficulty: ${difficulty ?: ""}"
+                )
+                lines.forEach { line ->
+                    Text(line, style = MaterialTheme.typography.bodyLarge)
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = { createCareer() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Start my career") }
+            }
+        }
+
+        CStep.Home -> {
             val career = selected
             val back = { step = CStep.Menu }
             BackHandler(onBack = back)
             PageColumn {
-                PageHeading("Your career is created")
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading(career?.fullName ?: "My Player")
                 Spacer(modifier = Modifier.height(8.dp))
                 if (career != null) {
                     CareerPhoto(career)
                     Text(
-                        text = career.describe(),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        text = "${career.club}, ${career.state}, ${career.country}. Jersey number ${career.jersey}.",
+                        style = MaterialTheme.typography.bodyLarge
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(career.playingStyle(), style = MaterialTheme.typography.bodyLarge)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "It is saved. You can open it from Resume career. The next parts of career mode, your club's players and your matches, are still to come.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(career.playingStyle(), style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    if (career.clubs.isEmpty()) {
+                        Text(
+                            text = "This career was made before the club teams existed, so it has no squads. Delete it from the player profile and start a new one.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    } else {
+                        OptionButton("My club squad", "${career.club}: ${career.myClub?.players?.size ?: 0} players.", true, true) { step = CStep.MySquad }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OptionButton("Clubs of ${career.state}", "${career.clubs.size} district clubs and their squads.", true, false) { step = CStep.StateClubs }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    OptionButton("Matches", "Coming in the next parts: your club's matches and the domestic season.", false, false) { }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OptionButton("Player profile", "Your details, ratings and choices. Delete this career here.", true, false) { step = CStep.Details }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(onClick = back, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Back to My Player") }
             }
+        }
+
+        CStep.MySquad -> {
+            val career = selected
+            val back = { step = CStep.Home }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading(career?.club ?: "My club squad")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Your club's squad. Ratings run from 1 to 95.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(12.dp))
+                SquadLines(career?.myClub?.players ?: emptyList())
+            }
+        }
+
+        CStep.StateClubs -> {
+            val career = selected
+            val back = { step = CStep.Home }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Clubs of ${career?.state ?: "your state"}")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Choose a club to see its squad.", style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                career?.clubs?.forEachIndexed { index, club ->
+                    OptionButton(club.name, "${club.players.size} players${if (club.name == career.club) ". Your club." else "."}", true, club.name == career.club) {
+                        clubIndex = index
+                        step = CStep.ClubSquad
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+
+        CStep.ClubSquad -> {
+            val career = selected
+            val club = career?.clubs?.getOrNull(clubIndex)
+            val back = { step = CStep.StateClubs }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading(club?.name ?: "Club")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("The squad of this club. Ratings run from 1 to 95.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(12.dp))
+                SquadLines(club?.players ?: emptyList())
+            }
+        }
+    }
+}
+
+/** A squad as one line per player, grouped by role (batsmen, keepers, all-rounders, bowlers) under headings. */
+@Composable
+private fun SquadLines(players: List<CareerPlayer>) {
+    CareerWorld.ROLES.forEach { role ->
+        val group = players.filter { it.role == role.label }
+        if (group.isNotEmpty()) {
+            Text(
+                text = if (role.label.endsWith("man")) role.label.dropLast(3) + "men" else role.label + "s",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() }
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            group.forEach { p ->
+                Text(p.describe(), style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }

@@ -1,6 +1,6 @@
-Patch run: 42322684222
-Timestamp (UTC): 2026-11-07T01:11:37Z
+Patch run: 42344689814
+Timestamp (UTC): 2026-11-07T05:54:49Z
 Result: OK
 -----
-Patch 2026-11-07-084-career-playing-style-and-photo.json
-  applied 3 operation(s) to 3 file(s)
+Patch 2026-11-07-085-career-home-and-club-teams.json
+  applied 4 operation(s) to 4 file(s)
