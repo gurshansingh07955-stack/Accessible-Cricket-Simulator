@@ -189,7 +189,10 @@ data class MatchState(
     // A five-day Test's innings, sessions and rules (logic/TestMatch.kt); null = not a five-day Test.
     val test: TestState? = null,
     // The tournament (and stage, for example "Big Bash League 2026-27, Final") this match belongs to; null = a normal match.
-    val tournamentName: String? = null
+    val tournamentName: String? = null,
+    // Career mode (My Player): the id of the player who takes over his own batting and bowling. The rest of his team, openers, the
+    // choice of the next batter and bowler, the field, is played by the game, as it is for the opposition. Null in every other match.
+    val careerPlayerId: String? = null
 )
 
 object MatchStateMachine {
@@ -726,7 +729,7 @@ object MatchStateMachine {
 
         val currentInningsData = MatchStats.createEmptyInningsData(battingTeam, bowlingTeam, Pair(striker, nonStriker), bowler)
 
-        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, state.userTeam.id, state.format, 0, state.rules)
+        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, if (state.careerPlayerId != null) "" else state.userTeam.id, state.format, 0, state.rules)
 
         return state.copy(
             currentInnings = 2,
@@ -742,8 +745,8 @@ object MatchStateMachine {
             firstInningsData = firstInningsData,
             secondInningsData = null,
             currentInningsData = currentInningsData,
-            needsOpenerSelection = battingTeam.id == state.userTeam.id,
-            needsBowlerSelection = bowlingTeam.id == state.userTeam.id,
+            needsOpenerSelection = battingTeam.id == state.userTeam.id && state.careerPlayerId == null,
+            needsBowlerSelection = bowlingTeam.id == state.userTeam.id && state.careerPlayerId == null,
             pendingDismissal = null,
             deferredOverEnd = false,
             fieldPlacements = fieldPlacements,
@@ -831,7 +834,7 @@ object MatchStateMachine {
         val nonStriker = battingTeam.players[1]
         val bowler = Lineup.openingBowler(bowlingTeam)
         val innings = MatchStats.createEmptyInningsData(battingTeam, bowlingTeam, Pair(striker, nonStriker), bowler)
-        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, state.userTeam.id, state.format, 0, state.rules)
+        val fieldPlacements = pickStartingFieldPlacements(bowlingTeam, bowler.id, if (state.careerPlayerId != null) "" else state.userTeam.id, state.format, 0, state.rules)
         return state.copy(
             currentInnings = inningsNumber,
             battingTeam = battingTeam,
@@ -843,8 +846,8 @@ object MatchStateMachine {
             ballByBall = emptyList(),
             lastSixBalls = emptyList(),
             currentInningsData = innings,
-            needsOpenerSelection = battingTeam.id == state.userTeam.id,
-            needsBowlerSelection = bowlingTeam.id == state.userTeam.id,
+            needsOpenerSelection = battingTeam.id == state.userTeam.id && state.careerPlayerId == null,
+            needsBowlerSelection = bowlingTeam.id == state.userTeam.id && state.careerPlayerId == null,
             pendingDismissal = null,
             deferredOverEnd = false,
             fieldPlacements = fieldPlacements,

@@ -1,6 +1,6 @@
-Patch run: 42388039384
-Timestamp (UTC): 2026-11-07T15:47:09Z
+Patch run: 42431100860
+Timestamp (UTC): 2026-11-08T00:44:16Z
 Result: OK
 -----
-Patch 2026-11-07-087-career-selection-and-growth.json
-  applied 7 operation(s) to 7 file(s)
+Patch 2026-11-07-088-career-play-as-your-player.json
+  applied 18 operation(s) to 6 file(s)

@@ -49,6 +49,7 @@ import com.cricketsim.logic.CareerWorld
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.CplSimulator
 import com.cricketsim.logic.MatchFormat
+import com.cricketsim.logic.MatchRules
 import com.cricketsim.logic.SimMode
 import com.cricketsim.logic.TossResult
 import com.cricketsim.logic.TossRoles
@@ -67,6 +68,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
+
+/** District club cricket: 20 overs a side, no DRS, rain possible, and a tie is shared (no Super Over). */
+private val CAREER_RULES = MatchRules(
+    overs = 20, restrictionBalls = 36, fieldersOutside = 2, drsReviews = 0, rainEnabled = true, maxOversPerBowler = 4, noSuperOver = true
+)
 
 private enum class HubTab(val label: String) { Home("Home"), Play("Game play"), Calendar("Calendar"), Table("Points table") }
 
@@ -225,6 +231,8 @@ fun CareerHub(
                     MatchScreen(
                         tournamentName = state.name,
                         format = MatchFormat.T20,
+                        rules = CAREER_RULES,
+                        careerPlayerId = CareerSeason.userPlayerId(career),
                         stadium = stadium,
                         userTeam = flow.userXI,
                         opponentTeam = flow.oppXI,
@@ -322,7 +330,7 @@ fun CareerHub(
                                         message = chosen.reason + " You can simulate the match instead."
                                     } else if (pid != null && squad != null && oppSquad != null && stadium != null) {
                                         // The selectors name the XI (you are in it): straight to the toss.
-                                        val xi = CareerSelection.matchXI(squad, updated.tags, stadium, pid)
+                                        val xi = CareerSelection.matchXI(squad, updated.tags, stadium, pid, career.battingNumber)
                                         play = CPlay.Toss(mine.id, xi, CplSimulator.pickXI(oppSquad, updated.tags, stadium))
                                     }
                                 }
@@ -476,7 +484,7 @@ private fun PlayTab(
         }
         OptionButton(
             title = "Play my match",
-            description = if (decision.selected) "The selectors name the XI with you in it. Toss, then play it ball by ball, controlling the whole team for now." else "You are not in the XI, so you cannot play this match.",
+            description = if (decision.selected) "The selectors name the XI with you in it. After the toss you take over only your own batting and bowling; the game plays the rest of your team." else "You are not in the XI, so you cannot play this match.",
             enabled = !busy && decision.selected,
             emphasised = pending == null
         ) { onPlay() }

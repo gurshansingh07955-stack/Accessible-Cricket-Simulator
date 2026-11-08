@@ -258,7 +258,7 @@ object MatchSimulation {
     private fun endOfOver(state: MatchState, stadium: Stadium): MatchState {
         val rotated = MatchStateMachine.rotateStrike(state)
         if (isInningsOver(rotated) || isTargetReached(rotated)) return rotated
-        val withBowlerHandled = if (rotated.bowlingTeam.id == rotated.userTeam.id) {
+        val withBowlerHandled = if (rotated.bowlingTeam.id == rotated.userTeam.id && rotated.careerPlayerId == null) {
             rotated.copy(needsBowlerSelection = true)
         } else {
             MatchStateMachine.changeBowler(rotated, AiSituation.bowlingBias(rotated))
@@ -373,8 +373,8 @@ object MatchSimulation {
 
             // If the innings ends on this exact ball, nobody needs to be sent in.
             if (!isInningsOver(newState)) {
-                if (newState.battingTeam.id == newState.userTeam.id) {
-                    // The user picks their own next batsman.
+                if (newState.battingTeam.id == newState.userTeam.id && newState.careerPlayerId == null) {
+                    // The user picks their own next batsman (in career mode the game does).
                     val outStats = newState.currentInningsData.batsmanStats.firstOrNull { it.playerId == striker.id }
                     newState = newState.copy(
                         pendingDismissal = PendingDismissal(

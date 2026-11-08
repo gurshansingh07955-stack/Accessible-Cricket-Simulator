@@ -203,7 +203,9 @@ fun MatchScreen(
     /** A custom tournament's rules (overs, restriction, DRS, rain); null = the format's own. */
     rules: MatchRules? = null,
     /** The tournament (and stage) this match belongs to: shown on the match screens and in the shared scorecard. Null = a normal match. */
-    tournamentName: String? = null
+    tournamentName: String? = null,
+    /** Career mode: the player who takes over only his own batting and bowling (everything else is played for him). Null = the user plays the whole team. */
+    careerPlayerId: String? = null
 ) {
     val services = LocalGameServices.current
     val matchContext = LocalContext.current
@@ -225,6 +227,23 @@ fun MatchScreen(
                 rules = rules
             )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }
                 .let { if (!tournamentName.isNullOrBlank() && it.tournamentName == null) it.copy(tournamentName = tournamentName) else it }
+                .let { s ->
+                    if (careerPlayerId == null || s.careerPlayerId != null) {
+                        s
+                    } else {
+                        // Career mode: the captain picks the openers, the bowlers and the field; the player only takes his own batting and bowling.
+                        val c = s.copy(careerPlayerId = careerPlayerId, needsOpenerSelection = false, needsBowlerSelection = false)
+                        if (c.bowlingTeam.id == c.userTeam.id) {
+                            MatchStateMachine.setFieldPlacements(
+                                c,
+                                FieldingSystem.generateAiFieldPlacements(
+                                    FieldingSystem.getFieldingPlayers(c.bowlingTeam, c.currentBowler.id),
+                                    FieldingSystem.isRestrictedBall(c, 0)
+                                )
+                            )
+                        } else c
+                    }
+                }
                 .also { FieldingSystem.applyRules(it.rules) }
         )
     }
@@ -540,7 +559,12 @@ fun MatchScreen(
             presetBattingDecision
         )
         // Every dismissal: the fielding side appeals and the umpire decides before anything else (AppealScreens.kt).
-        if (resumed == null && result.outcome.isWicket && result.outcome.dismissalType != null) {
+        // In career mode only the player's own dismissal, or a wicket he takes, goes through the appeal: a team-mate's or an opponent's is just given.
+        val careerPid = before.careerPlayerId
+        val careerInvolved = careerPid == null ||
+            (before.bowlingTeam.id == before.userTeam.id && before.currentBowler.id == careerPid) ||
+            result.outcome.outBatsmanId == careerPid
+        if (resumed == null && careerInvolved && result.outcome.isWicket && result.outcome.dismissalType != null) {
             pendingAppeal = PendingAppeal(before, result, userBowling = before.bowlingTeam.id == before.userTeam.id)
             return
         }
@@ -576,9 +600,35 @@ fun MatchScreen(
                 )
                 return
             }
-            if (userBatting) services?.announceSpoken("You have no reviews left.")
+            if (userBatting && careerInvolved) services?.announceSpoken("You have no reviews left.")
         }
         commitBall(before, result)
+    }
+
+    // CAREER MODE: when it is not the player's turn to bat (he is not on strike) or to bowl (he is not the bowler), the game plays the ball
+    // for his team by itself, a pause between balls so each one can be heard; "Skip to my turn" shortens the pause until his turn comes.
+    var skipping by remember { mutableStateOf(false) }
+    LaunchedEffect(
+        matchState, matchOver, pendingAppeal, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
+        confirmingDeclare, showImpactUse, surgeNotice, showPitchingScreen, showBattingScreen, showFieldScreen, showChangeBowler, skipping
+    ) {
+        val pid = matchState.careerPlayerId ?: return@LaunchedEffect
+        val s = matchState
+        if (matchOver || pendingAppeal != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
+            confirmingLeave || confirmingDeclare || showImpactUse || surgeNotice != null || showPitchingScreen || showBattingScreen ||
+            showFieldScreen || showChangeBowler
+        ) return@LaunchedEffect
+        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.needsBowlerSelection || s.needsOpenerSelection || s.pendingDismissal != null ||
+            s.activeRainDelay != null || s.drinksBreak != null || s.superOverNominating
+        ) return@LaunchedEffect
+        val myBowl = s.bowlingTeam.id == userTeam.id && s.currentBowler.id == pid
+        val myBat = s.battingTeam.id == userTeam.id && s.currentBatsmen.first.id == pid
+        if (myBowl || myBat) {
+            skipping = false
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(if (skipping) 150L else 1800L)
+        advanceOneBall()
     }
 
     if (confirmingLeave) {
@@ -1012,6 +1062,11 @@ fun MatchScreen(
 
     val isPowerplayNow = FieldingSystem.isRestrictedBall(matchState, matchState.score.overs * 6 + matchState.score.balls)
     val isUserBowling = matchState.bowlingTeam.id == userTeam.id
+    // Career mode: the player takes over only when he is on strike or is the bowler; otherwise the game plays the ball.
+    val careerId = matchState.careerPlayerId
+    val autoTurn = careerId != null &&
+        !(isUserBowling && matchState.currentBowler.id == careerId) &&
+        !(!isUserBowling && matchState.currentBatsmen.first.id == careerId)
 
     if (showFieldScreen) {
         BackHandler(onBack = { showFieldScreen = false })
@@ -1020,7 +1075,7 @@ fun MatchScreen(
             players = matchState.bowlingTeam.players,
             placements = matchState.fieldPlacements,
             isPowerplay = isPowerplayNow,
-            isReadOnly = !isUserBowling,
+            isReadOnly = !isUserBowling || matchState.careerPlayerId != null,
             onConfirm = { placements ->
                 matchState = MatchStateMachine.setFieldPlacements(matchState, placements)
                 fieldMessage = fieldSetMessage(placements, isPowerplayNow)
@@ -1093,10 +1148,28 @@ fun MatchScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        if (isUserBowling) {
-            // Set the field BEFORE bowling — it's a pre-delivery decision.
+        if (autoTurn) {
+            Text(
+                text = "Your team is playing. You take over when you face the ball or bowl. The game plays on by itself.",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(MatchLines.strikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Text(MatchLines.nonStrikerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Text(MatchLines.bowlerLine(matchState), style = MaterialTheme.typography.bodyLarge)
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { skipping = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Skip to my turn")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Set field")
+                Text("Hear the field")
+            }
+        } else if (isUserBowling) {
+            // Set the field BEFORE bowling — it's a pre-delivery decision. (In career mode the captain sets it; you only hear it.)
+            Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (careerId != null) "Hear the field" else "Set field")
             }
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1105,11 +1178,23 @@ fun MatchScreen(
             Text(MatchLines.bowlerLine(matchState), style = MaterialTheme.typography.bodyLarge)
             Spacer(modifier = Modifier.height(16.dp))
 
-            Button(onClick = { showPitchingScreen = true }, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    if (careerId != null) {
+                        // The captain sets the field for your over, and says what moved.
+                        val prepared = MatchSimulation.prepareAiDelivery(matchState)
+                        matchState = prepared.state
+                        director?.onFieldChanges(prepared.fieldChanges)
+                        if (prepared.fieldChanges.isNotEmpty()) services?.announceSpoken(prepared.fieldChanges.joinToString(" "))
+                    }
+                    showPitchingScreen = true
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Bowl")
             }
             // Only until the first ball of this over has been bowled; after that the option is gone.
-            if (MatchStateMachine.canChangeBowler(matchState)) {
+            if (careerId == null && MatchStateMachine.canChangeBowler(matchState)) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = { showChangeBowler = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("Change bowler")

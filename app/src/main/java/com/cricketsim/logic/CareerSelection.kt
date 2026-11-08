@@ -72,6 +72,13 @@ object CareerSelection {
     }
 
     /** The eleven the player's club takes the field with for a match he is selected for (captain and keeper set). */
-    fun matchXI(squad: Team, tags: Map<String, SquadTag>, stadium: Stadium, userPlayerId: String): Team =
-        CplSimulator.pickXI(squadForMatch(squad, tags, stadium, userPlayerId, true), tags, stadium)
+    fun matchXI(squad: Team, tags: Map<String, SquadTag>, stadium: Stadium, userPlayerId: String, battingNumber: Int = 0): Team {
+        val xi = CplSimulator.pickXI(squadForMatch(squad, tags, stadium, userPlayerId, true), tags, stadium)
+        if (battingNumber !in 1..11) return xi
+        // The batting order puts him at the number he chose (a keeper or an opener is not moved off the top two unless he chose to be).
+        val me = xi.players.find { it.id == userPlayerId } ?: return xi
+        val order = xi.players.filter { it.id != userPlayerId }.toMutableList()
+        order.add((battingNumber - 1).coerceIn(0, order.size), me)
+        return xi.copy(players = order)
+    }
 }
