@@ -12,6 +12,7 @@ import com.cricketsim.logic.MatchEngine
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.MatchStateMachine
 import com.cricketsim.logic.MatchStatus
+import com.cricketsim.logic.userSelects
 import com.cricketsim.logic.PendingDismissal
 import com.cricketsim.logic.Player
 import com.cricketsim.logic.RainInterruption
@@ -258,7 +259,7 @@ object MatchSimulation {
     private fun endOfOver(state: MatchState, stadium: Stadium): MatchState {
         val rotated = MatchStateMachine.rotateStrike(state)
         if (isInningsOver(rotated) || isTargetReached(rotated)) return rotated
-        val withBowlerHandled = if (rotated.bowlingTeam.id == rotated.userTeam.id && rotated.careerPlayerId == null) {
+        val withBowlerHandled = if (rotated.bowlingTeam.id == rotated.userTeam.id && rotated.userSelects) {
             rotated.copy(needsBowlerSelection = true)
         } else {
             MatchStateMachine.changeBowler(rotated, AiSituation.bowlingBias(rotated))
@@ -373,7 +374,7 @@ object MatchSimulation {
 
             // If the innings ends on this exact ball, nobody needs to be sent in.
             if (!isInningsOver(newState)) {
-                if (newState.battingTeam.id == newState.userTeam.id && newState.careerPlayerId == null) {
+                if (newState.battingTeam.id == newState.userTeam.id && newState.userSelects) {
                     // The user picks their own next batsman (in career mode the game does).
                     val outStats = newState.currentInningsData.batsmanStats.firstOrNull { it.playerId == striker.id }
                     newState = newState.copy(

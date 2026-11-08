@@ -55,6 +55,7 @@ import com.cricketsim.logic.TestMatch
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.MatchStateMachine
 import com.cricketsim.logic.MatchStatus
+import com.cricketsim.logic.userSelects
 import com.cricketsim.logic.ResolvedBowlingDecision
 import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
@@ -206,7 +207,9 @@ fun MatchScreen(
     /** The tournament (and stage) this match belongs to: shown on the match screens and in the shared scorecard. Null = a normal match. */
     tournamentName: String? = null,
     /** Career mode: the player who takes over only his own batting and bowling (everything else is played for him). Null = the user plays the whole team. */
-    careerPlayerId: String? = null
+    careerPlayerId: String? = null,
+    /** Career mode: the player is the captain, so he also makes the team decisions (XI, toss, bowlers, field, batting order). */
+    careerCaptain: Boolean = false
 ) {
     val services = LocalGameServices.current
     val matchContext = LocalContext.current
@@ -232,9 +235,11 @@ fun MatchScreen(
                     if (careerPlayerId == null || s.careerPlayerId != null) {
                         s
                     } else {
-                        // Career mode: the captain picks the openers, the bowlers and the field; the player only takes his own batting and bowling.
-                        val c = s.copy(careerPlayerId = careerPlayerId, needsOpenerSelection = false, needsBowlerSelection = false)
-                        if (c.bowlingTeam.id == c.userTeam.id) {
+                        // Career mode: the captain picks the openers, the bowlers and the field; the player only takes his own batting and bowling,
+                        // unless he IS the captain, who makes those decisions himself.
+                        val c = if (careerCaptain) s.copy(careerPlayerId = careerPlayerId, careerCaptain = true)
+                        else s.copy(careerPlayerId = careerPlayerId, needsOpenerSelection = false, needsBowlerSelection = false)
+                        if (!careerCaptain && c.bowlingTeam.id == c.userTeam.id) {
                             MatchStateMachine.setFieldPlacements(
                                 c,
                                 FieldingSystem.generateAiFieldPlacements(
@@ -430,7 +435,7 @@ fun MatchScreen(
         breakLastBall = lastLine
         if (declared) director?.onTestDeclaration() else director?.onTestInningsEnded()
         if (TestMatch.followOnAvailable(recorded)) {
-            if (TestMatch.followOnEnforcerId(recorded) == recorded.userTeam.id && recorded.careerPlayerId == null) {
+            if (TestMatch.followOnEnforcerId(recorded) == recorded.userTeam.id && recorded.userSelects) {
                 matchState = recorded.copy(test = recorded.test?.copy(followOnPending = true))
                 recentCommentary = emptyList()
                 services?.announceSpoken(TestMatch.followOnSpoken(recorded))
@@ -629,7 +634,8 @@ fun MatchScreen(
             skipping = false
             return@LaunchedEffect
         }
-        kotlinx.coroutines.delay(if (skipping) 150L else if (s.test != null) 900L else 1800L)
+        // A pause of five and a half seconds between the balls that are not the player's, so each can be heard and understood.
+        kotlinx.coroutines.delay(if (skipping) 300L else 5500L)
         advanceOneBall()
     }
 
@@ -1077,7 +1083,7 @@ fun MatchScreen(
             players = matchState.bowlingTeam.players,
             placements = matchState.fieldPlacements,
             isPowerplay = isPowerplayNow,
-            isReadOnly = !isUserBowling || matchState.careerPlayerId != null,
+            isReadOnly = !isUserBowling || (matchState.careerPlayerId != null && !matchState.userSelects),
             onConfirm = { placements ->
                 matchState = MatchStateMachine.setFieldPlacements(matchState, placements)
                 fieldMessage = fieldSetMessage(placements, isPowerplayNow)
@@ -1166,12 +1172,12 @@ fun MatchScreen(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Hear the field")
+                Text(if (isUserBowling && matchState.userSelects) "Set field" else "Hear the field")
             }
         } else if (isUserBowling) {
             // Set the field BEFORE bowling — it's a pre-delivery decision. (In career mode the captain sets it; you only hear it.)
             Button(onClick = { showFieldScreen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (careerId != null) "Hear the field" else "Set field")
+                Text(if (careerId != null && !matchState.userSelects) "Hear the field" else "Set field")
             }
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1182,7 +1188,7 @@ fun MatchScreen(
 
             Button(
                 onClick = {
-                    if (careerId != null) {
+                    if (careerId != null && !matchState.userSelects) {
                         // The captain sets the field for your over, and says what moved.
                         val prepared = MatchSimulation.prepareAiDelivery(matchState)
                         matchState = prepared.state
@@ -1196,7 +1202,7 @@ fun MatchScreen(
                 Text("Bowl")
             }
             // Only until the first ball of this over has been bowled; after that the option is gone.
-            if (careerId == null && MatchStateMachine.canChangeBowler(matchState)) {
+            if ((careerId == null || matchState.userSelects) && MatchStateMachine.canChangeBowler(matchState)) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = { showChangeBowler = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("Change bowler")

@@ -51,9 +51,23 @@ data class CareerProfile(
     /** Matches played in the XI. */
     val matchesPlayed: Int = 0,
     /** The ratings [batting, bowling, fielding] the career started with; null on an older career. */
-    val startRatings: List<Int>? = null
+    val startRatings: List<Int>? = null,
+    // Part six: leadership. "" (a player), "Vice-captain" or "Captain" of his club; promoted for his form (see CareerLeadership).
+    val leadership: String = "",
+    /** Matches played in the XI when the player was last promoted. */
+    val leadershipSince: Int = 0
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
+
+    /** The club captain makes the team decisions in his matches: the XI, the toss, the bowlers, the field, the batting order. */
+    val isCaptain: Boolean get() = leadership == "Captain"
+
+    /** One spoken line about his place in the club's leadership. */
+    fun leadershipLine(): String = when (leadership) {
+        "Captain" -> "You are the captain of $club."
+        "Vice-captain" -> "You are the vice-captain of $club."
+        else -> ""
+    }
 
     /** The squad of the player's own district club. */
     val myClub: CareerClub? get() = clubs.find { it.name == club }

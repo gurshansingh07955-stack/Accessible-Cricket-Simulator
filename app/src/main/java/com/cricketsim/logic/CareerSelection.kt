@@ -61,7 +61,8 @@ object CareerSelection {
         val adjust = if (form.isEmpty()) 0 else ((form.average() - 25.0) / 10.0).roundToInt().coerceIn(-3, 3)
         val grace = (if (career.matchesPlayed < 3) 1 else 0) + (if (career.age <= 19) 1 else 0)
         val debut = career.matchesPlayed == 0
-        val selected = debut || rank - adjust - grace <= cutoff
+        val captain = career.isCaptain
+        val selected = captain || debut || rank - adjust - grace <= cutoff
 
         val formNote = when {
             adjust > 0 -> " Your good form moves you up ${if (adjust == 1) "a place" else "$adjust places"}."
@@ -75,6 +76,7 @@ object CareerSelection {
         }
         val base = "You rank ${ordinal(rank)} of ${group.size} ${plural(me.role.lowercase())} at your club, and the selectors on ${career.difficulty.lowercase()} pick the top $cutoff.$graceNote$formNote"
         val reason = when {
+            captain -> "You are the captain, so you always play, and you make the team decisions. $base"
             debut -> "You are in the XI. The selectors give every new player a debut: this is your first match. $base"
             selected -> "You are in the XI. $base"
             else -> "You are not in the XI. $base Score runs, take wickets or improve your ratings to move up."

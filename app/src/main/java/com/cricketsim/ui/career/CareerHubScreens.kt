@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.key
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -58,6 +61,7 @@ import com.cricketsim.persistence.summary
 import com.cricketsim.ui.custom.OptionButton
 import com.cricketsim.ui.custom.PageHeading
 import com.cricketsim.ui.match.MatchScreen
+import com.cricketsim.ui.setup.PlayingXIScreen
 import com.cricketsim.ui.setup.TossScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -68,6 +72,7 @@ private enum class HubTab(val label: String) { Home("Home"), Play("Game play"), 
 
 /** Where the player is in playing one of his club's matches (full screen: the tabs are hidden while a match is set up or played). */
 private sealed interface CPlay {
+    class PickXI(val comp: Int, val fixtureId: Int, val attempt: Int = 0) : CPlay
     class Toss(val comp: Int, val fixtureId: Int, val userXI: Team, val oppXI: Team) : CPlay
     class Match(val comp: Int, val fixtureId: Int, val userXI: Team, val oppXI: Team, val toss: TossResult, val resume: MatchSnapshot? = null) : CPlay
 }
@@ -106,6 +111,7 @@ fun CareerHub(
     var compTab by remember { mutableStateOf(0) }
     var tableTab by remember { mutableStateOf(0) }
     var statsTab by remember { mutableStateOf(0) }
+    var xiProblem by remember { mutableStateOf<String?>(null) }
     // The selectors' decision for the player's next match (his rank in his role at the club, the difficulty and his form).
     val decision = CareerSelection.decide(career)
 
@@ -156,19 +162,76 @@ fun CareerHub(
     val current = seasons
     if (flow != null && current != null) {
         when (flow) {
-            is CPlay.Toss -> {
+            is CPlay.PickXI -> {
+                // The captain picks the XI himself.
                 val back = { play = null }
                 BackHandler(onBack = back)
                 val state = current[flow.comp]
                 val fixture = state.fixtures.find { it.id == flow.fixtureId }
+                val userSquad = state.teams.find { it.id == state.userTeamId }
+                val oppId = if (fixture?.homeId == state.userTeamId) fixture?.awayId else fixture?.homeId
+                val oppSquad = state.teams.find { it.id == oppId }
+                val stadium = fixture?.let { CplData.stadium(it.stadiumId) }
+                val pid = CareerSeason.userPlayerId(career)
+                if (fixture != null && userSquad != null && oppSquad != null && stadium != null && pid != null) {
+                    val selection = remember(flow.fixtureId) { CplSimulator.squadForSelection(userSquad, state.tags, stadium) }
+                    key(flow.attempt) {
+                        PlayingXIScreen(
+                            userTeam = selection,
+                            onXIConfirmed = { xi ->
+                                val problem = CplSimulator.xiProblem(xi, state.tags, state.tournamentId)
+                                if (problem != null) {
+                                    xiProblem = problem
+                                    play = CPlay.PickXI(flow.comp, flow.fixtureId, flow.attempt + 1)
+                                } else if (xi.players.none { it.id == pid }) {
+                                    xiProblem = "You are the captain and a player: your own name must be in your XI."
+                                    play = CPlay.PickXI(flow.comp, flow.fixtureId, flow.attempt + 1)
+                                } else {
+                                    play = CPlay.Toss(flow.comp, flow.fixtureId, xi, CplSimulator.pickXI(oppSquad, state.tags, stadium))
+                                }
+                            },
+                            onBack = back
+                        )
+                    }
+                    val problem = xiProblem
+                    if (problem != null) {
+                        AlertDialog(
+                            onDismissRequest = { xiProblem = null },
+                            title = { Text("Change your team") },
+                            text = { Text(problem) },
+                            confirmButton = { TextButton(onClick = { xiProblem = null }) { Text("OK") } }
+                        )
+                    }
+                } else {
+                    Column(modifier = Modifier.padding(20.dp)) { OutlinedButton(onClick = back) { Text("Back") } }
+                }
+            }
+
+            is CPlay.Toss -> {
+                val back = { play = if (career.isCaptain) CPlay.PickXI(flow.comp, flow.fixtureId) else null }
+                BackHandler(onBack = back)
+                val state = current[flow.comp]
+                val fixture = state.fixtures.find { it.id == flow.fixtureId }
                 val userHome = fixture?.homeId == state.userTeamId
-                TossScreen(
-                    userTeam = flow.userXI,
-                    opponentTeam = flow.oppXI,
-                    userCalls = TossRoles.userCalls(userHome, !userHome),
-                    onTossComplete = { toss -> play = CPlay.Match(flow.comp, flow.fixtureId, flow.userXI, flow.oppXI, toss) },
-                    onBack = back
-                )
+                if (career.isCaptain) {
+                    // The captain does the toss himself: he calls or flips, and chooses to bat or bowl.
+                    TossScreen(
+                        userTeam = flow.userXI,
+                        opponentTeam = flow.oppXI,
+                        userCalls = TossRoles.userCalls(userHome, !userHome),
+                        onTossComplete = { toss -> play = CPlay.Match(flow.comp, flow.fixtureId, flow.userXI, flow.oppXI, toss) },
+                        onBack = back
+                    )
+                } else {
+                    // The captains do it: the screen only says who flipped, who called and who chose.
+                    CareerTossScreen(
+                        userXI = flow.userXI,
+                        oppXI = flow.oppXI,
+                        userIsHome = userHome,
+                        onDone = { toss -> play = CPlay.Match(flow.comp, flow.fixtureId, flow.userXI, flow.oppXI, toss) },
+                        onBack = back
+                    )
+                }
             }
 
             is CPlay.Match -> {
@@ -186,6 +249,7 @@ fun CareerHub(
                         format = AbuDhabiT10.formatFor(state.tournamentId),
                         rules = TournamentRules.rulesFor(state.tournamentId),
                         careerPlayerId = CareerSeason.userPlayerId(career),
+                        careerCaptain = career.isCaptain,
                         stadium = stadium,
                         userTeam = flow.userXI,
                         opponentTeam = flow.oppXI,
@@ -286,6 +350,9 @@ fun CareerHub(
                                     val stadium = CplData.stadium(mine.stadiumId)
                                     if (!chosen.selected) {
                                         message = chosen.reason + " You can simulate the match instead."
+                                    } else if (career.isCaptain) {
+                                        // The captain picks his own XI, then does the toss.
+                                        play = CPlay.PickXI(ci, mine.id)
                                     } else if (pid != null && squad != null && oppSquad != null && stadium != null) {
                                         // The selectors name the XI (you are in it, at your batting number): straight to the toss.
                                         val xi = CareerSelection.matchXI(squad, updated.tags, stadium, pid, career.battingNumber)
@@ -353,6 +420,10 @@ private fun HomeTab(
     if (career.plan().isNotEmpty()) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(career.plan(), style = MaterialTheme.typography.bodyMedium)
+    }
+    if (career.leadershipLine().isNotEmpty()) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(career.leadershipLine(), style = MaterialTheme.typography.bodyMedium)
     }
     if (career.growthLine().isNotEmpty()) {
         Spacer(modifier = Modifier.height(4.dp))
@@ -458,7 +529,8 @@ private fun PlayTab(
         }
         OptionButton(
             title = "Play my match",
-            description = if (decision.selected) "The selectors name the XI with you in it. After the toss you take over only your own batting and bowling; the game plays the rest of your team." else "You are not in the XI, so you cannot play this match.",
+            description = if (career.isCaptain) "You are the captain: you pick the XI and do the toss, choose the bowlers, set the field and decide the batting order. You face and bowl your own balls; the game plays the rest."
+            else if (decision.selected) "The selectors name the XI with you in it. The captains do the toss. You take over only your own batting and bowling; the game plays the rest of your team." else "You are not in the XI, so you cannot play this match.",
             enabled = !busy && decision.selected,
             emphasised = pending == null
         ) { onPlay() }

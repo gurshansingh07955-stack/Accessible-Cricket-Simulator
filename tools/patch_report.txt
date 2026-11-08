@@ -1,6 +1,6 @@
-Patch run: 42471931739
-Timestamp (UTC): 2026-11-08T10:34:17Z
+Patch run: 42495457094
+Timestamp (UTC): 2026-11-08T15:34:13Z
 Result: OK
 -----
-Patch 2026-11-08-090-career-three-leagues-and-fair-selection.json
-  applied 14 operation(s) to 8 file(s)
+Patch 2026-11-08-091-career-pace-toss-and-captaincy.json
+  applied 30 operation(s) to 12 file(s)

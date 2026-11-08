@@ -70,12 +70,16 @@ object CareerProgress {
             if (club.name != career.club) club
             else club.copy(players = club.players.map { if (it.isUser) it.copy(batting = newBat, bowling = newBowl, fielding = newField) else it })
         }
-        val updated = career.copy(
+        val played2 = career.copy(
             batting = newBat, bowling = newBowl, fielding = newField,
             clubTeams = clubs,
             matchesPlayed = career.matchesPlayed + 1,
             form = (career.form.orEmpty() + impact).takeLast(5)
         )
-        return Result(updated, "${parts.joinToString(" ")} Your impact was ${impact.roundToInt()}. $growth")
+        // A run of good matches is rewarded with the club's leadership.
+        val rank = CareerLeadership.promotion(played2)
+        val updated = if (rank != null) played2.copy(leadership = rank, leadershipSince = played2.matchesPlayed) else played2
+        val news = if (rank != null) " " + CareerLeadership.announcement(rank, career.club) else ""
+        return Result(updated, "${parts.joinToString(" ")} Your impact was ${impact.roundToInt()}. $growth$news")
     }
 }
