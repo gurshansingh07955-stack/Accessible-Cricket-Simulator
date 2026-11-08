@@ -618,7 +618,7 @@ object TestMatch {
     fun canDeclare(s: MatchState): Boolean {
         val t = s.test ?: return false
         return !t.currentRecorded && !t.noDeclarations && t.breakPhase == 0 && !t.followOnPending &&
-            s.matchStatus == MatchStatus.IN_PROGRESS && s.battingTeam.id == s.userTeam.id &&
+            s.matchStatus == MatchStatus.IN_PROGRESS && s.battingTeam.id == s.userTeam.id && s.careerPlayerId == null &&
             s.currentInnings in 1 until inningsCount(s) && s.pendingDismissal == null && !s.needsOpenerSelection &&
             s.ballByBall.isNotEmpty()
     }
@@ -627,7 +627,7 @@ object TestMatch {
     fun aiShouldDeclare(s: MatchState): Boolean {
         val t = s.test ?: return false
         if (t.currentRecorded || t.noDeclarations || t.breakPhase != 0 || t.followOnPending) return false
-        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.battingTeam.id == s.userTeam.id) return false
+        if (s.matchStatus != MatchStatus.IN_PROGRESS || (s.battingTeam.id == s.userTeam.id && s.careerPlayerId == null)) return false
         if (s.currentInnings !in 1 until inningsCount(s) || s.score.balls != 0 || s.pendingDismissal != null) return false
         if (s.score.overs < (40 * dayScale(s)).toInt()) return false
         if (s.currentInnings == 1) {
@@ -694,7 +694,7 @@ object TestMatch {
     fun canTakeNewBall(s: MatchState): Boolean {
         val t = s.test ?: return false
         return newBallAvailable(s) && t.breakPhase == 0 && !t.followOnPending &&
-            s.matchStatus == MatchStatus.IN_PROGRESS && s.bowlingTeam.id == s.userTeam.id &&
+            s.matchStatus == MatchStatus.IN_PROGRESS && s.bowlingTeam.id == s.userTeam.id && s.careerPlayerId == null &&
             s.pendingDismissal == null && !s.needsOpenerSelection
     }
 
@@ -711,7 +711,7 @@ object TestMatch {
     fun aiShouldTakeNewBall(s: MatchState): Boolean {
         val t = s.test ?: return false
         if (!newBallAvailable(s) || t.breakPhase != 0 || t.followOnPending) return false
-        if (s.matchStatus != MatchStatus.IN_PROGRESS || s.bowlingTeam.id == s.userTeam.id) return false
+        if (s.matchStatus != MatchStatus.IN_PROGRESS || (s.bowlingTeam.id == s.userTeam.id && s.careerPlayerId == null)) return false
         if (s.score.balls != 0 || s.pendingDismissal != null || s.needsOpenerSelection) return false
         return Random.nextDouble() < 0.7
     }
@@ -720,7 +720,7 @@ object TestMatch {
     fun shouldRemindNewBall(s: MatchState): Boolean {
         val t = s.test ?: return false
         return newBallAvailable(s) && !t.newBallNotified && t.breakPhase == 0 && !t.followOnPending &&
-            s.bowlingTeam.id == s.userTeam.id && s.score.balls == 0 && s.pendingDismissal == null
+            s.bowlingTeam.id == s.userTeam.id && s.careerPlayerId == null && s.score.balls == 0 && s.pendingDismissal == null
     }
 
     fun markNewBallNotified(s: MatchState): MatchState {

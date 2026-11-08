@@ -8,12 +8,35 @@ import kotlin.math.abs
 import kotlin.random.Random
 
 /**
- * The season a career plays in: the district clubs of the player's state in one league, every club twice (home and away),
- * a match on a Saturday each week. It is a [TournamentState] (the game's own tournament record: fixtures, results,
- * scorecards, player statistics), so a season is played, simulated, tabled and counted by the same code as the
- * game's tournaments. Its tournament id is "career_<career id>".
+ * The season a career plays in: THREE competitions between the district clubs of the player's state, each a league in which every club plays the
+ * others once: a T20 League (20 overs a side), a 50-Over League and a 3-Day League (three-day matches, two innings each, played like a Test).
+ * Each competition is a [TournamentState], the game's own tournament record (fixtures, results, scorecards, player statistics), with its own
+ * table and statistics; its id is "career_<career id>_<t20|odi|3day>". The matches take turns week by week: a T20 match on a Saturday, a
+ * 50-over match the next week, a three-day match (Friday to Sunday) the week after, and so on.
  */
 object CareerSeason {
+
+    class Competition(val key: String, val label: String, val shortLabel: String, val days: Int)
+
+    val COMPETITIONS = listOf(
+        Competition("t20", "T20 League", "T20", 1),
+        Competition("odi", "50-Over League", "50-over", 1),
+        Competition("3day", "3-Day League", "3-day", 3)
+    )
+
+    fun tournamentId(careerId: String, key: String): String = "career_${careerId}_$key"
+
+    fun compIndex(state: TournamentState): Int = COMPETITIONS.indexOfFirst { it.key == state.tournamentId.substringAfterLast('_') }.coerceAtLeast(0)
+
+    fun competitionOf(state: TournamentState): Competition = COMPETITIONS[compIndex(state)]
+
+    /** The rules a competition is played by (TournamentRules asks for them by tournament id). */
+    fun rulesFor(tournamentId: String): MatchRules? = when (tournamentId.substringAfterLast('_')) {
+        "t20" -> MatchRules(overs = 20, restrictionBalls = 36, fieldersOutside = 2, drsReviews = 0, rainEnabled = true, maxOversPerBowler = 4, noSuperOver = true)
+        "odi" -> MatchRules(overs = 50, restrictionBalls = 60, fieldersOutside = 2, drsReviews = 0, rainEnabled = true, maxOversPerBowler = 10, noSuperOver = true)
+        "3day" -> TestMatch.rulesForDays(3)
+        else -> null
+    }
 
     fun clubId(careerId: String, index: Int): String = "career_${careerId}_c$index"
 
@@ -79,8 +102,8 @@ object CareerSeason {
         return c
     }
 
-    /** The season of a career, or null if its state has fewer than two clubs (a career made before the clubs existed). */
-    fun newSeason(career: CareerProfile): TournamentState? {
+    /** The three competitions of a career's season (T20, 50-over, 3-day), or null if its state has fewer than two clubs. */
+    fun newSeason(career: CareerProfile): List<TournamentState>? {
         val clubs = career.clubs
         if (clubs.size < 2) return null
         val teams = clubs.mapIndexed { i, c -> clubTeam(career.id, i, c) }
@@ -89,39 +112,51 @@ object CareerSeason {
         val all = AllStadiums.list()
         val grounds = all.filter { it.country == career.country }.ifEmpty { all }
         val offset = abs(career.state.hashCode()) % grounds.size
-        // Each club plays its home matches on a ground of its own.
         val groundOf = teams.indices.associate { teams[it].id to grounds[(offset + it * 3) % grounds.size].id }
-        val first = roundRobin(teams.map { it.id })
-        val fixtures = ArrayList<TournamentFixture>()
-        fun add(home: String, away: String) {
-            fixtures.add(TournamentFixture(fixtures.size, fixtures.size + 1, CplData.LEAGUE, home, away, groundOf.getValue(home)))
-        }
-        first.forEach { add(it.first, it.second) }
-        first.forEach { add(it.second, it.first) }
         val start = firstSaturday()
-        return TournamentState(
-            version = CplData.SAVE_VERSION,
-            tournamentId = "career_${career.id}",
-            name = "${career.state} District League ${start.get(Calendar.YEAR)}",
-            userTeamId = userClubId(career) ?: teams.first().id,
-            teams = teams,
-            tags = tags,
-            fixtures = fixtures,
-            createdAt = start.timeInMillis
-        )
+        val year = start.get(Calendar.YEAR)
+        return COMPETITIONS.map { comp ->
+            val fixtures = ArrayList<TournamentFixture>()
+            roundRobin(teams.map { it.id }).forEach { (home, away) ->
+                fixtures.add(TournamentFixture(fixtures.size, fixtures.size + 1, CplData.LEAGUE, home, away, groundOf.getValue(home)))
+            }
+            TournamentState(
+                version = CplData.SAVE_VERSION,
+                tournamentId = tournamentId(career.id, comp.key),
+                name = "${career.state} ${comp.label} $year",
+                userTeamId = userClubId(career) ?: teams.first().id,
+                teams = teams,
+                tags = tags,
+                fixtures = fixtures,
+                createdAt = start.timeInMillis
+            )
+        }
     }
 
-    /** Matches played on one Saturday: half the clubs (rounded down), so each club plays once a week. */
+    /** The round of a competition a fixture is in: half the clubs (rounded down) play in a round, so each club plays once. */
     fun roundOf(state: TournamentState, fixture: TournamentFixture): Int = (fixture.number - 1) / maxOf(1, state.teams.size / 2)
 
+    /** The weeks of the three competitions take turns: T20 in week 1, 50-over in week 2, 3-day in week 3, T20 in week 4... */
+    fun weekOf(state: TournamentState, fixture: TournamentFixture): Int = roundOf(state, fixture) * COMPETITIONS.size + compIndex(state)
+
+    /** The first day of the match: a Saturday, or the Friday before it for a three-day match. */
     fun dateMillis(state: TournamentState, fixture: TournamentFixture): Long {
         val c = Calendar.getInstance()
         c.timeInMillis = state.createdAt
-        c.add(Calendar.DAY_OF_YEAR, 7 * roundOf(state, fixture))
+        c.add(Calendar.DAY_OF_YEAR, 7 * weekOf(state, fixture) - (if (competitionOf(state).days > 1) 1 else 0))
         return c.timeInMillis
     }
 
     fun dateText(millis: Long): String = SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(Date(millis))
+
+    /** "Saturday 6 December 2026", or "Friday 5 December 2026 to Sunday 7 December 2026" for a three-day match. */
+    fun whenText(state: TournamentState, fixture: TournamentFixture): String {
+        val start = dateMillis(state, fixture)
+        val days = competitionOf(state).days
+        if (days <= 1) return dateText(start)
+        val end = Calendar.getInstance().apply { timeInMillis = start; add(Calendar.DAY_OF_YEAR, days - 1) }.timeInMillis
+        return "${dateText(start)} to ${dateText(end)}"
+    }
 
     fun isComplete(state: TournamentState): Boolean = state.fixtures.all { it.result != null }
 
@@ -138,7 +173,7 @@ object CareerSeason {
         return if (i < 0) null else "${clubId(career.id, clubIndex)}_p$i"
     }
 
-    /** The season's copy of the player gets his current ratings (they grow as he plays). */
+    /** A competition's copy of the player gets his current ratings (they grow as he plays). */
     fun withUserPlayer(state: TournamentState, career: CareerProfile): TournamentState {
         val pid = userPlayerId(career) ?: return state
         return state.copy(teams = state.teams.map { t ->
@@ -153,50 +188,66 @@ object CareerSeason {
         })
     }
 
-    /** Simulates the player's own fixture with the selectors' decision: he is in the club's XI or left out of it. */
+    /** Simulates the player's own fixture with the selectors' decision: he is in the club's XI or left out of it. Any competition's format. */
     fun simulateMine(state: TournamentState, fixture: TournamentFixture, career: CareerProfile, random: Random): TournamentState {
-        val home = state.teams.find { it.id == fixture.homeId } ?: return state
-        val away = state.teams.find { it.id == fixture.awayId } ?: return state
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
         val pid = userPlayerId(career) ?: return CplSimulator.simulateFixture(state, fixture, random)
         val selected = CareerSelection.decide(career).selected
-        val userIsHome = fixture.homeId == state.userTeamId
-        val mine = CareerSelection.squadForMatch(if (userIsHome) home else away, state.tags, stadium, pid, selected)
-        val sim = CplSimulator.simulateMatch(
-            if (userIsHome) mine else home, if (userIsHome) away else mine, state.tags, stadium, random
-        ) ?: return state
-        return state.copy(
-            fixtures = state.fixtures.map { if (it.id == fixture.id) it.copy(result = sim.result, scorecard = sim.scorecard) else it },
-            playerStats = CplSimulator.applyStats(state.playerStats, sim.finished, sim.home, sim.away)
-        )
+        val mine = state.teams.find { it.id == state.userTeamId } ?: return state
+        val adjusted = CareerSelection.squadForMatch(mine, state.tags, stadium, pid, selected)
+        val after = CplSimulator.simulateFixture(state.copy(teams = state.teams.map { if (it.id == state.userTeamId) adjusted else it }), fixture, random)
+        return after.copy(teams = state.teams)
     }
 
-    class Advance(val state: TournamentState, val career: CareerProfile, val lines: List<String>)
+    /** The player's next unplayed match in any competition (the one that comes first in the calendar), with its competition's index. */
+    fun nextMine(states: List<TournamentState>): Pair<Int, TournamentFixture>? {
+        var best: Pair<Int, TournamentFixture>? = null
+        var bestDate = Long.MAX_VALUE
+        states.forEachIndexed { i, s ->
+            val f = s.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, s.userTeamId) } ?: return@forEachIndexed
+            val d = dateMillis(s, f)
+            if (d < bestDate) {
+                bestDate = d
+                best = i to f
+            }
+        }
+        return best
+    }
+
+    class Advance(val states: List<TournamentState>, val career: CareerProfile, val lines: List<String>)
 
     /**
-     * Moves the season on. The other clubs' matches before the player's are always played. [includeMine] also simulates the player's
-     * next match (with the selectors' decision, then his form and ratings); [whole] goes on to the end of the season.
+     * Moves the season on, match by match in calendar order. The other clubs' matches before the player's next match (in its competition) are
+     * always played. [includeMine] also simulates the player's match (with the selectors' decision, then his form and ratings); [whole] goes
+     * on to the end of the season, all three competitions.
      */
-    fun advance(state: TournamentState, career: CareerProfile, random: Random, includeMine: Boolean, whole: Boolean): Advance {
-        var s = state
+    fun advance(states: List<TournamentState>, career: CareerProfile, random: Random, includeMine: Boolean, whole: Boolean): Advance {
+        var list = states
         var c = career
         val lines = ArrayList<String>()
         var guard = 0
-        while (guard < 100) {
+        while (guard < 200) {
             guard++
-            s = CplSimulator.run(s, SimMode.UNTIL_MINE, random)
-            val mine = s.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, s.userTeamId) } ?: break
+            val next = nextMine(list) ?: break
+            val ci = next.first
+            val ran = CplSimulator.run(list[ci], SimMode.UNTIL_MINE, random)
+            list = list.mapIndexed { i, x -> if (i == ci) ran else x }
             if (!includeMine && !whole) break
+            val mine = ran.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, ran.userTeamId) } ?: break
             val pid = userPlayerId(c)
-            val before = if (pid != null) s.playerStats[pid] else null
-            s = simulateMine(s, mine, c, random)
-            val result = CareerProgress.afterMatch(c, before, if (pid != null) s.playerStats[pid] else null, random)
+            val before = if (pid != null) ran.playerStats[pid] else null
+            val played = simulateMine(ran, mine, c, random)
+            val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random)
             c = result.career
-            s = withUserPlayer(s, c)
-            lines.add("${nameOf(s, mine.homeId)} v ${nameOf(s, mine.awayId)}: ${s.fixtures.find { it.id == mine.id }?.result?.summary ?: ""} ${result.text}")
+            val updated = withUserPlayer(played, c)
+            list = list.mapIndexed { i, x -> if (i == ci) updated else x }
+            lines.add(
+                "${competitionOf(updated).label}: ${nameOf(updated, mine.homeId)} v ${nameOf(updated, mine.awayId)}. " +
+                    "${updated.fixtures.find { it.id == mine.id }?.result?.summary ?: ""} ${result.text}"
+            )
             if (!whole) break
         }
-        if (whole) s = CplSimulator.run(s, SimMode.ALL, random)
-        return Advance(s, c, lines)
+        if (whole) list = list.map { withUserPlayer(CplSimulator.run(it, SimMode.ALL, random), c) }
+        return Advance(list, c, lines)
     }
 }

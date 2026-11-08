@@ -99,11 +99,11 @@ kashmiri_pk|Tariq,Zahid,Aamir,Nadeem,Shakeel,Arif,Waheed,Yasir,Khalid,Sajjad,Jav
 
     /** The player's own starting ratings [batting, bowling, fielding]: modest, with his role's strength first. */
     fun startingRatings(role: String, random: Random): List<Int> = when (role) {
-        "Batsman" -> listOf(between(random, 41, 47), between(random, 8, 14), between(random, 36, 44))
-        "Wicketkeeper-batsman" -> listOf(between(random, 40, 46), between(random, 6, 10), between(random, 40, 46))
-        "Bowler" -> listOf(between(random, 14, 20), between(random, 42, 48), between(random, 32, 40))
-        "Batting all-rounder" -> listOf(between(random, 40, 46), between(random, 28, 34), between(random, 36, 42))
-        else -> listOf(between(random, 28, 34), between(random, 40, 46), between(random, 36, 42))
+        "Batsman" -> listOf(between(random, 46, 53), between(random, 8, 14), between(random, 38, 46))
+        "Wicketkeeper-batsman" -> listOf(between(random, 45, 52), between(random, 6, 10), between(random, 42, 50))
+        "Bowler" -> listOf(between(random, 14, 20), between(random, 47, 54), between(random, 34, 42))
+        "Batting all-rounder" -> listOf(between(random, 45, 52), between(random, 33, 40), between(random, 38, 44))
+        else -> listOf(between(random, 33, 40), between(random, 45, 52), between(random, 38, 44))
     }
 
     private fun makePlayer(role: String, pool: Pair<List<String>, List<String>>, random: Random, used: MutableSet<String>): CareerPlayer {

@@ -430,7 +430,7 @@ fun MatchScreen(
         breakLastBall = lastLine
         if (declared) director?.onTestDeclaration() else director?.onTestInningsEnded()
         if (TestMatch.followOnAvailable(recorded)) {
-            if (TestMatch.followOnEnforcerId(recorded) == recorded.userTeam.id) {
+            if (TestMatch.followOnEnforcerId(recorded) == recorded.userTeam.id && recorded.careerPlayerId == null) {
                 matchState = recorded.copy(test = recorded.test?.copy(followOnPending = true))
                 recentCommentary = emptyList()
                 services?.announceSpoken(TestMatch.followOnSpoken(recorded))
@@ -620,7 +620,8 @@ fun MatchScreen(
             showFieldScreen || showChangeBowler
         ) return@LaunchedEffect
         if (s.matchStatus != MatchStatus.IN_PROGRESS || s.needsBowlerSelection || s.needsOpenerSelection || s.pendingDismissal != null ||
-            s.activeRainDelay != null || s.drinksBreak != null || s.superOverNominating
+            s.activeRainDelay != null || s.drinksBreak != null || s.superOverNominating ||
+            (s.test?.breakPhase ?: 0) != 0 || s.test?.followOnPending == true
         ) return@LaunchedEffect
         val myBowl = s.bowlingTeam.id == userTeam.id && s.currentBowler.id == pid
         val myBat = s.battingTeam.id == userTeam.id && s.currentBatsmen.first.id == pid
@@ -628,7 +629,7 @@ fun MatchScreen(
             skipping = false
             return@LaunchedEffect
         }
-        kotlinx.coroutines.delay(if (skipping) 150L else 1800L)
+        kotlinx.coroutines.delay(if (skipping) 150L else if (s.test != null) 900L else 1800L)
         advanceOneBall()
     }
 

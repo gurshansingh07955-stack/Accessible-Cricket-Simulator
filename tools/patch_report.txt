@@ -1,6 +1,6 @@
-Patch run: 42451198376
-Timestamp (UTC): 2026-11-08T05:33:06Z
+Patch run: 42471931739
+Timestamp (UTC): 2026-11-08T10:34:17Z
 Result: OK
 -----
-Patch 2026-11-08-089-matchstatus-import-fix.json
-  applied 1 operation(s) to 1 file(s)
+Patch 2026-11-08-090-career-three-leagues-and-fair-selection.json
+  applied 14 operation(s) to 8 file(s)
