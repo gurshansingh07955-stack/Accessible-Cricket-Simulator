@@ -1,0 +1,13 @@
+{
+  "name": "Build fix for patch 088: import MatchStatus in MatchScreen",
+  "message": "MatchScreen's career-mode loop uses MatchStatus, which the file did not import",
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "import com.cricketsim.logic.MatchStateMachine\n",
+      "replace": "import com.cricketsim.logic.MatchStateMachine\nimport com.cricketsim.logic.MatchStatus\n",
+      "count": 1
+    }
+  ]
+}
