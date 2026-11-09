@@ -1,0 +1,197 @@
+{
+  "name": "My Player part eight: the international level (series, national selection, pathway)",
+  "message": "Career: national call-up, a season of Test/ODI/T20 series, format-specific selection and a pathway section on the Home tab",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+    "contains": "object CareerInternational"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val stateMatches: Int = 0\n) {",
+      "replace": "    val stateMatches: Int = 0,\n    // Part eight: the international level.\n    /** Matches played for the national team. */\n    val internationalMatches: Int = 0\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "leadership == \"Captain\" && !isState",
+      "replace": "leadership == \"Captain\" && !isState && !isInternational",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val isState: Boolean get() = level == \"State\"\n",
+      "replace": "    val isState: Boolean get() = level == \"State\"\n\n    /** True once he has been picked for the national team (\"International\" level). */\n    val isInternational: Boolean get() = level == \"International\"\n\n    /** At the state squad or above it. */\n    val atOrAboveState: Boolean get() = isState || isInternational\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "        return if (isState) \"You play for the ${domesticTeams.firstOrNull() ?: state} squad. Season $n, age $age.\"",
+      "replace": "        if (isInternational) return \"You play for the $country national squad. Season $n, age $age. International matches: $internationalMatches.\"\n        return if (isState) \"You play for the ${domesticTeams.firstOrNull() ?: state} squad. Season $n, age $age.\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerProgress.kt",
+      "find": "            stateMatches = if (career.isState) career.stateMatches + 1 else career.stateMatches,",
+      "replace": "            stateMatches = if (career.isState) career.stateMatches + 1 else career.stateMatches,\n            internationalMatches = if (career.isInternational) career.internationalMatches + 1 else career.internationalMatches,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeadership.kt",
+      "find": "        if (career.isState) return null // the club's captaincy is a district matter",
+      "replace": "        if (career.isState || career.isInternational) return null // the club's captaincy is a district matter",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "    fun forState(career: CareerProfile, state: TournamentState): Decision =\n        if (CareerSeason.isClub(state)) decide(career) else decideAtState(career, state)",
+      "replace": "    fun forState(career: CareerProfile, state: TournamentState): Decision =\n        if (CareerSeason.isClub(state)) decide(career)\n        else if (CareerInternational.isInternational(state)) CareerInternational.matchDecision(career, state)\n        else decideAtState(career, state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "(if (career.isState) 2 else 0)",
+      "replace": "(if (career.atOrAboveState) 2 else 0)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "val loyal = if (career.isState) \" As a player",
+      "replace": "val loyal = if (career.atOrAboveState) \" As a player",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "if (career.isState) \"The ${squad.name} selectors keep you",
+      "replace": "if (career.atOrAboveState) \"The ${squad.name} selectors keep you",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "if (career.isState) \"The ${squad.name} selectors drop you",
+      "replace": "if (career.atOrAboveState) \"The ${squad.name} selectors drop you",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerDomestic.kt",
+      "find": "    private fun withPlayer(team: Team, me: Player): Team {",
+      "replace": "    internal fun withPlayer(team: Team, me: Player): Team {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        if (isClub(state)) return COMPETITIONS[compIndex(state)]\n",
+      "replace": "        if (isClub(state)) return COMPETITIONS[compIndex(state)]\n        if (CareerInternational.isInternational(state)) return CareerInternational.competition(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        else if (isClub(state)) CplData.standings(state).firstOrNull()?.team",
+      "replace": "        else if (isClub(state)) CplData.standings(state).firstOrNull()?.team\n        else if (CareerInternational.isInternational(state)) CareerInternational.seriesWinner(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        var text = \"A new season begins. You are ${older.age}. \"\n        val squad = CareerDomestic.stateSquad(career)",
+      "replace": "        var text = \"A new season begins. You are ${older.age}. \"\n        // The national selectors look first (state and international players only): called up or kept, he plays a season of international series.\n        if (career.atOrAboveState) {\n            val call = CareerInternational.decision(career)\n            if (call != null) {\n                text += call.reason + \" \"\n                if (call.selected) {\n                    val intlLevel = older.copy(level = CareerInternational.LEVEL)\n                    val intl = CareerInternational.newSeason(intlLevel)\n                    if (intl != null) {\n                        val intlKeys = intl.map { keyOf(it) }\n                        return NextSeason(intlLevel.copy(seasonKeys = intlKeys), intl, intlKeys, text + \"You play for ${career.country} this season.\")\n                    }\n                }\n            }\n        }\n        val squad = CareerDomestic.stateSquad(career)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "text += if (career.isState) \"You go back to district",
+      "replace": "text += if (career.atOrAboveState) \"You go back to district",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        if (tournamentId.startsWith(\"career_\")) return CareerSeason.rulesFor(tournamentId)\n",
+      "replace": "        if (tournamentId.startsWith(\"career_\")) return CareerSeason.rulesFor(tournamentId)\n        // A career's international series (My Player, part eight): T20, one-day and Test series.\n        if (tournamentId.startsWith(CareerInternational.PREFIX)) return CareerInternational.rulesFor(tournamentId)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "import com.cricketsim.logic.CareerDomestic\n",
+      "replace": "import com.cricketsim.logic.CareerDomestic\nimport com.cricketsim.logic.CareerInternational\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "val fresh = withContext(Dispatchers.Default) { if (career.isState) CareerDomestic.newSeason(career) else CareerSeason.newSeason(career) }",
+      "replace": "val fresh = withContext(Dispatchers.Default) {\n                when {\n                    career.isInternational -> CareerInternational.newSeason(career)\n                    career.isState -> CareerDomestic.newSeason(career)\n                    else -> CareerSeason.newSeason(career)\n                }\n            }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    // The crowd, as in the game's tournaments: from the toss to the end of the match.\n",
+      "replace": "    // Where the player stands on the road to the next level (worked out off the main thread: it builds the squads he is compared with).\n    var pathway by remember { mutableStateOf<List<String>>(emptyList()) }\n    LaunchedEffect(career.id, career.season, career.level, career.matchesPlayed) {\n        pathway = withContext(Dispatchers.Default) { try { CareerInternational.pathway(career) } catch (e: Exception) { emptyList() } }\n    }\n\n    // The crowd, as in the game's tournaments: from the toss to the end of the match.\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "HubTab.Home -> HomeTab(career, decision, onBack, onOpenSquad, onOpenClubs, onOpenProfile)",
+      "replace": "HubTab.Home -> HomeTab(career, decision, pathway, onBack, onOpenSquad, onOpenClubs, onOpenProfile)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    decision: CareerSelection.Decision,\n    onBack: () -> Unit,\n",
+      "replace": "    decision: CareerSelection.Decision,\n    pathway: List<String>,\n    onBack: () -> Unit,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    Text(career.levelLine(), style = MaterialTheme.typography.bodyMedium)\n",
+      "replace": "    Text(career.levelLine(), style = MaterialTheme.typography.bodyMedium)\n    if (pathway.isNotEmpty()) {\n        Spacer(modifier = Modifier.height(12.dp))\n        Text(\"Your pathway\", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n        pathway.forEach { line ->\n            Spacer(modifier = Modifier.height(4.dp))\n            Text(line, style = MaterialTheme.typography.bodyMedium)\n        }\n        Spacer(modifier = Modifier.height(4.dp))\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "text = \"${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: \"not decided\"}.\" +",
+      "replace": "text = (if (CareerInternational.isInternational(s)) CareerInternational.resultLine(s) else \"${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: \"not decided\"}.\") +",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "text = if (career.isState) \"The state selectors will decide whether",
+      "replace": "text = if (career.isInternational) \"The national selectors will decide whether you keep your place in the national squad for next season. If you are dropped you go back to state cricket.\"\n                else if (career.isState) \"The national selectors look at you first, then the state selectors decide whether",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_EIGHT.md",
+      "content": "# My Player, part eight: the international level\n\n**The road.** District club, then the state squad, then the national team. The Home tab now has a **Your pathway** section (a heading, then plain sentences) that says where the player is, what the next step is,\nhis rank in his role against the squad he is aiming for, the number of places the selectors take, and roughly how many rating points he is short. This answers the complaint most players have about career modes\n(nobody says how far away selection is). It is worked out by `CareerInternational.pathway` off the main thread.\n\n**The call-up.** After a state season the national selectors decide (`CareerInternational.decision`): his ratings in his role against the national squad's players of that role (top three batsmen, bowlers, top two\nall-rounders, one keeper, widened or narrowed by the career difficulty), his form (the average impact of his last five matches against 25, a place for every ten, up to three either way), youth (21 or younger)\nand, for a player already in the national squad, two places of loyalty. They also want to have seen `MIN_STATE_MATCHES` (8) state matches. Called up, the level becomes **International**; dropped, he goes back to the\nstate squad (and from there, if the state selectors drop him too, to district cricket). The reasons are spoken in the new-season message.\n\n**The season.** Four series, each a small two-team `TournamentState` (id `careerintl_<career>_s<season>_<n>_<t20|odi|test>`): a Test series (two or three matches, five against the country's old rival), a one-day series\n(three or five), two T20 series (three or five, then three). Opponents are drawn from the ten Test countries, a different one every series and every season; the series alternate home and away (home series are\nplayed at the grounds of the player's country, away series at the opponent's). The national teams are the game's own, the player written into his country's squad in the place of its weakest player of his role.\nRules: T20 and one-day series use the format's own rules (with DRS); a Test is five days (`TestMatch.rulesForDays(5)`). A Test series' table shows points, wins and draws.\n\n**Selection for a match** (`matchDecision`): a Test XI takes four batsmen and four bowlers, a one-day or T20 XI three of each, two all-rounders in a Test and three otherwise, one keeper. His first international match is always\na debut; the first three matches and being 19 or younger count a place in his favour; form moves him up or down by up to three places.\n\n**Where it is wired.** `TournamentRules.rulesFor` (MatchRules.kt) answers for ids that start with `careerintl_` (they must not start with `career_`, which means a club league); `CareerSeason.competitionOf`, `champion` and\n`nextSeason` know about the series; `CareerProfile` has `isInternational`, `atOrAboveState` and `internationalMatches`; the hub creates the international season at the start of a season at that level.\n\n**Not built yet (the next parts).** International tournaments inside the season (the T20 World Cup, the Champions Trophy, the Asia Cup), the franchise leagues (the IPL, the Big Bash and the rest, with an auction or\ndraft decided by form), a player ranking page, season awards, retirement and a career summary, a captaincy path for the national side, picking a format to specialise in.\n\n**Dials.** `MIN_STATE_MATCHES`, `squadSlots` and `matchSlots` in `CareerInternational.kt`; the rating growth in `CareerProgress`.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "content": "package com.cricketsim.logic\n\nimport java.util.Calendar\nimport kotlin.math.roundToInt\nimport kotlin.random.Random\n\n/**\n * The international level of a career (My Player, part eight): the national team.\n *\n * HOW A PLAYER GETS THERE. At the end of a state season the national selectors look at him ([decision]): his ratings in his role against the national\n * squad's players of that role, his form (the average impact of his last five matches), his age, the career difficulty, and how many state matches\n * the selectors have seen ([MIN_STATE_MATCHES]). Called up, he plays a season of international series for his country; each season the selectors\n * look again (a player already in the squad gets two places of loyalty). Dropped, he goes back to the state squad.\n *\n * THE SEASON. Four series ([newSeason]): a Test series (two, three or five matches; five against the country's old rival), a one-day series\n * (three or five matches), and two T20 series (three or five, and three). Each series is a small [TournamentState] of two teams (the national sides as the\n * game has them, the player written into his country's squad), so the career hub, the calendar, the tables and the match flow work on it unchanged.\n * The opponent and whether the series is at home or away change every season. Home series use the grounds of the player's country, away series\n * the opponent's.\n *\n * SELECTION FOR A MATCH ([matchDecision]) depends on the format: a Test XI takes four batsmen and four bowlers, a one-day or T20 XI three of each.\n * His first international match is always a debut.\n *\n * Dials: [MIN_STATE_MATCHES], the slot counts in [squadSlots] and [matchSlots].\n */\nobject CareerInternational {\n\n    const val LEVEL = \"International\"\n\n    /** Tournament ids of the career's series start with this (they must not start with \"career_\", which means a club league). */\n    const val PREFIX = \"careerintl_\"\n\n    /** State matches the national selectors want to have seen before they look at a player. */\n    const val MIN_STATE_MATCHES = 8\n\n    private val OPPONENTS = listOf(\n        \"India\", \"Australia\", \"England\", \"Pakistan\", \"South Africa\",\n        \"New Zealand\", \"Sri Lanka\", \"West Indies\", \"Bangladesh\", \"Afghanistan\"\n    )\n\n    /** The old rival of a country: the Test series against it has five matches. */\n    private val RIVALS = mapOf(\n        \"India\" to \"Australia\", \"Pakistan\" to \"India\", \"Australia\" to \"England\",\n        \"England\" to \"Australia\", \"South Africa\" to \"Australia\", \"New Zealand\" to \"Australia\"\n    )\n\n    private class Plan(val format: String, val matches: Int)\n\n    fun isInternational(state: TournamentState): Boolean = state.tournamentId.startsWith(PREFIX)\n\n    /** \"t20\", \"odi\" or \"test\": the last part of a series' tournament id. */\n    private fun formatKey(tournamentId: String): String = tournamentId.substringAfterLast('_')\n\n    private fun formatWord(key: String): String = when (key) {\n        \"test\" -> \"Test\"\n        \"odi\" -> \"one-day\"\n        else -> \"T20\"\n    }\n\n    /** The rules a series is played by (TournamentRules asks for them by tournament id). */\n    fun rulesFor(tournamentId: String): MatchRules? = when (formatKey(tournamentId)) {\n        \"t20\" -> TournamentRules.rulesForFormat(\"T20\")\n        \"odi\" -> TournamentRules.rulesForFormat(\"ODI\")\n        \"test\" -> TestMatch.rulesForDays(5)\n        else -> null\n    }\n\n    /** A series as a competition of the career hub: named after the series, a Test lasts five days. */\n    fun competition(state: TournamentState): CareerSeason.Competition {\n        val key = formatKey(state.tournamentId)\n        val short = when (key) {\n            \"test\" -> \"Test\"\n            \"odi\" -> \"ODI\"\n            else -> \"T20I\"\n        }\n        return CareerSeason.Competition(state.tournamentId, state.name, short, if (key == \"test\") 5 else 1)\n    }\n\n    fun nationalTeam(country: String): Team? = CricketData.getAllTeams().find { it.name == country }\n\n    // ------------------------------------------------------------ small helpers\n\n    private fun value(p: Player): Double = when (p.role) {\n        PlayerRole.BATSMAN, PlayerRole.WICKETKEEPER -> p.battingRating * 0.8 + p.fieldingRating * 0.2\n        PlayerRole.BOWLER -> p.bowlingRating * 0.8 + p.fieldingRating * 0.2\n        PlayerRole.ALL_ROUNDER -> p.battingRating * 0.45 + p.bowlingRating * 0.45 + p.fieldingRating * 0.1\n    }\n\n    private fun myValue(career: CareerProfile, role: PlayerRole): Double = when (role) {\n        PlayerRole.BATSMAN, PlayerRole.WICKETKEEPER -> career.batting * 0.8 + career.fielding * 0.2\n        PlayerRole.BOWLER -> career.bowling * 0.8 + career.fielding * 0.2\n        PlayerRole.ALL_ROUNDER -> career.batting * 0.45 + career.bowling * 0.45 + career.fielding * 0.1\n    }\n\n    private fun roleWord(role: PlayerRole): String = when (role) {\n        PlayerRole.BATSMAN -> \"batsmen\"\n        PlayerRole.BOWLER -> \"bowlers\"\n        PlayerRole.ALL_ROUNDER -> \"all-rounders\"\n        PlayerRole.WICKETKEEPER -> \"wicketkeepers\"\n    }\n\n    /** Places in the national squad for a role (the call-up). */\n    private fun squadSlots(role: PlayerRole): Int = when (role) {\n        PlayerRole.WICKETKEEPER -> 1\n        PlayerRole.BATSMAN -> 3\n        PlayerRole.BOWLER -> 3\n        PlayerRole.ALL_ROUNDER -> 2\n    }\n\n    /** Places in the XI for a role in a format of a series (\"t20\", \"odi\" or \"test\"). */\n    private fun matchSlots(role: PlayerRole, key: String): Int = when (role) {\n        PlayerRole.WICKETKEEPER -> 1\n        PlayerRole.BATSMAN -> if (key == \"test\") 4 else 3\n        PlayerRole.BOWLER -> if (key == \"test\") 4 else 3\n        PlayerRole.ALL_ROUNDER -> if (key == \"test\") 2 else 3\n    }\n\n    private fun ordinal(n: Int): String = when {\n        n % 100 in 11..13 -> \"${n}th\"\n        n % 10 == 1 -> \"${n}st\"\n        n % 10 == 2 -> \"${n}nd\"\n        n % 10 == 3 -> \"${n}rd\"\n        else -> \"${n}th\"\n    }\n\n    private fun formAdjust(career: CareerProfile, last: Int): Int {\n        val form = career.form.orEmpty().takeLast(last)\n        return if (form.isEmpty()) 0 else ((form.average() - 25.0) / 10.0).roundToInt().coerceIn(-3, 3)\n    }\n\n    private fun formNote(adjust: Int): String = when {\n        adjust > 0 -> \" Your good form moves you up ${if (adjust == 1) \"a place\" else \"$adjust places\"}.\"\n        adjust < 0 -> \" Your poor form drops you ${if (adjust == -1) \"a place\" else \"${-adjust} places\"}.\"\n        else -> \"\"\n    }\n\n    /** How many rating points short of the last place of the squad (roughly), or \"\" if he is not short. */\n    private fun gapText(group: List<Player>, mine: Double, cutoff: Int): String {\n        val values = group.map { value(it) }.sortedDescending()\n        val target = values.getOrNull(cutoff - 1) ?: return \"\"\n        if (target <= mine) return \"\"\n        return \" You need roughly ${(target - mine).roundToInt() + 1} more rating points in your role to be among them.\"\n    }\n\n    // ------------------------------------------------------------ the call-up\n\n    /**\n     * The national selectors' decision at the end of a season: is the player called up to the national squad (or does he keep his place)?\n     * Null if the career is not at the state or international level, or the country has no national team.\n     */\n    fun decision(career: CareerProfile): CareerSelection.Decision? {\n        if (!career.atOrAboveState) return null\n        val squad = nationalTeam(career.country) ?: return null\n        val role = CareerSeason.roleOf(career.role)\n        val mine = myValue(career, role)\n        val group = squad.players.filter { it.role == role }\n        val rank = 1 + group.count { value(it) > mine }\n        val factor = CareerWorld.selectionFactor(career.difficulty)\n        val cutoff = (squadSlots(role) / factor).roundToInt().coerceIn(1, group.size + 1)\n        val adjust = formAdjust(career, 5)\n        val grace = (if (career.age <= 21) 1 else 0) + (if (career.isInternational) 2 else 0)\n        val seen = career.isInternational || career.stateMatches >= MIN_STATE_MATCHES\n        val selected = seen && rank - adjust - grace <= cutoff\n        val youth = if (career.age <= 21) \" The selectors back young players.\" else \"\"\n        val loyal = if (career.isInternational) \" As a player already in the squad you get two places of loyalty.\" else \"\"\n        val base = \"With your ratings you would rank ${ordinal(rank)} among the ${group.size} ${roleWord(role)} of the ${career.country} squad, and the national selectors on ${career.difficulty.lowercase()} pick the top $cutoff.$youth$loyal${formNote(adjust)}\"\n        val reason = when {\n            !seen -> \"The national selectors want to see more of you first: you have played ${career.stateMatches} of the $MIN_STATE_MATCHES state matches they ask for.\"\n            selected && career.isInternational -> \"The national selectors keep you in the ${career.country} squad. $base\"\n            selected -> \"The national selectors call you up to the ${career.country} squad! $base\"\n            career.isInternational -> \"The national selectors drop you from the ${career.country} squad. $base${gapText(group, mine, cutoff)}\"\n            else -> \"The national selectors do not pick you this year. $base${gapText(group, mine, cutoff)} Keep scoring runs and taking wickets.\"\n        }\n        return CareerSelection.Decision(selected, rank, cutoff, group.size + 1, adjust, reason)\n    }\n\n    /**\n     * The decision for the player's next match of a series: his rank among the players of his role in the national squad, with the places the\n     * format gives that role. The first international match is always a debut; the first three and being 19 or younger each count a place in his favour.\n     */\n    fun matchDecision(career: CareerProfile, state: TournamentState): CareerSelection.Decision {\n        val team = state.teams.find { it.id == state.userTeamId } ?: return CareerSelection.Decision(true, 1, 11, 15, 0, \"\")\n        val me = team.players.find { it.id == CareerDomestic.playerId(career.id) }\n            ?: return CareerSelection.Decision(true, 1, 11, team.players.size, 0, \"\")\n        val key = formatKey(state.tournamentId)\n        val group = team.players.filter { it.role == me.role }.sortedByDescending { value(it) }\n        val rank = group.indexOfFirst { it.id == me.id }.let { if (it < 0) group.size else it + 1 }\n        val factor = CareerWorld.selectionFactor(career.difficulty)\n        val cutoff = (matchSlots(me.role, key) / factor).roundToInt().coerceIn(1, group.size)\n        val adjust = formAdjust(career, 3)\n        val grace = (if (career.internationalMatches < 3) 1 else 0) + (if (career.age <= 19) 1 else 0)\n        val debut = career.internationalMatches == 0\n        val selected = debut || rank - adjust - grace <= cutoff\n        val base = \"You rank ${ordinal(rank)} of ${group.size} ${roleWord(me.role)} in the ${team.name} squad, and for a ${formatWord(key)} match the selectors on ${career.difficulty.lowercase()} pick the top $cutoff.${formNote(adjust)}\"\n        val reason = when {\n            debut -> \"You are in the XI. The selectors give every new international a debut: this is your first international match. $base\"\n            selected -> \"You are in the XI. $base\"\n            else -> \"You are not in the XI. $base Score runs, take wickets or improve your ratings to move up.\"\n        }\n        return CareerSelection.Decision(selected, rank, cutoff, group.size, adjust, reason)\n    }\n\n    // ------------------------------------------------------------ the season\n\n    /** The grounds of a country (a country the game has no grounds for plays at the UAE's, or anywhere). */\n    private fun groundsOf(all: List<Stadium>, country: String): List<Stadium> =\n        all.filter { it.country == country }.ifEmpty { all.filter { it.country == \"UAE\" } }.ifEmpty { all }\n\n    /**\n     * A season of international series for the player's country: a Test series, a one-day series and two T20 series, each against a different\n     * opponent, dated one after the other. Null if the country has no national team or too few opponents.\n     */\n    fun newSeason(career: CareerProfile): List<TournamentState>? {\n        val everyone = CricketData.getAllTeams()\n        val mine = everyone.find { it.name == career.country } ?: return null\n        val season = maxOf(1, career.season)\n        val random = Random(career.id.hashCode() * 31 + season)\n        val pool = OPPONENTS.filter { it != career.country }.mapNotNull { n -> everyone.find { it.name == n } }.shuffled(random)\n        if (pool.size < 4) return null\n        val rival = RIVALS[career.country]\n        // On odd seasons the old rival is met first, in the Test series.\n        val ordered = if (season % 2 == 1 && rival != null) pool.sortedBy { if (it.name == rival) 0 else 1 } else pool\n        val plan = listOf(\n            Plan(\"test\", if (ordered[0].name == rival) 5 else listOf(2, 3, 3)[random.nextInt(3)]),\n            Plan(\"odi\", if (ordered[1].name == rival) 5 else listOf(3, 3, 5)[random.nextInt(3)]),\n            Plan(\"t20\", listOf(3, 3, 5)[random.nextInt(3)]),\n            Plan(\"t20\", 3)\n        )\n        val me = CareerDomestic.asPlayer(career, mine.id)\n        val myTeam = CareerDomestic.withPlayer(mine, me)\n        val all = AllStadiums.list()\n        val start = CareerSeason.firstSaturday()\n        var offsetWeeks = 0\n        val out = ArrayList<TournamentState>()\n        plan.forEachIndexed { i, p ->\n            val opp = ordered[i % ordered.size]\n            val home = (season + i) % 2 == 0\n            val grounds = groundsOf(all, if (home) career.country else opp.name)\n            val homeId = if (home) myTeam.id else opp.id\n            val awayId = if (home) opp.id else myTeam.id\n            val fixtures = (0 until p.matches).map { m ->\n                TournamentFixture(m, m + 1, CplData.LEAGUE, homeId, awayId, grounds[(m + season) % grounds.size].id)\n            }\n            val tags = LinkedHashMap<String, SquadTag>()\n            (myTeam.players + opp.players).forEach { tags[it.id] = SquadTag.DOMESTIC }\n            val label = when (p.format) {\n                \"test\" -> \"Test\"\n                \"odi\" -> \"ODI\"\n                else -> \"T20I\"\n            }\n            val startAt = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * offsetWeeks) }.timeInMillis\n            out.add(\n                TournamentState(\n                    version = CplData.SAVE_VERSION,\n                    tournamentId = \"$PREFIX${career.id}_s${season}_${i}_${p.format}\",\n                    name = \"${myTeam.name} ${p.matches}-match $label series v ${opp.name}\",\n                    userTeamId = myTeam.id,\n                    teams = listOf(myTeam, opp),\n                    tags = tags,\n                    fixtures = fixtures,\n                    createdAt = startAt\n                )\n            )\n            offsetWeeks += p.matches + 1\n        }\n        return out\n    }\n\n    // ------------------------------------------------------------ results\n\n    /** The winner of a finished series (null for a drawn series). */\n    fun seriesWinner(state: TournamentState): Team? {\n        val a = state.teams.getOrNull(0) ?: return null\n        val b = state.teams.getOrNull(1) ?: return null\n        val wa = state.fixtures.count { it.result?.winnerId == a.id }\n        val wb = state.fixtures.count { it.result?.winnerId == b.id }\n        return when {\n            wa > wb -> a\n            wb > wa -> b\n            else -> null\n        }\n    }\n\n    /** One sentence about the state of a series. */\n    fun resultLine(state: TournamentState): String {\n        val a = state.teams.getOrNull(0) ?: return state.name\n        val b = state.teams.getOrNull(1) ?: return state.name\n        val wa = state.fixtures.count { it.result?.winnerId == a.id }\n        val wb = state.fixtures.count { it.result?.winnerId == b.id }\n        val played = state.fixtures.count { it.result != null }\n        return when {\n            played < state.fixtures.size -> \"${state.name}: $wa-$wb after $played of ${state.fixtures.size} matches.\"\n            wa > wb -> \"${state.name}: ${a.name} won $wa-$wb.\"\n            wb > wa -> \"${state.name}: ${b.name} won $wb-$wa.\"\n            else -> \"${state.name}: the series was drawn $wa-$wb.\"\n        }\n    }\n\n    // ------------------------------------------------------------ the pathway\n\n    private fun summary(d: CareerSelection.Decision): String =\n        \"you would rank ${ordinal(d.rank)} in your role, and the selectors take the top ${d.cutoff}.\" + (if (d.selected) \" You are on course.\" else \" You are not there yet.\")\n\n    /**\n     * How far the player is from the next level, in plain sentences: the road (district club, state squad, national team), where he is, and\n     * his rank against the squad he is aiming for, with what is missing. Builds squads, so call it off the main thread.\n     */\n    fun pathway(career: CareerProfile): List<String> {\n        val out = ArrayList<String>()\n        out.add(\"The road: district club, then the ${career.state} state squad, then the ${career.country} national team.\")\n        if (career.isInternational) {\n            out.add(\"You are in the ${career.country} national squad and have played ${career.internationalMatches} international matches.\")\n            decision(career)?.let { out.add(\"Keeping your place next season: \" + summary(it)) }\n        } else if (career.isState) {\n            out.add(\"You are in the ${career.domesticTeams.firstOrNull() ?: career.state} squad and have played ${career.stateMatches} state matches.\")\n            if (career.stateMatches < MIN_STATE_MATCHES) {\n                out.add(\"The national selectors want at least $MIN_STATE_MATCHES state matches first: ${MIN_STATE_MATCHES - career.stateMatches} to go.\")\n            }\n            decision(career)?.let { out.add(\"Next step, the ${career.country} national squad: \" + summary(it)) }\n        } else {\n            val squad = CareerDomestic.stateSquad(career)\n            if (squad == null) {\n                out.add(\"Your state has no domestic team in the game, so there is no state call-up.\")\n            } else {\n                val d = CareerSelection.stateDecision(career, squad)\n                val role = CareerSeason.roleOf(career.role)\n                val gap = if (d.selected) \"\" else gapText(squad.players.filter { it.role == role }, myValue(career, role), d.cutoff)\n                out.add(\"Next step, the ${squad.name} state squad: \" + summary(d) + gap)\n            }\n        }\n        return out\n    }\n}\n",
+      "mustNotExist": true
+    }
+  ]
+}
