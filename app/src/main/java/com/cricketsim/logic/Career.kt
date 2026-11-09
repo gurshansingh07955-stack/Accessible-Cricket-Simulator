@@ -55,12 +55,31 @@ data class CareerProfile(
     // Part six: leadership. "" (a player), "Vice-captain" or "Captain" of his club; promoted for his form (see CareerLeadership).
     val leadership: String = "",
     /** Matches played in the XI when the player was last promoted. */
-    val leadershipSince: Int = 0
+    val leadershipSince: Int = 0,
+    // Part seven: the domestic level.
+    /** "" or "District" = playing for a district club; "State" = called up to the state squad. */
+    val level: String = "",
+    /** The season he is in (1 = the first); 0 on an older career means the first. */
+    val season: Int = 0,
+    /** The competitions of the current season (their file keys); null = the three club leagues. */
+    val seasonKeys: List<String>? = null,
+    /** Matches played for the state. */
+    val stateMatches: Int = 0
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
     /** The club captain makes the team decisions in his matches: the XI, the toss, the bowlers, the field, the batting order. */
-    val isCaptain: Boolean get() = leadership == "Captain"
+    val isCaptain: Boolean get() = leadership == "Captain" && !isState
+
+    /** True once he has been called up to the state squad. */
+    val isState: Boolean get() = level == "State"
+
+    /** One spoken line about the level he plays at. */
+    fun levelLine(): String {
+        val n = maxOf(1, season)
+        return if (isState) "You play for the ${domesticTeams.firstOrNull() ?: state} squad. Season $n, age $age."
+        else "You play district club cricket for $club. Season $n, age $age."
+    }
 
     /** One spoken line about his place in the club's leadership. */
     fun leadershipLine(): String = when (leadership) {

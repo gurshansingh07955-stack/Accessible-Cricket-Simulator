@@ -74,6 +74,7 @@ object CareerProgress {
             batting = newBat, bowling = newBowl, fielding = newField,
             clubTeams = clubs,
             matchesPlayed = career.matchesPlayed + 1,
+            stateMatches = if (career.isState) career.stateMatches + 1 else career.stateMatches,
             form = (career.form.orEmpty() + impact).takeLast(5)
         )
         // A run of good matches is rewarded with the club's leadership.

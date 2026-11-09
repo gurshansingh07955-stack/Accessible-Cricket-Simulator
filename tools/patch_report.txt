@@ -1,6 +1,6 @@
-Patch run: 42495457094
-Timestamp (UTC): 2026-11-08T15:34:13Z
+Patch run: 42568028829
+Timestamp (UTC): 2026-11-09T05:34:11Z
 Result: OK
 -----
-Patch 2026-11-08-091-career-pace-toss-and-captaincy.json
-  applied 30 operation(s) to 12 file(s)
+Patch 2026-11-09-092-career-domestic-level.json
+  applied 10 operation(s) to 9 file(s)

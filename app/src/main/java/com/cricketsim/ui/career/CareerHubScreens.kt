@@ -45,7 +45,9 @@ import com.cricketsim.logic.AbuDhabiT10
 import com.cricketsim.logic.CareerProfile
 import com.cricketsim.logic.CareerProgress
 import com.cricketsim.logic.CareerSeason
+import com.cricketsim.logic.CareerDomestic
 import com.cricketsim.logic.CareerSelection
+import com.cricketsim.logic.CareerTables
 import com.cricketsim.logic.CplData
 import com.cricketsim.logic.CplSimulator
 import com.cricketsim.logic.Team
@@ -97,8 +99,11 @@ fun CareerHub(
     val context = LocalContext.current
     val services = LocalGameServices.current
     val scope = rememberCoroutineScope()
-    val comps = CareerSeason.COMPETITIONS
-    val seasonStores = remember(career.id) { comps.map { TournamentSaveStore(context, "career_season_${career.id}_${it.key}.json") } }
+    // The competitions of the current season: the three club leagues, or the state's domestic tournaments once he has been called up.
+    val seasonKeys = career.seasonKeys ?: CareerSeason.CLUB_KEYS
+    val seasonStores = remember(career.id, career.season, seasonKeys) {
+        seasonKeys.map { TournamentSaveStore(context, CareerSeason.seasonFile(career.id, career.season, it)) }
+    }
     val matchStore = remember(career.id) { MatchSaveStore(context, "career_match_${career.id}.json") }
 
     var tab by remember { mutableStateOf(HubTab.Home) }
@@ -113,14 +118,26 @@ fun CareerHub(
     var statsTab by remember { mutableStateOf(0) }
     var xiProblem by remember { mutableStateOf<String?>(null) }
     // The selectors' decision for the player's next match (his rank in his role at the club, the difficulty and his form).
-    val decision = CareerSelection.decide(career)
+    // At the club: his rank among his club-mates. Once called up: his rank in the state squad. Read for the match that comes next.
+    val sList = seasons
+    val nextForDecision = if (sList != null) CareerSeason.nextMine(sList) else null
+    val decision = if (sList != null && nextForDecision != null) CareerSelection.forState(career, sList[nextForDecision.first]) else CareerSelection.decide(career)
 
-    LaunchedEffect(career.id) {
+    LaunchedEffect(career.id, career.season, seasonKeys) {
+        seasons = null
+        loaded = false
         val existing = seasonStores.map { it.load() }
-        val list = if (existing.all { it != null }) {
+        val list = if (existing.isNotEmpty() && existing.all { it != null }) {
             existing.filterNotNull()
         } else {
-            CareerSeason.newSeason(career)?.also { fresh -> fresh.forEachIndexed { i, s -> seasonStores[i].save(s) } }
+            // The first time a season is opened: make its competitions (the club leagues, or the state's tournaments) and remember their files.
+            val fresh = withContext(Dispatchers.Default) { if (career.isState) CareerDomestic.newSeason(career) else CareerSeason.newSeason(career) }
+            if (fresh != null) {
+                val keys = fresh.map { CareerSeason.keyOf(it) }
+                fresh.forEachIndexed { i, s -> TournamentSaveStore(context, CareerSeason.seasonFile(career.id, career.season, keys[i])).save(s) }
+                if (keys != seasonKeys) onCareerChanged(career.copy(seasonKeys = keys))
+            }
+            fresh
         }
         seasons = list
         pendingMatch = matchStore.load()
@@ -172,7 +189,7 @@ fun CareerHub(
                 val oppId = if (fixture?.homeId == state.userTeamId) fixture?.awayId else fixture?.homeId
                 val oppSquad = state.teams.find { it.id == oppId }
                 val stadium = fixture?.let { CplData.stadium(it.stadiumId) }
-                val pid = CareerSeason.userPlayerId(career)
+                val pid = CareerSeason.playerIdIn(state, career)
                 if (fixture != null && userSquad != null && oppSquad != null && stadium != null && pid != null) {
                     val selection = remember(flow.fixtureId) { CplSimulator.squadForSelection(userSquad, state.tags, stadium) }
                     key(flow.attempt) {
@@ -247,8 +264,8 @@ fun CareerHub(
                     MatchScreen(
                         tournamentName = state.name,
                         format = AbuDhabiT10.formatFor(state.tournamentId),
-                        rules = TournamentRules.rulesFor(state.tournamentId),
-                        careerPlayerId = CareerSeason.userPlayerId(career),
+                        rules = TournamentRules.rulesFor(state.tournamentId, fixture?.stage),
+                        careerPlayerId = CareerSeason.playerIdIn(state, career),
                         careerCaptain = career.isCaptain,
                         stadium = stadium,
                         userTeam = flow.userXI,
@@ -262,7 +279,7 @@ fun CareerHub(
                             pendingMatch = null
                             val latestList = seasons ?: current
                             val latest = latestList[flow.comp]
-                            val pid = CareerSeason.userPlayerId(career)
+                            val pid = CareerSeason.playerIdIn(latest, career)
                             val recorded = CplSimulator.recordPlayedMatch(latest, flow.fixtureId, finished, flow.userXI, flow.oppXI)
                             // What the match did to the player: his form and his ratings.
                             val progress = CareerProgress.afterMatch(
@@ -342,8 +359,8 @@ fun CareerHub(
                                     val ci = next.first
                                     val mine = next.second
                                     val updated = adv.states[ci]
-                                    val pid = CareerSeason.userPlayerId(career)
-                                    val chosen = CareerSelection.decide(career)
+                                    val pid = CareerSeason.playerIdIn(updated, career)
+                                    val chosen = CareerSelection.forState(career, updated)
                                     val squad = updated.teams.find { it.id == updated.userTeamId }
                                     val oppId = if (mine.homeId == updated.userTeamId) mine.awayId else mine.homeId
                                     val oppSquad = updated.teams.find { it.id == oppId }
@@ -368,8 +385,7 @@ fun CareerHub(
                         val snapshot = pendingMatch
                         val list = seasons
                         if (snapshot != null && list != null) {
-                            val name = snapshot.state.tournamentName ?: ""
-                            val ci = comps.indexOfFirst { name.contains(it.label) }.coerceAtLeast(0)
+                            val ci = list.indexOfFirst { it.name == snapshot.state.tournamentName }.coerceAtLeast(0)
                             val fixtureId = CplSimulator.fixtureFor(list[ci], snapshot.state.userTeam.id, snapshot.state.opponentTeam.id)
                             if (fixtureId != null) {
                                 play = CPlay.Match(ci, fixtureId, snapshot.state.userTeam, snapshot.state.opponentTeam, snapshot.toss, snapshot)
@@ -379,6 +395,25 @@ fun CareerHub(
                     onDiscard = {
                         pendingMatch = null
                         scope.launch { matchStore.clear() }
+                    },
+                    onNextSeason = {
+                        if (!busy) {
+                            busy = true
+                            message = "The selectors are meeting."
+                            scope.launch {
+                                if (pendingMatch != null) {
+                                    pendingMatch = null
+                                    matchStore.clear()
+                                }
+                                val next = withContext(Dispatchers.Default) { CareerSeason.nextSeason(career) }
+                                next.states.forEachIndexed { i, s ->
+                                    TournamentSaveStore(context, CareerSeason.seasonFile(career.id, next.career.season, next.keys[i])).save(s)
+                                }
+                                message = next.text
+                                busy = false
+                                onCareerChanged(next.career)
+                            }
+                        }
                     }
                 )
                 HubTab.Calendar -> CalendarTab(current, loaded)
@@ -421,6 +456,8 @@ private fun HomeTab(
         Spacer(modifier = Modifier.height(4.dp))
         Text(career.plan(), style = MaterialTheme.typography.bodyMedium)
     }
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(career.levelLine(), style = MaterialTheme.typography.bodyMedium)
     if (career.leadershipLine().isNotEmpty()) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(career.leadershipLine(), style = MaterialTheme.typography.bodyMedium)
@@ -471,7 +508,8 @@ private fun PlayTab(
     onSimulateMine: () -> Unit,
     onSimulateAll: () -> Unit,
     onResume: () -> Unit,
-    onDiscard: () -> Unit
+    onDiscard: () -> Unit,
+    onNextSeason: () -> Unit
 ) {
     PageHeading("Game play")
     Spacer(modifier = Modifier.height(8.dp))
@@ -488,25 +526,38 @@ private fun PlayTab(
     }
     val played = seasons.sumOf { s -> s.fixtures.count { it.result != null } }
     val total = seasons.sumOf { it.fixtures.size }
-    Text("$played of $total matches played this season: T20, 50-over and 3-day leagues.", style = MaterialTheme.typography.bodyMedium)
+    Text("$played of $total matches played this season. ${career.levelLine()}", style = MaterialTheme.typography.bodyMedium)
     Spacer(modifier = Modifier.height(12.dp))
     val next = CareerSeason.nextMine(seasons)
     if (next == null) {
-        Text("Your season is complete.", style = MaterialTheme.typography.bodyLarge)
-        seasons.forEach { s ->
-            val champion = CareerSeason.champion(s)
-            val position = CplData.standings(s).indexOfFirst { it.team.id == s.userTeamId } + 1
+        val allDone = seasons.all { CareerSeason.isComplete(it) }
+        if (!allDone) {
             Text(
-                text = "${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: "not decided"}." +
-                    (if (position > 0) " ${career.club} finished ${ordinal(position)}." else ""),
+                text = "You have played all your matches so far. Some matches of the other teams are still to be played: simulate them to see whether your team goes through to a knockout match.",
                 style = MaterialTheme.typography.bodyLarge
             )
+            Spacer(modifier = Modifier.height(12.dp))
+            OptionButton("Simulate the rest of the season", "The other teams' matches, and any knockout match your team reaches.", !busy, true) { onSimulateAll() }
+        } else {
+            Text("Your season is complete.", style = MaterialTheme.typography.bodyLarge)
+            seasons.forEach { s ->
+                val champion = CareerSeason.champion(s)
+                val position = CplData.standings(s).indexOfFirst { it.team.id == s.userTeamId } + 1
+                Text(
+                    text = "${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: "not decided"}." +
+                        (if (position > 0 && CareerSeason.isClub(s)) " ${career.club} finished ${ordinal(position)}." else ""),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = if (career.isState) "The state selectors will decide whether you keep your place in the squad for next season. If you are dropped you go back to district cricket."
+                else "The state selectors will look at your ratings and your form and decide whether to call you up to your state squad. Either way, a new season begins and you are a year older.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OptionButton("Start next season", "The selectors decide, then the new season's competitions are made.", !busy, true) { onNextSeason() }
         }
-        Text(
-            text = "The state and domestic tournaments come in the next parts of career mode.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     } else {
         val state = seasons[next.first]
         val mine = next.second
@@ -537,7 +588,7 @@ private fun PlayTab(
         Spacer(modifier = Modifier.height(12.dp))
         OptionButton("Simulate my match", "The other clubs' earlier matches are played too. You play if you are in the XI.", !busy, false) { onSimulateMine() }
         Spacer(modifier = Modifier.height(12.dp))
-        OptionButton("Simulate the whole season", "Every match that is left, in all three leagues.", !busy, false) { onSimulateAll() }
+        OptionButton("Simulate the whole season", "Every match that is left, in every competition.", !busy, false) { onSimulateAll() }
     }
     if (message.isNotEmpty()) {
         Spacer(modifier = Modifier.height(16.dp))
@@ -557,13 +608,20 @@ private fun CalendarTab(seasons: List<TournamentState>?, loaded: Boolean) {
         Text("This career has no season.", style = MaterialTheme.typography.bodyLarge)
         return
     }
-    Text("One match a week: a T20 on a Saturday, a 50-over match the next week, a three-day match (Friday to Sunday) the week after.", style = MaterialTheme.typography.bodyMedium)
+    Text(
+        text = "In the club leagues every match is listed; in the state tournaments, your team's matches. One match a week.",
+        style = MaterialTheme.typography.bodyMedium
+    )
     Spacer(modifier = Modifier.height(12.dp))
-    val entries = seasons.flatMap { s -> s.fixtures.map { f -> Pair(s, f) } }
-    entries.groupBy { (s, f) -> CareerSeason.weekOf(s, f) }.toSortedMap().forEach { (week, list) ->
+    val entries = seasons.flatMap { s ->
+        s.fixtures
+            .filter { it.homeId != null && it.awayId != null && (CareerSeason.isClub(s) || CplSimulator.involves(it, s.userTeamId)) }
+            .map { f -> Pair(s, f) }
+    }.sortedWith(compareBy({ CareerSeason.dateMillis(it.first, it.second) }, { it.second.number }))
+    entries.groupBy { (s, f) -> CareerSeason.dateMillis(s, f) }.forEach { (_, list) ->
         val (firstState, firstFixture) = list.first()
         Text(
-            text = "Week ${week + 1}: ${CareerSeason.whenText(firstState, firstFixture)}",
+            text = CareerSeason.whenText(firstState, firstFixture),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.semantics { heading() }
         )
@@ -572,8 +630,8 @@ private fun CalendarTab(seasons: List<TournamentState>?, loaded: Boolean) {
             val yours = CplSimulator.involves(f, s.userTeamId)
             val result = f.result
             Text(
-                text = "${CareerSeason.competitionOf(s).label}, match ${f.number}: ${fixtureText(s, f)}." + (if (yours) " Your match." else "") +
-                    (if (result != null) " Result: ${result.summary}" else " Not played yet."),
+                text = "${CareerSeason.competitionOf(s).label}${if (f.stage != CplData.LEAGUE) ", ${f.stage}" else ""}, match ${f.number}: ${fixtureText(s, f)}." +
+                    (if (yours) " Your match." else "") + (if (result != null) " Result: ${result.summary}" else " Not played yet."),
                 style = MaterialTheme.typography.bodyLarge
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -615,33 +673,35 @@ private fun TableTab(
         Text("Loading the season.", style = MaterialTheme.typography.bodyLarge)
         return
     }
-    if (seasons == null) {
+    if (seasons == null || seasons.isEmpty()) {
         Text("This career has no season.", style = MaterialTheme.typography.bodyLarge)
         return
     }
     // Which competition: each has its own table and its own statistics.
-    SubTabs(CareerSeason.COMPETITIONS.map { it.shortLabel }, compTab, onCompTab)
+    SubTabs(seasons.map { CareerSeason.competitionOf(it).shortLabel }, compTab.coerceIn(0, seasons.size - 1), onCompTab)
     Spacer(modifier = Modifier.height(8.dp))
     val state = seasons[compTab.coerceIn(0, seasons.size - 1)]
-    val multiDay = CareerSeason.competitionOf(state).days > 1
     SubTabs(listOf("Points table", "Stats"), tableTab, onTableTab)
     Spacer(modifier = Modifier.height(12.dp))
     Text(state.name, style = MaterialTheme.typography.titleMedium)
     Spacer(modifier = Modifier.height(8.dp))
     if (tableTab == 0) {
-        val rows = CplData.standings(state)
         val champion = CareerSeason.champion(state)
         if (champion != null) {
             Text("Champions: ${champion.name}.", style = MaterialTheme.typography.bodyLarge)
             Spacer(modifier = Modifier.height(8.dp))
         }
-        rows.forEachIndexed { i, r ->
-            val nrr = String.format(java.util.Locale.US, "%+.3f", r.netRunRate)
-            Text(
-                text = "${i + 1}. ${r.team.name}${if (r.team.id == state.userTeamId) " (your club)" else ""}: played ${r.played}, won ${r.won}, " +
-                    "lost ${r.lost}, ${if (multiDay) "drawn" else "no result"} ${r.noResult}, points ${r.points}" + (if (multiDay) "" else ", net run rate $nrr"),
-                style = MaterialTheme.typography.bodyLarge
-            )
+        val tables = CareerTables.tables(state)
+        if (tables.isEmpty()) Text("No matches have been played in this competition yet, so there is no table.", style = MaterialTheme.typography.bodyLarge)
+        tables.forEach { table ->
+            if (tables.size > 1) {
+                Text(table.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+            table.rows.forEach { (teamId, text) ->
+                Text(text + if (teamId == state.userTeamId) " (your team)" else "", style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             Spacer(modifier = Modifier.height(8.dp))
         }
     } else {
@@ -650,7 +710,7 @@ private fun TableTab(
         val stats = if (statsTab == 0) state.playerStats.values else state.playerStats.values.filter { it.teamId == state.userTeamId }
         val categories = CplData.statCategories(stats, teamNameOf = { id -> CareerSeason.nameOf(state, id) }).filter { it.entries.isNotEmpty() }
         if (categories.isEmpty()) {
-            Text("No matches have been played in this league yet, so there are no statistics.", style = MaterialTheme.typography.bodyLarge)
+            Text("No matches have been played in this competition yet, so there are no statistics.", style = MaterialTheme.typography.bodyLarge)
         }
         categories.forEach { c ->
             Text(c.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })

@@ -26,9 +26,29 @@ object CareerSeason {
 
     fun tournamentId(careerId: String, key: String): String = "career_${careerId}_$key"
 
-    fun compIndex(state: TournamentState): Int = COMPETITIONS.indexOfFirst { it.key == state.tournamentId.substringAfterLast('_') }.coerceAtLeast(0)
+    val CLUB_KEYS = COMPETITIONS.map { it.key }
 
-    fun competitionOf(state: TournamentState): Competition = COMPETITIONS[compIndex(state)]
+    /** A club league ("career_<id>_t20" ...), as opposed to a state tournament of the domestic level. */
+    fun isClub(state: TournamentState): Boolean = state.tournamentId.startsWith("career_")
+
+    /** A competition's file key: "t20", "odi", "3day" for the club leagues, the tournament id for a state tournament. */
+    fun keyOf(state: TournamentState): String = if (isClub(state)) state.tournamentId.substringAfterLast('_') else state.tournamentId
+
+    /** The file a competition of a season is saved in (the first season's club leagues keep the names the first versions gave them). */
+    fun seasonFile(careerId: String, season: Int, key: String): String =
+        if (season <= 1 && key in CLUB_KEYS) "career_season_${careerId}_$key.json" else "career_season_${careerId}_s${maxOf(season, 1)}_$key.json"
+
+    fun compIndex(state: TournamentState): Int = COMPETITIONS.indexOfFirst { it.key == keyOf(state) }.coerceAtLeast(0)
+
+    fun competitionOf(state: TournamentState): Competition {
+        if (isClub(state)) return COMPETITIONS[compIndex(state)]
+        val def = CareerDomestic.defFor(state.tournamentId)
+        return Competition(state.tournamentId, def?.label ?: state.name, def?.shortLabel ?: "Domestic", def?.days ?: 1)
+    }
+
+    /** The player's id in a competition: his club player's id in the club leagues, his one fixed id in a state tournament. */
+    fun playerIdIn(state: TournamentState, career: CareerProfile): String? =
+        if (isClub(state)) userPlayerId(career) else CareerDomestic.playerId(career.id)
 
     /** The rules a competition is played by (TournamentRules asks for them by tournament id). */
     fun rulesFor(tournamentId: String): MatchRules? = when (tournamentId.substringAfterLast('_')) {
@@ -46,14 +66,14 @@ object CareerSeason {
         return if (index < 0) null else clubId(career.id, index)
     }
 
-    private fun roleOf(label: String): PlayerRole = when (label) {
+    internal fun roleOf(label: String): PlayerRole = when (label) {
         "Batsman" -> PlayerRole.BATSMAN
         "Wicketkeeper-batsman" -> PlayerRole.WICKETKEEPER
         "Bowler" -> PlayerRole.BOWLER
         else -> PlayerRole.ALL_ROUNDER
     }
 
-    private fun styleOf(label: String): BowlingStyle =
+    internal fun styleOf(label: String): BowlingStyle =
         if (label == "Off break" || label == "Leg break" || label == "Orthodox spin" || label == "Wrist spin") BowlingStyle.SPIN else BowlingStyle.PACE
 
     /** A club as the game's team: its made-up players become the game's players (ids "<club id>_p<number>"). */
@@ -93,7 +113,7 @@ object CareerSeason {
     }
 
     /** The first Saturday at least a week away, at nine in the morning. */
-    private fun firstSaturday(): Calendar {
+    internal fun firstSaturday(): Calendar {
         val c = Calendar.getInstance()
         c.set(Calendar.HOUR_OF_DAY, 9); c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
         var ahead = (Calendar.SATURDAY - c.get(Calendar.DAY_OF_WEEK) + 7) % 7
@@ -143,7 +163,14 @@ object CareerSeason {
     fun dateMillis(state: TournamentState, fixture: TournamentFixture): Long {
         val c = Calendar.getInstance()
         c.timeInMillis = state.createdAt
-        c.add(Calendar.DAY_OF_YEAR, 7 * weekOf(state, fixture) - (if (competitionOf(state).days > 1) 1 else 0))
+        if (isClub(state)) {
+            c.add(Calendar.DAY_OF_YEAR, 7 * weekOf(state, fixture) - (if (competitionOf(state).days > 1) 1 else 0))
+        } else {
+            // A state tournament: the player's matches, one a week, from the week the tournament starts.
+            val mine = state.fixtures.filter { CplSimulator.involves(it, state.userTeamId) }
+            val index = mine.indexOfFirst { it.id == fixture.id }.let { if (it < 0) fixture.number else it }
+            c.add(Calendar.DAY_OF_YEAR, 7 * index)
+        }
         return c.timeInMillis
     }
 
@@ -158,10 +185,14 @@ object CareerSeason {
         return "${dateText(start)} to ${dateText(end)}"
     }
 
-    fun isComplete(state: TournamentState): Boolean = state.fixtures.all { it.result != null }
+    /** No match that can be played is left (a knockout match whose teams are not known yet does not count: it comes when the table is settled). */
+    fun isComplete(state: TournamentState): Boolean = state.fixtures.none { it.result == null && it.homeId != null && it.awayId != null }
 
-    /** The club top of the table once every match is played. */
-    fun champion(state: TournamentState): Team? = if (isComplete(state)) CplData.standings(state).firstOrNull()?.team else null
+    /** The champions once every match is played: the club top of the table, or the winner of a state tournament. */
+    fun champion(state: TournamentState): Team? =
+        if (!isComplete(state)) null
+        else if (isClub(state)) CplData.standings(state).firstOrNull()?.team
+        else CplSimulator.champion(state)
 
     fun nameOf(state: TournamentState, teamId: String?): String = state.teams.find { it.id == teamId }?.name ?: "?"
 
@@ -175,7 +206,7 @@ object CareerSeason {
 
     /** A competition's copy of the player gets his current ratings (they grow as he plays). */
     fun withUserPlayer(state: TournamentState, career: CareerProfile): TournamentState {
-        val pid = userPlayerId(career) ?: return state
+        val pid = playerIdIn(state, career) ?: return state
         return state.copy(teams = state.teams.map { t ->
             if (t.players.none { it.id == pid }) t
             else t.copy(players = t.players.map { p ->
@@ -191,8 +222,8 @@ object CareerSeason {
     /** Simulates the player's own fixture with the selectors' decision: he is in the club's XI or left out of it. Any competition's format. */
     fun simulateMine(state: TournamentState, fixture: TournamentFixture, career: CareerProfile, random: Random): TournamentState {
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
-        val pid = userPlayerId(career) ?: return CplSimulator.simulateFixture(state, fixture, random)
-        val selected = CareerSelection.decide(career).selected
+        val pid = playerIdIn(state, career) ?: return CplSimulator.simulateFixture(state, fixture, random)
+        val selected = CareerSelection.forState(career, state).selected
         val mine = state.teams.find { it.id == state.userTeamId } ?: return state
         val adjusted = CareerSelection.squadForMatch(mine, state.tags, stadium, pid, selected)
         val after = CplSimulator.simulateFixture(state.copy(teams = state.teams.map { if (it.id == state.userTeamId) adjusted else it }), fixture, random)
@@ -226,15 +257,21 @@ object CareerSeason {
         var c = career
         val lines = ArrayList<String>()
         var guard = 0
-        while (guard < 200) {
+        while (guard < 300) {
             guard++
-            val next = nextMine(list) ?: break
+            var next = nextMine(list)
+            if (next == null && whole) {
+                // Nothing left for the player: finish the other matches, which may open a knockout match for his team.
+                list = list.map { CplSimulator.run(it, SimMode.ALL, random) }
+                next = nextMine(list)
+            }
+            if (next == null) break
             val ci = next.first
             val ran = CplSimulator.run(list[ci], SimMode.UNTIL_MINE, random)
             list = list.mapIndexed { i, x -> if (i == ci) ran else x }
             if (!includeMine && !whole) break
             val mine = ran.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, ran.userTeamId) } ?: break
-            val pid = userPlayerId(c)
+            val pid = playerIdIn(ran, c)
             val before = if (pid != null) ran.playerStats[pid] else null
             val played = simulateMine(ran, mine, c, random)
             val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random)
@@ -249,5 +286,34 @@ object CareerSeason {
         }
         if (whole) list = list.map { withUserPlayer(CplSimulator.run(it, SimMode.ALL, random), c) }
         return Advance(list, c, lines)
+    }
+
+    class NextSeason(val career: CareerProfile, val states: List<TournamentState>, val keys: List<String>, val text: String)
+
+    /**
+     * The next season. The player is a year older. The state selectors look at him (his ratings in the state squad, his form, the difficulty): called up, he plays
+     * the state team's tournaments; kept, he plays them again; not called up (or dropped), he plays another club season.
+     */
+    fun nextSeason(career: CareerProfile): NextSeason {
+        val older = career.copy(age = career.age + 1, season = maxOf(1, career.season) + 1)
+        var text = "A new season begins. You are ${older.age}. "
+        val squad = CareerDomestic.stateSquad(career)
+        if (squad != null) {
+            val decision = CareerSelection.stateDecision(career, squad)
+            text += decision.reason + " "
+            if (decision.selected) {
+                val withLevel = older.copy(level = "State")
+                val domestic = CareerDomestic.newSeason(withLevel)
+                if (domestic != null) {
+                    val keys = domestic.map { keyOf(it) }
+                    return NextSeason(withLevel.copy(seasonKeys = keys), domestic, keys, text + "You play for the ${squad.name} squad this season.")
+                }
+            }
+        }
+        val club = older.copy(level = "District")
+        val states = newSeason(club) ?: emptyList()
+        val keys = states.map { keyOf(it) }
+        text += if (career.isState) "You go back to district club cricket for ${career.club}." else "You stay with ${career.club} for another season of club cricket."
+        return NextSeason(club.copy(seasonKeys = keys), states, keys, text)
     }
 }

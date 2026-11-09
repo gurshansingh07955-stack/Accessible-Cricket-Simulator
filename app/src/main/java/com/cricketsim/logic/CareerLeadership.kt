@@ -14,6 +14,7 @@ object CareerLeadership {
 
     /** The new rank if the player has earned one, else null. */
     fun promotion(career: CareerProfile): String? {
+        if (career.isState) return null // the club's captaincy is a district matter
         val form = career.form.orEmpty().takeLast(5)
         if (form.size < 5) return null
         val average = form.average()

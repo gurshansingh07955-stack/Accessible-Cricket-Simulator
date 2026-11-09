@@ -110,4 +110,85 @@ object CareerSelection {
         order.add((battingNumber - 1).coerceIn(0, order.size), me)
         return xi.copy(players = order)
     }
+
+    // ------------------------------------------------------------ the state level
+
+    private fun pv(p: Player): Double = when (p.role) {
+        PlayerRole.BATSMAN, PlayerRole.WICKETKEEPER -> p.battingRating * 0.8 + p.fieldingRating * 0.2
+        PlayerRole.BOWLER -> p.bowlingRating * 0.8 + p.fieldingRating * 0.2
+        else -> p.battingRating * 0.45 + p.bowlingRating * 0.45 + p.fieldingRating * 0.1
+    }
+
+    private fun roleSlots(role: PlayerRole): Int = if (role == PlayerRole.WICKETKEEPER) 1 else 3
+
+    /** The decision for the player's next match in a competition: the club's rank among his club-mates, or the state squad's. */
+    fun forState(career: CareerProfile, state: TournamentState): Decision =
+        if (CareerSeason.isClub(state)) decide(career) else decideAtState(career, state)
+
+    /**
+     * Once called up, the player is ranked in the state squad among the players of his role (the squad is bigger and stronger than a club's):
+     * the selectors take the top three of a role (one keeper), widened or narrowed by the difficulty. His first state match is a debut; his first
+     * three state matches and being 19 or younger each count a place in his favour; form still moves him up or down by up to three places.
+     */
+    fun decideAtState(career: CareerProfile, state: TournamentState): Decision {
+        val team = state.teams.find { it.id == state.userTeamId } ?: return Decision(true, 1, 11, 15, 0, "")
+        val me = team.players.find { it.id == CareerSeason.playerIdIn(state, career) } ?: return Decision(true, 1, 11, team.players.size, 0, "")
+        val group = team.players.filter { it.role == me.role }.sortedByDescending { pv(it) }
+        val rank = group.indexOfFirst { it.id == me.id }.let { if (it < 0) group.size else it + 1 }
+        val factor = CareerWorld.selectionFactor(career.difficulty)
+        val cutoff = (roleSlots(me.role) / factor).roundToInt().coerceIn(1, group.size)
+        val form = career.form.orEmpty().takeLast(3)
+        val adjust = if (form.isEmpty()) 0 else ((form.average() - 25.0) / 10.0).roundToInt().coerceIn(-3, 3)
+        val grace = (if (career.stateMatches < 3) 1 else 0) + (if (career.age <= 19) 1 else 0)
+        val debut = career.stateMatches == 0
+        val selected = debut || rank - adjust - grace <= cutoff
+        val formNote = when {
+            adjust > 0 -> " Your good form moves you up ${if (adjust == 1) "a place" else "$adjust places"}."
+            adjust < 0 -> " Your poor form drops you ${if (adjust == -1) "a place" else "${-adjust} places"}."
+            else -> ""
+        }
+        val base = "You rank ${ordinal(rank)} of ${group.size} players of your role in the ${team.name} squad, and the selectors on ${career.difficulty.lowercase()} pick the top $cutoff.$formNote"
+        val reason = when {
+            debut -> "You are in the XI. The state selectors give every new player a debut: this is your first state match. $base"
+            selected -> "You are in the XI. $base"
+            else -> "You are not in the XI. $base Score runs, take wickets or improve your ratings to move up."
+        }
+        return Decision(selected, rank, cutoff, group.size, adjust, reason)
+    }
+
+    /**
+     * The decision at the end of a season: is the player called up to the state squad (or does he keep his place in it)? He is ranked, with his current
+     * ratings, against the squad's players of his role. His form (the average impact of his last five matches against 25, a place for every ten) and being
+     * 19 or younger help him; a player already in the squad gets two places of loyalty.
+     */
+    fun stateDecision(career: CareerProfile, squad: Team): Decision {
+        val role = CareerSeason.roleOf(career.role)
+        val myValue = when (role) {
+            PlayerRole.BATSMAN, PlayerRole.WICKETKEEPER -> career.batting * 0.8 + career.fielding * 0.2
+            PlayerRole.BOWLER -> career.bowling * 0.8 + career.fielding * 0.2
+            else -> career.batting * 0.45 + career.bowling * 0.45 + career.fielding * 0.1
+        }
+        val group = squad.players.filter { it.role == role }
+        val rank = 1 + group.count { pv(it) > myValue }
+        val factor = CareerWorld.selectionFactor(career.difficulty)
+        val cutoff = (roleSlots(role) / factor).roundToInt().coerceIn(1, group.size + 1)
+        val form = career.form.orEmpty().takeLast(5)
+        val adjust = if (form.isEmpty()) 0 else ((form.average() - 25.0) / 10.0).roundToInt().coerceIn(-3, 3)
+        val grace = (if (career.age <= 19) 1 else 0) + (if (career.isState) 2 else 0)
+        val selected = rank - adjust - grace <= cutoff
+        val formNote = when {
+            adjust > 0 -> " Your good form moves you up ${if (adjust == 1) "a place" else "$adjust places"}."
+            adjust < 0 -> " Your poor form drops you ${if (adjust == -1) "a place" else "${-adjust} places"}."
+            else -> ""
+        }
+        val loyal = if (career.isState) " As a player already in the squad you get two places of loyalty." else ""
+        val youth = if (career.age <= 19) " The selectors back young players." else ""
+        val base = "With your ratings you would rank ${ordinal(rank)} among the ${group.size} players of your role in the ${squad.name} squad, and the selectors on ${career.difficulty.lowercase()} pick the top $cutoff.$youth$loyal$formNote"
+        val reason = if (selected) {
+            if (career.isState) "The ${squad.name} selectors keep you in the squad. $base" else "The ${squad.name} selectors call you up to the state squad! $base"
+        } else {
+            if (career.isState) "The ${squad.name} selectors drop you from the squad. $base" else "The ${squad.name} selectors do not call you up this year. $base Keep scoring runs and taking wickets and improving."
+        }
+        return Decision(selected, rank, cutoff, group.size, adjust, reason)
+    }
 }
