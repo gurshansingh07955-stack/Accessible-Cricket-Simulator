@@ -123,7 +123,9 @@ object CareerSelection {
 
     /** The decision for the player's next match in a competition: the club's rank among his club-mates, or the state squad's. */
     fun forState(career: CareerProfile, state: TournamentState): Decision =
-        if (CareerSeason.isClub(state)) decide(career) else decideAtState(career, state)
+        if (CareerSeason.isClub(state)) decide(career)
+        else if (CareerInternational.isInternational(state)) CareerInternational.matchDecision(career, state)
+        else decideAtState(career, state)
 
     /**
      * Once called up, the player is ranked in the state squad among the players of his role (the squad is bigger and stronger than a club's):
@@ -174,20 +176,20 @@ object CareerSelection {
         val cutoff = (roleSlots(role) / factor).roundToInt().coerceIn(1, group.size + 1)
         val form = career.form.orEmpty().takeLast(5)
         val adjust = if (form.isEmpty()) 0 else ((form.average() - 25.0) / 10.0).roundToInt().coerceIn(-3, 3)
-        val grace = (if (career.age <= 19) 1 else 0) + (if (career.isState) 2 else 0)
+        val grace = (if (career.age <= 19) 1 else 0) + (if (career.atOrAboveState) 2 else 0)
         val selected = rank - adjust - grace <= cutoff
         val formNote = when {
             adjust > 0 -> " Your good form moves you up ${if (adjust == 1) "a place" else "$adjust places"}."
             adjust < 0 -> " Your poor form drops you ${if (adjust == -1) "a place" else "${-adjust} places"}."
             else -> ""
         }
-        val loyal = if (career.isState) " As a player already in the squad you get two places of loyalty." else ""
+        val loyal = if (career.atOrAboveState) " As a player already in the squad you get two places of loyalty." else ""
         val youth = if (career.age <= 19) " The selectors back young players." else ""
         val base = "With your ratings you would rank ${ordinal(rank)} among the ${group.size} players of your role in the ${squad.name} squad, and the selectors on ${career.difficulty.lowercase()} pick the top $cutoff.$youth$loyal$formNote"
         val reason = if (selected) {
-            if (career.isState) "The ${squad.name} selectors keep you in the squad. $base" else "The ${squad.name} selectors call you up to the state squad! $base"
+            if (career.atOrAboveState) "The ${squad.name} selectors keep you in the squad. $base" else "The ${squad.name} selectors call you up to the state squad! $base"
         } else {
-            if (career.isState) "The ${squad.name} selectors drop you from the squad. $base" else "The ${squad.name} selectors do not call you up this year. $base Keep scoring runs and taking wickets and improving."
+            if (career.atOrAboveState) "The ${squad.name} selectors drop you from the squad. $base" else "The ${squad.name} selectors do not call you up this year. $base Keep scoring runs and taking wickets and improving."
         }
         return Decision(selected, rank, cutoff, group.size, adjust, reason)
     }

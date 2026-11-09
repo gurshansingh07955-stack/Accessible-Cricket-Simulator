@@ -46,6 +46,7 @@ import com.cricketsim.logic.CareerProfile
 import com.cricketsim.logic.CareerProgress
 import com.cricketsim.logic.CareerSeason
 import com.cricketsim.logic.CareerDomestic
+import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerSelection
 import com.cricketsim.logic.CareerTables
 import com.cricketsim.logic.CplData
@@ -131,7 +132,13 @@ fun CareerHub(
             existing.filterNotNull()
         } else {
             // The first time a season is opened: make its competitions (the club leagues, or the state's tournaments) and remember their files.
-            val fresh = withContext(Dispatchers.Default) { if (career.isState) CareerDomestic.newSeason(career) else CareerSeason.newSeason(career) }
+            val fresh = withContext(Dispatchers.Default) {
+                when {
+                    career.isInternational -> CareerInternational.newSeason(career)
+                    career.isState -> CareerDomestic.newSeason(career)
+                    else -> CareerSeason.newSeason(career)
+                }
+            }
             if (fresh != null) {
                 val keys = fresh.map { CareerSeason.keyOf(it) }
                 fresh.forEachIndexed { i, s -> TournamentSaveStore(context, CareerSeason.seasonFile(career.id, career.season, keys[i])).save(s) }
@@ -142,6 +149,12 @@ fun CareerHub(
         seasons = list
         pendingMatch = matchStore.load()
         loaded = true
+    }
+
+    // Where the player stands on the road to the next level (worked out off the main thread: it builds the squads he is compared with).
+    var pathway by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(career.id, career.season, career.level, career.matchesPlayed) {
+        pathway = withContext(Dispatchers.Default) { try { CareerInternational.pathway(career) } catch (e: Exception) { emptyList() } }
     }
 
     // The crowd, as in the game's tournaments: from the toss to the end of the match.
@@ -329,7 +342,7 @@ fun CareerHub(
                 .padding(20.dp)
         ) {
             when (tab) {
-                HubTab.Home -> HomeTab(career, decision, onBack, onOpenSquad, onOpenClubs, onOpenProfile)
+                HubTab.Home -> HomeTab(career, decision, pathway, onBack, onOpenSquad, onOpenClubs, onOpenProfile)
                 HubTab.Play -> PlayTab(
                     career = career,
                     seasons = current,
@@ -439,6 +452,7 @@ private fun fixtureText(state: TournamentState, f: TournamentFixture): String {
 private fun HomeTab(
     career: CareerProfile,
     decision: CareerSelection.Decision,
+    pathway: List<String>,
     onBack: () -> Unit,
     onOpenSquad: () -> Unit,
     onOpenClubs: () -> Unit,
@@ -458,6 +472,15 @@ private fun HomeTab(
     }
     Spacer(modifier = Modifier.height(4.dp))
     Text(career.levelLine(), style = MaterialTheme.typography.bodyMedium)
+    if (pathway.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("Your pathway", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+        pathway.forEach { line ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(line, style = MaterialTheme.typography.bodyMedium)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+    }
     if (career.leadershipLine().isNotEmpty()) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(career.leadershipLine(), style = MaterialTheme.typography.bodyMedium)
@@ -544,14 +567,15 @@ private fun PlayTab(
                 val champion = CareerSeason.champion(s)
                 val position = CplData.standings(s).indexOfFirst { it.team.id == s.userTeamId } + 1
                 Text(
-                    text = "${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: "not decided"}." +
+                    text = (if (CareerInternational.isInternational(s)) CareerInternational.resultLine(s) else "${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: "not decided"}.") +
                         (if (position > 0 && CareerSeason.isClub(s)) " ${career.club} finished ${ordinal(position)}." else ""),
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = if (career.isState) "The state selectors will decide whether you keep your place in the squad for next season. If you are dropped you go back to district cricket."
+                text = if (career.isInternational) "The national selectors will decide whether you keep your place in the national squad for next season. If you are dropped you go back to state cricket."
+                else if (career.isState) "The national selectors look at you first, then the state selectors decide whether you keep your place in the squad for next season. If you are dropped you go back to district cricket."
                 else "The state selectors will look at your ratings and your form and decide whether to call you up to your state squad. Either way, a new season begins and you are a year older.",
                 style = MaterialTheme.typography.bodyMedium
             )

@@ -64,19 +64,29 @@ data class CareerProfile(
     /** The competitions of the current season (their file keys); null = the three club leagues. */
     val seasonKeys: List<String>? = null,
     /** Matches played for the state. */
-    val stateMatches: Int = 0
+    val stateMatches: Int = 0,
+    // Part eight: the international level.
+    /** Matches played for the national team. */
+    val internationalMatches: Int = 0
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
     /** The club captain makes the team decisions in his matches: the XI, the toss, the bowlers, the field, the batting order. */
-    val isCaptain: Boolean get() = leadership == "Captain" && !isState
+    val isCaptain: Boolean get() = leadership == "Captain" && !isState && !isInternational
 
     /** True once he has been called up to the state squad. */
     val isState: Boolean get() = level == "State"
 
+    /** True once he has been picked for the national team ("International" level). */
+    val isInternational: Boolean get() = level == "International"
+
+    /** At the state squad or above it. */
+    val atOrAboveState: Boolean get() = isState || isInternational
+
     /** One spoken line about the level he plays at. */
     fun levelLine(): String {
         val n = maxOf(1, season)
+        if (isInternational) return "You play for the $country national squad. Season $n, age $age. International matches: $internationalMatches."
         return if (isState) "You play for the ${domesticTeams.firstOrNull() ?: state} squad. Season $n, age $age."
         else "You play district club cricket for $club. Season $n, age $age."
     }

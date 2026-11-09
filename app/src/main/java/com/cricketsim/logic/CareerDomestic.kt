@@ -75,7 +75,7 @@ object CareerDomestic {
     private fun CareerProfile.fieldingRatingForState(): Int = fielding.coerceIn(1, 95)
 
     /** The squad with the player in the place of its weakest player of his role (a keeper is only replaced by a keeper). */
-    private fun withPlayer(team: Team, me: Player): Team {
+    internal fun withPlayer(team: Team, me: Player): Team {
         val sameRole = team.players.filter { it.role == me.role }
         val candidates = if (me.role == PlayerRole.WICKETKEEPER && sameRole.isNotEmpty()) sameRole
         else sameRole.ifEmpty { team.players.filter { it.role != PlayerRole.WICKETKEEPER } }

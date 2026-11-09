@@ -42,6 +42,7 @@ object CareerSeason {
 
     fun competitionOf(state: TournamentState): Competition {
         if (isClub(state)) return COMPETITIONS[compIndex(state)]
+        if (CareerInternational.isInternational(state)) return CareerInternational.competition(state)
         val def = CareerDomestic.defFor(state.tournamentId)
         return Competition(state.tournamentId, def?.label ?: state.name, def?.shortLabel ?: "Domestic", def?.days ?: 1)
     }
@@ -192,6 +193,7 @@ object CareerSeason {
     fun champion(state: TournamentState): Team? =
         if (!isComplete(state)) null
         else if (isClub(state)) CplData.standings(state).firstOrNull()?.team
+        else if (CareerInternational.isInternational(state)) CareerInternational.seriesWinner(state)
         else CplSimulator.champion(state)
 
     fun nameOf(state: TournamentState, teamId: String?): String = state.teams.find { it.id == teamId }?.name ?: "?"
@@ -297,6 +299,21 @@ object CareerSeason {
     fun nextSeason(career: CareerProfile): NextSeason {
         val older = career.copy(age = career.age + 1, season = maxOf(1, career.season) + 1)
         var text = "A new season begins. You are ${older.age}. "
+        // The national selectors look first (state and international players only): called up or kept, he plays a season of international series.
+        if (career.atOrAboveState) {
+            val call = CareerInternational.decision(career)
+            if (call != null) {
+                text += call.reason + " "
+                if (call.selected) {
+                    val intlLevel = older.copy(level = CareerInternational.LEVEL)
+                    val intl = CareerInternational.newSeason(intlLevel)
+                    if (intl != null) {
+                        val intlKeys = intl.map { keyOf(it) }
+                        return NextSeason(intlLevel.copy(seasonKeys = intlKeys), intl, intlKeys, text + "You play for ${career.country} this season.")
+                    }
+                }
+            }
+        }
         val squad = CareerDomestic.stateSquad(career)
         if (squad != null) {
             val decision = CareerSelection.stateDecision(career, squad)
@@ -313,7 +330,7 @@ object CareerSeason {
         val club = older.copy(level = "District")
         val states = newSeason(club) ?: emptyList()
         val keys = states.map { keyOf(it) }
-        text += if (career.isState) "You go back to district club cricket for ${career.club}." else "You stay with ${career.club} for another season of club cricket."
+        text += if (career.atOrAboveState) "You go back to district club cricket for ${career.club}." else "You stay with ${career.club} for another season of club cricket."
         return NextSeason(club.copy(seasonKeys = keys), states, keys, text)
     }
 }
