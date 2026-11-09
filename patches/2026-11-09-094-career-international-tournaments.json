@@ -1,0 +1,120 @@
+{
+  "name": "My Player part nine: the season's tournament, form in each format, Player of the Series; the research roadmap",
+  "message": "Career: T20 World Cup, Champions Trophy and Asia Cup close the international season; per-format form; series awards line; roadmap doc",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+    "contains": "fun tournamentFor"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    fun isInternational(state: TournamentState): Boolean = state.tournamentId.startsWith(PREFIX)\n",
+      "replace": "    /** The game's own tournaments a career plays in at the international level, one a season. */\n    private val TOURNAMENT_IDS = listOf(T20WorldCup.TOURNAMENT_ID, ChampionsTrophy.TOURNAMENT_ID, AsiaCup.TOURNAMENT_ID)\n\n    /** A bilateral series (a Test, one-day or T20 series). */\n    fun isSeries(state: TournamentState): Boolean = state.tournamentId.startsWith(PREFIX)\n\n    /** The T20 World Cup, the Champions Trophy or the Asia Cup. */\n    fun isTournament(state: TournamentState): Boolean = state.tournamentId in TOURNAMENT_IDS\n\n    /** Any competition of the international level. */\n    fun isInternational(state: TournamentState): Boolean = isSeries(state) || isTournament(state)\n\n    /** \"t20\", \"odi\" or \"test\" for a competition of the international level, \"\" for any other (used to keep his form in each format). */\n    fun formatKeyOf(state: TournamentState): String = if (isInternational(state)) formatKey(state.tournamentId) else \"\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    private fun formatKey(tournamentId: String): String = tournamentId.substringAfterLast('_')\n",
+      "replace": "    private fun formatKey(tournamentId: String): String = when {\n        tournamentId.startsWith(PREFIX) -> tournamentId.substringAfterLast('_')\n        tournamentId == ChampionsTrophy.TOURNAMENT_ID -> \"odi\" // the Champions Trophy is 50 overs a side\n        else -> \"t20\"\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        return CareerSeason.Competition(state.tournamentId, state.name, short, if (key == \"test\") 5 else 1)",
+      "replace": "        return CareerSeason.Competition(state.tournamentId, state.name, if (isTournament(state)) \"Tournament\" else short, if (key == \"test\") 5 else 1)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    private fun formNote(adjust: Int): String = when {",
+      "replace": "    /** Form in one format (his last matches in it) if he has played at least two there, else his form overall: a Test batsman in form can fail in T20. */\n    private fun formAdjustFor(career: CareerProfile, key: String): Int {\n        val inFormat = career.formByFormat?.get(key).orEmpty().takeLast(3)\n        if (inFormat.size >= 2) return ((inFormat.average() - 25.0) / 10.0).roundToInt().coerceIn(-3, 3)\n        return formAdjust(career, 3)\n    }\n\n    private fun formNote(adjust: Int): String = when {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val adjust = formAdjust(career, 3)\n",
+      "replace": "        val adjust = formAdjustFor(career, key)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "            offsetWeeks += p.matches + 1\n        }\n        return out\n    }",
+      "replace": "            offsetWeeks += p.matches + 1\n        }\n        // One tournament closes the season, after the series.\n        val tournamentStart = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * offsetWeeks) }.timeInMillis\n        tournamentFor(career, season, me, tournamentStart)?.let { out.add(it) }\n        return out\n    }\n\n    private class TourDef(\n        val label: String,\n        val build: () -> Pair<List<Team>, Map<String, SquadTag>>,\n        val make: (String, Pair<List<Team>, Map<String, SquadTag>>) -> TournamentState\n    )\n\n    /**\n     * The tournament of a season, built by the game's own tournament code with the player written into his country's squad: the T20 World Cup in even seasons,\n     * the Champions Trophy (50 overs) in odd ones, and for India and Pakistan the Asia Cup in every second odd season. Null if it could not be built.\n     */\n    private fun tournamentFor(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {\n        val asian = career.country == \"India\" || career.country == \"Pakistan\"\n        val def = when {\n            season % 2 == 0 -> TourDef(\"T20 World Cup\", { T20WorldCup.buildTeams() }, { t, b -> T20WorldCup.newTournament(t, b) })\n            asian && season % 4 == 3 -> TourDef(\"Asia Cup\", { AsiaCup.buildTeams() }, { t, b -> AsiaCup.newTournament(t, b) })\n            else -> TourDef(\"Champions Trophy\", { ChampionsTrophy.buildTeams() }, { t, b -> ChampionsTrophy.newTournament(t, b) })\n        }\n        return try {\n            val built = def.build()\n            val team = built.first.find { it.name == career.country } ?: return null\n            val state0 = def.make(team.id, built)\n            val mine = me.copy(teamId = team.id)\n            val teams = state0.teams.map { t -> if (t.id == team.id) CareerDomestic.withPlayer(t, mine) else t }\n            state0.copy(name = \"${def.label}, season $season\", teams = teams, tags = state0.tags + (mine.id to SquadTag.DOMESTIC), createdAt = startAt)\n        } catch (e: Exception) {\n            null\n        }\n    }",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    // ------------------------------------------------------------ the pathway\n",
+      "replace": "    /** One or two sentences on what the player did in a finished series or tournament, and whether he was its Player of the Series. */\n    fun awardLine(state: TournamentState, career: CareerProfile): String {\n        val pid = CareerDomestic.playerId(career.id)\n        val mine = state.playerStats[pid] ?: return \"You did not play in it.\"\n        if (mine.matches == 0) return \"You did not play in it.\"\n        val parts = ArrayList<String>()\n        if (mine.balls > 0) parts.add(\"${mine.runs} runs\")\n        if (mine.ballsBowled > 0) parts.add(\"${mine.wickets} wickets\")\n        if (mine.catches > 0) parts.add(\"${mine.catches} catches\")\n        val best = state.playerStats.values.maxWithOrNull(compareBy<PlayerStats>({ it.impact }, { it.runs + it.wickets * 20 }))\n        val star = if (best != null && best.playerId == pid && best.impact > 0.0) \" You were Player of the Series!\" else \"\"\n        return \"Your tally in ${mine.matches} matches: ${parts.joinToString(\", \").ifEmpty { \"no runs, wickets or catches\" }}.$star\"\n    }\n\n    // ------------------------------------------------------------ the pathway\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val internationalMatches: Int = 0\n) {",
+      "replace": "    val internationalMatches: Int = 0,\n    /** The impact of his last five matches in each international format (\"t20\", \"odi\", \"test\"): the selectors judge a Test batsman by his Test form. */\n    val formByFormat: Map<String, List<Double>>? = null\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerProgress.kt",
+      "find": "    fun afterMatch(career: CareerProfile, before: PlayerStats?, after: PlayerStats?, random: Random): Result {",
+      "replace": "    fun afterMatch(career: CareerProfile, before: PlayerStats?, after: PlayerStats?, random: Random, format: String = \"\"): Result {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerProgress.kt",
+      "find": "            form = (career.form.orEmpty() + impact).takeLast(5)\n",
+      "replace": "            form = (career.form.orEmpty() + impact).takeLast(5),\n            formByFormat = if (format.isEmpty()) career.formByFormat\n            else career.formByFormat.orEmpty() + (format to (career.formByFormat?.get(format).orEmpty() + impact).takeLast(5))\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "else if (CareerInternational.isInternational(state)) CareerInternational.seriesWinner(state)",
+      "replace": "else if (CareerInternational.isSeries(state)) CareerInternational.seriesWinner(state)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random)",
+      "replace": "val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random, CareerInternational.formatKeyOf(ran))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                                if (pid != null) recorded.playerStats[pid] else null,\n                                Random.Default\n                            )",
+      "replace": "                                if (pid != null) recorded.playerStats[pid] else null,\n                                Random.Default,\n                                CareerInternational.formatKeyOf(latest)\n                            )",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "text = (if (CareerInternational.isInternational(s)) CareerInternational.resultLine(s) else \"${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: \"not decided\"}.\") +",
+      "replace": "text = (if (CareerInternational.isSeries(s)) CareerInternational.resultLine(s) else \"${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: \"not decided\"}.\") +\n                        (if (CareerInternational.isInternational(s)) \" \" + CareerInternational.awardLine(s, career) else \"\") +",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_ROADMAP.md",
+      "content": "# My Player: the research and the roadmap\n\nWritten in the part-nine patch so that nothing found in the research is lost. \"Done\" means built and working on the phone; \"part N\" says when it is planned.\n\n## What Cricket 26 and the earlier Big Ant games do (and what players complain about)\n\nFound in the game's own pages, reviews and the Big Ant and PlanetCricket forums:\n- A career from club cricket up through state or county cricket to international cricket; menus say how far you are from selection to the next level (Cricket 26 review). **Done (part eight: \"Your pathway\").**\n- Choose an \"international affiliation\": the national team you aim for, even one different from your domestic country. Not built (the game's six countries pick their own; a later option).\n- Contract offers from several clubs at the start and between seasons; contracts and sponsors based on performance and reputation (wishlist). **Franchise offers: part ten.**\n- Objectives and XP: players complain that experience does not depend on performance and that objectives (hit ten fours) do not help the career player. Here growth already follows the impact of each match (`CareerProgress`). **Season objectives: part eleven.**\n- Training that feels pointless (\"I do not train and I am rated in the 90s\"). **A training focus for the season: part eleven.**\n- \"Bland and predictable, you just churn out games\": no stakes, no stories. **Series results, Player of the Series lines, honours, records and retirement: parts nine and eleven.**\n- No player rankings and no Cricinfo-style statistics. **Career statistics and rankings page: part eleven.**\n- Unexplained or silly AI selection (a player always picked and batting at 11): **every selection here gives its reason in a sentence (done); computer squads change over the years: part eleven.**\n- Real players never age or retire. **Part eleven (retirement and fresh young players in the national squads).**\n- Fatigue, injuries and workload (franchise leagues against national duty): **injuries and workload: part eleven; clashes between league and national duty: part ten.**\n- Press conferences before matches (a captain's press conference in Cricket 26). Low value for a screen reader; may come as short text lines after a series.\n- Progression pace: the community split between \"too slow, thirties before you are capped\" and \"a satisfying path\". Here the pace is a dial: the career difficulty, `CareerProgress.BASE_GROWTH`, and the number of state matches the national selectors want (`MIN_STATE_MATCHES`).\n\n## The real world, used as a rule book\n- The ICC calendar 2024 to 2031: a T20 World Cup in every even year, a World Test Championship final and a 50-over event in every odd year (an ODI World Cup in 2027 and 2031, the Champions Trophy in 2029). **Part nine: the career season ends with the T20 World Cup in even seasons and the Champions Trophy in odd ones; for India and Pakistan the Asia Cup in every second odd season.** The game has no ODI World Cup or World Test Championship final yet (a later part may add them).\n- Bilateral series of three or five matches in each format, Test series of two to five matches, and old rivalries with five-match series. **Done (part eight).**\n- Selection by format: Test, one-day and T20 sides are different; Pakistan's 2026 contracts even move to format-specific tracks (Test, ODI, T20). **Part nine: form is kept in each format and the selectors judge him by it.**\n- Franchise leagues: capped and uncapped players, a base price from experience and recent performance, domestic T20 form as a proxy, overseas slots (at most four in an XI, eight in a squad in the IPL), the uncapped players' round, the mini and the mega auction. **Part ten: offers from the leagues the game has, decided by his T20 form, reputation and the franchises' needs.**\n- Players choosing leagues over national duty (central contracts declined) and boards blaming leagues for fatigue. **Part ten: league and national duty can clash, and the player chooses.**\n\n## The parts\n- Eight: the international level (series, national call-up, pathway). Done.\n- Nine: the tournament that closes each international season, form in each format, Player of the Series lines. This patch.\n- Ten: league selection (offers, the franchise squads, a league season, clashes with national duty).\n- Eleven: career statistics and rankings, season objectives, a training focus, honours, retirement, and a career summary.\n- Twelve: international captaincy, specialising in a format, an ODI World Cup and a Test championship final.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_NINE.md",
+      "content": "# My Player, part nine: the season's tournament, form in each format, Player of the Series\n\n**The tournament.** An international season now ends with one tournament, built by the game's own tournament code (`T20WorldCup`, `ChampionsTrophy`, `AsiaCup`) with the player written into his country's squad (`CareerInternational.tournamentFor`):\neven seasons the T20 World Cup; odd seasons the Champions Trophy (50 overs); India and Pakistan play the Asia Cup in every second odd season (season 3, 7, 11 ...) instead of the Champions Trophy. The tournament is dated after the series and saved in the\nseason's own file. All the other teams' matches are simulated as the player's matches come up; knockout stages open when the table is settled.\n\n**Form in each format.** After every international match the impact is kept in his form for that format (`CareerProfile.formByFormat`: \"t20\", \"odi\" or \"test\", the last five). The selectors (`matchDecision`) judge him by the last three\nmatches in the format of the match if he has played two or more there, else by his overall form. A Test batsman in form can be left out of the T20 side after failures in it.\n\n**Player of the Series.** When a series or tournament is finished the Game play tab says what the player did (runs, wickets, catches) and whether he had the most impact of anyone (`CareerInternational.awardLine`).\n\n**Dials.** The tournament cycle (`tournamentFor`), the form window (`formAdjustFor`), `MIN_STATE_MATCHES`.\n",
+      "mustNotExist": true
+    }
+  ]
+}
