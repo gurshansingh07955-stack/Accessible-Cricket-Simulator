@@ -1,6 +1,6 @@
-Build run: 42603640588 (attempt 1)
-Commit: 5e7b59f518b42f38e86dd6dd0013ee39baaa3a5a
-Timestamp (UTC): 2026-11-09T10:49:20Z
+Build run: 42646807857 (attempt 1)
+Commit: 326bf8a4edc44c08a450e6bdcab9884aa2c05dc9
+Timestamp (UTC): 2026-11-09T15:41:35Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -15,10 +15,10 @@ Daemon will be stopped at the end of the build
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
 > Task :app:packageDebugResources
-> Task :app:mergeDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
 > Task :app:parseDebugLocalResources
+> Task :app:mergeDebugResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
 > Task :app:javaPreCompileDebug
@@ -29,11 +29,11 @@ Daemon will be stopped at the end of the build
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
 > Task :app:mergeDebugStartupProfile
-> Task :app:processDebugManifestForPackage
-> Task :app:checkDebugDuplicateClasses
 > Task :app:mergeDebugJniLibFolders
-> Task :app:mergeLibDexDebug
+> Task :app:checkDebugDuplicateClasses
 > Task :app:mergeDebugNativeLibs NO-SOURCE
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeLibDexDebug
 > Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
@@ -67,7 +67,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1794221234069.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1794238768742.json
 
-BUILD SUCCESSFUL in 2m 11s
+BUILD SUCCESSFUL in 2m 10s
 37 actionable tasks: 37 executed
