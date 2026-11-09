@@ -46,10 +46,27 @@ object CareerInternational {
 
     private class Plan(val format: String, val matches: Int)
 
-    fun isInternational(state: TournamentState): Boolean = state.tournamentId.startsWith(PREFIX)
+    /** The game's own tournaments a career plays in at the international level, one a season. */
+    private val TOURNAMENT_IDS = listOf(T20WorldCup.TOURNAMENT_ID, ChampionsTrophy.TOURNAMENT_ID, AsiaCup.TOURNAMENT_ID)
+
+    /** A bilateral series (a Test, one-day or T20 series). */
+    fun isSeries(state: TournamentState): Boolean = state.tournamentId.startsWith(PREFIX)
+
+    /** The T20 World Cup, the Champions Trophy or the Asia Cup. */
+    fun isTournament(state: TournamentState): Boolean = state.tournamentId in TOURNAMENT_IDS
+
+    /** Any competition of the international level. */
+    fun isInternational(state: TournamentState): Boolean = isSeries(state) || isTournament(state)
+
+    /** "t20", "odi" or "test" for a competition of the international level, "" for any other (used to keep his form in each format). */
+    fun formatKeyOf(state: TournamentState): String = if (isInternational(state)) formatKey(state.tournamentId) else ""
 
     /** "t20", "odi" or "test": the last part of a series' tournament id. */
-    private fun formatKey(tournamentId: String): String = tournamentId.substringAfterLast('_')
+    private fun formatKey(tournamentId: String): String = when {
+        tournamentId.startsWith(PREFIX) -> tournamentId.substringAfterLast('_')
+        tournamentId == ChampionsTrophy.TOURNAMENT_ID -> "odi" // the Champions Trophy is 50 overs a side
+        else -> "t20"
+    }
 
     private fun formatWord(key: String): String = when (key) {
         "test" -> "Test"
@@ -73,7 +90,7 @@ object CareerInternational {
             "odi" -> "ODI"
             else -> "T20I"
         }
-        return CareerSeason.Competition(state.tournamentId, state.name, short, if (key == "test") 5 else 1)
+        return CareerSeason.Competition(state.tournamentId, state.name, if (isTournament(state)) "Tournament" else short, if (key == "test") 5 else 1)
     }
 
     fun nationalTeam(country: String): Team? = CricketData.getAllTeams().find { it.name == country }
@@ -126,6 +143,13 @@ object CareerInternational {
     private fun formAdjust(career: CareerProfile, last: Int): Int {
         val form = career.form.orEmpty().takeLast(last)
         return if (form.isEmpty()) 0 else ((form.average() - 25.0) / 10.0).roundToInt().coerceIn(-3, 3)
+    }
+
+    /** Form in one format (his last matches in it) if he has played at least two there, else his form overall: a Test batsman in form can fail in T20. */
+    private fun formAdjustFor(career: CareerProfile, key: String): Int {
+        val inFormat = career.formByFormat?.get(key).orEmpty().takeLast(3)
+        if (inFormat.size >= 2) return ((inFormat.average() - 25.0) / 10.0).roundToInt().coerceIn(-3, 3)
+        return formAdjust(career, 3)
     }
 
     private fun formNote(adjust: Int): String = when {
@@ -187,7 +211,7 @@ object CareerInternational {
         val rank = group.indexOfFirst { it.id == me.id }.let { if (it < 0) group.size else it + 1 }
         val factor = CareerWorld.selectionFactor(career.difficulty)
         val cutoff = (matchSlots(me.role, key) / factor).roundToInt().coerceIn(1, group.size)
-        val adjust = formAdjust(career, 3)
+        val adjust = formAdjustFor(career, key)
         val grace = (if (career.internationalMatches < 3) 1 else 0) + (if (career.age <= 19) 1 else 0)
         val debut = career.internationalMatches == 0
         val selected = debut || rank - adjust - grace <= cutoff
@@ -263,7 +287,39 @@ object CareerInternational {
             )
             offsetWeeks += p.matches + 1
         }
+        // One tournament closes the season, after the series.
+        val tournamentStart = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * offsetWeeks) }.timeInMillis
+        tournamentFor(career, season, me, tournamentStart)?.let { out.add(it) }
         return out
+    }
+
+    private class TourDef(
+        val label: String,
+        val build: () -> Pair<List<Team>, Map<String, SquadTag>>,
+        val make: (String, Pair<List<Team>, Map<String, SquadTag>>) -> TournamentState
+    )
+
+    /**
+     * The tournament of a season, built by the game's own tournament code with the player written into his country's squad: the T20 World Cup in even seasons,
+     * the Champions Trophy (50 overs) in odd ones, and for India and Pakistan the Asia Cup in every second odd season. Null if it could not be built.
+     */
+    private fun tournamentFor(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {
+        val asian = career.country == "India" || career.country == "Pakistan"
+        val def = when {
+            season % 2 == 0 -> TourDef("T20 World Cup", { T20WorldCup.buildTeams() }, { t, b -> T20WorldCup.newTournament(t, b) })
+            asian && season % 4 == 3 -> TourDef("Asia Cup", { AsiaCup.buildTeams() }, { t, b -> AsiaCup.newTournament(t, b) })
+            else -> TourDef("Champions Trophy", { ChampionsTrophy.buildTeams() }, { t, b -> ChampionsTrophy.newTournament(t, b) })
+        }
+        return try {
+            val built = def.build()
+            val team = built.first.find { it.name == career.country } ?: return null
+            val state0 = def.make(team.id, built)
+            val mine = me.copy(teamId = team.id)
+            val teams = state0.teams.map { t -> if (t.id == team.id) CareerDomestic.withPlayer(t, mine) else t }
+            state0.copy(name = "${def.label}, season $season", teams = teams, tags = state0.tags + (mine.id to SquadTag.DOMESTIC), createdAt = startAt)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     // ------------------------------------------------------------ results
@@ -294,6 +350,20 @@ object CareerInternational {
             wb > wa -> "${state.name}: ${b.name} won $wb-$wa."
             else -> "${state.name}: the series was drawn $wa-$wb."
         }
+    }
+
+    /** One or two sentences on what the player did in a finished series or tournament, and whether he was its Player of the Series. */
+    fun awardLine(state: TournamentState, career: CareerProfile): String {
+        val pid = CareerDomestic.playerId(career.id)
+        val mine = state.playerStats[pid] ?: return "You did not play in it."
+        if (mine.matches == 0) return "You did not play in it."
+        val parts = ArrayList<String>()
+        if (mine.balls > 0) parts.add("${mine.runs} runs")
+        if (mine.ballsBowled > 0) parts.add("${mine.wickets} wickets")
+        if (mine.catches > 0) parts.add("${mine.catches} catches")
+        val best = state.playerStats.values.maxWithOrNull(compareBy<PlayerStats>({ it.impact }, { it.runs + it.wickets * 20 }))
+        val star = if (best != null && best.playerId == pid && best.impact > 0.0) " You were Player of the Series!" else ""
+        return "Your tally in ${mine.matches} matches: ${parts.joinToString(", ").ifEmpty { "no runs, wickets or catches" }}.$star"
     }
 
     // ------------------------------------------------------------ the pathway

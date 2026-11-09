@@ -24,7 +24,7 @@ object CareerProgress {
     }
 
     /** [before] and [after] are the player's tournament statistics around the match; they differ only if he played. */
-    fun afterMatch(career: CareerProfile, before: PlayerStats?, after: PlayerStats?, random: Random): Result {
+    fun afterMatch(career: CareerProfile, before: PlayerStats?, after: PlayerStats?, random: Random, format: String = ""): Result {
         val played = (after?.matches ?: 0) > (before?.matches ?: 0)
         if (after == null || !played) return Result(career, "You were not in the XI for this match.")
         fun d(f: (PlayerStats) -> Int) = f(after) - (before?.let(f) ?: 0)
@@ -76,7 +76,9 @@ object CareerProgress {
             matchesPlayed = career.matchesPlayed + 1,
             stateMatches = if (career.isState) career.stateMatches + 1 else career.stateMatches,
             internationalMatches = if (career.isInternational) career.internationalMatches + 1 else career.internationalMatches,
-            form = (career.form.orEmpty() + impact).takeLast(5)
+            form = (career.form.orEmpty() + impact).takeLast(5),
+            formByFormat = if (format.isEmpty()) career.formByFormat
+            else career.formByFormat.orEmpty() + (format to (career.formByFormat?.get(format).orEmpty() + impact).takeLast(5))
         )
         // A run of good matches is rewarded with the club's leadership.
         val rank = CareerLeadership.promotion(played2)

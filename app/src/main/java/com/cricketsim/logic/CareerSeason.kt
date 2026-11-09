@@ -193,7 +193,7 @@ object CareerSeason {
     fun champion(state: TournamentState): Team? =
         if (!isComplete(state)) null
         else if (isClub(state)) CplData.standings(state).firstOrNull()?.team
-        else if (CareerInternational.isInternational(state)) CareerInternational.seriesWinner(state)
+        else if (CareerInternational.isSeries(state)) CareerInternational.seriesWinner(state)
         else CplSimulator.champion(state)
 
     fun nameOf(state: TournamentState, teamId: String?): String = state.teams.find { it.id == teamId }?.name ?: "?"
@@ -276,7 +276,7 @@ object CareerSeason {
             val pid = playerIdIn(ran, c)
             val before = if (pid != null) ran.playerStats[pid] else null
             val played = simulateMine(ran, mine, c, random)
-            val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random)
+            val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random, CareerInternational.formatKeyOf(ran))
             c = result.career
             val updated = withUserPlayer(played, c)
             list = list.mapIndexed { i, x -> if (i == ci) updated else x }

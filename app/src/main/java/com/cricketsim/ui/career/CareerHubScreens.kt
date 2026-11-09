@@ -299,7 +299,8 @@ fun CareerHub(
                                 career,
                                 if (pid != null) latest.playerStats[pid] else null,
                                 if (pid != null) recorded.playerStats[pid] else null,
-                                Random.Default
+                                Random.Default,
+                                CareerInternational.formatKeyOf(latest)
                             )
                             val newList = latestList.mapIndexed { i, s ->
                                 CareerSeason.withUserPlayer(if (i == flow.comp) recorded else s, progress.career)
@@ -567,7 +568,8 @@ private fun PlayTab(
                 val champion = CareerSeason.champion(s)
                 val position = CplData.standings(s).indexOfFirst { it.team.id == s.userTeamId } + 1
                 Text(
-                    text = (if (CareerInternational.isInternational(s)) CareerInternational.resultLine(s) else "${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: "not decided"}.") +
+                    text = (if (CareerInternational.isSeries(s)) CareerInternational.resultLine(s) else "${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: "not decided"}.") +
+                        (if (CareerInternational.isInternational(s)) " " + CareerInternational.awardLine(s, career) else "") +
                         (if (position > 0 && CareerSeason.isClub(s)) " ${career.club} finished ${ordinal(position)}." else ""),
                     style = MaterialTheme.typography.bodyLarge
                 )

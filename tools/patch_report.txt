@@ -1,6 +1,6 @@
-Patch run: 42603604477
-Timestamp (UTC): 2026-11-09T10:46:41Z
+Patch run: 42646773115
+Timestamp (UTC): 2026-11-09T15:39:02Z
 Result: OK
 -----
-Patch 2026-11-09-093-career-international-level.json
-  applied 27 operation(s) to 10 file(s)
+Patch 2026-11-09-094-career-international-tournaments.json
+  applied 16 operation(s) to 7 file(s)

@@ -67,7 +67,9 @@ data class CareerProfile(
     val stateMatches: Int = 0,
     // Part eight: the international level.
     /** Matches played for the national team. */
-    val internationalMatches: Int = 0
+    val internationalMatches: Int = 0,
+    /** The impact of his last five matches in each international format ("t20", "odi", "test"): the selectors judge a Test batsman by his Test form. */
+    val formByFormat: Map<String, List<Double>>? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
