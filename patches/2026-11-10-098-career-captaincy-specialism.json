@@ -1,0 +1,119 @@
+{
+  "name": "My Player part thirteen: national captaincy and format specialism",
+  "message": "Career: vice-captain and captain of the national side, Test or white-ball specialism",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+    "contains": "fun captaincy("
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val retiredSeason: Int = 0\n) {",
+      "replace": "    val retiredSeason: Int = 0,\n    // Part thirteen: national captaincy and the format he specialises in.\n    /** \"Vice-captain\" or \"Captain\" of his country (null = a player). */\n    val nationalRole: String? = null,\n    /** \"Test\" or \"White-ball\" (null = all formats). */\n    val specialism: String? = null\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "leadership == \"Captain\" && !isState && !isInternational",
+      "replace": "(leadership == \"Captain\" && !isState && !isInternational) || (isInternational && nationalRole == \"Captain\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val grace = (if (career.internationalMatches < 3) 1 else 0) + (if (career.age <= 19) 1 else 0)\n",
+      "replace": "        val grace = (if (career.internationalMatches < 3) 1 else 0) + (if (career.age <= 19) 1 else 0) + specialismFit(career, key)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val selected = debut || rank - adjust - grace <= cutoff\n",
+      "replace": "        val captain = career.nationalRole == \"Captain\"\n        val selected = debut || captain || rank - adjust - grace <= cutoff\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "            selected -> \"You are in the XI. $base\"\n",
+      "replace": "            captain -> \"You are in the XI: you are the captain of ${team.name}. $base\"\n            selected -> \"You are in the XI. $base\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        return CareerSelection.Decision(selected, rank, cutoff, group.size, adjust, reason)\n",
+      "replace": "        return CareerSelection.Decision(selected, rank, cutoff, group.size, adjust, reason + specialismNote(career, key))\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    // ------------------------------------------------------------ the season\n",
+      "replace": "    // ------------------------------------------------------------ specialism and captaincy (part thirteen)\n\n    /** +1 if the format is the one he specialises in, -1 if it is the other kind, 0 if he does not specialise. */\n    fun specialismFit(career: CareerProfile, key: String): Int = when (career.specialism) {\n        \"Test\" -> if (key == \"test\") 1 else -1\n        \"White-ball\" -> if (key == \"test\") -1 else 1\n        else -> 0\n    }\n\n    private fun specialismNote(career: CareerProfile, key: String): String = when (specialismFit(career, key)) {\n        1 -> \" As a ${if (career.specialism == \"Test\") \"Test\" else \"white-ball\"} specialist you get a place in your favour in this format.\"\n        -1 -> \" As a ${if (career.specialism == \"Test\") \"Test\" else \"white-ball\"} specialist you have a place against you in this format.\"\n        else -> \"\"\n    }\n\n    class Captaincy(val career: CareerProfile, val text: String)\n\n    /** Matches the national selectors want to have seen before they consider a player for the vice-captaincy, and for the captaincy. */\n    const val VICE_MATCHES = 12\n    const val CAPTAIN_MATCHES = 25\n\n    private fun leadershipScore(career: CareerProfile): Double {\n        val squad = nationalTeam(career.country)\n        val role = CareerSeason.roleOf(career.role)\n        val mine = myValue(career, role)\n        val standing = if (squad == null) 99 else 1 + squad.players.count { value(it) > mine }\n        val form = career.form.orEmpty()\n        val formBonus = if (form.isEmpty()) 0.0 else ((form.average() - 20.0) / 20.0).coerceIn(-1.0, 1.0)\n        return career.internationalMatches / 10.0 + formBonus + (if (standing <= 3) 1.5 else if (standing <= 6) 0.5 else 0.0) + (if (career.age >= 26) 1.0 else 0.0)\n    }\n\n    /**\n     * The national selectors' leadership decision at the start of an international season. A leadership score from his international experience (a point for every ten\n     * matches), his form, his standing among the squad's best (top three +1.5, top six +0.5) and his age (26 or over +1): at 4.0 with 12 matches he is made vice-captain; a vice-captain\n     * at 6.0 with 25 matches is made captain; a captain or vice-captain whose score falls under 3.0 loses the role. A captain picks the XI and does the toss in the national matches.\n     */\n    fun captaincy(career: CareerProfile): Captaincy {\n        if (!career.isInternational) return Captaincy(career, \"\")\n        val score = leadershipScore(career)\n        val current = career.nationalRole\n        val matches = career.internationalMatches\n        val next = when (current) {\n            \"Captain\" -> if (score >= 3.0) \"Captain\" else null\n            \"Vice-captain\" -> if (score >= 6.0 && matches >= CAPTAIN_MATCHES) \"Captain\" else if (score >= 3.0) \"Vice-captain\" else null\n            else -> if (score >= 4.0 && matches >= VICE_MATCHES) \"Vice-captain\" else null\n        }\n        if (next == current) return Captaincy(career, \"\")\n        val text = when (next) {\n            \"Captain\" -> \"The national selectors appoint you captain of ${career.country}! \"\n            \"Vice-captain\" -> \"The national selectors appoint you vice-captain of ${career.country}. \"\n            else -> \"You have lost the ${current?.lowercase() ?: \"leadership\"} of ${career.country}. \"\n        }\n        val honours = if (next != null && next != current) career.honours.orEmpty() + \"Season ${career.season}: appointed ${next.lowercase()} of ${career.country}.\" else career.honours\n        return Captaincy(career.copy(nationalRole = next, honours = honours?.takeLast(60)), text)\n    }\n\n    /** A sentence for the Career tab and the pathway about the national captaincy. */\n    fun captaincyLine(career: CareerProfile): String = when (career.nationalRole) {\n        \"Captain\" -> \"You are the captain of ${career.country}: you pick the XI and do the toss in the national matches.\"\n        \"Vice-captain\" -> \"You are the vice-captain of ${career.country}. At $CAPTAIN_MATCHES international matches, with good form and a place among the squad's best, the selectors may make you captain (you have played ${career.internationalMatches}).\"\n        else -> \"The selectors look at the vice-captaincy at $VICE_MATCHES international matches, with good form and a place among the squad's best; you have played ${career.internationalMatches}.\"\n    }\n\n    // ------------------------------------------------------------ the season\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "            decision(career)?.let { out.add(\"Keeping your place next season: \" + summary(it)) }\n",
+      "replace": "            decision(career)?.let { out.add(\"Keeping your place next season: \" + summary(it)) }\n            out.add(captaincyLine(career))\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "                    val intlLevel = older.copy(level = CareerInternational.LEVEL)\n",
+      "replace": "                    val captaincy = CareerInternational.captaincy(older.copy(level = CareerInternational.LEVEL))\n                    val intlLevel = captaincy.career\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "text + \"You play for ${career.country} this season.\")",
+      "replace": "text + captaincy.text + \"You play for ${career.country} this season.\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "        val grace = if (career.isInternational) 1 else 0\n",
+      "replace": "        val grace = (if (career.isInternational) 1 else 0) + (when (career.specialism) { \"White-ball\" -> 1; \"Test\" -> -2; else -> 0 })\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "        val grace = if (career.leagueMatches < 3) 1 else 0\n",
+      "replace": "        val grace = (if (career.leagueMatches < 3) 1 else 0) + (when (career.specialism) { \"White-ball\" -> 1; \"Test\" -> -2; else -> 0 })\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, retireNow)",
+      "replace": "                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, retireNow)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "CAREER_ROADMAP.md",
+      "find": "- Thirteen: international captaincy and specialising in a format.",
+      "replace": "- Thirteen: international captaincy and specialising in a format (patch 098). Done.",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_THIRTEEN.md",
+      "content": "# My Player, part thirteen: national captaincy and format specialism\n\n**Format specialism** (Career tab, \"Format specialism\", for players of the state squad and above). All formats, Test specialist, or White-ball specialist (one-day and T20). A specialist gets a place in his favour with the selectors in his format and a place against him in the other\n(`CareerInternational.specialismFit`, in the match decision, and the reason says so). In the franchise leagues a white-ball specialist gets a place more, a Test specialist two places fewer (`CareerLeagues`, both the offers and the selection). It can be changed at any time.\n\n**National captaincy** (`CareerInternational.captaincy`, decided when an international season starts). A leadership score: a point for every ten international matches, his form (-1 to +1), his standing among the squad's best players (top three +1.5, top six +0.5) and age 26 or over (+1).\nAt 4.0 with 12 international matches he is made **vice-captain**; a vice-captain at 6.0 with 25 matches is made **captain**; a captain or vice-captain whose score falls under 3.0 loses the role. The appointment is announced in the new-season message and added to his honours; the pathway and the Career tab say how far he is from it.\nA national captain is always in the XI, picks the XI and does the toss in the national matches, as the club captain does (`CareerProfile.isCaptain`). A captain who is also signed by a franchise league also picks that league's XI (a known simplification).\n\n**Dials.** `VICE_MATCHES`, `CAPTAIN_MATCHES`, the thresholds in `captaincy`, the place values in `specialismFit` and the league graces.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "content": "package com.cricketsim.ui.career\n\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.CareerHealth\nimport com.cricketsim.logic.CareerInternational\nimport com.cricketsim.logic.CareerProfile\nimport com.cricketsim.logic.CareerRecords\nimport com.cricketsim.logic.CareerSeason\nimport com.cricketsim.logic.TournamentState\nimport com.cricketsim.ui.custom.OptionButton\nimport com.cricketsim.ui.custom.PageHeading\n\n/**\n * The career's Career tab (My Player, parts eleven to thirteen): this season's objectives, the training focus, fitness, the rankings, the career record,\n * the honours and retirement; for a retired player the career summary comes first and the rest of the playing parts are left out.\n * Every part has a heading, then plain sentences, so a screen reader can jump from heading to heading.\n */\n@Composable\ninternal fun CareerRecordTab(\n    career: CareerProfile,\n    seasons: List<TournamentState>?,\n    rankLines: List<String>,\n    onFocus: (String?) -> Unit,\n    onSpecialism: (String?) -> Unit,\n    onRetire: () -> Unit\n) {\n    PageHeading(\"Career\")\n    Spacer(modifier = Modifier.height(8.dp))\n\n    if (career.retired) {\n        SectionHeading(\"Career summary\")\n        CareerHealth.summaryLines(career).forEach { BodyLine(it) }\n    } else {\n        SectionHeading(\"Season objectives\")\n        val objectives = if (seasons == null) emptyList() else CareerRecords.objectiveLines(career, seasons)\n        if (objectives.isEmpty()) {\n            BodyLine(\"Objectives appear when the season has loaded.\")\n        } else {\n            objectives.forEach { BodyLine(it) }\n            BodyLine(\"Every objective you reach gives +1 to the rating it is about when the season ends.\")\n        }\n\n        SectionHeading(\"Fitness\")\n        BodyLine(CareerHealth.statusLine(career) ?: \"Fitness: you are fit and well.\")\n        BodyLine(\"Injuries are more likely in Test cricket, for bowlers, after thirty and when you are tired. From 33 your ratings slowly fall with age.\")\n\n        SectionHeading(\"Training focus\")\n        BodyLine(\"The skill you work on grows faster after matches, the others a little slower. Now: ${career.trainingFocus ?: \"balanced\"}.\")\n        listOf<Pair<String?, String>>(\n            null to \"Balanced\",\n            \"Batting\" to \"Batting\",\n            \"Bowling\" to \"Bowling\",\n            \"Fielding\" to \"Fielding\"\n        ).forEach { (value, label) ->\n            val chosen = career.trainingFocus == value\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\n                if (chosen) \"$label (chosen)\" else label,\n                if (value == null) \"All three skills grow at the normal rate.\" else \"$label grows faster, the other skills slower.\",\n                !chosen, false\n            ) { onFocus(value) }\n        }\n    }\n\n    if (!career.retired && career.atOrAboveState) {\n        SectionHeading(\"Format specialism\")\n        BodyLine(\n            \"A specialist is preferred by the selectors in his format (a place in his favour) and less in the other (a place against). \" +\n                \"A white-ball specialist also gets more franchise league offers; a Test specialist gets fewer. Now: ${career.specialism?.let { if (it == \"Test\") \"Test specialist\" else \"white-ball specialist\" } ?: \"all formats\"}.\"\n        )\n        listOf<Pair<String?, String>>(\n            null to \"All formats\",\n            \"Test\" to \"Test specialist\",\n            \"White-ball\" to \"White-ball specialist\"\n        ).forEach { (value, label) ->\n            val chosen = career.specialism == value\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\n                if (chosen) \"$label (chosen)\" else label,\n                when (value) {\n                    \"Test\" -> \"Test series are yours; one-day and T20 matches and leagues are harder to get into.\"\n                    \"White-ball\" -> \"One-day and T20 matches and leagues are yours; Test series are harder to get into.\"\n                    else -> \"No preference: every format is judged the same.\"\n                },\n                !chosen, false\n            ) { onSpecialism(value) }\n        }\n    }\n    if (!career.retired && career.isInternational) {\n        SectionHeading(\"National captaincy\")\n        BodyLine(CareerInternational.captaincyLine(career))\n    }\n\n    SectionHeading(\"Rankings\")\n    if (rankLines.isEmpty()) BodyLine(\"Working out your rankings.\") else rankLines.forEach { BodyLine(it) }\n\n    SectionHeading(\"Career record\")\n    val record = CareerRecords.recordLines(career)\n    if (record.isEmpty()) BodyLine(\"No matches yet. Your record grows with every match you play.\") else record.forEach { BodyLine(it) }\n\n    SectionHeading(\"Honours\")\n    val honours = career.honours.orEmpty()\n    if (honours.isEmpty()) BodyLine(\"None yet. Win a competition or be Player of the Series.\") else honours.reversed().forEach { BodyLine(it) }\n\n    if (!career.retired) {\n        SectionHeading(\"Retirement\")\n        BodyLine(\"You are ${career.age}. Players usually retire between 36 and 42, earlier if their ratings fall.\")\n        var confirm by remember { mutableStateOf(false) }\n        val seasonDone = seasons != null && seasons.isNotEmpty() && seasons.all { CareerSeason.isComplete(it) }\n        Spacer(modifier = Modifier.height(6.dp))\n        if (!confirm) {\n            OptionButton(\n                \"Retire from cricket\",\n                if (seasonDone) \"End your career and see your career summary.\" else \"You can retire when the season is finished.\",\n                seasonDone, false\n            ) { confirm = true }\n        } else {\n            BodyLine(\"Are you sure? Retiring ends your career for good.\")\n            OptionButton(\"Yes, retire now\", \"Your career ends and the summary appears here.\", true, true) {\n                confirm = false\n                onRetire()\n            }\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\"No, keep playing\", \"Go back to your career.\", true, false) { confirm = false }\n        }\n    }\n}\n\n@Composable\nprivate fun SectionHeading(text: String) {\n    Spacer(modifier = Modifier.height(16.dp))\n    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n    Spacer(modifier = Modifier.height(4.dp))\n}\n\n@Composable\nprivate fun BodyLine(text: String) {\n    Text(text, style = MaterialTheme.typography.bodyMedium)\n    Spacer(modifier = Modifier.height(4.dp))\n}\n"
+    }
+  ]
+}
