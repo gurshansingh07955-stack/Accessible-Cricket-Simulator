@@ -125,6 +125,7 @@ object CareerSelection {
     fun forState(career: CareerProfile, state: TournamentState): Decision =
         if (CareerSeason.isClub(state)) decide(career)
         else if (CareerInternational.isInternational(state)) CareerInternational.matchDecision(career, state)
+        else if (CareerLeagues.isLeague(state)) CareerLeagues.matchDecision(career, state)
         else decideAtState(career, state)
 
     /**

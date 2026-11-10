@@ -69,7 +69,18 @@ data class CareerProfile(
     /** Matches played for the national team. */
     val internationalMatches: Int = 0,
     /** The impact of his last five matches in each international format ("t20", "odi", "test"): the selectors judge a Test batsman by his Test form. */
-    val formByFormat: Map<String, List<Double>>? = null
+    val formByFormat: Map<String, List<Double>>? = null,
+    // Part ten: franchise leagues.
+    /** The franchise offers on the table (null until he has asked for them). */
+    val leagueOffers: List<LeagueOffer>? = null,
+    /** The season the offers were made for. */
+    val leagueOffersSeason: Int = 0,
+    /** The season in which he settled his league (signed, or turned every offer down). */
+    val leagueDecidedSeason: Int = 0,
+    /** One sentence about this season's league, for the Home tab. */
+    val leagueLine: String? = null,
+    /** Matches played in franchise leagues. */
+    val leagueMatches: Int = 0
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 

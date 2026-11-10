@@ -59,7 +59,7 @@ object CareerInternational {
     fun isInternational(state: TournamentState): Boolean = isSeries(state) || isTournament(state)
 
     /** "t20", "odi" or "test" for a competition of the international level, "" for any other (used to keep his form in each format). */
-    fun formatKeyOf(state: TournamentState): String = if (isInternational(state)) formatKey(state.tournamentId) else ""
+    fun formatKeyOf(state: TournamentState): String = if (isInternational(state) || CareerLeagues.isLeague(state)) formatKey(state.tournamentId) else ""
 
     /** "t20", "odi" or "test": the last part of a series' tournament id. */
     private fun formatKey(tournamentId: String): String = when {

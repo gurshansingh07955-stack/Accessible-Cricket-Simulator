@@ -43,6 +43,7 @@ object CareerSeason {
     fun competitionOf(state: TournamentState): Competition {
         if (isClub(state)) return COMPETITIONS[compIndex(state)]
         if (CareerInternational.isInternational(state)) return CareerInternational.competition(state)
+        if (CareerLeagues.isLeague(state)) return CareerLeagues.competition(state)
         val def = CareerDomestic.defFor(state.tournamentId)
         return Competition(state.tournamentId, def?.label ?: state.name, def?.shortLabel ?: "Domestic", def?.days ?: 1)
     }
@@ -276,7 +277,7 @@ object CareerSeason {
             val pid = playerIdIn(ran, c)
             val before = if (pid != null) ran.playerStats[pid] else null
             val played = simulateMine(ran, mine, c, random)
-            val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random, CareerInternational.formatKeyOf(ran))
+            val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random, CareerInternational.formatKeyOf(ran), CareerLeagues.isLeague(ran))
             c = result.career
             val updated = withUserPlayer(played, c)
             list = list.mapIndexed { i, x -> if (i == ci) updated else x }

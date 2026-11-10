@@ -47,6 +47,8 @@ import com.cricketsim.logic.CareerProgress
 import com.cricketsim.logic.CareerSeason
 import com.cricketsim.logic.CareerDomestic
 import com.cricketsim.logic.CareerInternational
+import com.cricketsim.logic.CareerLeagues
+import com.cricketsim.logic.LeagueOffer
 import com.cricketsim.logic.CareerSelection
 import com.cricketsim.logic.CareerTables
 import com.cricketsim.logic.CplData
@@ -187,6 +189,53 @@ fun CareerHub(
         }
     }
 
+    // League offers (part ten): ask the franchises, sign for one league for the season, or turn them all down. A signed league's season is saved in its
+    // own file first and then added to the season's competitions, so the season loads again with it.
+    val checkOffers: () -> Unit = {
+        if (!busy) {
+            busy = true
+            message = "The franchises are looking at you."
+            scope.launch {
+                val offers = withContext(Dispatchers.Default) { try { CareerLeagues.offersFor(career) } catch (e: Exception) { emptyList() } }
+                busy = false
+                message = if (offers.isEmpty()) CareerLeagues.noOfferReason(career) else "You have ${offers.size} league offers."
+                onCareerChanged(career.copy(leagueOffers = offers, leagueOffersSeason = career.season))
+            }
+        }
+    }
+    val acceptOffer: (LeagueOffer) -> Unit = { offer ->
+        val list = seasons
+        if (!busy && list != null) {
+            busy = true
+            message = "Joining ${offer.teamName}."
+            scope.launch {
+                val startAt = (list.maxOfOrNull { it.createdAt } ?: System.currentTimeMillis()) + 10L * 7L * 24L * 3600L * 1000L
+                val signed = withContext(Dispatchers.Default) { CareerLeagues.buildSeason(career, offer, startAt) }
+                if (signed == null) {
+                    busy = false
+                    message = "That league could not be set up. Please try another offer."
+                } else {
+                    val leagueKey = CareerSeason.keyOf(signed)
+                    TournamentSaveStore(context, CareerSeason.seasonFile(career.id, career.season, leagueKey)).save(signed)
+                    busy = false
+                    message = "You have signed for ${offer.teamName} in the ${offer.leagueName}. Its matches are in your calendar."
+                    onCareerChanged(
+                        career.copy(
+                            seasonKeys = seasonKeys + leagueKey,
+                            leagueOffers = null,
+                            leagueDecidedSeason = career.season,
+                            leagueLine = "This season you also play for ${offer.teamName} in the ${offer.leagueName}."
+                        )
+                    )
+                }
+            }
+        }
+    }
+    val declineOffers: () -> Unit = {
+        message = "You turned the offers down."
+        onCareerChanged(career.copy(leagueOffers = null, leagueDecidedSeason = career.season, leagueLine = "You turned down this season's league offers."))
+    }
+
     // ---------------------------------------------------------------- playing a match (full screen)
     val flow = play
     val current = seasons
@@ -300,7 +349,8 @@ fun CareerHub(
                                 if (pid != null) latest.playerStats[pid] else null,
                                 if (pid != null) recorded.playerStats[pid] else null,
                                 Random.Default,
-                                CareerInternational.formatKeyOf(latest)
+                                CareerInternational.formatKeyOf(latest),
+                                CareerLeagues.isLeague(latest)
                             )
                             val newList = latestList.mapIndexed { i, s ->
                                 CareerSeason.withUserPlayer(if (i == flow.comp) recorded else s, progress.career)
@@ -343,7 +393,7 @@ fun CareerHub(
                 .padding(20.dp)
         ) {
             when (tab) {
-                HubTab.Home -> HomeTab(career, decision, pathway, onBack, onOpenSquad, onOpenClubs, onOpenProfile)
+                HubTab.Home -> HomeTab(career, decision, pathway, { LeagueSection(career, busy, message, checkOffers, acceptOffer, declineOffers) }, onBack, onOpenSquad, onOpenClubs, onOpenProfile)
                 HubTab.Play -> PlayTab(
                     career = career,
                     seasons = current,
@@ -454,6 +504,7 @@ private fun HomeTab(
     career: CareerProfile,
     decision: CareerSelection.Decision,
     pathway: List<String>,
+    leagueSection: @Composable () -> Unit,
     onBack: () -> Unit,
     onOpenSquad: () -> Unit,
     onOpenClubs: () -> Unit,
@@ -482,6 +533,7 @@ private fun HomeTab(
         }
         Spacer(modifier = Modifier.height(4.dp))
     }
+    leagueSection()
     if (career.leadershipLine().isNotEmpty()) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(career.leadershipLine(), style = MaterialTheme.typography.bodyMedium)
@@ -569,7 +621,7 @@ private fun PlayTab(
                 val position = CplData.standings(s).indexOfFirst { it.team.id == s.userTeamId } + 1
                 Text(
                     text = (if (CareerInternational.isSeries(s)) CareerInternational.resultLine(s) else "${CareerSeason.competitionOf(s).label}: champions ${champion?.name ?: "not decided"}.") +
-                        (if (CareerInternational.isInternational(s)) " " + CareerInternational.awardLine(s, career) else "") +
+                        (if (CareerInternational.isInternational(s) || CareerLeagues.isLeague(s)) " " + CareerInternational.awardLine(s, career) else "") +
                         (if (position > 0 && CareerSeason.isClub(s)) " ${career.club} finished ${ordinal(position)}." else ""),
                     style = MaterialTheme.typography.bodyLarge
                 )
