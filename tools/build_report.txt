@@ -1,6 +1,6 @@
-Build run: 42800134705 (attempt 1)
-Commit: a11924fd684edbd0fa47e3ba982eb9f0636dd165
-Timestamp (UTC): 2026-11-10T10:35:10Z
+Build run: 42801730238 (attempt 1)
+Commit: fe300c2c52ce9b50656d1cefa9bb6d252501e716
+Timestamp (UTC): 2026-11-10T10:47:24Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -21,8 +21,8 @@ Daemon will be stopped at the end of the build
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
-> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug
+> Task :app:processDebugManifestForPackage
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
@@ -31,10 +31,10 @@ Daemon will be stopped at the end of the build
 > Task :app:desugarDebugFileDependencies
 > Task :app:mergeDebugStartupProfile
 > Task :app:mergeDebugJniLibFolders
+> Task :app:checkDebugDuplicateClasses
 > Task :app:mergeDebugNativeLibs NO-SOURCE
 > Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:validateSigningDebug
-> Task :app:checkDebugDuplicateClasses
 > Task :app:writeDebugAppMetadata
 > Task :app:mergeLibDexDebug
 > Task :app:writeDebugSigningConfigVersions
@@ -67,7 +67,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1794306825440.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1794307515009.json
 
-BUILD SUCCESSFUL in 1m 28s
+BUILD SUCCESSFUL in 2m 13s
 37 actionable tasks: 37 executed
