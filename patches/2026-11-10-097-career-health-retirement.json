@@ -1,0 +1,125 @@
+{
+  "name": "My Player part twelve: injuries, ageing, retirement and the career summary",
+  "message": "Career: injuries and workload, ageing from 33, retirement (chosen or forced) and a career summary",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerHealth.kt",
+    "contains": "object CareerHealth"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val trainingFocus: String? = null\n) {",
+      "replace": "    val trainingFocus: String? = null,\n    // Part twelve: fitness, ageing and retirement.\n    /** Matches he still has to miss through injury (0 = fit). */\n    val injuredMatches: Int = 0,\n    /** What is wrong with him (\"a hamstring strain\"). */\n    val injury: String? = null,\n    /** Matches played this season: a tired player is hurt more easily. */\n    val workload: Int = 0,\n    /** True once he has retired: the career is over and only the summary is shown. */\n    val retired: Boolean = false,\n    /** The season in which he retired. */\n    val retiredSeason: Int = 0\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerProgress.kt",
+      "find": "        if (after == null || !played) return Result(career, \"You were not in the XI for this match.\")",
+      "replace": "        if (after == null || !played) return CareerHealth.missedMatch(career)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerProgress.kt",
+      "find": "            matchesPlayed = career.matchesPlayed + 1,\n",
+      "replace": "            matchesPlayed = career.matchesPlayed + 1,\n            workload = career.workload + 1,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerProgress.kt",
+      "find": "        return Result(updated, \"${parts.joinToString(\" \")} Your impact was ${impact.roundToInt()}. $growth$news\")",
+      "replace": "        // A chance of an injury after the match (more in Tests, for bowlers, for the old and the tired).\n        val hurt = CareerHealth.roll(updated, random, format)\n        val afterHurt = if (hurt == null) updated else updated.copy(injuredMatches = hurt.matches, injury = hurt.name)\n        val hurtText = if (hurt == null) \"\" else \" \" + CareerHealth.injuryAnnouncement(hurt)\n        return Result(afterHurt, \"${parts.joinToString(\" \")} Your impact was ${impact.roundToInt()}. $growth$news$hurtText\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "        if (CareerSeason.isClub(state)) decide(career)\n",
+      "replace": "        if (career.injuredMatches > 0) CareerHealth.decision(career)\n        else if (CareerSeason.isClub(state)) decide(career)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        val older = career.copy(age = career.age + 1, season = maxOf(1, career.season) + 1)",
+      "replace": "        // A new season: a year older, a fresh workload, and the close season heals six matches of injury.\n        val older = career.copy(age = career.age + 1, season = maxOf(1, career.season) + 1, workload = 0, injuredMatches = maxOf(0, career.injuredMatches - 6))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerRecords.kt",
+      "find": "        return Settlement(updated, (objectiveText + honourText).trim())",
+      "replace": "        // Ageing and retirement (part twelve).\n        val aged = CareerHealth.aged(updated)\n        val agedText = if (aged.batting < updated.batting || aged.bowling < updated.bowling) \" Age is catching up with you: your ratings have dropped.\" else \"\"\n        val decided = CareerHealth.retirementDecision(aged)\n        val retiredText = if (decided.retired && !updated.retired) \" \" + CareerHealth.retirementText(decided) else \"\"\n        return Settlement(decided, (objectiveText + honourText + agedText + retiredText).trim())",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        return out\n    }\n}",
+      "replace": "        CareerHealth.statusLine(career)?.let { out.add(it) }\n        return out\n    }\n}",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerLeagueScreens.kt",
+      "find": "    if (!career.atOrAboveState) return\n",
+      "replace": "    if (!career.atOrAboveState || career.retired) return\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                        if (!busy) {\n                            busy = true\n                            message = \"The selectors are meeting.\"\n",
+      "replace": "                        if (career.retired) {\n                            message = \"You have retired. Your career summary is on the Career tab.\"\n                        } else if (!busy) {\n                            busy = true\n                            message = \"The selectors are meeting.\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                                val settled = CareerRecords.settleSeason(career, seasons.orEmpty())\n",
+      "replace": "                                val settled = CareerRecords.settleSeason(career, seasons.orEmpty())\n                                if (settled.career.retired) {\n                                    // The ageing selectors' season ends his career: no new season.\n                                    busy = false\n                                    message = settled.text\n                                    onCareerChanged(settled.career)\n                                    return@launch\n                                }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    // Part eleven: his place among the players of the game, worked out off the main thread (it builds the national teams).\n",
+      "replace": "    // Part twelve: retiring by his own choice (offered when the season is finished): the season is settled first, then the career ends.\n    val retireNow: () -> Unit = {\n        if (!busy && !career.retired) {\n            busy = true\n            scope.launch {\n                val settled = CareerRecords.settleSeason(career, seasons.orEmpty())\n                busy = false\n                message = (if (settled.text.isEmpty()) \"\" else settled.text + \" \") + \"You have retired from cricket. Your career summary is on the Career tab.\"\n                onCareerChanged(settled.career.copy(retired = true, retiredSeason = career.season))\n            }\n        }\n    }\n\n    // Part eleven: his place among the players of the game, worked out off the main thread (it builds the national teams).\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                HubTab.Career -> CareerRecordTab(career, current, rankLines) { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }",
+      "replace": "                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, retireNow)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "CAREER_ROADMAP.md",
+      "find": "- Twelve: injuries and workload, retirement and a career summary, computer squads that age and change, international captaincy, specialising in a format, an ODI World Cup and a Test championship final.",
+      "replace": "- Twelve: injuries and workload, ageing, retirement and a career summary (patch 097). Done.\n- Thirteen: international captaincy and specialising in a format.\n- Fourteen: computer squads that age and change, an ODI World Cup and a Test championship final.",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_TWELVE.md",
+      "content": "# My Player, part twelve: injuries, ageing, retirement and the career summary\n\n**Injuries** (`CareerHealth.roll`). After each match he plays there is a chance of an injury: about 1.2%, times 1.8 in Test cricket and 1.2 in one-day cricket, 1.4 for bowlers and 1.15 for all-rounders, +6% for every year over 29, and +1/60 for every match played this season (the workload).\nCapped at 10%. A minor injury is 2 or 3 matches, a moderate one 4 to 8, a serious one 10 to 18. The match report says what happened. While injured the selectors do not pick him (the reason says what is wrong and for how many matches); you can simulate the match instead.\nEach match his side plays without him counts off one. The close season heals six matches. The Home tab's pathway and the Career tab's Fitness section show the state of his fitness; the workload resets every season.\n\n**Ageing** (`CareerHealth.aged`). When a season ends, from 33 his batting and bowling fall by (age - 32) / 3 (1 at 35, 2 at 38, 3 at 41) and his fielding by half of it.\n\n**Retirement** (`CareerHealth.retirementDecision`). At the end of a season: 12% at 36, growing by 12% a year (60% at 40, certain at 44), or 50% from 33 if his main rating is under 40. The draw comes from the career and the season, so reopening the game does not change it. He can also retire himself\n(Career tab, Retirement: a confirmation first; offered when the season is finished). A retired career cannot start a season; the Career tab opens with the **career summary**: seasons and ages, the highest level, the record, honours, final ratings and a verdict\n(a true great, a career to be proud of, a solid career, a short but honest career) from his matches, honours, runs and wickets.\n\n**Dials.** The injury chances and severities in `CareerHealth.roll`, the decline in `aged`, the retirement ages and chances in `retirementDecision`, the verdict thresholds in `summaryLines`.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerHealth.kt",
+      "content": "package com.cricketsim.logic\n\nimport kotlin.random.Random\n\n/**\n * My Player, part twelve: injuries, tiredness, ageing, retirement and the career summary.\n *\n * INJURIES. After every match he plays there is a small chance of an injury ([roll]): about 1.2% a match, more in Test cricket (x1.8) and one-day cricket (x1.2),\n * more for bowlers (x1.4) and all-rounders (x1.15), more after thirty (6% for every year), and more when he is tired (the workload counts the matches of\n * the season: +1/60 for every match). A minor injury keeps him out for two or three matches, a moderate one for four to eight, a serious one for ten to eighteen.\n * While injured he is not selected ([decision]); every match his side plays without him counts off one ([missedMatch]); between seasons he rests six matches.\n *\n * AGEING. When a season ends, from the age of 33 his batting and bowling fall by (age - 32) / 3 points a season (one at 35, two at 38, three at 41) and his fielding by half that.\n *\n * RETIREMENT. At the end of a season from the age of 36 he may retire: a 12% chance at 36 that grows by 12% a year (60% at 40, certain at 44), or 50% from 33 if his main\n * rating has fallen under 40. The chance is drawn from the career and the season, so it cannot be re-rolled by reopening the game. He can retire himself when a season is\n * finished (Career tab). A retired career keeps its Career tab with a [summaryLines] summary and cannot start a new season.\n */\nobject CareerHealth {\n\n    class Injury(val name: String, val matches: Int)\n\n    private val MINOR = listOf(\"a bruised hand\", \"a tight hamstring\", \"a sore shoulder\", \"a twisted ankle\")\n    private val MODERATE = listOf(\"a hamstring strain\", \"a side strain\", \"a fractured finger\", \"an ankle sprain\", \"a groin strain\")\n    private val SERIOUS = listOf(\"a stress fracture of the back\", \"a knee ligament injury\", \"a shoulder dislocation\", \"a torn hamstring\")\n\n    /** The injury he picks up in a match he has just played, or null. */\n    fun roll(career: CareerProfile, random: Random, format: String): Injury? {\n        if (career.injuredMatches > 0 || career.retired) return null\n        var p = 0.012\n        p *= when (format) {\n            \"test\" -> 1.8\n            \"odi\" -> 1.2\n            else -> 1.0\n        }\n        p *= when (career.role) {\n            \"Bowler\" -> 1.4\n            \"Batting all-rounder\", \"Bowling all-rounder\" -> 1.15\n            else -> 1.0\n        }\n        if (career.age >= 30) p *= 1.0 + (career.age - 29) * 0.06\n        p *= 1.0 + career.workload / 60.0\n        if (random.nextDouble() >= p.coerceAtMost(0.10)) return null\n        val r = random.nextDouble()\n        return when {\n            r < 0.6 -> Injury(MINOR.random(random), 2 + random.nextInt(2))\n            r < 0.9 -> Injury(MODERATE.random(random), 4 + random.nextInt(5))\n            else -> Injury(SERIOUS.random(random), 10 + random.nextInt(9))\n        }\n    }\n\n    fun injuryAnnouncement(h: Injury): String = \"You picked up ${h.name} and will miss the next ${h.matches} matches.\"\n\n    /** The selectors' decision while he is injured (the hub adds \"You can simulate the match instead.\"). */\n    fun decision(career: CareerProfile): CareerSelection.Decision {\n        val n = career.injuredMatches\n        return CareerSelection.Decision(\n            false, 1, 11, 15, 0,\n            \"You are injured with ${career.injury ?: \"an injury\"} and will miss $n more ${if (n == 1) \"match\" else \"matches\"}.\"\n        )\n    }\n\n    /** What a match his side plays without him does: counts off an injury, or says he was not in the XI. */\n    fun missedMatch(career: CareerProfile): CareerProgress.Result {\n        if (career.injuredMatches <= 0) return CareerProgress.Result(career, \"You were not in the XI for this match.\")\n        val left = career.injuredMatches - 1\n        val updated = career.copy(injuredMatches = left, injury = if (left == 0) null else career.injury)\n        val text = if (left == 0) \"You missed the match injured (${career.injury ?: \"an injury\"}). You have recovered and are fit again.\"\n        else \"You missed the match injured. $left more ${if (left == 1) \"match\" else \"matches\"} to miss.\"\n        return CareerProgress.Result(updated, text)\n    }\n\n    /** A sentence about his fitness for the Home tab, or null when there is nothing to say. */\n    fun statusLine(career: CareerProfile): String? = when {\n        career.injuredMatches > 0 -> \"Fitness: injured with ${career.injury ?: \"an injury\"}, ${career.injuredMatches} more matches to miss.\"\n        career.workload >= 25 -> \"Fitness: you are tired after ${career.workload} matches this season, which raises your risk of injury.\"\n        else -> null\n    }\n\n    /** His ratings after a season of ageing (nothing before 33). */\n    fun aged(career: CareerProfile): CareerProfile {\n        val d = ((career.age - 32) / 3).coerceAtLeast(0)\n        if (d == 0) return career\n        val bat = (career.batting - d).coerceAtLeast(1)\n        val bowl = (career.bowling - d).coerceAtLeast(1)\n        val field = (career.fielding - (d + 1) / 2).coerceAtLeast(1)\n        val clubs = career.clubs.map { club ->\n            if (club.name != career.club) club\n            else club.copy(players = club.players.map { if (it.isUser) it.copy(batting = bat, bowling = bowl, fielding = field) else it })\n        }\n        return career.copy(batting = bat, bowling = bowl, fielding = field, clubTeams = clubs)\n    }\n\n    /** The career with the retirement decision of the season made (retired or not). */\n    fun retirementDecision(career: CareerProfile): CareerProfile {\n        if (career.retired) return career\n        val main = when (career.role) {\n            \"Bowler\" -> career.bowling\n            \"Batsman\", \"Wicketkeeper-batsman\" -> career.batting\n            else -> maxOf(career.batting, career.bowling)\n        }\n        val chance = when {\n            career.age >= 44 -> 1.0\n            career.age >= 36 -> minOf(1.0, (career.age - 35) * 0.12)\n            career.age >= 33 && main < 40 -> 0.5\n            else -> 0.0\n        }\n        val random = Random(career.id.hashCode() * 17 + career.season)\n        return if (chance > 0.0 && random.nextDouble() < chance) career.copy(retired = true, retiredSeason = career.season) else career\n    }\n\n    fun retirementText(career: CareerProfile): String =\n        \"At ${career.age} you announce your retirement from cricket. Your career summary is on the Career tab.\"\n\n    /** The career in a few sentences, for a retired player. */\n    fun summaryLines(career: CareerProfile): List<String> {\n        val seasons = maxOf(1, career.season)\n        val startAge = career.age - (seasons - 1)\n        val out = ArrayList<String>()\n        out.add(\"You played $seasons ${if (seasons == 1) \"season\" else \"seasons\"} of cricket, from the age of $startAge to ${career.age}.\")\n        val highest = when {\n            career.internationalMatches > 0 -> \"international cricket for ${career.country}, ${career.internationalMatches} matches\"\n            career.stateMatches > 0 -> \"state cricket for ${career.state}, ${career.stateMatches} matches\"\n            else -> \"district club cricket for ${career.club}\"\n        }\n        out.add(\"The highest level you reached: $highest.\")\n        if (career.leagueMatches > 0) out.add(\"You also played ${career.leagueMatches} franchise league matches.\")\n        out.addAll(CareerRecords.recordLines(career))\n        val honours = career.honours.orEmpty()\n        out.add(if (honours.isEmpty()) \"You won no honours.\" else \"You won ${honours.size} ${if (honours.size == 1) \"honour\" else \"honours\"}.\")\n        out.add(\"Your final ratings: batting ${career.batting}, bowling ${career.bowling}, fielding ${career.fielding}.\")\n        val recs = career.records.orEmpty().values\n        val points = career.internationalMatches * 2.0 + career.leagueMatches + career.stateMatches * 0.5 + honours.size * 5.0 +\n            recs.sumOf { it.runs } / 100.0 + recs.sumOf { it.wickets } / 10.0\n        out.add(\n            when {\n                points >= 300 -> \"A true great of the game: your name will be remembered.\"\n                points >= 150 -> \"A career to be proud of, at the top level.\"\n                points >= 60 -> \"A solid, respected career.\"\n                else -> \"A short but honest career.\"\n            }\n        )\n        return out\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "content": "package com.cricketsim.ui.career\n\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.CareerHealth\nimport com.cricketsim.logic.CareerProfile\nimport com.cricketsim.logic.CareerRecords\nimport com.cricketsim.logic.CareerSeason\nimport com.cricketsim.logic.TournamentState\nimport com.cricketsim.ui.custom.OptionButton\nimport com.cricketsim.ui.custom.PageHeading\n\n/**\n * The career's Career tab (My Player, parts eleven and twelve): this season's objectives, the training focus, fitness, the rankings, the career record,\n * the honours and retirement; for a retired player the career summary comes first and the rest of the playing parts are left out.\n * Every part has a heading, then plain sentences, so a screen reader can jump from heading to heading.\n */\n@Composable\ninternal fun CareerRecordTab(\n    career: CareerProfile,\n    seasons: List<TournamentState>?,\n    rankLines: List<String>,\n    onFocus: (String?) -> Unit,\n    onRetire: () -> Unit\n) {\n    PageHeading(\"Career\")\n    Spacer(modifier = Modifier.height(8.dp))\n\n    if (career.retired) {\n        SectionHeading(\"Career summary\")\n        CareerHealth.summaryLines(career).forEach { BodyLine(it) }\n    } else {\n        SectionHeading(\"Season objectives\")\n        val objectives = if (seasons == null) emptyList() else CareerRecords.objectiveLines(career, seasons)\n        if (objectives.isEmpty()) {\n            BodyLine(\"Objectives appear when the season has loaded.\")\n        } else {\n            objectives.forEach { BodyLine(it) }\n            BodyLine(\"Every objective you reach gives +1 to the rating it is about when the season ends.\")\n        }\n\n        SectionHeading(\"Fitness\")\n        BodyLine(CareerHealth.statusLine(career) ?: \"Fitness: you are fit and well.\")\n        BodyLine(\"Injuries are more likely in Test cricket, for bowlers, after thirty and when you are tired. From 33 your ratings slowly fall with age.\")\n\n        SectionHeading(\"Training focus\")\n        BodyLine(\"The skill you work on grows faster after matches, the others a little slower. Now: ${career.trainingFocus ?: \"balanced\"}.\")\n        listOf<Pair<String?, String>>(\n            null to \"Balanced\",\n            \"Batting\" to \"Batting\",\n            \"Bowling\" to \"Bowling\",\n            \"Fielding\" to \"Fielding\"\n        ).forEach { (value, label) ->\n            val chosen = career.trainingFocus == value\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\n                if (chosen) \"$label (chosen)\" else label,\n                if (value == null) \"All three skills grow at the normal rate.\" else \"$label grows faster, the other skills slower.\",\n                !chosen, false\n            ) { onFocus(value) }\n        }\n    }\n\n    SectionHeading(\"Rankings\")\n    if (rankLines.isEmpty()) BodyLine(\"Working out your rankings.\") else rankLines.forEach { BodyLine(it) }\n\n    SectionHeading(\"Career record\")\n    val record = CareerRecords.recordLines(career)\n    if (record.isEmpty()) BodyLine(\"No matches yet. Your record grows with every match you play.\") else record.forEach { BodyLine(it) }\n\n    SectionHeading(\"Honours\")\n    val honours = career.honours.orEmpty()\n    if (honours.isEmpty()) BodyLine(\"None yet. Win a competition or be Player of the Series.\") else honours.reversed().forEach { BodyLine(it) }\n\n    if (!career.retired) {\n        SectionHeading(\"Retirement\")\n        BodyLine(\"You are ${career.age}. Players usually retire between 36 and 42, earlier if their ratings fall.\")\n        var confirm by remember { mutableStateOf(false) }\n        val seasonDone = seasons != null && seasons.isNotEmpty() && seasons.all { CareerSeason.isComplete(it) }\n        Spacer(modifier = Modifier.height(6.dp))\n        if (!confirm) {\n            OptionButton(\n                \"Retire from cricket\",\n                if (seasonDone) \"End your career and see your career summary.\" else \"You can retire when the season is finished.\",\n                seasonDone, false\n            ) { confirm = true }\n        } else {\n            BodyLine(\"Are you sure? Retiring ends your career for good.\")\n            OptionButton(\"Yes, retire now\", \"Your career ends and the summary appears here.\", true, true) {\n                confirm = false\n                onRetire()\n            }\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\"No, keep playing\", \"Go back to your career.\", true, false) { confirm = false }\n        }\n    }\n}\n\n@Composable\nprivate fun SectionHeading(text: String) {\n    Spacer(modifier = Modifier.height(16.dp))\n    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n    Spacer(modifier = Modifier.height(4.dp))\n}\n\n@Composable\nprivate fun BodyLine(text: String) {\n    Text(text, style = MaterialTheme.typography.bodyMedium)\n    Spacer(modifier = Modifier.height(4.dp))\n}\n"
+    }
+  ]
+}
