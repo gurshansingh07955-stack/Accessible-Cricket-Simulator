@@ -16,6 +16,13 @@ object CareerProgress {
     const val BASE_GROWTH = 1.0
     const val IMPACT_PAR = 20.0
 
+    /** The training focus: the skill he works on grows faster (x1.6), the other two a little slower (x0.85); no focus changes nothing. */
+    private fun focusFactor(career: CareerProfile, skill: String): Double = when (career.trainingFocus) {
+        null, "" -> 1.0
+        skill -> 1.6
+        else -> 0.85
+    }
+
     class Result(val career: CareerProfile, val text: String)
 
     private fun gain(g: Double, random: Random): Int {
@@ -52,9 +59,9 @@ object CareerProgress {
             "Batting all-rounder" -> 0.65 to 0.45
             else -> 0.45 to 0.65
         }
-        val batGain = gain(g * batShare, random)
-        val bowlGain = gain(g * bowlShare, random)
-        val fieldGain = gain(g * 0.2 + catches * 0.3, random)
+        val batGain = gain(g * batShare * focusFactor(career, "Batting"), random)
+        val bowlGain = gain(g * bowlShare * focusFactor(career, "Bowling"), random)
+        val fieldGain = gain((g * 0.2 + catches * 0.3) * focusFactor(career, "Fielding"), random)
         val newBat = (career.batting + batGain).coerceAtMost(95)
         val newBowl = (career.bowling + bowlGain).coerceAtMost(95)
         val newField = (career.fielding + fieldGain).coerceAtMost(95)
@@ -77,6 +84,7 @@ object CareerProgress {
             stateMatches = if (career.isState && !league) career.stateMatches + 1 else career.stateMatches,
             internationalMatches = if (career.isInternational && !league) career.internationalMatches + 1 else career.internationalMatches,
             leagueMatches = if (league) career.leagueMatches + 1 else career.leagueMatches,
+            records = CareerRecords.updated(career, before, after, format, league),
             form = (career.form.orEmpty() + impact).takeLast(5),
             formByFormat = if (format.isEmpty()) career.formByFormat
             else career.formByFormat.orEmpty() + (format to (career.formByFormat?.get(format).orEmpty() + impact).takeLast(5))

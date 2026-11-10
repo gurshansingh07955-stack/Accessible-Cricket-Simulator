@@ -1,6 +1,6 @@
-Patch run: 42731088144
-Timestamp (UTC): 2026-11-10T00:48:30Z
+Patch run: 42796681947
+Timestamp (UTC): 2026-11-10T10:09:15Z
 Result: OK
 -----
-Patch 2026-11-09-095-career-league-selection.json
-  applied 18 operation(s) to 9 file(s)
+Patch 2026-11-10-096-career-tab-records-objectives.json
+  applied 17 operation(s) to 7 file(s)

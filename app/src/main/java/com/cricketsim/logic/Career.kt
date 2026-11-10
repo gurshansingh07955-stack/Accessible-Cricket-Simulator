@@ -80,7 +80,14 @@ data class CareerProfile(
     /** One sentence about this season's league, for the Home tab. */
     val leagueLine: String? = null,
     /** Matches played in franchise leagues. */
-    val leagueMatches: Int = 0
+    val leagueMatches: Int = 0,
+    // Part eleven: the record, the honours and the training focus.
+    /** What he has done in each kind of cricket ("Club", "State", "Test", "ODI", "T20I", "League"). */
+    val records: Map<String, CareerRecord>? = null,
+    /** The honours he has won, oldest first. */
+    val honours: List<String>? = null,
+    /** "Batting", "Bowling" or "Fielding": the skill he works on (null = balanced). */
+    val trainingFocus: String? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 

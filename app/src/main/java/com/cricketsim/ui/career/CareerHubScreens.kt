@@ -48,6 +48,7 @@ import com.cricketsim.logic.CareerSeason
 import com.cricketsim.logic.CareerDomestic
 import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerLeagues
+import com.cricketsim.logic.CareerRecords
 import com.cricketsim.logic.LeagueOffer
 import com.cricketsim.logic.CareerSelection
 import com.cricketsim.logic.CareerTables
@@ -73,7 +74,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
-private enum class HubTab(val label: String) { Home("Home"), Play("Game play"), Calendar("Calendar"), Table("Points table") }
+private enum class HubTab(val label: String) { Home("Home"), Play("Game play"), Calendar("Calendar"), Table("Points table"), Career("Career") }
 
 /** Where the player is in playing one of his club's matches (full screen: the tabs are hidden while a match is set up or played). */
 private sealed interface CPlay {
@@ -187,6 +188,12 @@ fun CareerHub(
                 message = adv.lines.joinToString("\n")
             }
         }
+    }
+
+    // Part eleven: his place among the players of the game, worked out off the main thread (it builds the national teams).
+    var rankLines by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(career.id, career.season, career.matchesPlayed) {
+        rankLines = withContext(Dispatchers.Default) { try { CareerRecords.rankings(career) } catch (e: Exception) { emptyList() } }
     }
 
     // League offers (part ten): ask the franchises, sign for one league for the season, or turn them all down. A signed league's season is saved in its
@@ -469,11 +476,13 @@ fun CareerHub(
                                     pendingMatch = null
                                     matchStore.clear()
                                 }
-                                val next = withContext(Dispatchers.Default) { CareerSeason.nextSeason(career) }
+                                // The season's honours and objectives are settled first (ratings, honours), then the selectors meet.
+                                val settled = CareerRecords.settleSeason(career, seasons.orEmpty())
+                                val next = withContext(Dispatchers.Default) { CareerSeason.nextSeason(settled.career) }
                                 next.states.forEachIndexed { i, s ->
                                     TournamentSaveStore(context, CareerSeason.seasonFile(career.id, next.career.season, next.keys[i])).save(s)
                                 }
-                                message = next.text
+                                message = (if (settled.text.isEmpty()) "" else settled.text + " ") + next.text
                                 busy = false
                                 onCareerChanged(next.career)
                             }
@@ -482,6 +491,7 @@ fun CareerHub(
                 )
                 HubTab.Calendar -> CalendarTab(current, loaded)
                 HubTab.Table -> TableTab(current, loaded, compTab, { compTab = it }, tableTab, { tableTab = it }, statsTab, { statsTab = it })
+                HubTab.Career -> CareerRecordTab(career, current, rankLines) { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }
             }
         }
     }
