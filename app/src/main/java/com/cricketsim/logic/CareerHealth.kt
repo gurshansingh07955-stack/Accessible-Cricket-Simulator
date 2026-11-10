@@ -129,6 +129,7 @@ object CareerHealth {
         val honours = career.honours.orEmpty()
         out.add(if (honours.isEmpty()) "You won no honours." else "You won ${honours.size} ${if (honours.size == 1) "honour" else "honours"}.")
         out.add("Your final ratings: batting ${career.batting}, bowling ${career.bowling}, fielding ${career.fielding}.")
+        out.add("Career earnings: ${CareerFinance.money(career.money)}.")
         val recs = career.records.orEmpty().values
         val points = career.internationalMatches * 2.0 + career.leagueMatches + career.stateMatches * 0.5 + honours.size * 5.0 +
             recs.sumOf { it.runs } / 100.0 + recs.sumOf { it.wickets } / 10.0

@@ -82,6 +82,8 @@ object CareerProgress {
             clubTeams = clubs,
             matchesPlayed = career.matchesPlayed + 1,
             workload = career.workload + 1,
+            money = career.money + CareerFinance.matchFee(career, format, league),
+            seasonEarnings = career.seasonEarnings + CareerFinance.matchFee(career, format, league),
             stateMatches = if (career.isState && !league) career.stateMatches + 1 else career.stateMatches,
             internationalMatches = if (career.isInternational && !league) career.internationalMatches + 1 else career.internationalMatches,
             leagueMatches = if (league) career.leagueMatches + 1 else career.leagueMatches,

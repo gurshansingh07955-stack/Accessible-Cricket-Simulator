@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.cricketsim.logic.CareerFinance
 import com.cricketsim.logic.CareerHealth
 import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerProfile
@@ -23,7 +24,7 @@ import com.cricketsim.ui.custom.OptionButton
 import com.cricketsim.ui.custom.PageHeading
 
 /**
- * The career's Career tab (My Player, parts eleven to thirteen): this season's objectives, the training focus, fitness, the rankings, the career record,
+ * The career's Career tab (My Player, parts eleven to fifteen): this season's objectives, the training focus, fitness, the rankings, the career record,
  * the honours and retirement; for a retired player the career summary comes first and the rest of the playing parts are left out.
  * Every part has a heading, then plain sentences, so a screen reader can jump from heading to heading.
  */
@@ -113,6 +114,13 @@ internal fun CareerRecordTab(
     SectionHeading("Honours")
     val honours = career.honours.orEmpty()
     if (honours.isEmpty()) BodyLine("None yet. Win a competition or be Player of the Series.") else honours.reversed().forEach { BodyLine(it) }
+
+    SectionHeading("Earnings")
+    CareerFinance.lines(career).forEach { BodyLine(it) }
+
+    SectionHeading("In the news")
+    val news = career.media.orEmpty()
+    if (news.isEmpty()) BodyLine("Nothing yet. The papers write about you when a competition ends.") else news.reversed().forEach { BodyLine(it) }
 
     if (!career.retired) {
         SectionHeading("Retirement")

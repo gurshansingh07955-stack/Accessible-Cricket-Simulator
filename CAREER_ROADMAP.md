@@ -33,4 +33,6 @@ Found in the game's own pages, reviews and the Big Ant and PlanetCricket forums:
 - Twelve: injuries and workload, ageing, retirement and a career summary (patch 097). Done.
 - Thirteen: international captaincy and specialising in a format (patch 098). Done.
 - Fourteen: computer squads that age, an ODI World Cup and the World Test Championship final (patch 099). Done.
-- Later ideas from the research: an international affiliation (aim for another country's team), short press-conference style text after a series, a real ODI World Cup format of 14 teams, injury replacements, contracts and pay, retentions in the IPL, the ILT20, Impact Players in career matches.
+- Fifteen: contracts and pay, franchise retention, the ILT20 and the papers' verdicts (patch 100). Done.
+- Sixteen: an international affiliation (aim for another country's team); real retirements with new named players in the computer squads; ageing for the domestic squads.
+- Seventeen: the real 14-team ODI World Cup; the Impact Player and the Power Surge in career matches; the overseas cap checked in the XI the selectors name.

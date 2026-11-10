@@ -46,6 +46,7 @@ import com.cricketsim.logic.CareerProfile
 import com.cricketsim.logic.CareerProgress
 import com.cricketsim.logic.CareerSeason
 import com.cricketsim.logic.CareerDomestic
+import com.cricketsim.logic.CareerFinance
 import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerLeagues
 import com.cricketsim.logic.CareerRecords
@@ -236,6 +237,7 @@ fun CareerHub(
                     message = "That league could not be set up. Please try another offer."
                 } else {
                     val leagueKey = CareerSeason.keyOf(signed)
+                    val deal = CareerFinance.contract(career, offer)
                     TournamentSaveStore(context, CareerSeason.seasonFile(career.id, career.season, leagueKey)).save(signed)
                     busy = false
                     message = "You have signed for ${offer.teamName} in the ${offer.leagueName}. Its matches are in your calendar."
@@ -244,7 +246,10 @@ fun CareerHub(
                             seasonKeys = seasonKeys + leagueKey,
                             leagueOffers = null,
                             leagueDecidedSeason = career.season,
-                            leagueLine = "This season you also play for ${offer.teamName} in the ${offer.leagueName}."
+                            leagueContract = deal,
+                            lastLeagueId = offer.leagueId,
+                            lastLeagueTeamId = offer.teamId,
+                            leagueLine = "This season you also play for ${offer.teamName} in the ${offer.leagueName}. Your contract is worth ${CareerFinance.money(deal.toLong())}."
                         )
                     )
                 }

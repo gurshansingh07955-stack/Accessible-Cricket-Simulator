@@ -72,6 +72,9 @@ object CareerLeagues {
             League("cpl", "Caribbean Premier League", "West Indies", 4,
                 { Built(CplData.buildTeams()) },
                 { teamId, built, random -> CplData.newTournament(teamId, built.pair, random) }),
+            League("ilt20", "International League T20", "UAE", 3,
+                { Built(InternationalLeagueT20.buildTeams()) },
+                { teamId, built, _ -> InternationalLeagueT20.newTournament(teamId, built.pair) }),
             League("mlc", "Major League Cricket", "USA", 3,
                 { Built(MajorLeagueCricket.buildTeams()) },
                 { teamId, built, _ -> MajorLeagueCricket.newTournament(teamId, built.pair) }),
@@ -86,7 +89,7 @@ object CareerLeagues {
 
     private val LEAGUE_IDS = setOf(
         IplSeason.TOURNAMENT_ID, BigBashLeague.TOURNAMENT_ID, Sa20.TOURNAMENT_ID, CplData.TOURNAMENT_ID,
-        MajorLeagueCricket.TOURNAMENT_ID, LankaPremierLeague.TOURNAMENT_ID, AbuDhabiT10.TOURNAMENT_ID
+        MajorLeagueCricket.TOURNAMENT_ID, LankaPremierLeague.TOURNAMENT_ID, AbuDhabiT10.TOURNAMENT_ID, InternationalLeagueT20.TOURNAMENT_ID
     )
 
     /** True for the season of a franchise league a career is playing in. */
@@ -179,10 +182,14 @@ object CareerLeagues {
                 val group = team.players.filter { it.role == role }
                 val rank = 1 + group.count { value(it) > mine }
                 val cutoff = ((slots(role) / factor).roundToInt() - (if (overseas) 1 else 0)).coerceIn(1, group.size + 1)
-                val margin = cutoff - (rank - adjust - grace)
+                // The franchise he played for last season wants to keep him: a place in his favour.
+                val retained = career.lastLeagueTeamId == team.id
+                val margin = cutoff - (rank - adjust - grace - (if (retained) 1 else 0))
+                val retentionText = if (retained) " Your franchise wants to keep you." else ""
                 if (margin >= 0) {
                     val note = "You would rank ${ordinal(rank)} among the ${group.size + 1} ${roleWord(role)} of ${team.name}${if (overseas) ", as an overseas player" else ""}, and a T20 XI takes the top $cutoff.${formNote(adjust)}"
-                    here.add(Candidate(league.prestige, margin, LeagueOffer(league.id, league.name, team.id, team.name, overseas, seed, note)))
+                    here.add(Candidate(league.prestige, margin, LeagueOffer(league.id, league.name, team.id, team.name, overseas, seed,
+                        note + retentionText + " Contract offered: " + CareerFinance.money(CareerFinance.contractFor(career, league.id, retained).toLong()) + ".")))
                 }
             }
             found.addAll(here.sortedByDescending { it.margin }.take(MAX_PER_LEAGUE))

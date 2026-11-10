@@ -299,7 +299,7 @@ object CareerSeason {
      */
     fun nextSeason(career: CareerProfile): NextSeason {
         // A new season: a year older, a fresh workload, and the close season heals six matches of injury.
-        val older = career.copy(age = career.age + 1, season = maxOf(1, career.season) + 1, workload = 0, injuredMatches = maxOf(0, career.injuredMatches - 6))
+        val older = career.copy(age = career.age + 1, season = maxOf(1, career.season) + 1, workload = 0, injuredMatches = maxOf(0, career.injuredMatches - 6), seasonEarnings = 0L, leagueContract = 0)
         var text = "A new season begins. You are ${older.age}. "
         // The national selectors look first (state and international players only): called up or kept, he plays a season of international series.
         if (career.atOrAboveState) {

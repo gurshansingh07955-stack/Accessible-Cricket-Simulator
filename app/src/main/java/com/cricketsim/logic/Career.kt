@@ -103,7 +103,19 @@ data class CareerProfile(
     /** "Vice-captain" or "Captain" of his country (null = a player). */
     val nationalRole: String? = null,
     /** "Test" or "White-ball" (null = all formats). */
-    val specialism: String? = null
+    val specialism: String? = null,
+    // Part fifteen: money, the franchise he played for, and the papers.
+    /** What he has earned in his career, in dollars. */
+    val money: Long = 0L,
+    /** What he has earned this season (match fees as he plays; contracts and prizes added when the season is settled). */
+    val seasonEarnings: Long = 0L,
+    /** What his league contract this season is worth (0 = none). */
+    val leagueContract: Int = 0,
+    /** The league and the franchise he last signed for: that franchise wants to keep him. */
+    val lastLeagueId: String? = null,
+    val lastLeagueTeamId: String? = null,
+    /** What the papers have written about him (the last fifteen lines). */
+    val media: List<String>? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
