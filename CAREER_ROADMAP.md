@@ -30,4 +30,6 @@ Found in the game's own pages, reviews and the Big Ant and PlanetCricket forums:
 - Nine: the tournament that closes each international season, form in each format, Player of the Series lines. This patch.
 - Ten: league selection (offers, the franchise squads, a league season, clashes with national duty).
 - Eleven: career record and rankings, season objectives, a training focus, honours (the Career tab). Done (patch 096).
-- Twelve: injuries and workload, retirement and a career summary, computer squads that age and change, international captaincy, specialising in a format, an ODI World Cup and a Test championship final.
+- Twelve: injuries and workload, ageing, retirement and a career summary (patch 097). Done.
+- Thirteen: international captaincy and specialising in a format.
+- Fourteen: computer squads that age and change, an ODI World Cup and a Test championship final.

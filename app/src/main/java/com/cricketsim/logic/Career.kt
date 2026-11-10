@@ -87,7 +87,18 @@ data class CareerProfile(
     /** The honours he has won, oldest first. */
     val honours: List<String>? = null,
     /** "Batting", "Bowling" or "Fielding": the skill he works on (null = balanced). */
-    val trainingFocus: String? = null
+    val trainingFocus: String? = null,
+    // Part twelve: fitness, ageing and retirement.
+    /** Matches he still has to miss through injury (0 = fit). */
+    val injuredMatches: Int = 0,
+    /** What is wrong with him ("a hamstring strain"). */
+    val injury: String? = null,
+    /** Matches played this season: a tired player is hurt more easily. */
+    val workload: Int = 0,
+    /** True once he has retired: the career is over and only the summary is shown. */
+    val retired: Boolean = false,
+    /** The season in which he retired. */
+    val retiredSeason: Int = 0
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 

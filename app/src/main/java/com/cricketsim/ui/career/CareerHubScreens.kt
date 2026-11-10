@@ -190,6 +190,19 @@ fun CareerHub(
         }
     }
 
+    // Part twelve: retiring by his own choice (offered when the season is finished): the season is settled first, then the career ends.
+    val retireNow: () -> Unit = {
+        if (!busy && !career.retired) {
+            busy = true
+            scope.launch {
+                val settled = CareerRecords.settleSeason(career, seasons.orEmpty())
+                busy = false
+                message = (if (settled.text.isEmpty()) "" else settled.text + " ") + "You have retired from cricket. Your career summary is on the Career tab."
+                onCareerChanged(settled.career.copy(retired = true, retiredSeason = career.season))
+            }
+        }
+    }
+
     // Part eleven: his place among the players of the game, worked out off the main thread (it builds the national teams).
     var rankLines by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(career.id, career.season, career.matchesPlayed) {
@@ -468,7 +481,9 @@ fun CareerHub(
                         scope.launch { matchStore.clear() }
                     },
                     onNextSeason = {
-                        if (!busy) {
+                        if (career.retired) {
+                            message = "You have retired. Your career summary is on the Career tab."
+                        } else if (!busy) {
                             busy = true
                             message = "The selectors are meeting."
                             scope.launch {
@@ -478,6 +493,13 @@ fun CareerHub(
                                 }
                                 // The season's honours and objectives are settled first (ratings, honours), then the selectors meet.
                                 val settled = CareerRecords.settleSeason(career, seasons.orEmpty())
+                                if (settled.career.retired) {
+                                    // The ageing selectors' season ends his career: no new season.
+                                    busy = false
+                                    message = settled.text
+                                    onCareerChanged(settled.career)
+                                    return@launch
+                                }
                                 val next = withContext(Dispatchers.Default) { CareerSeason.nextSeason(settled.career) }
                                 next.states.forEachIndexed { i, s ->
                                     TournamentSaveStore(context, CareerSeason.seasonFile(career.id, next.career.season, next.keys[i])).save(s)
@@ -491,7 +513,7 @@ fun CareerHub(
                 )
                 HubTab.Calendar -> CalendarTab(current, loaded)
                 HubTab.Table -> TableTab(current, loaded, compTab, { compTab = it }, tableTab, { tableTab = it }, statsTab, { statsTab = it })
-                HubTab.Career -> CareerRecordTab(career, current, rankLines) { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }
+                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, retireNow)
             }
         }
     }

@@ -398,6 +398,7 @@ object CareerInternational {
                 out.add("Next step, the ${squad.name} state squad: " + summary(d) + gap)
             }
         }
+        CareerHealth.statusLine(career)?.let { out.add(it) }
         return out
     }
 }

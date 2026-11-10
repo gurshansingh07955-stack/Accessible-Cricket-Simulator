@@ -123,7 +123,8 @@ object CareerSelection {
 
     /** The decision for the player's next match in a competition: the club's rank among his club-mates, or the state squad's. */
     fun forState(career: CareerProfile, state: TournamentState): Decision =
-        if (CareerSeason.isClub(state)) decide(career)
+        if (career.injuredMatches > 0) CareerHealth.decision(career)
+        else if (CareerSeason.isClub(state)) decide(career)
         else if (CareerInternational.isInternational(state)) CareerInternational.matchDecision(career, state)
         else if (CareerLeagues.isLeague(state)) CareerLeagues.matchDecision(career, state)
         else decideAtState(career, state)

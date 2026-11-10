@@ -29,7 +29,7 @@ internal fun LeagueSection(
     onAccept: (LeagueOffer) -> Unit,
     onDecline: () -> Unit
 ) {
-    if (!career.atOrAboveState) return
+    if (!career.atOrAboveState || career.retired) return
     Spacer(modifier = Modifier.height(12.dp))
     Text("League offers", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     Spacer(modifier = Modifier.height(4.dp))

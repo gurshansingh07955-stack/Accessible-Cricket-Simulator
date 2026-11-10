@@ -33,7 +33,7 @@ object CareerProgress {
     /** [before] and [after] are the player's tournament statistics around the match; they differ only if he played. */
     fun afterMatch(career: CareerProfile, before: PlayerStats?, after: PlayerStats?, random: Random, format: String = "", league: Boolean = false): Result {
         val played = (after?.matches ?: 0) > (before?.matches ?: 0)
-        if (after == null || !played) return Result(career, "You were not in the XI for this match.")
+        if (after == null || !played) return CareerHealth.missedMatch(career)
         fun d(f: (PlayerStats) -> Int) = f(after) - (before?.let(f) ?: 0)
         val runs = d { it.runs }
         val balls = d { it.balls }
@@ -81,6 +81,7 @@ object CareerProgress {
             batting = newBat, bowling = newBowl, fielding = newField,
             clubTeams = clubs,
             matchesPlayed = career.matchesPlayed + 1,
+            workload = career.workload + 1,
             stateMatches = if (career.isState && !league) career.stateMatches + 1 else career.stateMatches,
             internationalMatches = if (career.isInternational && !league) career.internationalMatches + 1 else career.internationalMatches,
             leagueMatches = if (league) career.leagueMatches + 1 else career.leagueMatches,
@@ -93,6 +94,10 @@ object CareerProgress {
         val rank = CareerLeadership.promotion(played2)
         val updated = if (rank != null) played2.copy(leadership = rank, leadershipSince = played2.matchesPlayed) else played2
         val news = if (rank != null) " " + CareerLeadership.announcement(rank, career.club) else ""
-        return Result(updated, "${parts.joinToString(" ")} Your impact was ${impact.roundToInt()}. $growth$news")
+        // A chance of an injury after the match (more in Tests, for bowlers, for the old and the tired).
+        val hurt = CareerHealth.roll(updated, random, format)
+        val afterHurt = if (hurt == null) updated else updated.copy(injuredMatches = hurt.matches, injury = hurt.name)
+        val hurtText = if (hurt == null) "" else " " + CareerHealth.injuryAnnouncement(hurt)
+        return Result(afterHurt, "${parts.joinToString(" ")} Your impact was ${impact.roundToInt()}. $growth$news$hurtText")
     }
 }

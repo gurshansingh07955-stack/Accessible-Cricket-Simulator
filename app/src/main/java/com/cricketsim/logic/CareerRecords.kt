@@ -301,6 +301,11 @@ object CareerRecords {
         )
         val objectiveText = if (t.matches == 0) "" else "You reached $done of ${objectives.size} season objectives" + (if (changes.isEmpty()) "." else " and your ratings grew: ${changes.joinToString(", ")}.")
         val honourText = if (honours.isEmpty()) "" else " Honours: ${honours.joinToString(" ") { it.substringAfter(": ") }}"
-        return Settlement(updated, (objectiveText + honourText).trim())
+        // Ageing and retirement (part twelve).
+        val aged = CareerHealth.aged(updated)
+        val agedText = if (aged.batting < updated.batting || aged.bowling < updated.bowling) " Age is catching up with you: your ratings have dropped." else ""
+        val decided = CareerHealth.retirementDecision(aged)
+        val retiredText = if (decided.retired && !updated.retired) " " + CareerHealth.retirementText(decided) else ""
+        return Settlement(decided, (objectiveText + honourText + agedText + retiredText).trim())
     }
 }
