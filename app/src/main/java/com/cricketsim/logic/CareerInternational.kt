@@ -212,16 +212,81 @@ object CareerInternational {
         val factor = CareerWorld.selectionFactor(career.difficulty)
         val cutoff = (matchSlots(me.role, key) / factor).roundToInt().coerceIn(1, group.size)
         val adjust = formAdjustFor(career, key)
-        val grace = (if (career.internationalMatches < 3) 1 else 0) + (if (career.age <= 19) 1 else 0)
+        val grace = (if (career.internationalMatches < 3) 1 else 0) + (if (career.age <= 19) 1 else 0) + specialismFit(career, key)
         val debut = career.internationalMatches == 0
-        val selected = debut || rank - adjust - grace <= cutoff
+        val captain = career.nationalRole == "Captain"
+        val selected = debut || captain || rank - adjust - grace <= cutoff
         val base = "You rank ${ordinal(rank)} of ${group.size} ${roleWord(me.role)} in the ${team.name} squad, and for a ${formatWord(key)} match the selectors on ${career.difficulty.lowercase()} pick the top $cutoff.${formNote(adjust)}"
         val reason = when {
             debut -> "You are in the XI. The selectors give every new international a debut: this is your first international match. $base"
+            captain -> "You are in the XI: you are the captain of ${team.name}. $base"
             selected -> "You are in the XI. $base"
             else -> "You are not in the XI. $base Score runs, take wickets or improve your ratings to move up."
         }
-        return CareerSelection.Decision(selected, rank, cutoff, group.size, adjust, reason)
+        return CareerSelection.Decision(selected, rank, cutoff, group.size, adjust, reason + specialismNote(career, key))
+    }
+
+    // ------------------------------------------------------------ specialism and captaincy (part thirteen)
+
+    /** +1 if the format is the one he specialises in, -1 if it is the other kind, 0 if he does not specialise. */
+    fun specialismFit(career: CareerProfile, key: String): Int = when (career.specialism) {
+        "Test" -> if (key == "test") 1 else -1
+        "White-ball" -> if (key == "test") -1 else 1
+        else -> 0
+    }
+
+    private fun specialismNote(career: CareerProfile, key: String): String = when (specialismFit(career, key)) {
+        1 -> " As a ${if (career.specialism == "Test") "Test" else "white-ball"} specialist you get a place in your favour in this format."
+        -1 -> " As a ${if (career.specialism == "Test") "Test" else "white-ball"} specialist you have a place against you in this format."
+        else -> ""
+    }
+
+    class Captaincy(val career: CareerProfile, val text: String)
+
+    /** Matches the national selectors want to have seen before they consider a player for the vice-captaincy, and for the captaincy. */
+    const val VICE_MATCHES = 12
+    const val CAPTAIN_MATCHES = 25
+
+    private fun leadershipScore(career: CareerProfile): Double {
+        val squad = nationalTeam(career.country)
+        val role = CareerSeason.roleOf(career.role)
+        val mine = myValue(career, role)
+        val standing = if (squad == null) 99 else 1 + squad.players.count { value(it) > mine }
+        val form = career.form.orEmpty()
+        val formBonus = if (form.isEmpty()) 0.0 else ((form.average() - 20.0) / 20.0).coerceIn(-1.0, 1.0)
+        return career.internationalMatches / 10.0 + formBonus + (if (standing <= 3) 1.5 else if (standing <= 6) 0.5 else 0.0) + (if (career.age >= 26) 1.0 else 0.0)
+    }
+
+    /**
+     * The national selectors' leadership decision at the start of an international season. A leadership score from his international experience (a point for every ten
+     * matches), his form, his standing among the squad's best (top three +1.5, top six +0.5) and his age (26 or over +1): at 4.0 with 12 matches he is made vice-captain; a vice-captain
+     * at 6.0 with 25 matches is made captain; a captain or vice-captain whose score falls under 3.0 loses the role. A captain picks the XI and does the toss in the national matches.
+     */
+    fun captaincy(career: CareerProfile): Captaincy {
+        if (!career.isInternational) return Captaincy(career, "")
+        val score = leadershipScore(career)
+        val current = career.nationalRole
+        val matches = career.internationalMatches
+        val next = when (current) {
+            "Captain" -> if (score >= 3.0) "Captain" else null
+            "Vice-captain" -> if (score >= 6.0 && matches >= CAPTAIN_MATCHES) "Captain" else if (score >= 3.0) "Vice-captain" else null
+            else -> if (score >= 4.0 && matches >= VICE_MATCHES) "Vice-captain" else null
+        }
+        if (next == current) return Captaincy(career, "")
+        val text = when (next) {
+            "Captain" -> "The national selectors appoint you captain of ${career.country}! "
+            "Vice-captain" -> "The national selectors appoint you vice-captain of ${career.country}. "
+            else -> "You have lost the ${current?.lowercase() ?: "leadership"} of ${career.country}. "
+        }
+        val honours = if (next != null && next != current) career.honours.orEmpty() + "Season ${career.season}: appointed ${next.lowercase()} of ${career.country}." else career.honours
+        return Captaincy(career.copy(nationalRole = next, honours = honours?.takeLast(60)), text)
+    }
+
+    /** A sentence for the Career tab and the pathway about the national captaincy. */
+    fun captaincyLine(career: CareerProfile): String = when (career.nationalRole) {
+        "Captain" -> "You are the captain of ${career.country}: you pick the XI and do the toss in the national matches."
+        "Vice-captain" -> "You are the vice-captain of ${career.country}. At $CAPTAIN_MATCHES international matches, with good form and a place among the squad's best, the selectors may make you captain (you have played ${career.internationalMatches})."
+        else -> "The selectors look at the vice-captaincy at $VICE_MATCHES international matches, with good form and a place among the squad's best; you have played ${career.internationalMatches}."
     }
 
     // ------------------------------------------------------------ the season
@@ -381,6 +446,7 @@ object CareerInternational {
         if (career.isInternational) {
             out.add("You are in the ${career.country} national squad and have played ${career.internationalMatches} international matches.")
             decision(career)?.let { out.add("Keeping your place next season: " + summary(it)) }
+            out.add(captaincyLine(career))
         } else if (career.isState) {
             out.add("You are in the ${career.domesticTeams.firstOrNull() ?: career.state} squad and have played ${career.stateMatches} state matches.")
             if (career.stateMatches < MIN_STATE_MATCHES) {

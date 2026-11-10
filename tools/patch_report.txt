@@ -1,6 +1,6 @@
-Patch run: 42800101229
-Timestamp (UTC): 2026-11-10T10:33:18Z
+Patch run: 42801695960
+Timestamp (UTC): 2026-11-10T10:44:44Z
 Result: OK
 -----
-Patch 2026-11-10-097-career-health-retirement.json
-  applied 17 operation(s) to 12 file(s)
+Patch 2026-11-10-098-career-captaincy-specialism.json
+  applied 16 operation(s) to 8 file(s)

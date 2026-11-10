@@ -31,5 +31,5 @@ Found in the game's own pages, reviews and the Big Ant and PlanetCricket forums:
 - Ten: league selection (offers, the franchise squads, a league season, clashes with national duty).
 - Eleven: career record and rankings, season objectives, a training focus, honours (the Career tab). Done (patch 096).
 - Twelve: injuries and workload, ageing, retirement and a career summary (patch 097). Done.
-- Thirteen: international captaincy and specialising in a format.
+- Thirteen: international captaincy and specialising in a format (patch 098). Done.
 - Fourteen: computer squads that age and change, an ODI World Cup and a Test championship final.

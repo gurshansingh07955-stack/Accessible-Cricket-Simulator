@@ -513,7 +513,7 @@ fun CareerHub(
                 )
                 HubTab.Calendar -> CalendarTab(current, loaded)
                 HubTab.Table -> TableTab(current, loaded, compTab, { compTab = it }, tableTab, { tableTab = it }, statsTab, { statsTab = it })
-                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, retireNow)
+                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, retireNow)
             }
         }
     }

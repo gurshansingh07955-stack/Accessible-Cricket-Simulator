@@ -307,11 +307,12 @@ object CareerSeason {
             if (call != null) {
                 text += call.reason + " "
                 if (call.selected) {
-                    val intlLevel = older.copy(level = CareerInternational.LEVEL)
+                    val captaincy = CareerInternational.captaincy(older.copy(level = CareerInternational.LEVEL))
+                    val intlLevel = captaincy.career
                     val intl = CareerInternational.newSeason(intlLevel)
                     if (intl != null) {
                         val intlKeys = intl.map { keyOf(it) }
-                        return NextSeason(intlLevel.copy(seasonKeys = intlKeys), intl, intlKeys, text + "You play for ${career.country} this season.")
+                        return NextSeason(intlLevel.copy(seasonKeys = intlKeys), intl, intlKeys, text + captaincy.text + "You play for ${career.country} this season.")
                     }
                 }
             }

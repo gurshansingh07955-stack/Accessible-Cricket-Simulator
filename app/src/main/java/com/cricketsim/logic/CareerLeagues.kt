@@ -168,7 +168,7 @@ object CareerLeagues {
         val mine = myValue(career, role)
         val factor = CareerWorld.selectionFactor(career.difficulty)
         val adjust = formAdjust(career)
-        val grace = if (career.isInternational) 1 else 0
+        val grace = (if (career.isInternational) 1 else 0) + (when (career.specialism) { "White-ball" -> 1; "Test" -> -2; else -> 0 })
         val seed = career.id.hashCode().toLong() * 1000L + career.season
         val found = ArrayList<Candidate>()
         for (league in eligible(career)) {
@@ -225,7 +225,7 @@ object CareerLeagues {
         val factor = CareerWorld.selectionFactor(career.difficulty)
         val cutoff = ((slots(me.role) / factor).roundToInt() - (if (overseas) 1 else 0)).coerceIn(1, group.size)
         val adjust = formAdjust(career)
-        val grace = if (career.leagueMatches < 3) 1 else 0
+        val grace = (if (career.leagueMatches < 3) 1 else 0) + (when (career.specialism) { "White-ball" -> 1; "Test" -> -2; else -> 0 })
         val debut = career.leagueMatches == 0
         val selected = debut || rank - adjust - grace <= cutoff
         val base = "You rank ${ordinal(rank)} of ${group.size} ${roleWord(me.role)} at ${team.name}${if (overseas) " as an overseas player" else ""}, and a T20 XI takes the top $cutoff.${formNote(adjust)}"

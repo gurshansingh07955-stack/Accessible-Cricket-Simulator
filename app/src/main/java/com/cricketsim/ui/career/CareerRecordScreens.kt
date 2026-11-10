@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.CareerHealth
+import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerProfile
 import com.cricketsim.logic.CareerRecords
 import com.cricketsim.logic.CareerSeason
@@ -22,7 +23,7 @@ import com.cricketsim.ui.custom.OptionButton
 import com.cricketsim.ui.custom.PageHeading
 
 /**
- * The career's Career tab (My Player, parts eleven and twelve): this season's objectives, the training focus, fitness, the rankings, the career record,
+ * The career's Career tab (My Player, parts eleven to thirteen): this season's objectives, the training focus, fitness, the rankings, the career record,
  * the honours and retirement; for a retired player the career summary comes first and the rest of the playing parts are left out.
  * Every part has a heading, then plain sentences, so a screen reader can jump from heading to heading.
  */
@@ -32,6 +33,7 @@ internal fun CareerRecordTab(
     seasons: List<TournamentState>?,
     rankLines: List<String>,
     onFocus: (String?) -> Unit,
+    onSpecialism: (String?) -> Unit,
     onRetire: () -> Unit
 ) {
     PageHeading("Career")
@@ -70,6 +72,35 @@ internal fun CareerRecordTab(
                 !chosen, false
             ) { onFocus(value) }
         }
+    }
+
+    if (!career.retired && career.atOrAboveState) {
+        SectionHeading("Format specialism")
+        BodyLine(
+            "A specialist is preferred by the selectors in his format (a place in his favour) and less in the other (a place against). " +
+                "A white-ball specialist also gets more franchise league offers; a Test specialist gets fewer. Now: ${career.specialism?.let { if (it == "Test") "Test specialist" else "white-ball specialist" } ?: "all formats"}."
+        )
+        listOf<Pair<String?, String>>(
+            null to "All formats",
+            "Test" to "Test specialist",
+            "White-ball" to "White-ball specialist"
+        ).forEach { (value, label) ->
+            val chosen = career.specialism == value
+            Spacer(modifier = Modifier.height(6.dp))
+            OptionButton(
+                if (chosen) "$label (chosen)" else label,
+                when (value) {
+                    "Test" -> "Test series are yours; one-day and T20 matches and leagues are harder to get into."
+                    "White-ball" -> "One-day and T20 matches and leagues are yours; Test series are harder to get into."
+                    else -> "No preference: every format is judged the same."
+                },
+                !chosen, false
+            ) { onSpecialism(value) }
+        }
+    }
+    if (!career.retired && career.isInternational) {
+        SectionHeading("National captaincy")
+        BodyLine(CareerInternational.captaincyLine(career))
     }
 
     SectionHeading("Rankings")

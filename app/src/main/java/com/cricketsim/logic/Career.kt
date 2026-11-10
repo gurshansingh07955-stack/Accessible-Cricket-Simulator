@@ -98,12 +98,17 @@ data class CareerProfile(
     /** True once he has retired: the career is over and only the summary is shown. */
     val retired: Boolean = false,
     /** The season in which he retired. */
-    val retiredSeason: Int = 0
+    val retiredSeason: Int = 0,
+    // Part thirteen: national captaincy and the format he specialises in.
+    /** "Vice-captain" or "Captain" of his country (null = a player). */
+    val nationalRole: String? = null,
+    /** "Test" or "White-ball" (null = all formats). */
+    val specialism: String? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
     /** The club captain makes the team decisions in his matches: the XI, the toss, the bowlers, the field, the batting order. */
-    val isCaptain: Boolean get() = leadership == "Captain" && !isState && !isInternational
+    val isCaptain: Boolean get() = (leadership == "Captain" && !isState && !isInternational) || (isInternational && nationalRole == "Captain")
 
     /** True once he has been called up to the state squad. */
     val isState: Boolean get() = level == "State"
