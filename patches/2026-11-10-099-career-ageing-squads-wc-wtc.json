@@ -1,0 +1,128 @@
+{
+  "name": "My Player part fourteen: ageing squads, the ODI World Cup, the World Test Championship final",
+  "message": "Career: computer squads age with the career, an ODI World Cup every fourth season, the World Test Championship final in odd seasons",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+    "contains": "fun advanceWc("
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    const val PREFIX = \"careerintl_\"\n",
+      "replace": "    const val PREFIX = \"careerintl_\"\n\n    /** The ODI World Cup of a career season (a tournament of ten national teams, built here; its id must not start with PREFIX, which means a two-team series). */\n    const val WC_PREFIX = \"careerwc_\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    fun isTournament(state: TournamentState): Boolean = state.tournamentId in TOURNAMENT_IDS",
+      "replace": "    fun isTournament(state: TournamentState): Boolean = state.tournamentId in TOURNAMENT_IDS || state.tournamentId.startsWith(WC_PREFIX)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        tournamentId.startsWith(PREFIX) -> tournamentId.substringAfterLast('_')\n",
+      "replace": "        tournamentId.startsWith(PREFIX) || tournamentId.startsWith(WC_PREFIX) -> tournamentId.substringAfterLast('_')\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val squad = nationalTeam(career.country) ?: return null\n",
+      "replace": "        val squad = nationalTeam(career.country)?.let { evolved(it, career.season, null) } ?: return null\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val squad = nationalTeam(career.country)\n",
+      "replace": "        val squad = nationalTeam(career.country)?.let { evolved(it, career.season, null) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val everyone = CricketData.getAllTeams()\n",
+      "replace": "        // The computer's squads age with the career: the young improve, the old decline (see evolved).\n        val everyone = CricketData.getAllTeams().map { evolved(it, maxOf(1, career.season), null) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        // One tournament closes the season, after the series.\n",
+      "replace": "        // In odd seasons the two best Test teams play the World Test Championship final (the player's country must be one of them).\n        if (season % 2 == 1) {\n            val finalStart = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * offsetWeeks) }.timeInMillis\n            val finalState = wtcFinal(career, season, everyone, mine, me, finalStart)\n            if (finalState != null) {\n                out.add(finalState)\n                offsetWeeks += 2\n            }\n        }\n        // One tournament closes the season, after the series.\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val asian = career.country == \"India\" || career.country == \"Pakistan\"\n",
+      "replace": "        if (season % 4 == 1) return odiWorldCup(career, season, me, startAt)\n        val asian = career.country == \"India\" || career.country == \"Pakistan\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "            val teams = state0.teams.map { t -> if (t.id == team.id) CareerDomestic.withPlayer(t, mine) else t }\n",
+      "replace": "            val teams = state0.teams.map { t ->\n                val aged = evolved(t, season, null)\n                if (t.id == team.id) CareerDomestic.withPlayer(aged, mine) else aged\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    private class TourDef(\n",
+      "replace": "    // ------------------------------------------------------------ part fourteen: ageing squads, the ODI World Cup, the Test championship final\n\n    /**\n     * A national or franchise team as it is after [season] - 1 seasons of the career. Players have no age in the game, so each gets one from his name (24 to 37);\n     * every season of the career a player under 27 gains 1.5 rating points, one of 33 or over loses 1.5 (never more than 12 in all, and at most about 5 are gained), in batting\n     * and bowling, half of it in fielding. [protectId] (the player's own id) is left alone.\n     */\n    fun evolved(team: Team, season: Int, protectId: String?): Team {\n        val steps = (season - 1).coerceAtLeast(0)\n        if (steps == 0) return team\n        return team.copy(players = team.players.map { p ->\n            if (p.id == protectId) p\n            else {\n                val age0 = 24 + (p.name.hashCode() and 0x7fffffff) % 14\n                var delta = 0.0\n                for (y in 0 until steps) {\n                    val age = age0 + y\n                    delta += when {\n                        age < 27 -> 1.5\n                        age < 33 -> 0.0\n                        else -> -1.5\n                    }\n                }\n                val d = delta.coerceAtLeast(-12.0).roundToInt()\n                if (d == 0) p\n                else p.copy(\n                    battingRating = (p.battingRating + d).coerceIn(10, 99),\n                    bowlingRating = (p.bowlingRating + d).coerceIn(10, 99),\n                    fieldingRating = (p.fieldingRating + d / 2).coerceIn(10, 99)\n                )\n            }\n        })\n    }\n\n    /** Every pair of a list once (the circle method), 45 matches for ten teams. */\n    private fun roundRobin(ids: List<String>): List<Pair<String, String>> {\n        val list = ids.toMutableList()\n        if (list.size % 2 == 1) list.add(\"\")\n        val n = list.size\n        val out = ArrayList<Pair<String, String>>()\n        for (round in 0 until n - 1) {\n            for (i in 0 until n / 2) {\n                val a = list[i]\n                val b = list[n - 1 - i]\n                if (a.isNotEmpty() && b.isNotEmpty()) out.add(if (round % 2 == 0) a to b else b to a)\n            }\n            val last = list.removeAt(n - 1)\n            list.add(1, last)\n        }\n        return out\n    }\n\n    /**\n     * The ODI World Cup of an international season (seasons 1, 5, 9 ...): the ten Test nations play each other once (45 matches, 50 overs a side), then the top four play two\n     * semi-finals (1st v 4th, 2nd v 3rd) and the Final ([advanceWc]). The host country changes every four seasons. Null if it could not be built.\n     */\n    private fun odiWorldCup(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {\n        return try {\n            val all = CricketData.getAllTeams().map { evolved(it, season, null) }\n            val nations = OPPONENTS.mapNotNull { n -> all.find { it.name == n } }\n            val mineTeam = nations.find { it.name == career.country } ?: return null\n            if (nations.size < 8) return null\n            val teams = nations.map { t -> if (t.id == mineTeam.id) CareerDomestic.withPlayer(t, me.copy(teamId = mineTeam.id)) else t }\n            val grounds = groundsOf(AllStadiums.list(), OPPONENTS[(season / 4) % OPPONENTS.size])\n            val fixtures = ArrayList<TournamentFixture>()\n            roundRobin(teams.map { it.id }).forEachIndexed { i, pair ->\n                fixtures.add(TournamentFixture(i, i + 1, CplData.LEAGUE, pair.first, pair.second, grounds[i % grounds.size].id))\n            }\n            var number = fixtures.size\n            for (stage in listOf(\"Semi-final 1\", \"Semi-final 2\", \"Final\")) {\n                fixtures.add(TournamentFixture(number, number + 1, stage, null, null, grounds[0].id))\n                number++\n            }\n            val tags = LinkedHashMap<String, SquadTag>()\n            teams.forEach { t -> t.players.forEach { tags[it.id] = SquadTag.DOMESTIC } }\n            TournamentState(\n                version = CplData.SAVE_VERSION,\n                tournamentId = \"$WC_PREFIX${career.id}_s${season}_odi\",\n                name = \"ODI World Cup, season $season\",\n                userTeamId = mineTeam.id,\n                teams = teams,\n                tags = tags,\n                fixtures = fixtures,\n                createdAt = startAt\n            )\n        } catch (e: Exception) {\n            null\n        }\n    }\n\n    /** Fills in the ODI World Cup's semi-finals and Final as the teams become known (called from CplSimulator.advancePlayoffs after every match). */\n    fun advanceWc(state: TournamentState): TournamentState {\n        val league = state.fixtures.filter { it.stage == CplData.LEAGUE }\n        if (league.isEmpty() || league.any { it.result == null }) return state\n        val table = CplData.standings(state)\n        if (table.size < 4) return state\n        var fx = state.fixtures\n        fun setTeams(stage: String, home: String?, away: String?) {\n            if (home == null || away == null) return\n            fx = fx.map { if (it.stage == stage && it.homeId == null) it.copy(homeId = home, awayId = away) else it }\n        }\n        setTeams(\"Semi-final 1\", table[0].team.id, table[3].team.id)\n        setTeams(\"Semi-final 2\", table[1].team.id, table[2].team.id)\n        val winner1 = fx.firstOrNull { it.stage == \"Semi-final 1\" }?.result?.winnerId\n        val winner2 = fx.firstOrNull { it.stage == \"Semi-final 2\" }?.result?.winnerId\n        if (winner1 != null && winner2 != null) setTeams(\"Final\", winner1, winner2)\n        return state.copy(fixtures = fx)\n    }\n\n    /**\n     * The World Test Championship final of an odd season: the two strongest Test teams of the season (the average of each team's best eleven, with a little luck drawn from the\n     * career and the season) meet in a one-match Test series in England. Only if the player's country is one of them; null otherwise.\n     */\n    private fun wtcFinal(career: CareerProfile, season: Int, everyone: List<Team>, mine: Team, me: Player, startAt: Long): TournamentState? {\n        val random = Random(career.id.hashCode() * 13 + season)\n        val strength = OPPONENTS.mapNotNull { n -> everyone.find { it.name == n } }\n            .associate { t -> t.id to (t.players.map { value(it) }.sortedDescending().take(11).average() + random.nextDouble() * 6.0 - 3.0) }\n        val finalists = strength.entries.sortedByDescending { it.value }.map { it.key }.take(2)\n        if (mine.id !in finalists) return null\n        val opp = everyone.find { it.id == finalists.first { id -> id != mine.id } } ?: return null\n        val myTeam = CareerDomestic.withPlayer(mine, me)\n        val ground = groundsOf(AllStadiums.list(), \"England\")[0]\n        val tags = LinkedHashMap<String, SquadTag>()\n        (myTeam.players + opp.players).forEach { tags[it.id] = SquadTag.DOMESTIC }\n        return TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = \"$PREFIX${career.id}_s${season}_wtc_test\",\n            name = \"World Test Championship final: ${myTeam.name} v ${opp.name}\",\n            userTeamId = myTeam.id,\n            teams = listOf(myTeam, opp),\n            tags = tags,\n            fixtures = listOf(TournamentFixture(0, 1, CplData.LEAGUE, myTeam.id, opp.id, ground.id)),\n            createdAt = startAt\n        )\n    }\n\n    private class TourDef(\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "            for (team in built.pair.first) {\n",
+      "replace": "            for (team in built.pair.first.map { CareerInternational.evolved(it, career.season, null) }) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "            val teams = state0.teams.map { t -> if (t.id == team.id) CareerDomestic.withPlayer(t, me) else t }\n",
+      "replace": "            val teams = state0.teams.map { t ->\n                val aged = CareerInternational.evolved(t, career.season, null)\n                if (t.id == team.id) CareerDomestic.withPlayer(aged, me) else aged\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerRecords.kt",
+      "find": "        val teams = CricketData.getAllTeams()\n",
+      "replace": "        val teams = CricketData.getAllTeams().map { CareerInternational.evolved(it, career.season, null) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        if (tournamentId.startsWith(CareerInternational.PREFIX)) return CareerInternational.rulesFor(tournamentId)",
+      "replace": "        if (tournamentId.startsWith(CareerInternational.PREFIX) || tournamentId.startsWith(CareerInternational.WC_PREFIX)) return CareerInternational.rulesFor(tournamentId)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)\n",
+      "replace": "        if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)\n        if (state.tournamentId.startsWith(CareerInternational.WC_PREFIX)) return CareerInternational.advanceWc(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "CAREER_ROADMAP.md",
+      "find": "- Fourteen: computer squads that age and change, an ODI World Cup and a Test championship final.",
+      "replace": "- Fourteen: computer squads that age, an ODI World Cup and the World Test Championship final (patch 099). Done.\n- Later ideas from the research: an international affiliation (aim for another country's team), short press-conference style text after a series, a real ODI World Cup format of 14 teams, injury replacements, contracts and pay, retentions in the IPL, the ILT20, Impact Players in career matches.",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_FOURTEEN.md",
+      "content": "# My Player, part fourteen: ageing squads, the ODI World Cup, the World Test Championship final\n\n**The season cycle** is now: even seasons the T20 World Cup; seasons 1, 5, 9 ... the ODI World Cup; seasons 3, 7, 11 ... the Asia Cup for India and Pakistan and the Champions Trophy for the others. In every odd season the World Test Championship final is added before the tournament when the player's country qualifies.\n\n**Computer squads age** (`CareerInternational.evolved`). Players have no age in the game, so each gets one from his name (24 to 37). In every season of the career a player under 27 gains 1.5 rating points, one of 33 or over loses 1.5 (at most 12 in all), in batting and bowling, half of it in fielding;\nthe player himself is left alone. It is applied to the national teams in the career's series and tournaments, to the franchise squads in the league offers and league seasons, to the squad the national selectors compare him with, and to the rankings. A career of many seasons therefore meets a world that has moved on:\nold stars fade and young players rise. Not done: real retirements and new players with names (there is no age to retire on, and no name generator), and the domestic squads of the state and club leagues.\n\n**ODI World Cup** (`odiWorldCup`, `advanceWc`). The ten Test nations, 50 overs a side, every nation plays the other nine once (45 matches, at the grounds of a host country that changes every four seasons), then 1st v 4th and 2nd v 3rd in two semi-finals and the Final.\nThe game's real 2027 and 2031 World Cups have 14 teams (not built).\n\n**World Test Championship final** (`wtcFinal`). In an odd season the two strongest Test teams of the season (the average of each team's best eleven, with a little luck drawn from the career and the season) play a one-match, five-day series in England. It only appears when the player's country is one of the two, and the Test can be drawn\n(the result line says the series was drawn).\n\n**Dials.** The ageing rates in `evolved`, the cycle in `tournamentFor`, the luck in `wtcFinal`.\n",
+      "mustNotExist": true
+    }
+  ]
+}
