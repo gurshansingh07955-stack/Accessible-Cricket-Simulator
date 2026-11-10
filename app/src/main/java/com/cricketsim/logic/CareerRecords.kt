@@ -143,7 +143,7 @@ object CareerRecords {
 
     /** Where his ratings put him among the players of the game's national teams, and in his own country's squad. Builds the teams: call it off the main thread. */
     fun rankings(career: CareerProfile): List<String> {
-        val teams = CricketData.getAllTeams()
+        val teams = CricketData.getAllTeams().map { CareerInternational.evolved(it, career.season, null) }
         val everyone = teams.flatMap { it.players }
         val role = CareerSeason.roleOf(career.role)
         val out = ArrayList<String>()

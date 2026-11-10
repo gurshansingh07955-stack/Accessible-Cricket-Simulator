@@ -32,4 +32,5 @@ Found in the game's own pages, reviews and the Big Ant and PlanetCricket forums:
 - Eleven: career record and rankings, season objectives, a training focus, honours (the Career tab). Done (patch 096).
 - Twelve: injuries and workload, ageing, retirement and a career summary (patch 097). Done.
 - Thirteen: international captaincy and specialising in a format (patch 098). Done.
-- Fourteen: computer squads that age and change, an ODI World Cup and a Test championship final.
+- Fourteen: computer squads that age, an ODI World Cup and the World Test Championship final (patch 099). Done.
+- Later ideas from the research: an international affiliation (aim for another country's team), short press-conference style text after a series, a real ODI World Cup format of 14 teams, injury replacements, contracts and pay, retentions in the IPL, the ILT20, Impact Players in career matches.

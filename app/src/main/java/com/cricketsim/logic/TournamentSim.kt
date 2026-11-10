@@ -492,6 +492,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         if (state.tournamentId == ChampionsTrophy.TOURNAMENT_ID) return ChampionsTrophy.advance(state)
         if (state.tournamentId == AsiaCup.TOURNAMENT_ID) return AsiaCup.advance(state)
         if (state.tournamentId == AsianGames.TOURNAMENT_ID) return AsianGames.advance(state)
+        if (state.tournamentId.startsWith(CareerInternational.WC_PREFIX)) return CareerInternational.advanceWc(state)
         if (state.tournamentId == Ranji.TOURNAMENT_ID) return Ranji.advance(state)
         if (DomesticFc.isSmall(state.tournamentId)) return DomesticFc.advance(state)
         if (DomesticWhiteBall.isWhiteBall(state.tournamentId)) return DomesticWhiteBall.advance(state)

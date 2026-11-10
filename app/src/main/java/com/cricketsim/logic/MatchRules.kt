@@ -112,7 +112,7 @@ object TournamentRules {
         // A career's competitions (My Player): the T20, 50-over and 3-day club leagues.
         if (tournamentId.startsWith("career_")) return CareerSeason.rulesFor(tournamentId)
         // A career's international series (My Player, part eight): T20, one-day and Test series.
-        if (tournamentId.startsWith(CareerInternational.PREFIX)) return CareerInternational.rulesFor(tournamentId)
+        if (tournamentId.startsWith(CareerInternational.PREFIX) || tournamentId.startsWith(CareerInternational.WC_PREFIX)) return CareerInternational.rulesFor(tournamentId)
         // The Ranji Trophy: first-class matches (four days, five in the knockouts), no DRS, no rain.
         DomesticFc.rulesFor(tournamentId, stage)?.let { return it }
         // The Syed Mushtaq Ali Trophy (20 overs) and the Vijay Hazare Trophy (50 overs): no DRS, no rain.

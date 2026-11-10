@@ -1,6 +1,6 @@
-Patch run: 42801695960
-Timestamp (UTC): 2026-11-10T10:44:44Z
+Patch run: 42803728228
+Timestamp (UTC): 2026-11-10T10:59:39Z
 Result: OK
 -----
-Patch 2026-11-10-098-career-captaincy-specialism.json
-  applied 16 operation(s) to 8 file(s)
+Patch 2026-11-10-099-career-ageing-squads-wc-wtc.json
+  applied 17 operation(s) to 7 file(s)

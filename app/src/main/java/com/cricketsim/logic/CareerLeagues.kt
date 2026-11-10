@@ -175,7 +175,7 @@ object CareerLeagues {
             val built = (try { league.build(seed) } catch (e: Exception) { null }) ?: continue
             val overseas = league.country != career.country
             val here = ArrayList<Candidate>()
-            for (team in built.pair.first) {
+            for (team in built.pair.first.map { CareerInternational.evolved(it, career.season, null) }) {
                 val group = team.players.filter { it.role == role }
                 val rank = 1 + group.count { value(it) > mine }
                 val cutoff = ((slots(role) / factor).roundToInt() - (if (overseas) 1 else 0)).coerceIn(1, group.size + 1)
@@ -202,7 +202,10 @@ object CareerLeagues {
             val state0 = league.make(offer.teamId, built, Random(offer.seed))
             val me = CareerDomestic.asPlayer(career, team.id)
             val tag = if (offer.overseas) SquadTag.OVERSEAS else SquadTag.DOMESTIC
-            val teams = state0.teams.map { t -> if (t.id == team.id) CareerDomestic.withPlayer(t, me) else t }
+            val teams = state0.teams.map { t ->
+                val aged = CareerInternational.evolved(t, career.season, null)
+                if (t.id == team.id) CareerDomestic.withPlayer(aged, me) else aged
+            }
             state0.copy(name = "${league.name}, season ${career.season}", teams = teams, tags = state0.tags + (me.id to tag), createdAt = startAt)
         } catch (e: Exception) {
             null
