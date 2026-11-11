@@ -97,8 +97,22 @@ object CareerSelection {
         if (best.players.any { it.id == userPlayerId }) return best
         val others = best.players.filter { it.role != PlayerRole.WICKETKEEPER || me.role == PlayerRole.WICKETKEEPER }
         val sameKind = others.filter { it.role == me.role }
-        val victim = (if (sameKind.isEmpty()) others else sameKind).minByOrNull { v(it) } ?: return best
+        val firstVictim = (if (sameKind.isEmpty()) others else sameKind).minByOrNull { v(it) } ?: return best
+        val victim = overseasSafeVictim(best, others, me, firstVictim, tags)
         return best.copy(players = best.players.map { if (it.id == victim.id) me else it })
+    }
+
+    /** Most overseas players an XI may have: six in Major League Cricket (it has US-tagged players), four everywhere else. */
+    private fun overseasCap(tags: Map<String, SquadTag>): Int = if (tags.containsValue(SquadTag.USA)) 6 else 4
+
+    /**
+     * The player he replaces. If he is an overseas player and the XI already has the most overseas players allowed, he must take an overseas player's place, or the cap would be
+     * broken (part seventeen); otherwise the weakest player of his own kind, as before.
+     */
+    private fun overseasSafeVictim(best: Team, others: List<Player>, me: Player, victim: Player, tags: Map<String, SquadTag>): Player {
+        if (tags[me.id] != SquadTag.OVERSEAS || tags[victim.id] == SquadTag.OVERSEAS) return victim
+        if (best.players.count { tags[it.id] == SquadTag.OVERSEAS } < overseasCap(tags)) return victim
+        return others.filter { tags[it.id] == SquadTag.OVERSEAS }.minByOrNull { v(it) } ?: victim
     }
 
     /** The eleven the player's club takes the field with for a match he is selected for (captain and keeper set), the player at his batting number. */

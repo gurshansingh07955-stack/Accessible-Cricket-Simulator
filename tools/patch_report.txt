@@ -1,6 +1,6 @@
-Patch run: 42934802700
-Timestamp (UTC): 2026-11-11T00:53:09Z
+Patch run: 42991921915
+Timestamp (UTC): 2026-11-11T09:03:24Z
 Result: OK
 -----
-Patch 2026-11-11-102-career-move-abroad.json
-  applied 12 operation(s) to 6 file(s)
+Patch 2026-11-11-103-career-worldcup14-impact-surge-overseas.json
+  applied 10 operation(s) to 6 file(s)

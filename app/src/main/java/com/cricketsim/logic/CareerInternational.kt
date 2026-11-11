@@ -474,8 +474,103 @@ object CareerInternational {
         }
     }
 
+    private const val SUPER_SIX = "Super Six"
+
+    /**
+     * The ODI World Cup as the ICC plays it from 2027: 14 teams (the ten Test nations, Ireland, Zimbabwe, the Netherlands and Scotland) in two groups of seven, dealt out by strength in a snake so that the
+     * groups are balanced (21 matches a group); the top three of each group go to a Super Six (each plays the three from the other group, 9 matches, no points carried over); the top four of the Super Six
+     * play the semi-finals (1st v 4th, 2nd v 3rd) and the Final ([advanceWc14]). The host changes every four seasons. Null if it could not be built.
+     */
+    private fun odiWorldCup14(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {
+        return try {
+            val all = CricketData.getAllTeams().map { evolved(it, season, null) }
+            val names = OPPONENTS + listOf("Ireland", "Zimbabwe", "Netherlands", "Scotland")
+            val nations = names.mapNotNull { n -> all.find { it.name == n } }
+            val mineTeam = nations.find { it.name == career.nation } ?: return null
+            if (nations.size < 12) return null
+            val teams = nations.map { t -> if (t.id == mineTeam.id) CareerDomestic.withPlayer(t, me.copy(teamId = mineTeam.id)) else t }
+            val ranked = teams.sortedByDescending { t -> t.players.map { value(it) }.sortedDescending().take(11).average() }
+            val groupA = ArrayList<Team>()
+            val groupB = ArrayList<Team>()
+            ranked.forEachIndexed { i, t -> if (i % 4 == 0 || i % 4 == 3) groupA.add(t) else groupB.add(t) }
+            val grounds = groundsOf(AllStadiums.list(), OPPONENTS[(season / 4) % OPPONENTS.size])
+            val fixtures = ArrayList<TournamentFixture>()
+            var id = 0
+            for ((label, group) in listOf("Group A" to groupA, "Group B" to groupB)) {
+                for (pair in roundRobin(group.map { it.id })) {
+                    fixtures.add(TournamentFixture(id, id + 1, label, pair.first, pair.second, grounds[id % grounds.size].id))
+                    id++
+                }
+            }
+            repeat(9) {
+                fixtures.add(TournamentFixture(id, id + 1, SUPER_SIX, null, null, grounds[id % grounds.size].id))
+                id++
+            }
+            for (stage in listOf("Semi-final 1", "Semi-final 2", "Final")) {
+                fixtures.add(TournamentFixture(id, id + 1, stage, null, null, grounds[0].id))
+                id++
+            }
+            val tags = LinkedHashMap<String, SquadTag>()
+            teams.forEach { t -> t.players.forEach { tags[it.id] = SquadTag.DOMESTIC } }
+            TournamentState(
+                version = CplData.SAVE_VERSION,
+                tournamentId = "$WC_PREFIX${career.id}_s${season}_odi",
+                name = "ODI World Cup, season $season",
+                userTeamId = mineTeam.id,
+                teams = teams,
+                tags = tags,
+                fixtures = fixtures,
+                createdAt = startAt
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** The teams of a stage in table order. */
+    private fun stageIds(state: TournamentState, stage: String): List<String> {
+        val ids = state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()
+        return CplData.standings(state, stage).filter { it.team.id in ids }.map { it.team.id }
+    }
+
+    /** Fills in the Super Six, the semi-finals and the Final of the 14-team ODI World Cup as the teams become known. Safe after every match. */
+    private fun advanceWc14(state: TournamentState): TournamentState {
+        var fx = state.fixtures
+        fun complete(stage: String): Boolean {
+            val l = fx.filter { it.stage == stage }
+            return l.isNotEmpty() && l.all { it.result != null }
+        }
+        fun setTeams(stage: String, home: String?, away: String?) {
+            if (home == null || away == null) return
+            fx = fx.map { if (it.stage == stage && it.homeId == null) it.copy(homeId = home, awayId = away) else it }
+        }
+        if (complete("Group A") && complete("Group B")) {
+            val a = stageIds(state, "Group A")
+            val b = stageIds(state, "Group B")
+            if (a.size >= 3 && b.size >= 3) {
+                val open = fx.filter { it.stage == SUPER_SIX && it.homeId == null }.map { it.id }
+                open.forEachIndexed { k, fid ->
+                    fx = fx.map { f -> if (f.id == fid) f.copy(homeId = a[k / 3], awayId = b[k % 3]) else f }
+                }
+            }
+        }
+        val now = state.copy(fixtures = fx)
+        if (complete(SUPER_SIX)) {
+            val top = stageIds(now, SUPER_SIX)
+            if (top.size >= 4) {
+                setTeams("Semi-final 1", top[0], top[3])
+                setTeams("Semi-final 2", top[1], top[2])
+            }
+        }
+        val winner1 = fx.firstOrNull { it.stage == "Semi-final 1" }?.result?.winnerId
+        val winner2 = fx.firstOrNull { it.stage == "Semi-final 2" }?.result?.winnerId
+        if (winner1 != null && winner2 != null) setTeams("Final", winner1, winner2)
+        return state.copy(fixtures = fx)
+    }
+
     /** Fills in the ODI World Cup's semi-finals and Final as the teams become known (called from CplSimulator.advancePlayoffs after every match). */
     fun advanceWc(state: TournamentState): TournamentState {
+        if (state.fixtures.any { it.stage == "Group A" }) return advanceWc14(state)
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
         if (league.isEmpty() || league.any { it.result == null }) return state
         val table = CplData.standings(state)
@@ -531,7 +626,7 @@ object CareerInternational {
      * the Champions Trophy (50 overs) in odd ones, and for India and Pakistan the Asia Cup in every second odd season. Null if it could not be built.
      */
     private fun tournamentFor(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {
-        if (season % 4 == 1) return odiWorldCup(career, season, me, startAt)
+        if (season % 4 == 1) return odiWorldCup14(career, season, me, startAt)
         val asian = career.nation == "India" || career.nation == "Pakistan"
         val def = when {
             season % 2 == 0 -> TourDef("T20 World Cup", { T20WorldCup.buildTeams() }, { t, b -> T20WorldCup.newTournament(t, b) })

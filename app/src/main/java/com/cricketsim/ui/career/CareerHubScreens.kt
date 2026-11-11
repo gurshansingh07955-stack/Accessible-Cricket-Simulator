@@ -48,6 +48,7 @@ import com.cricketsim.logic.CareerSeason
 import com.cricketsim.logic.CareerDomestic
 import com.cricketsim.logic.CareerFinance
 import com.cricketsim.logic.CareerInternational
+import com.cricketsim.logic.BigBashLeague
 import com.cricketsim.logic.CareerLeagues
 import com.cricketsim.logic.CareerMove
 import com.cricketsim.logic.CareerRecords
@@ -355,6 +356,8 @@ fun CareerHub(
                         rules = TournamentRules.rulesFor(state.tournamentId, fixture?.stage),
                         careerPlayerId = CareerSeason.playerIdIn(state, career),
                         careerCaptain = career.isCaptain,
+                        powerSurge = state.tournamentId == BigBashLeague.TOURNAMENT_ID,
+                        impact = CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, career.isCaptain),
                         stadium = stadium,
                         userTeam = flow.userXI,
                         opponentTeam = flow.oppXI,

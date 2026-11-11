@@ -219,6 +219,24 @@ object CareerLeagues {
         }
     }
 
+    /**
+     * The IPL's Impact Player rule in a career match: the computer's choice of five substitutes for each side, when the player is the captain (he then uses his Impact Player from the
+     * Match info page, as in the game's IPL). Null in every other league and when he is not the captain (a player who only bats and bowls leaves the team decisions to the computer,
+     * so no Impact Players are used by either side).
+     */
+    fun impactFor(state: TournamentState, userXI: Team, oppXI: Team, captain: Boolean): ImpactSetup? {
+        if (state.tournamentId != IplSeason.TOURNAMENT_ID || !captain) return null
+        val userSquad = state.teams.find { it.id == userXI.id } ?: return null
+        val oppSquad = state.teams.find { it.id == oppXI.id } ?: return null
+        val overseas = state.tags.filterValues { it == SquadTag.OVERSEAS }.keys.toList()
+        val overseasSet = overseas.toSet()
+        return ImpactSetup(
+            ImpactPlayer.aiSubstitutes(userSquad.players, userXI.players, overseasSet),
+            ImpactPlayer.aiSubstitutes(oppSquad.players, oppXI.players, overseasSet),
+            overseas
+        )
+    }
+
     // ------------------------------------------------------------ selection for a match
 
     /**
