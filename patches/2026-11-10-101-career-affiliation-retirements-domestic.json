@@ -1,0 +1,160 @@
+{
+  "name": "My Player part sixteen: international affiliation, retiring veterans, ageing domestic squads",
+  "message": "Career: aim for another country's national team, veterans retire and are replaced, state squads age",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/SquadEvolution.kt",
+    "contains": "object SquadEvolution"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val media: List<String>? = null\n) {",
+      "replace": "    val media: List<String>? = null,\n    // Part sixteen: international affiliation.\n    /** The country whose national team he is aiming for when it is not his own (null = his own country). */\n    val represents: String? = null\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val atOrAboveState: Boolean get() = isState || isInternational",
+      "replace": "    val atOrAboveState: Boolean get() = isState || isInternational\n\n    /** The country of the national team he plays for or aims for. */\n    val nation: String get() = represents ?: country",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "You play for the $country national squad. Season",
+      "replace": "You play for the $nation national squad. Season",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "career.country",
+      "replace": "career.nation",
+      "count": 23
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    fun nationalTeam(country: String): Team? = CricketData.getAllTeams().find { it.name == country }",
+      "replace": "    fun nationalTeam(country: String): Team? = CricketData.getAllTeams().find { it.name == country }\n\n    /** The countries whose national teams a career can aim for (the ten Test nations). */\n    fun nations(): List<String> = OPPONENTS\n\n    /** State matches the national selectors want to have seen: twice as many for a player aiming for another country (the residency period). */\n    fun neededMatches(career: CareerProfile): Int = if (career.represents != null) MIN_STATE_MATCHES * 2 else MIN_STATE_MATCHES",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val seen = career.isInternational || career.stateMatches >= MIN_STATE_MATCHES\n",
+      "replace": "        val seen = career.isInternational || career.stateMatches >= neededMatches(career)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "of the $MIN_STATE_MATCHES state matches they ask for.\"",
+      "replace": "of the ${neededMatches(career)} state matches they ask for.\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "            if (career.stateMatches < MIN_STATE_MATCHES) {\n",
+      "replace": "            if (career.stateMatches < neededMatches(career)) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "                out.add(\"The national selectors want at least $MIN_STATE_MATCHES state matches first: ${MIN_STATE_MATCHES - career.stateMatches} to go.\")",
+      "replace": "                out.add(\"The national selectors want at least ${neededMatches(career)} state matches first: ${neededMatches(career) - career.stateMatches} to go.\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    fun evolved(team: Team, season: Int, protectId: String?): Team {",
+      "replace": "    fun evolved(team: Team, season: Int, protectId: String?, nameCountry: String? = null): Team {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "                val age0 = 24 + (p.name.hashCode() and 0x7fffffff) % 14\n",
+      "replace": "                val age0 = 24 + (p.name.hashCode() and 0x7fffffff) % 14\n                // A veteran who has reached retirement age is replaced by a young player (SquadEvolution).\n                if (age0 + steps >= SquadEvolution.RETIRE_AGE) return@map SquadEvolution.successor(team, p, nameCountry)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "career.country",
+      "replace": "career.nation",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerRecords.kt",
+      "find": "career.country",
+      "replace": "career.nation",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerHealth.kt",
+      "find": "career.country",
+      "replace": "career.nation",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "\"You play for ${career.country} this season.\")",
+      "replace": "\"You play for ${career.nation} this season.\")",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerDomestic.kt",
+      "find": "            if (team != null) return team\n",
+      "replace": "            if (team != null) return CareerInternational.evolved(team, career.season, null, career.country)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerDomestic.kt",
+      "find": "            val teams = state0.teams.map { t -> if (t.id == team.id) withPlayer(t, me) else t }\n",
+      "replace": "            val teams = state0.teams.map { t ->\n                val aged = CareerInternational.evolved(t, career.season, null, career.country)\n                if (t.id == team.id) withPlayer(aged, me) else aged\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "{ spec -> onCareerChanged(career.copy(specialism = spec)) }, retireNow)",
+      "replace": "{ spec -> onCareerChanged(career.copy(specialism = spec)) }, { nation -> onCareerChanged(career.copy(represents = nation, nationalRole = null)) }, retireNow)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "CAREER_ROADMAP.md",
+      "find": "- Sixteen: an international affiliation (aim for another country's team); real retirements with new named players in the computer squads; ageing for the domestic squads.",
+      "replace": "- Sixteen: an international affiliation; real retirements with new named players in the computer squads; ageing for the domestic squads (patch 101). Done.",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_SIXTEEN.md",
+      "content": "# My Player, part sixteen: international affiliation, retiring veterans, ageing domestic squads\n\n**International affiliation** (Career tab, \"International affiliation\", for a player who has not played an international match). He can aim for the national team of another of the ten Test nations (`CareerProfile.represents`, `CareerProfile.nation`).\nThe national selectors, the series, the tournaments, the leagues' rules (an Indian player may only play the IPL, a Pakistani player not the IPL, overseas or home in a league) and the captaincy then all use that nation. Because of the residency period the other country's selectors want\ntwice as many state matches (16 instead of 8: `CareerInternational.neededMatches`). Switching resets his national captaincy; it can be changed until his first international match; choosing his own country again puts it back.\n\n**Retiring veterans** (`SquadEvolution`). The computer's squads have no ages, so each player gets one from his name (24 to 37). When his age reaches 38 in the career's timeline he retires and a young player of the same role and bowling style takes his place, with a name from the country's list\n(ten countries; franchise squads mix the lists) and ratings of 0.72 of the veteran's plus 14. The same veteran always has the same successor. This applies wherever `CareerInternational.evolved` is used: the series and tournaments, the leagues, the squads the selectors compare him with, the rankings and the state squads.\n\n**Ageing domestic squads.** The state teams of the player's country now age and renew the same way (`CareerDomestic.newSeason` and `stateSquad`, with the country's names for the successors). The district club leagues are made up for each career and are not aged.\n\n**Dials.** `SquadEvolution.RETIRE_AGE`, the rating formula in `successor`, `MIN_STATE_MATCHES` (the residency period is twice it).\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/SquadEvolution.kt",
+      "content": "package com.cricketsim.logic\n\nimport kotlin.math.roundToInt\n\n/**\n * My Player, part sixteen: the players who replace the computer squads' veterans. Players have no age in the game, so [CareerInternational.evolved] gives each one from his name\n * (24 to 37); when the career has gone on long enough for his age to reach [RETIRE_AGE] he retires and a young player of the same role and bowling style takes his\n * place, with a name from the country's list and ratings of 0.72 of the veteran's plus 14 (a 90 is replaced by a 79, a 50 by a 50), a little different for each. The same\n * veteran always has the same successor (everything is drawn from the veteran's id), so a saved competition and a new one agree.\n */\nobject SquadEvolution {\n\n    const val RETIRE_AGE = 38\n\n    private class Pool(val first: List<String>, val last: List<String>)\n\n    private val POOLS: Map<String, Pool> = mapOf(\n        \"India\" to Pool(\n            listOf(\"Aarav\", \"Vihaan\", \"Arjun\", \"Rohan\", \"Karan\", \"Ishaan\", \"Dev\", \"Kabir\", \"Nikhil\", \"Yash\", \"Tanmay\", \"Pranav\"),\n            listOf(\"Sharma\", \"Verma\", \"Patel\", \"Reddy\", \"Nair\", \"Singh\", \"Gupta\", \"Joshi\", \"Kulkarni\", \"Menon\", \"Rao\", \"Chauhan\")\n        ),\n        \"Pakistan\" to Pool(\n            listOf(\"Hamza\", \"Bilal\", \"Zain\", \"Umar\", \"Faizan\", \"Shayan\", \"Danish\", \"Adnan\", \"Talha\", \"Rayyan\", \"Haider\", \"Moin\"),\n            listOf(\"Khan\", \"Malik\", \"Butt\", \"Ahmed\", \"Qureshi\", \"Chaudhry\", \"Siddiqui\", \"Raza\", \"Shah\", \"Iqbal\", \"Baig\", \"Mirza\")\n        ),\n        \"Australia\" to Pool(\n            listOf(\"Jack\", \"Oliver\", \"Noah\", \"Lachlan\", \"Mitchell\", \"Cooper\", \"Hunter\", \"Riley\", \"Beau\", \"Flynn\", \"Harry\", \"Max\"),\n            listOf(\"Taylor\", \"Walker\", \"Harris\", \"Cameron\", \"Kelly\", \"Murray\", \"Hughes\", \"Stewart\", \"Fraser\", \"Boyd\", \"Marsh\", \"Dawson\")\n        ),\n        \"England\" to Pool(\n            listOf(\"Harry\", \"George\", \"Oscar\", \"Freddie\", \"Archie\", \"Toby\", \"Callum\", \"Jamie\", \"Ollie\", \"Sam\", \"Rory\", \"Ben\"),\n            listOf(\"Clarke\", \"Wood\", \"Bennett\", \"Ward\", \"Palmer\", \"Holmes\", \"Fletcher\", \"Barker\", \"Gibson\", \"Hayes\", \"Lawson\", \"Pearce\")\n        ),\n        \"South Africa\" to Pool(\n            listOf(\"Thabo\", \"Pieter\", \"Johan\", \"Sipho\", \"Dewald\", \"Kyle\", \"Ruan\", \"Lwazi\", \"Jaco\", \"Tshepo\", \"Willem\", \"Zander\"),\n            listOf(\"Nkosi\", \"Botha\", \"Pretorius\", \"du Plessis\", \"Maseko\", \"Naidoo\", \"Steyn\", \"Venter\", \"Mokoena\", \"Jacobs\", \"Smit\", \"van Wyk\")\n        ),\n        \"New Zealand\" to Pool(\n            listOf(\"Liam\", \"Finn\", \"Tane\", \"Hamish\", \"Callum\", \"Ethan\", \"Mason\", \"Rhys\", \"Josh\", \"Cole\", \"Jacob\", \"Blair\"),\n            listOf(\"Anderson\", \"Tamihana\", \"Henare\", \"Reid\", \"Campbell\", \"Murphy\", \"Parata\", \"Bell\", \"Wilson\", \"Hogg\", \"Ngata\", \"Fraser\")\n        ),\n        \"Sri Lanka\" to Pool(\n            listOf(\"Kasun\", \"Dilshan\", \"Nuwan\", \"Pathum\", \"Chamika\", \"Sachith\", \"Lahiru\", \"Dhananjaya\", \"Thisara\", \"Ashen\", \"Janith\", \"Vimukthi\"),\n            listOf(\"Perera\", \"Fernando\", \"Silva\", \"Gunawardena\", \"Jayasuriya\", \"Rajapaksa\", \"Wickramasinghe\", \"Mendis\", \"Karunaratne\", \"Bandara\", \"Senanayake\", \"Dias\")\n        ),\n        \"West Indies\" to Pool(\n            listOf(\"Kemar\", \"Jason\", \"Devon\", \"Shamar\", \"Rovman\", \"Akeal\", \"Odean\", \"Jermaine\", \"Keacy\", \"Alzarri\", \"Kyle\", \"Brandon\"),\n            listOf(\"Brathwaite\", \"Holder\", \"Hope\", \"Pooran\", \"Joseph\", \"Lewis\", \"Allen\", \"Charles\", \"Walsh\", \"Seales\", \"Thomas\", \"Greaves\")\n        ),\n        \"Bangladesh\" to Pool(\n            listOf(\"Rahim\", \"Tamim\", \"Mehedi\", \"Nasum\", \"Shakib\", \"Litton\", \"Hasan\", \"Taskin\", \"Rubel\", \"Afif\", \"Saif\", \"Mahmud\"),\n            listOf(\"Hossain\", \"Rahman\", \"Islam\", \"Ahmed\", \"Das\", \"Mondol\", \"Chowdhury\", \"Sarkar\", \"Miah\", \"Khan\", \"Uddin\", \"Karim\")\n        ),\n        \"Afghanistan\" to Pool(\n            listOf(\"Rashid\", \"Mujeeb\", \"Najibullah\", \"Ikram\", \"Hazratullah\", \"Fazal\", \"Noor\", \"Gulbadin\", \"Abdul\", \"Karim\", \"Naveen\", \"Darwish\"),\n            listOf(\"Zadran\", \"Ahmadzai\", \"Khil\", \"Rahmani\", \"Omarzai\", \"Farooqi\", \"Shinwari\", \"Stanikzai\", \"Mohammadi\", \"Safi\", \"Noori\", \"Karimi\")\n        )\n    )\n\n    private fun nameFor(country: String?, h: Int): String {\n        val pool = (if (country != null) POOLS[country] else null) ?: POOLS.values.toList()[h % POOLS.size]\n        return pool.first[(h / 7) % pool.first.size] + \" \" + pool.last[(h / 91) % pool.last.size]\n    }\n\n    /**\n     * The young player who takes a retired veteran's place in a squad. [nameCountry] picks the list of names (a national team's own name, or the country of a domestic team);\n     * null or unknown mixes the lists, as a franchise squad does.\n     */\n    fun successor(team: Team, veteran: Player, nameCountry: String?): Player {\n        val h = veteran.id.hashCode() and 0x7fffffff\n        fun rate(r: Int): Int = (r * 0.72 + 14.0 + (h % 7) - 3).roundToInt().coerceIn(10, 99)\n        return veteran.copy(\n            id = \"gen_${veteran.id}\",\n            name = nameFor(nameCountry ?: team.name, h),\n            battingRating = rate(veteran.battingRating),\n            bowlingRating = rate(veteran.bowlingRating),\n            fieldingRating = rate(veteran.fieldingRating)\n        )\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "content": "package com.cricketsim.ui.career\n\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.CareerFinance\nimport com.cricketsim.logic.CareerHealth\nimport com.cricketsim.logic.CareerInternational\nimport com.cricketsim.logic.CareerProfile\nimport com.cricketsim.logic.CareerRecords\nimport com.cricketsim.logic.CareerSeason\nimport com.cricketsim.logic.TournamentState\nimport com.cricketsim.ui.custom.OptionButton\nimport com.cricketsim.ui.custom.PageHeading\n\n/**\n * The career's Career tab (My Player, parts eleven to sixteen): this season's objectives, the training focus, fitness, the rankings, the career record,\n * the honours and retirement; for a retired player the career summary comes first and the rest of the playing parts are left out.\n * Every part has a heading, then plain sentences, so a screen reader can jump from heading to heading.\n */\n@Composable\ninternal fun CareerRecordTab(\n    career: CareerProfile,\n    seasons: List<TournamentState>?,\n    rankLines: List<String>,\n    onFocus: (String?) -> Unit,\n    onSpecialism: (String?) -> Unit,\n    onAffiliation: (String?) -> Unit,\n    onRetire: () -> Unit\n) {\n    PageHeading(\"Career\")\n    Spacer(modifier = Modifier.height(8.dp))\n\n    if (career.retired) {\n        SectionHeading(\"Career summary\")\n        CareerHealth.summaryLines(career).forEach { BodyLine(it) }\n    } else {\n        SectionHeading(\"Season objectives\")\n        val objectives = if (seasons == null) emptyList() else CareerRecords.objectiveLines(career, seasons)\n        if (objectives.isEmpty()) {\n            BodyLine(\"Objectives appear when the season has loaded.\")\n        } else {\n            objectives.forEach { BodyLine(it) }\n            BodyLine(\"Every objective you reach gives +1 to the rating it is about when the season ends.\")\n        }\n\n        SectionHeading(\"Fitness\")\n        BodyLine(CareerHealth.statusLine(career) ?: \"Fitness: you are fit and well.\")\n        BodyLine(\"Injuries are more likely in Test cricket, for bowlers, after thirty and when you are tired. From 33 your ratings slowly fall with age.\")\n\n        SectionHeading(\"Training focus\")\n        BodyLine(\"The skill you work on grows faster after matches, the others a little slower. Now: ${career.trainingFocus ?: \"balanced\"}.\")\n        listOf<Pair<String?, String>>(\n            null to \"Balanced\",\n            \"Batting\" to \"Batting\",\n            \"Bowling\" to \"Bowling\",\n            \"Fielding\" to \"Fielding\"\n        ).forEach { (value, label) ->\n            val chosen = career.trainingFocus == value\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\n                if (chosen) \"$label (chosen)\" else label,\n                if (value == null) \"All three skills grow at the normal rate.\" else \"$label grows faster, the other skills slower.\",\n                !chosen, false\n            ) { onFocus(value) }\n        }\n    }\n\n    if (!career.retired && !career.isInternational && career.internationalMatches == 0) {\n        SectionHeading(\"International affiliation\")\n        BodyLine(\n            \"The national team you are aiming for. Now: ${career.represents ?: \"your own country, ${career.country}\"}. \" +\n                \"Aiming for another country means a residency period: its selectors want twice as many state matches (${CareerInternational.MIN_STATE_MATCHES * 2}) before they look at you. \" +\n                \"You can change it until your first international match.\"\n        )\n        val choices = listOf<Pair<String?, String>>(null to \"Your own country, ${career.country}\") +\n            CareerInternational.nations().filter { it != career.country }.map { it to it }\n        choices.forEach { (value, label) ->\n            val chosen = career.represents == value\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\n                if (chosen) \"$label (chosen)\" else label,\n                if (value == null) \"Aim for the national team of your own country.\" else \"Aim for the $value national team.\",\n                !chosen, false\n            ) { onAffiliation(value) }\n        }\n    }\n    if (!career.retired && career.atOrAboveState) {\n        SectionHeading(\"Format specialism\")\n        BodyLine(\n            \"A specialist is preferred by the selectors in his format (a place in his favour) and less in the other (a place against). \" +\n                \"A white-ball specialist also gets more franchise league offers; a Test specialist gets fewer. Now: ${career.specialism?.let { if (it == \"Test\") \"Test specialist\" else \"white-ball specialist\" } ?: \"all formats\"}.\"\n        )\n        listOf<Pair<String?, String>>(\n            null to \"All formats\",\n            \"Test\" to \"Test specialist\",\n            \"White-ball\" to \"White-ball specialist\"\n        ).forEach { (value, label) ->\n            val chosen = career.specialism == value\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\n                if (chosen) \"$label (chosen)\" else label,\n                when (value) {\n                    \"Test\" -> \"Test series are yours; one-day and T20 matches and leagues are harder to get into.\"\n                    \"White-ball\" -> \"One-day and T20 matches and leagues are yours; Test series are harder to get into.\"\n                    else -> \"No preference: every format is judged the same.\"\n                },\n                !chosen, false\n            ) { onSpecialism(value) }\n        }\n    }\n    if (!career.retired && career.isInternational) {\n        SectionHeading(\"National captaincy\")\n        BodyLine(CareerInternational.captaincyLine(career))\n    }\n\n    SectionHeading(\"Rankings\")\n    if (rankLines.isEmpty()) BodyLine(\"Working out your rankings.\") else rankLines.forEach { BodyLine(it) }\n\n    SectionHeading(\"Career record\")\n    val record = CareerRecords.recordLines(career)\n    if (record.isEmpty()) BodyLine(\"No matches yet. Your record grows with every match you play.\") else record.forEach { BodyLine(it) }\n\n    SectionHeading(\"Honours\")\n    val honours = career.honours.orEmpty()\n    if (honours.isEmpty()) BodyLine(\"None yet. Win a competition or be Player of the Series.\") else honours.reversed().forEach { BodyLine(it) }\n\n    SectionHeading(\"Earnings\")\n    CareerFinance.lines(career).forEach { BodyLine(it) }\n\n    SectionHeading(\"In the news\")\n    val news = career.media.orEmpty()\n    if (news.isEmpty()) BodyLine(\"Nothing yet. The papers write about you when a competition ends.\") else news.reversed().forEach { BodyLine(it) }\n\n    if (!career.retired) {\n        SectionHeading(\"Retirement\")\n        BodyLine(\"You are ${career.age}. Players usually retire between 36 and 42, earlier if their ratings fall.\")\n        var confirm by remember { mutableStateOf(false) }\n        val seasonDone = seasons != null && seasons.isNotEmpty() && seasons.all { CareerSeason.isComplete(it) }\n        Spacer(modifier = Modifier.height(6.dp))\n        if (!confirm) {\n            OptionButton(\n                \"Retire from cricket\",\n                if (seasonDone) \"End your career and see your career summary.\" else \"You can retire when the season is finished.\",\n                seasonDone, false\n            ) { confirm = true }\n        } else {\n            BodyLine(\"Are you sure? Retiring ends your career for good.\")\n            OptionButton(\"Yes, retire now\", \"Your career ends and the summary appears here.\", true, true) {\n                confirm = false\n                onRetire()\n            }\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\"No, keep playing\", \"Go back to your career.\", true, false) { confirm = false }\n        }\n    }\n}\n\n@Composable\nprivate fun SectionHeading(text: String) {\n    Spacer(modifier = Modifier.height(16.dp))\n    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n    Spacer(modifier = Modifier.height(4.dp))\n}\n\n@Composable\nprivate fun BodyLine(text: String) {\n    Text(text, style = MaterialTheme.typography.bodyMedium)\n    Spacer(modifier = Modifier.height(4.dp))\n}\n"
+    }
+  ]
+}
