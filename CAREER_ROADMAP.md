@@ -34,5 +34,5 @@ Found in the game's own pages, reviews and the Big Ant and PlanetCricket forums:
 - Thirteen: international captaincy and specialising in a format (patch 098). Done.
 - Fourteen: computer squads that age, an ODI World Cup and the World Test Championship final (patch 099). Done.
 - Fifteen: contracts and pay, franchise retention, the ILT20 and the papers' verdicts (patch 100). Done.
-- Sixteen: an international affiliation (aim for another country's team); real retirements with new named players in the computer squads; ageing for the domestic squads.
+- Sixteen: an international affiliation; real retirements with new named players in the computer squads; ageing for the domestic squads (patch 101). Done.
 - Seventeen: the real 14-team ODI World Cup; the Impact Player and the Power Surge in career matches; the overseas cap checked in the XI the selectors name.

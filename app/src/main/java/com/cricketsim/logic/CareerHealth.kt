@@ -119,7 +119,7 @@ object CareerHealth {
         val out = ArrayList<String>()
         out.add("You played $seasons ${if (seasons == 1) "season" else "seasons"} of cricket, from the age of $startAge to ${career.age}.")
         val highest = when {
-            career.internationalMatches > 0 -> "international cricket for ${career.country}, ${career.internationalMatches} matches"
+            career.internationalMatches > 0 -> "international cricket for ${career.nation}, ${career.internationalMatches} matches"
             career.stateMatches > 0 -> "state cricket for ${career.state}, ${career.stateMatches} matches"
             else -> "district club cricket for ${career.club}"
         }

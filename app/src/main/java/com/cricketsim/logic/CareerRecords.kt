@@ -159,7 +159,7 @@ object CareerRecords {
         }
         val fieldRank = 1 + everyone.count { it.fieldingRating > career.fielding }
         out.add("Fielding: ${ordinal(fieldRank)} of ${everyone.size + 1} players, with a fielding rating of ${career.fielding}.")
-        val squad = teams.find { it.name == career.country }
+        val squad = teams.find { it.name == career.nation }
         if (squad != null) {
             val mine = when (role) {
                 PlayerRole.BATSMAN, PlayerRole.WICKETKEEPER -> career.batting * 0.8 + career.fielding * 0.2
@@ -168,7 +168,7 @@ object CareerRecords {
             }
             val group = squad.players.filter { it.role == role }
             val rank = 1 + group.count { value(it) > mine }
-            out.add("In the ${career.country} squad you would rank ${ordinal(rank)} of ${group.size + 1} ${roleWord(role)}.")
+            out.add("In the ${career.nation} squad you would rank ${ordinal(rank)} of ${group.size + 1} ${roleWord(role)}.")
         }
         return out
     }

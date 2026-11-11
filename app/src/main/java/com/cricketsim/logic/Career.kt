@@ -115,7 +115,10 @@ data class CareerProfile(
     val lastLeagueId: String? = null,
     val lastLeagueTeamId: String? = null,
     /** What the papers have written about him (the last fifteen lines). */
-    val media: List<String>? = null
+    val media: List<String>? = null,
+    // Part sixteen: international affiliation.
+    /** The country whose national team he is aiming for when it is not his own (null = his own country). */
+    val represents: String? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
@@ -131,10 +134,13 @@ data class CareerProfile(
     /** At the state squad or above it. */
     val atOrAboveState: Boolean get() = isState || isInternational
 
+    /** The country of the national team he plays for or aims for. */
+    val nation: String get() = represents ?: country
+
     /** One spoken line about the level he plays at. */
     fun levelLine(): String {
         val n = maxOf(1, season)
-        if (isInternational) return "You play for the $country national squad. Season $n, age $age. International matches: $internationalMatches."
+        if (isInternational) return "You play for the $nation national squad. Season $n, age $age. International matches: $internationalMatches."
         return if (isState) "You play for the ${domesticTeams.firstOrNull() ?: state} squad. Season $n, age $age."
         else "You play district club cricket for $club. Season $n, age $age."
     }

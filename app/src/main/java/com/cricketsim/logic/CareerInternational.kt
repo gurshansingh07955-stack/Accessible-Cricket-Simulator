@@ -98,6 +98,12 @@ object CareerInternational {
 
     fun nationalTeam(country: String): Team? = CricketData.getAllTeams().find { it.name == country }
 
+    /** The countries whose national teams a career can aim for (the ten Test nations). */
+    fun nations(): List<String> = OPPONENTS
+
+    /** State matches the national selectors want to have seen: twice as many for a player aiming for another country (the residency period). */
+    fun neededMatches(career: CareerProfile): Int = if (career.represents != null) MIN_STATE_MATCHES * 2 else MIN_STATE_MATCHES
+
     // ------------------------------------------------------------ small helpers
 
     private fun value(p: Player): Double = when (p.role) {
@@ -177,7 +183,7 @@ object CareerInternational {
      */
     fun decision(career: CareerProfile): CareerSelection.Decision? {
         if (!career.atOrAboveState) return null
-        val squad = nationalTeam(career.country)?.let { evolved(it, career.season, null) } ?: return null
+        val squad = nationalTeam(career.nation)?.let { evolved(it, career.season, null) } ?: return null
         val role = CareerSeason.roleOf(career.role)
         val mine = myValue(career, role)
         val group = squad.players.filter { it.role == role }
@@ -186,16 +192,16 @@ object CareerInternational {
         val cutoff = (squadSlots(role) / factor).roundToInt().coerceIn(1, group.size + 1)
         val adjust = formAdjust(career, 5)
         val grace = (if (career.age <= 21) 1 else 0) + (if (career.isInternational) 2 else 0)
-        val seen = career.isInternational || career.stateMatches >= MIN_STATE_MATCHES
+        val seen = career.isInternational || career.stateMatches >= neededMatches(career)
         val selected = seen && rank - adjust - grace <= cutoff
         val youth = if (career.age <= 21) " The selectors back young players." else ""
         val loyal = if (career.isInternational) " As a player already in the squad you get two places of loyalty." else ""
-        val base = "With your ratings you would rank ${ordinal(rank)} among the ${group.size} ${roleWord(role)} of the ${career.country} squad, and the national selectors on ${career.difficulty.lowercase()} pick the top $cutoff.$youth$loyal${formNote(adjust)}"
+        val base = "With your ratings you would rank ${ordinal(rank)} among the ${group.size} ${roleWord(role)} of the ${career.nation} squad, and the national selectors on ${career.difficulty.lowercase()} pick the top $cutoff.$youth$loyal${formNote(adjust)}"
         val reason = when {
-            !seen -> "The national selectors want to see more of you first: you have played ${career.stateMatches} of the $MIN_STATE_MATCHES state matches they ask for."
-            selected && career.isInternational -> "The national selectors keep you in the ${career.country} squad. $base"
-            selected -> "The national selectors call you up to the ${career.country} squad! $base"
-            career.isInternational -> "The national selectors drop you from the ${career.country} squad. $base${gapText(group, mine, cutoff)}"
+            !seen -> "The national selectors want to see more of you first: you have played ${career.stateMatches} of the ${neededMatches(career)} state matches they ask for."
+            selected && career.isInternational -> "The national selectors keep you in the ${career.nation} squad. $base"
+            selected -> "The national selectors call you up to the ${career.nation} squad! $base"
+            career.isInternational -> "The national selectors drop you from the ${career.nation} squad. $base${gapText(group, mine, cutoff)}"
             else -> "The national selectors do not pick you this year. $base${gapText(group, mine, cutoff)} Keep scoring runs and taking wickets."
         }
         return CareerSelection.Decision(selected, rank, cutoff, group.size + 1, adjust, reason)
@@ -251,7 +257,7 @@ object CareerInternational {
     const val CAPTAIN_MATCHES = 25
 
     private fun leadershipScore(career: CareerProfile): Double {
-        val squad = nationalTeam(career.country)?.let { evolved(it, career.season, null) }
+        val squad = nationalTeam(career.nation)?.let { evolved(it, career.season, null) }
         val role = CareerSeason.roleOf(career.role)
         val mine = myValue(career, role)
         val standing = if (squad == null) 99 else 1 + squad.players.count { value(it) > mine }
@@ -277,18 +283,18 @@ object CareerInternational {
         }
         if (next == current) return Captaincy(career, "")
         val text = when (next) {
-            "Captain" -> "The national selectors appoint you captain of ${career.country}! "
-            "Vice-captain" -> "The national selectors appoint you vice-captain of ${career.country}. "
-            else -> "You have lost the ${current?.lowercase() ?: "leadership"} of ${career.country}. "
+            "Captain" -> "The national selectors appoint you captain of ${career.nation}! "
+            "Vice-captain" -> "The national selectors appoint you vice-captain of ${career.nation}. "
+            else -> "You have lost the ${current?.lowercase() ?: "leadership"} of ${career.nation}. "
         }
-        val honours = if (next != null && next != current) career.honours.orEmpty() + "Season ${career.season}: appointed ${next.lowercase()} of ${career.country}." else career.honours
+        val honours = if (next != null && next != current) career.honours.orEmpty() + "Season ${career.season}: appointed ${next.lowercase()} of ${career.nation}." else career.honours
         return Captaincy(career.copy(nationalRole = next, honours = honours?.takeLast(60)), text)
     }
 
     /** A sentence for the Career tab and the pathway about the national captaincy. */
     fun captaincyLine(career: CareerProfile): String = when (career.nationalRole) {
-        "Captain" -> "You are the captain of ${career.country}: you pick the XI and do the toss in the national matches."
-        "Vice-captain" -> "You are the vice-captain of ${career.country}. At $CAPTAIN_MATCHES international matches, with good form and a place among the squad's best, the selectors may make you captain (you have played ${career.internationalMatches})."
+        "Captain" -> "You are the captain of ${career.nation}: you pick the XI and do the toss in the national matches."
+        "Vice-captain" -> "You are the vice-captain of ${career.nation}. At $CAPTAIN_MATCHES international matches, with good form and a place among the squad's best, the selectors may make you captain (you have played ${career.internationalMatches})."
         else -> "The selectors look at the vice-captaincy at $VICE_MATCHES international matches, with good form and a place among the squad's best; you have played ${career.internationalMatches}."
     }
 
@@ -305,12 +311,12 @@ object CareerInternational {
     fun newSeason(career: CareerProfile): List<TournamentState>? {
         // The computer's squads age with the career: the young improve, the old decline (see evolved).
         val everyone = CricketData.getAllTeams().map { evolved(it, maxOf(1, career.season), null) }
-        val mine = everyone.find { it.name == career.country } ?: return null
+        val mine = everyone.find { it.name == career.nation } ?: return null
         val season = maxOf(1, career.season)
         val random = Random(career.id.hashCode() * 31 + season)
-        val pool = OPPONENTS.filter { it != career.country }.mapNotNull { n -> everyone.find { it.name == n } }.shuffled(random)
+        val pool = OPPONENTS.filter { it != career.nation }.mapNotNull { n -> everyone.find { it.name == n } }.shuffled(random)
         if (pool.size < 4) return null
-        val rival = RIVALS[career.country]
+        val rival = RIVALS[career.nation]
         // On odd seasons the old rival is met first, in the Test series.
         val ordered = if (season % 2 == 1 && rival != null) pool.sortedBy { if (it.name == rival) 0 else 1 } else pool
         val plan = listOf(
@@ -328,7 +334,7 @@ object CareerInternational {
         plan.forEachIndexed { i, p ->
             val opp = ordered[i % ordered.size]
             val home = (season + i) % 2 == 0
-            val grounds = groundsOf(all, if (home) career.country else opp.name)
+            val grounds = groundsOf(all, if (home) career.nation else opp.name)
             val homeId = if (home) myTeam.id else opp.id
             val awayId = if (home) opp.id else myTeam.id
             val fixtures = (0 until p.matches).map { m ->
@@ -378,13 +384,15 @@ object CareerInternational {
      * every season of the career a player under 27 gains 1.5 rating points, one of 33 or over loses 1.5 (never more than 12 in all, and at most about 5 are gained), in batting
      * and bowling, half of it in fielding. [protectId] (the player's own id) is left alone.
      */
-    fun evolved(team: Team, season: Int, protectId: String?): Team {
+    fun evolved(team: Team, season: Int, protectId: String?, nameCountry: String? = null): Team {
         val steps = (season - 1).coerceAtLeast(0)
         if (steps == 0) return team
         return team.copy(players = team.players.map { p ->
             if (p.id == protectId) p
             else {
                 val age0 = 24 + (p.name.hashCode() and 0x7fffffff) % 14
+                // A veteran who has reached retirement age is replaced by a young player (SquadEvolution).
+                if (age0 + steps >= SquadEvolution.RETIRE_AGE) return@map SquadEvolution.successor(team, p, nameCountry)
                 var delta = 0.0
                 for (y in 0 until steps) {
                     val age = age0 + y
@@ -431,7 +439,7 @@ object CareerInternational {
         return try {
             val all = CricketData.getAllTeams().map { evolved(it, season, null) }
             val nations = OPPONENTS.mapNotNull { n -> all.find { it.name == n } }
-            val mineTeam = nations.find { it.name == career.country } ?: return null
+            val mineTeam = nations.find { it.name == career.nation } ?: return null
             if (nations.size < 8) return null
             val teams = nations.map { t -> if (t.id == mineTeam.id) CareerDomestic.withPlayer(t, me.copy(teamId = mineTeam.id)) else t }
             val grounds = groundsOf(AllStadiums.list(), OPPONENTS[(season / 4) % OPPONENTS.size])
@@ -519,7 +527,7 @@ object CareerInternational {
      */
     private fun tournamentFor(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {
         if (season % 4 == 1) return odiWorldCup(career, season, me, startAt)
-        val asian = career.country == "India" || career.country == "Pakistan"
+        val asian = career.nation == "India" || career.nation == "Pakistan"
         val def = when {
             season % 2 == 0 -> TourDef("T20 World Cup", { T20WorldCup.buildTeams() }, { t, b -> T20WorldCup.newTournament(t, b) })
             asian && season % 4 == 3 -> TourDef("Asia Cup", { AsiaCup.buildTeams() }, { t, b -> AsiaCup.newTournament(t, b) })
@@ -527,7 +535,7 @@ object CareerInternational {
         }
         return try {
             val built = def.build()
-            val team = built.first.find { it.name == career.country } ?: return null
+            val team = built.first.find { it.name == career.nation } ?: return null
             val state0 = def.make(team.id, built)
             val mine = me.copy(teamId = team.id)
             val teams = state0.teams.map { t ->
@@ -595,17 +603,17 @@ object CareerInternational {
      */
     fun pathway(career: CareerProfile): List<String> {
         val out = ArrayList<String>()
-        out.add("The road: district club, then the ${career.state} state squad, then the ${career.country} national team.")
+        out.add("The road: district club, then the ${career.state} state squad, then the ${career.nation} national team.")
         if (career.isInternational) {
-            out.add("You are in the ${career.country} national squad and have played ${career.internationalMatches} international matches.")
+            out.add("You are in the ${career.nation} national squad and have played ${career.internationalMatches} international matches.")
             decision(career)?.let { out.add("Keeping your place next season: " + summary(it)) }
             out.add(captaincyLine(career))
         } else if (career.isState) {
             out.add("You are in the ${career.domesticTeams.firstOrNull() ?: career.state} squad and have played ${career.stateMatches} state matches.")
-            if (career.stateMatches < MIN_STATE_MATCHES) {
-                out.add("The national selectors want at least $MIN_STATE_MATCHES state matches first: ${MIN_STATE_MATCHES - career.stateMatches} to go.")
+            if (career.stateMatches < neededMatches(career)) {
+                out.add("The national selectors want at least ${neededMatches(career)} state matches first: ${neededMatches(career) - career.stateMatches} to go.")
             }
-            decision(career)?.let { out.add("Next step, the ${career.country} national squad: " + summary(it)) }
+            decision(career)?.let { out.add("Next step, the ${career.nation} national squad: " + summary(it)) }
         } else {
             val squad = CareerDomestic.stateSquad(career)
             if (squad == null) {

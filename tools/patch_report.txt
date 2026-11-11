@@ -1,6 +1,6 @@
-Patch run: 42805701941
-Timestamp (UTC): 2026-11-10T11:13:40Z
+Patch run: 42933591608
+Timestamp (UTC): 2026-11-11T00:43:42Z
 Result: OK
 -----
-Patch 2026-11-10-100-career-money-retention-ilt20-media.json
-  applied 16 operation(s) to 11 file(s)
+Patch 2026-11-10-101-career-affiliation-retirements-domestic.json
+  applied 22 operation(s) to 12 file(s)

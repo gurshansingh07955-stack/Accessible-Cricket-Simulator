@@ -89,7 +89,7 @@ object CareerDomestic {
         for (def in defsFor(career.country)) {
             val built = def.build()
             val team = built.first.find { it.name == name }
-            if (team != null) return team
+            if (team != null) return CareerInternational.evolved(team, career.season, null, career.country)
         }
         return null
     }
@@ -107,7 +107,10 @@ object CareerDomestic {
             val state0 = try { def.make(team.id, built) } catch (e: Exception) { continue }
             if (state0.teams.none { it.id == team.id }) continue
             val me = asPlayer(career, team.id)
-            val teams = state0.teams.map { t -> if (t.id == team.id) withPlayer(t, me) else t }
+            val teams = state0.teams.map { t ->
+                val aged = CareerInternational.evolved(t, career.season, null, career.country)
+                if (t.id == team.id) withPlayer(aged, me) else aged
+            }
             val mine = state0.fixtures.count { it.homeId == team.id || it.awayId == team.id }
             val startAt = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * offsetWeeks) }.timeInMillis
             out.add(state0.copy(teams = teams, tags = state0.tags + (pid to SquadTag.DOMESTIC), createdAt = startAt))

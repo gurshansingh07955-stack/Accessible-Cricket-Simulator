@@ -312,7 +312,7 @@ object CareerSeason {
                     val intl = CareerInternational.newSeason(intlLevel)
                     if (intl != null) {
                         val intlKeys = intl.map { keyOf(it) }
-                        return NextSeason(intlLevel.copy(seasonKeys = intlKeys), intl, intlKeys, text + captaincy.text + "You play for ${career.country} this season.")
+                        return NextSeason(intlLevel.copy(seasonKeys = intlKeys), intl, intlKeys, text + captaincy.text + "You play for ${career.nation} this season.")
                     }
                 }
             }

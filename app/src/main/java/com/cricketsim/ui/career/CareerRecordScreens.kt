@@ -24,7 +24,7 @@ import com.cricketsim.ui.custom.OptionButton
 import com.cricketsim.ui.custom.PageHeading
 
 /**
- * The career's Career tab (My Player, parts eleven to fifteen): this season's objectives, the training focus, fitness, the rankings, the career record,
+ * The career's Career tab (My Player, parts eleven to sixteen): this season's objectives, the training focus, fitness, the rankings, the career record,
  * the honours and retirement; for a retired player the career summary comes first and the rest of the playing parts are left out.
  * Every part has a heading, then plain sentences, so a screen reader can jump from heading to heading.
  */
@@ -35,6 +35,7 @@ internal fun CareerRecordTab(
     rankLines: List<String>,
     onFocus: (String?) -> Unit,
     onSpecialism: (String?) -> Unit,
+    onAffiliation: (String?) -> Unit,
     onRetire: () -> Unit
 ) {
     PageHeading("Career")
@@ -75,6 +76,25 @@ internal fun CareerRecordTab(
         }
     }
 
+    if (!career.retired && !career.isInternational && career.internationalMatches == 0) {
+        SectionHeading("International affiliation")
+        BodyLine(
+            "The national team you are aiming for. Now: ${career.represents ?: "your own country, ${career.country}"}. " +
+                "Aiming for another country means a residency period: its selectors want twice as many state matches (${CareerInternational.MIN_STATE_MATCHES * 2}) before they look at you. " +
+                "You can change it until your first international match."
+        )
+        val choices = listOf<Pair<String?, String>>(null to "Your own country, ${career.country}") +
+            CareerInternational.nations().filter { it != career.country }.map { it to it }
+        choices.forEach { (value, label) ->
+            val chosen = career.represents == value
+            Spacer(modifier = Modifier.height(6.dp))
+            OptionButton(
+                if (chosen) "$label (chosen)" else label,
+                if (value == null) "Aim for the national team of your own country." else "Aim for the $value national team.",
+                !chosen, false
+            ) { onAffiliation(value) }
+        }
+    }
     if (!career.retired && career.atOrAboveState) {
         SectionHeading("Format specialism")
         BodyLine(

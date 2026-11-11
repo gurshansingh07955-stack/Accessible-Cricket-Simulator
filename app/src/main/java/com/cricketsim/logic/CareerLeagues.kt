@@ -147,7 +147,7 @@ object CareerLeagues {
     private fun seen(career: CareerProfile): Int = career.stateMatches + career.internationalMatches + career.leagueMatches
 
     /** The leagues open to him: an Indian player only the IPL, a Pakistani player every league but the IPL. */
-    private fun eligible(career: CareerProfile): List<League> = when (career.country) {
+    private fun eligible(career: CareerProfile): List<League> = when (career.nation) {
         "India" -> LEAGUES.filter { it.id == "ipl" }
         "Pakistan" -> LEAGUES.filter { it.id != "ipl" }
         else -> LEAGUES
@@ -176,7 +176,7 @@ object CareerLeagues {
         val found = ArrayList<Candidate>()
         for (league in eligible(career)) {
             val built = (try { league.build(seed) } catch (e: Exception) { null }) ?: continue
-            val overseas = league.country != career.country
+            val overseas = league.country != career.nation
             val here = ArrayList<Candidate>()
             for (team in built.pair.first.map { CareerInternational.evolved(it, career.season, null) }) {
                 val group = team.players.filter { it.role == role }
