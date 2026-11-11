@@ -1,0 +1,79 @@
+{
+  "name": "My Player part seventeen: 14-team ODI World Cup, Impact Player and Power Surge in career matches, overseas cap in the XI",
+  "message": "Career: ODI World Cup of 14 teams with a Super Six, Impact Player (IPL captain) and Power Surge (Big Bash) in career matches, overseas cap kept in the XI",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+    "contains": "fun odiWorldCup14("
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        if (season % 4 == 1) return odiWorldCup(career, season, me, startAt)\n",
+      "replace": "        if (season % 4 == 1) return odiWorldCup14(career, season, me, startAt)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    fun advanceWc(state: TournamentState): TournamentState {\n",
+      "replace": "    fun advanceWc(state: TournamentState): TournamentState {\n        if (state.fixtures.any { it.stage == \"Group A\" }) return advanceWc14(state)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    /** Fills in the ODI World Cup's semi-finals and Final as the teams become known (called from CplSimulator.advancePlayoffs after every match). */\n",
+      "replace": "    private const val SUPER_SIX = \"Super Six\"\n\n    /**\n     * The ODI World Cup as the ICC plays it from 2027: 14 teams (the ten Test nations, Ireland, Zimbabwe, the Netherlands and Scotland) in two groups of seven, dealt out by strength in a snake so that the\n     * groups are balanced (21 matches a group); the top three of each group go to a Super Six (each plays the three from the other group, 9 matches, no points carried over); the top four of the Super Six\n     * play the semi-finals (1st v 4th, 2nd v 3rd) and the Final ([advanceWc14]). The host changes every four seasons. Null if it could not be built.\n     */\n    private fun odiWorldCup14(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {\n        return try {\n            val all = CricketData.getAllTeams().map { evolved(it, season, null) }\n            val names = OPPONENTS + listOf(\"Ireland\", \"Zimbabwe\", \"Netherlands\", \"Scotland\")\n            val nations = names.mapNotNull { n -> all.find { it.name == n } }\n            val mineTeam = nations.find { it.name == career.nation } ?: return null\n            if (nations.size < 12) return null\n            val teams = nations.map { t -> if (t.id == mineTeam.id) CareerDomestic.withPlayer(t, me.copy(teamId = mineTeam.id)) else t }\n            val ranked = teams.sortedByDescending { t -> t.players.map { value(it) }.sortedDescending().take(11).average() }\n            val groupA = ArrayList<Team>()\n            val groupB = ArrayList<Team>()\n            ranked.forEachIndexed { i, t -> if (i % 4 == 0 || i % 4 == 3) groupA.add(t) else groupB.add(t) }\n            val grounds = groundsOf(AllStadiums.list(), OPPONENTS[(season / 4) % OPPONENTS.size])\n            val fixtures = ArrayList<TournamentFixture>()\n            var id = 0\n            for ((label, group) in listOf(\"Group A\" to groupA, \"Group B\" to groupB)) {\n                for (pair in roundRobin(group.map { it.id })) {\n                    fixtures.add(TournamentFixture(id, id + 1, label, pair.first, pair.second, grounds[id % grounds.size].id))\n                    id++\n                }\n            }\n            repeat(9) {\n                fixtures.add(TournamentFixture(id, id + 1, SUPER_SIX, null, null, grounds[id % grounds.size].id))\n                id++\n            }\n            for (stage in listOf(\"Semi-final 1\", \"Semi-final 2\", \"Final\")) {\n                fixtures.add(TournamentFixture(id, id + 1, stage, null, null, grounds[0].id))\n                id++\n            }\n            val tags = LinkedHashMap<String, SquadTag>()\n            teams.forEach { t -> t.players.forEach { tags[it.id] = SquadTag.DOMESTIC } }\n            TournamentState(\n                version = CplData.SAVE_VERSION,\n                tournamentId = \"$WC_PREFIX${career.id}_s${season}_odi\",\n                name = \"ODI World Cup, season $season\",\n                userTeamId = mineTeam.id,\n                teams = teams,\n                tags = tags,\n                fixtures = fixtures,\n                createdAt = startAt\n            )\n        } catch (e: Exception) {\n            null\n        }\n    }\n\n    /** The teams of a stage in table order. */\n    private fun stageIds(state: TournamentState, stage: String): List<String> {\n        val ids = state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()\n        return CplData.standings(state, stage).filter { it.team.id in ids }.map { it.team.id }\n    }\n\n    /** Fills in the Super Six, the semi-finals and the Final of the 14-team ODI World Cup as the teams become known. Safe after every match. */\n    private fun advanceWc14(state: TournamentState): TournamentState {\n        var fx = state.fixtures\n        fun complete(stage: String): Boolean {\n            val l = fx.filter { it.stage == stage }\n            return l.isNotEmpty() && l.all { it.result != null }\n        }\n        fun setTeams(stage: String, home: String?, away: String?) {\n            if (home == null || away == null) return\n            fx = fx.map { if (it.stage == stage && it.homeId == null) it.copy(homeId = home, awayId = away) else it }\n        }\n        if (complete(\"Group A\") && complete(\"Group B\")) {\n            val a = stageIds(state, \"Group A\")\n            val b = stageIds(state, \"Group B\")\n            if (a.size >= 3 && b.size >= 3) {\n                val open = fx.filter { it.stage == SUPER_SIX && it.homeId == null }.map { it.id }\n                open.forEachIndexed { k, fid ->\n                    fx = fx.map { f -> if (f.id == fid) f.copy(homeId = a[k / 3], awayId = b[k % 3]) else f }\n                }\n            }\n        }\n        val now = state.copy(fixtures = fx)\n        if (complete(SUPER_SIX)) {\n            val top = stageIds(now, SUPER_SIX)\n            if (top.size >= 4) {\n                setTeams(\"Semi-final 1\", top[0], top[3])\n                setTeams(\"Semi-final 2\", top[1], top[2])\n            }\n        }\n        val winner1 = fx.firstOrNull { it.stage == \"Semi-final 1\" }?.result?.winnerId\n        val winner2 = fx.firstOrNull { it.stage == \"Semi-final 2\" }?.result?.winnerId\n        if (winner1 != null && winner2 != null) setTeams(\"Final\", winner1, winner2)\n        return state.copy(fixtures = fx)\n    }\n\n    /** Fills in the ODI World Cup's semi-finals and Final as the teams become known (called from CplSimulator.advancePlayoffs after every match). */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "        val victim = (if (sameKind.isEmpty()) others else sameKind).minByOrNull { v(it) } ?: return best\n",
+      "replace": "        val firstVictim = (if (sameKind.isEmpty()) others else sameKind).minByOrNull { v(it) } ?: return best\n        val victim = overseasSafeVictim(best, others, me, firstVictim, tags)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "    /** The eleven the player's club takes the field with for a match he is selected for (captain and keeper set), the player at his batting number. */\n",
+      "replace": "    /** Most overseas players an XI may have: six in Major League Cricket (it has US-tagged players), four everywhere else. */\n    private fun overseasCap(tags: Map<String, SquadTag>): Int = if (tags.containsValue(SquadTag.USA)) 6 else 4\n\n    /**\n     * The player he replaces. If he is an overseas player and the XI already has the most overseas players allowed, he must take an overseas player's place, or the cap would be\n     * broken (part seventeen); otherwise the weakest player of his own kind, as before.\n     */\n    private fun overseasSafeVictim(best: Team, others: List<Player>, me: Player, victim: Player, tags: Map<String, SquadTag>): Player {\n        if (tags[me.id] != SquadTag.OVERSEAS || tags[victim.id] == SquadTag.OVERSEAS) return victim\n        if (best.players.count { tags[it.id] == SquadTag.OVERSEAS } < overseasCap(tags)) return victim\n        return others.filter { tags[it.id] == SquadTag.OVERSEAS }.minByOrNull { v(it) } ?: victim\n    }\n\n    /** The eleven the player's club takes the field with for a match he is selected for (captain and keeper set), the player at his batting number. */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "    // ------------------------------------------------------------ selection for a match\n",
+      "replace": "    /**\n     * The IPL's Impact Player rule in a career match: the computer's choice of five substitutes for each side, when the player is the captain (he then uses his Impact Player from the\n     * Match info page, as in the game's IPL). Null in every other league and when he is not the captain (a player who only bats and bowls leaves the team decisions to the computer,\n     * so no Impact Players are used by either side).\n     */\n    fun impactFor(state: TournamentState, userXI: Team, oppXI: Team, captain: Boolean): ImpactSetup? {\n        if (state.tournamentId != IplSeason.TOURNAMENT_ID || !captain) return null\n        val userSquad = state.teams.find { it.id == userXI.id } ?: return null\n        val oppSquad = state.teams.find { it.id == oppXI.id } ?: return null\n        val overseas = state.tags.filterValues { it == SquadTag.OVERSEAS }.keys.toList()\n        val overseasSet = overseas.toSet()\n        return ImpactSetup(\n            ImpactPlayer.aiSubstitutes(userSquad.players, userXI.players, overseasSet),\n            ImpactPlayer.aiSubstitutes(oppSquad.players, oppXI.players, overseasSet),\n            overseas\n        )\n    }\n\n    // ------------------------------------------------------------ selection for a match\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                        careerCaptain = career.isCaptain,\n",
+      "replace": "                        careerCaptain = career.isCaptain,\n                        powerSurge = state.tournamentId == BigBashLeague.TOURNAMENT_ID,\n                        impact = CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, career.isCaptain),\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "import com.cricketsim.logic.CareerLeagues\n",
+      "replace": "import com.cricketsim.logic.BigBashLeague\nimport com.cricketsim.logic.CareerLeagues\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "CAREER_ROADMAP.md",
+      "find": "- Seventeen: the real 14-team ODI World Cup; the Impact Player and the Power Surge in career matches; the overseas cap checked in the XI the selectors name.",
+      "replace": "- Seventeen: the real 14-team ODI World Cup; the Impact Player and the Power Surge in career matches; the overseas cap checked in the XI the selectors name (patch 103). Done.",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_SEVENTEEN.md",
+      "content": "# My Player, part seventeen: the 14-team ODI World Cup, the Impact Player and Power Surge, the overseas cap\n\n**14-team ODI World Cup** (`odiWorldCup14`, `advanceWc14`; seasons 1, 5, 9 ...). The ten Test nations plus Ireland, Zimbabwe, the Netherlands and Scotland, in two groups of seven (dealt out by strength in a snake, 21 matches a group, 50 overs a side, shown as Group A and Group B tables); the top three of each group go to a\n**Super Six** (each plays the three from the other group: 9 matches; no points carried over, a simplification of the real format), then the top four of the Super Six play two semi-finals (1st v 4th, 2nd v 3rd) and the Final. The host country changes every four seasons.\n\n**Impact Player** (IPL, `CareerLeagues.impactFor`). When the player is the captain of an IPL side, the match has the Impact Player rule: the computer names five substitutes for each side and he uses his own from the Match info page, as in the game's IPL. When he is not the captain (he only bats and bowls, the computer decides the rest) no Impact Players\nare used by either side, so the sides stay level. The computer's own Impact Player use is the game's (`ImpactPlayer.aiChoose`).\n\n**Power Surge** (Big Bash). Career matches of the Big Bash now include the Power Surge: the game's rule, a Power Surge button on the Match info page when the player's side may take it, a pop-up when the computer takes it.\n\n**Overseas cap in the XI** (`CareerSelection.overseasSafeVictim`). When the selectors put an overseas player into the XI, and the best XI already has the most overseas players allowed (4, or 6 in Major League Cricket), he takes the place of an overseas player instead of a home player.\nThe ILT20's quotas of UAE and Afghan players are still not checked.\n",
+      "mustNotExist": true
+    }
+  ]
+}
