@@ -19,6 +19,8 @@ import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerProfile
 import com.cricketsim.logic.CareerRecords
 import com.cricketsim.logic.CareerSeason
+import com.cricketsim.logic.CareerWorld
+import com.cricketsim.logic.MoveRequest
 import com.cricketsim.logic.TournamentState
 import com.cricketsim.ui.custom.OptionButton
 import com.cricketsim.ui.custom.PageHeading
@@ -35,7 +37,7 @@ internal fun CareerRecordTab(
     rankLines: List<String>,
     onFocus: (String?) -> Unit,
     onSpecialism: (String?) -> Unit,
-    onAffiliation: (String?) -> Unit,
+    onMove: (MoveRequest?) -> Unit,
     onRetire: () -> Unit
 ) {
     PageHeading("Career")
@@ -76,23 +78,49 @@ internal fun CareerRecordTab(
         }
     }
 
-    if (!career.retired && !career.isInternational && career.internationalMatches == 0) {
-        SectionHeading("International affiliation")
-        BodyLine(
-            "The national team you are aiming for. Now: ${career.represents ?: "your own country, ${career.country}"}. " +
-                "Aiming for another country means a residency period: its selectors want twice as many state matches (${CareerInternational.MIN_STATE_MATCHES * 2}) before they look at you. " +
-                "You can change it until your first international match."
-        )
-        val choices = listOf<Pair<String?, String>>(null to "Your own country, ${career.country}") +
-            CareerInternational.nations().filter { it != career.country }.map { it to it }
-        choices.forEach { (value, label) ->
-            val chosen = career.represents == value
+    if (!career.retired && !career.isInternational && career.internationalMatches == 0 && career.clubs.isNotEmpty()) {
+        SectionHeading("Move to another country")
+        val pending = career.pendingMove
+        if (pending != null) {
+            BodyLine("Planned: a move to ${pending.club}, ${pending.state}, ${pending.country}. It happens when you start the next season.")
             Spacer(modifier = Modifier.height(6.dp))
-            OptionButton(
-                if (chosen) "$label (chosen)" else label,
-                if (value == null) "Aim for the national team of your own country." else "Aim for the $value national team.",
-                !chosen, false
-            ) { onAffiliation(value) }
+            OptionButton("Cancel the move", "Stay where you are.", true, false) { onMove(null) }
+        } else {
+            BodyLine(
+                "You can move your career to a district club in another country that has domestic cricket in the game. You start again at that club, keeping your ratings, age, money, honours and record. " +
+                    "The national selectors of the new country want you to have lived there for ${CareerInternational.RESIDENCY_SEASONS} seasons. " +
+                    "The move happens when you start the next season, and you can move until your first international match."
+            )
+            var pickCountry by remember { mutableStateOf<String?>(null) }
+            var pickState by remember { mutableStateOf<String?>(null) }
+            val c = pickCountry
+            val st = pickState
+            if (c == null) {
+                CareerWorld.COUNTRIES.filter { it != career.country }.forEach { country ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OptionButton(country, "Choose a state of $country.", true, false) { pickCountry = country }
+                }
+            } else if (st == null) {
+                BodyLine("Country: $c. Now choose a state.")
+                CareerWorld.states(c).forEach { state ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OptionButton(state.name, "Domestic team${if (state.domesticTeams.size > 1) "s" else ""}: ${state.domesticTeams.joinToString(", ")}.", true, false) { pickState = state.name }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                OptionButton("Back", "Choose another country.", true, false) { pickCountry = null }
+            } else {
+                BodyLine("State: $st, $c. Now choose a district club.")
+                CareerWorld.clubs(c, st).forEach { club ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OptionButton(club, "Move to this club at the start of the next season.", true, true) {
+                        onMove(MoveRequest(c, st, club))
+                        pickCountry = null
+                        pickState = null
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                OptionButton("Back", "Choose another state.", true, false) { pickState = null }
+            }
         }
     }
     if (!career.retired && career.atOrAboveState) {

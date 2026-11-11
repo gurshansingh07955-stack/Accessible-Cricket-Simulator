@@ -49,6 +49,7 @@ import com.cricketsim.logic.CareerDomestic
 import com.cricketsim.logic.CareerFinance
 import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerLeagues
+import com.cricketsim.logic.CareerMove
 import com.cricketsim.logic.CareerRecords
 import com.cricketsim.logic.LeagueOffer
 import com.cricketsim.logic.CareerSelection
@@ -505,11 +506,13 @@ fun CareerHub(
                                     onCareerChanged(settled.career)
                                     return@launch
                                 }
-                                val next = withContext(Dispatchers.Default) { CareerSeason.nextSeason(settled.career) }
+                                // A planned move abroad happens now: the player starts again at district level in the new country.
+                                val moved = CareerMove.apply(settled.career.copy(represents = null), System.nanoTime())
+                                val next = withContext(Dispatchers.Default) { CareerSeason.nextSeason(moved) }
                                 next.states.forEachIndexed { i, s ->
                                     TournamentSaveStore(context, CareerSeason.seasonFile(career.id, next.career.season, next.keys[i])).save(s)
                                 }
-                                message = (if (settled.text.isEmpty()) "" else settled.text + " ") + next.text
+                                message = (if (settled.text.isEmpty()) "" else settled.text + " ") + CareerMove.text(settled.career, moved) + next.text
                                 busy = false
                                 onCareerChanged(next.career)
                             }
@@ -518,7 +521,7 @@ fun CareerHub(
                 )
                 HubTab.Calendar -> CalendarTab(current, loaded)
                 HubTab.Table -> TableTab(current, loaded, compTab, { compTab = it }, tableTab, { tableTab = it }, statsTab, { statsTab = it })
-                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, { nation -> onCareerChanged(career.copy(represents = nation, nationalRole = null)) }, retireNow)
+                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, { move -> onCareerChanged(career.copy(pendingMove = move)) }, retireNow)
             }
         }
     }

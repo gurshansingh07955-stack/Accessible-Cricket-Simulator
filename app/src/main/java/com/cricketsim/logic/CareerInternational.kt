@@ -36,6 +36,9 @@ object CareerInternational {
     /** State matches the national selectors want to have seen before they look at a player. */
     const val MIN_STATE_MATCHES = 8
 
+    /** Seasons a player who moved to the country must have lived there before its national selectors look at him. */
+    const val RESIDENCY_SEASONS = 2
+
     private val OPPONENTS = listOf(
         "India", "Australia", "England", "Pakistan", "South Africa",
         "New Zealand", "Sri Lanka", "West Indies", "Bangladesh", "Afghanistan"
@@ -192,12 +195,14 @@ object CareerInternational {
         val cutoff = (squadSlots(role) / factor).roundToInt().coerceIn(1, group.size + 1)
         val adjust = formAdjust(career, 5)
         val grace = (if (career.age <= 21) 1 else 0) + (if (career.isInternational) 2 else 0)
-        val seen = career.isInternational || career.stateMatches >= neededMatches(career)
+        val residencyOk = career.movedSeason == 0 || career.season - career.movedSeason >= RESIDENCY_SEASONS
+        val seen = career.isInternational || (career.stateMatches >= neededMatches(career) && residencyOk)
         val selected = seen && rank - adjust - grace <= cutoff
         val youth = if (career.age <= 21) " The selectors back young players." else ""
         val loyal = if (career.isInternational) " As a player already in the squad you get two places of loyalty." else ""
         val base = "With your ratings you would rank ${ordinal(rank)} among the ${group.size} ${roleWord(role)} of the ${career.nation} squad, and the national selectors on ${career.difficulty.lowercase()} pick the top $cutoff.$youth$loyal${formNote(adjust)}"
         val reason = when {
+            !residencyOk && !career.isInternational -> "The national selectors cannot pick you yet: you moved to ${career.country} in season ${career.movedSeason} and must live there for $RESIDENCY_SEASONS seasons. You are eligible from season ${career.movedSeason + RESIDENCY_SEASONS}."
             !seen -> "The national selectors want to see more of you first: you have played ${career.stateMatches} of the ${neededMatches(career)} state matches they ask for."
             selected && career.isInternational -> "The national selectors keep you in the ${career.nation} squad. $base"
             selected -> "The national selectors call you up to the ${career.nation} squad! $base"
@@ -612,6 +617,9 @@ object CareerInternational {
             out.add("You are in the ${career.domesticTeams.firstOrNull() ?: career.state} squad and have played ${career.stateMatches} state matches.")
             if (career.stateMatches < neededMatches(career)) {
                 out.add("The national selectors want at least ${neededMatches(career)} state matches first: ${neededMatches(career) - career.stateMatches} to go.")
+            }
+            if (career.movedSeason > 0 && career.season - career.movedSeason < RESIDENCY_SEASONS) {
+                out.add("You moved to ${career.country} in season ${career.movedSeason}: the national selectors want you to live there for $RESIDENCY_SEASONS seasons first.")
             }
             decision(career)?.let { out.add("Next step, the ${career.nation} national squad: " + summary(it)) }
         } else {

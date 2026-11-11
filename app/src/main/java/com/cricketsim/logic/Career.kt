@@ -118,7 +118,12 @@ data class CareerProfile(
     val media: List<String>? = null,
     // Part sixteen: international affiliation.
     /** The country whose national team he is aiming for when it is not his own (null = his own country). */
-    val represents: String? = null
+    val represents: String? = null,
+    // Part sixteen (second version): moving to another country.
+    /** A move to a district club abroad, planned for the start of the next season. */
+    val pendingMove: MoveRequest? = null,
+    /** The season he moved to his present country (0 = he never moved). */
+    val movedSeason: Int = 0
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
