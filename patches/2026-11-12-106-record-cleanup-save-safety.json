@@ -1,0 +1,65 @@
+{
+  "name": "My Player part twenty: remove Earlier matches; a match saved before an update is never resumed",
+  "message": "Career record: no Earlier matches tab. Saved matches are stamped with the build and discarded after an update, so an old match cannot crash the game",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+    "contains": "val buildStamp: Long = runCatching"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerStatistics.kt",
+      "find": "                \"T20I\" -> \"International|T20\"\n                \"Club\" -> \"Club|$EARLIER\"\n                \"State\" -> \"State|$EARLIER\"\n                else -> \"League|$EARLIER\"\n",
+      "replace": "                \"T20I\" -> \"International|T20\"\n                // The records kept before the full record began have no tournament detail and no tab: only the international formats (which have one) are kept.\n                else -> continue\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerStatistics.kt",
+      "find": "            \"Club\" -> listOf(\"All\", \"Three-day\", \"One-day\", \"T20\") + present.filter { it == EARLIER }\n",
+      "replace": "            \"Club\" -> listOf(\"All\", \"Three-day\", \"One-day\", \"T20\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerStatistics.kt",
+      "find": "            else -> listOf(\"All\") + present.filter { it != EARLIER }.sorted() + present.filter { it == EARLIER }\n",
+      "replace": "            else -> listOf(\"All\") + present.sorted()\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "    val showInningsBreak: Boolean,\n    val breakLastBall: String\n)",
+      "replace": "    val showInningsBreak: Boolean,\n    val breakLastBall: String,\n    /** When the app was installed or updated: a match saved by another build is not resumed (see MatchSaveStore). Old saves read 0. */\n    val buildStamp: Long = 0L\n)",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "    private val lock = Mutex()\n",
+      "replace": "    private val lock = Mutex()\n\n    /**\n     * The time this build of the app was installed or last updated. Every save carries it, and a save made by another build is thrown away when it is loaded: after an update the game's\n     * classes may have changed shape, and resuming such a match could crash the game. A half-played match does not survive an update (finish it first); tournaments, seasons and careers do.\n     * If the time cannot be read it is 0 for every build and nothing is discarded.\n     */\n    private val buildStamp: Long = runCatching {\n        val app = context.applicationContext\n        app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime\n    }.getOrDefault(0L)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "                    temp.writeText(gson.toJson(snapshot))\n",
+      "replace": "                    temp.writeText(gson.toJson(snapshot.copy(buildStamp = buildStamp)))\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "                    if (snapshot != null && isUsable(snapshot)) snapshot else null\n",
+      "replace": "                    if (snapshot != null && snapshot.buildStamp == buildStamp && isUsable(snapshot)) {\n                        snapshot\n                    } else {\n                        // Saved by another build, or not usable: it is never resumed, and is deleted so that it cannot cause trouble later.\n                        runCatching { file.delete() }\n                        null\n                    }\n",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_TWENTY.md",
+      "content": "# My Player, part twenty: no \"Earlier matches\", and no crash from a match saved before an update\n\n**Career record.** The \"Earlier matches\" tab is gone. Records kept before the full record began had no tournament detail, so Club, State and League totals from before are no longer shown; the Test, ODI and T20 international totals still are (they have a tab).\n\n**A half-played match never survives an update** (`MatchSaveStore`). Every saved match now carries the time the app was installed or updated (`buildStamp`). When a saved match is loaded and it was saved by another build, it is discarded (and its file deleted), so the game can never try to resume a match whose data\nno longer fits the new code, which could crash it. This covers every saved match in the game: a normal match, the tournaments, the IPL, the customised tournaments and the career. Tournaments, seasons and careers are not affected: they are kept across updates. The first time after this update, a match half played with an older build is discarded once.\nIf the install time cannot be read, nothing is discarded. Finish a match before updating the game.\n",
+      "mustNotExist": true
+    }
+  ]
+}
