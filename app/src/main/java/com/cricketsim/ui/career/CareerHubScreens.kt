@@ -249,9 +249,11 @@ fun CareerHub(
                             leagueOffers = null,
                             leagueDecidedSeason = career.season,
                             leagueContract = deal,
+                            leagueCaptainTeamId = if (offer.captain) offer.teamId else null,
+                            honours = if (offer.captain) (career.honours.orEmpty() + "Season ${career.season}: appointed captain of ${offer.teamName}.").takeLast(60) else career.honours,
                             lastLeagueId = offer.leagueId,
                             lastLeagueTeamId = offer.teamId,
-                            leagueLine = "This season you also play for ${offer.teamName} in the ${offer.leagueName}. Your contract is worth ${CareerFinance.money(deal.toLong())}."
+                            leagueLine = "This season you also play for ${offer.teamName} in the ${offer.leagueName}. Your contract is worth ${CareerFinance.money(deal.toLong())}.${if (offer.captain) " You are the captain." else ""}"
                         )
                     )
                 }
@@ -314,12 +316,12 @@ fun CareerHub(
             }
 
             is CPlay.Toss -> {
-                val back = { play = if (career.isCaptain) CPlay.PickXI(flow.comp, flow.fixtureId) else null }
+                val back = { play = if (CareerSeason.captainIn(career, current[flow.comp])) CPlay.PickXI(flow.comp, flow.fixtureId) else null }
                 BackHandler(onBack = back)
                 val state = current[flow.comp]
                 val fixture = state.fixtures.find { it.id == flow.fixtureId }
                 val userHome = fixture?.homeId == state.userTeamId
-                if (career.isCaptain) {
+                if (CareerSeason.captainIn(career, state)) {
                     // The captain does the toss himself: he calls or flips, and chooses to bat or bowl.
                     TossScreen(
                         userTeam = flow.userXI,
@@ -355,9 +357,9 @@ fun CareerHub(
                         format = AbuDhabiT10.formatFor(state.tournamentId),
                         rules = TournamentRules.rulesFor(state.tournamentId, fixture?.stage),
                         careerPlayerId = CareerSeason.playerIdIn(state, career),
-                        careerCaptain = career.isCaptain,
+                        careerCaptain = CareerSeason.captainIn(career, state),
                         powerSurge = state.tournamentId == BigBashLeague.TOURNAMENT_ID,
-                        impact = CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, career.isCaptain),
+                        impact = CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, CareerSeason.captainIn(career, state)),
                         stadium = stadium,
                         userTeam = flow.userXI,
                         opponentTeam = flow.oppXI,
@@ -460,7 +462,7 @@ fun CareerHub(
                                     val stadium = CplData.stadium(mine.stadiumId)
                                     if (!chosen.selected) {
                                         message = chosen.reason + " You can simulate the match instead."
-                                    } else if (career.isCaptain) {
+                                    } else if (CareerSeason.captainIn(career, updated)) {
                                         // The captain picks his own XI, then does the toss.
                                         play = CPlay.PickXI(ci, mine.id)
                                     } else if (pid != null && squad != null && oppSquad != null && stadium != null) {
@@ -701,7 +703,7 @@ private fun PlayTab(
         }
         OptionButton(
             title = "Play my match",
-            description = if (career.isCaptain) "You are the captain: you pick the XI and do the toss, choose the bowlers, set the field and decide the batting order. You face and bowl your own balls; the game plays the rest."
+            description = if (next != null && CareerSeason.captainIn(career, seasons[next.first])) "You are the captain: you pick the XI and do the toss, choose the bowlers, set the field and decide the batting order. You face and bowl your own balls; the game plays the rest."
             else if (decision.selected) "The selectors name the XI with you in it. The captains do the toss. You take over only your own batting and bowling; the game plays the rest of your team." else "You are not in the XI, so you cannot play this match.",
             enabled = !busy && decision.selected,
             emphasised = pending == null

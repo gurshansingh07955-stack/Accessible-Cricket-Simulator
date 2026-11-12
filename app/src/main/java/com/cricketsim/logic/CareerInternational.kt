@@ -379,6 +379,11 @@ object CareerInternational {
         // One tournament closes the season, after the series.
         val tournamentStart = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * offsetWeeks) }.timeInMillis
         tournamentFor(career, season, me, tournamentStart)?.let { out.add(it) }
+        // India and Pakistan also play the Asia Cup in the seasons of the Champions Trophy, after it.
+        if ((career.nation == "India" || career.nation == "Pakistan") && season % 4 == 3) {
+            val asiaStart = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * (offsetWeeks + 8)) }.timeInMillis
+            tournamentFor(career, season, me, asiaStart, true)?.let { out.add(it) }
+        }
         return out
     }
 
@@ -625,12 +630,12 @@ object CareerInternational {
      * The tournament of a season, built by the game's own tournament code with the player written into his country's squad: the T20 World Cup in even seasons,
      * the Champions Trophy (50 overs) in odd ones, and for India and Pakistan the Asia Cup in every second odd season. Null if it could not be built.
      */
-    private fun tournamentFor(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {
+    private fun tournamentFor(career: CareerProfile, season: Int, me: Player, startAt: Long, asiaCup: Boolean = false): TournamentState? {
         if (season % 4 == 1) return odiWorldCup14(career, season, me, startAt)
         val asian = career.nation == "India" || career.nation == "Pakistan"
         val def = when {
             season % 2 == 0 -> TourDef("T20 World Cup", { T20WorldCup.buildTeams() }, { t, b -> T20WorldCup.newTournament(t, b) })
-            asian && season % 4 == 3 -> TourDef("Asia Cup", { AsiaCup.buildTeams() }, { t, b -> AsiaCup.newTournament(t, b) })
+            asiaCup -> TourDef("Asia Cup", { AsiaCup.buildTeams() }, { t, b -> AsiaCup.newTournament(t, b) })
             else -> TourDef("Champions Trophy", { ChampionsTrophy.buildTeams() }, { t, b -> ChampionsTrophy.newTournament(t, b) })
         }
         return try {

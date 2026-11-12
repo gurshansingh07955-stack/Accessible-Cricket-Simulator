@@ -123,7 +123,10 @@ data class CareerProfile(
     /** A move to a district club abroad, planned for the start of the next season. */
     val pendingMove: MoveRequest? = null,
     /** The season he moved to his present country (0 = he never moved). */
-    val movedSeason: Int = 0
+    val movedSeason: Int = 0,
+    // Part eighteen: franchise captaincy.
+    /** The franchise he captains this season (null = none); only counts in the season in which he signed (see leagueDecidedSeason). */
+    val leagueCaptainTeamId: String? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 

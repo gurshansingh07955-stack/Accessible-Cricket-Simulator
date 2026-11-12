@@ -190,6 +190,17 @@ object CareerSeason {
     /** No match that can be played is left (a knockout match whose teams are not known yet does not count: it comes when the table is settled). */
     fun isComplete(state: TournamentState): Boolean = state.fixtures.none { it.result == null && it.homeId != null && it.awayId != null }
 
+    /**
+     * Whether he is the captain in this competition (part eighteen): the club captain in a club league, the national captain in a series or an international tournament, the franchise captain
+     * in the league he signed for this season, and never in a state tournament. A national captain is no longer the captain of his franchise unless the franchise has made him its captain.
+     */
+    fun captainIn(career: CareerProfile, state: TournamentState): Boolean = when {
+        isClub(state) -> career.leadership == "Captain" && !career.isState && !career.isInternational
+        CareerInternational.isInternational(state) -> career.isInternational && career.nationalRole == "Captain"
+        CareerLeagues.isLeague(state) -> career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null && career.leagueCaptainTeamId == state.userTeamId
+        else -> false
+    }
+
     /** The champions once every match is played: the club top of the table, or the winner of a state tournament. */
     fun champion(state: TournamentState): Team? =
         if (!isComplete(state)) null

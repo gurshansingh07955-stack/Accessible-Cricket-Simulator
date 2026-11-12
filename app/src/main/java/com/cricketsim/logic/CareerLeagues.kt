@@ -13,7 +13,9 @@ data class LeagueOffer(
     val overseas: Boolean,
     /** The IPL's auction is rebuilt from this seed when the offer is accepted (the same squads come out). */
     val seed: Long,
-    val note: String
+    val note: String,
+    /** True if the franchise also offers him its captaincy. */
+    val captain: Boolean = false
 )
 
 /**
@@ -148,10 +150,20 @@ object CareerLeagues {
 
     /** The leagues open to him: an Indian player only the IPL, a Pakistani player every league but the IPL. */
     private fun eligible(career: CareerProfile): List<League> = when (career.nation) {
-        "India" -> LEAGUES.filter { it.id == "ipl" }
         "Pakistan" -> LEAGUES.filter { it.id != "ipl" }
         else -> LEAGUES
     }
+
+    /** League matches he must have played before a franchise offers him its captaincy. */
+    const val CAPTAIN_MATCHES = 10
+
+    /**
+     * A franchise's leadership score for him: a point for every ten league matches, 0.3 for every place of form, his standing among the franchise's players (top two +2, top five +1),
+     * an international +1.5, 25 or over +1. At 4.0, with [CAPTAIN_MATCHES] league matches played, the franchise offers him its captaincy with its contract.
+     */
+    private fun captainScore(career: CareerProfile, standing: Int, adjust: Int): Double =
+        career.leagueMatches / 10.0 + adjust * 0.3 + (if (standing <= 2) 2.0 else if (standing <= 5) 1.0 else 0.0) +
+            (if (career.isInternational) 1.5 else 0.0) + (if (career.age >= 25) 1.0 else 0.0)
 
     // ------------------------------------------------------------ the offers
 
@@ -186,10 +198,13 @@ object CareerLeagues {
                 val retained = career.lastLeagueTeamId == team.id
                 val margin = cutoff - (rank - adjust - grace - (if (retained) 1 else 0))
                 val retentionText = if (retained) " Your franchise wants to keep you." else ""
+                val standing = 1 + team.players.count { value(it) > mine }
+                val captainOffer = career.leagueMatches >= CAPTAIN_MATCHES && captainScore(career, standing, adjust) >= 4.0
                 if (margin >= 0) {
                     val note = "You would rank ${ordinal(rank)} among the ${group.size + 1} ${roleWord(role)} of ${team.name}${if (overseas) ", as an overseas player" else ""}, and a T20 XI takes the top $cutoff.${formNote(adjust)}"
                     here.add(Candidate(league.prestige, margin, LeagueOffer(league.id, league.name, team.id, team.name, overseas, seed,
-                        note + retentionText + " Contract offered: " + CareerFinance.money(CareerFinance.contractFor(career, league.id, retained).toLong()) + ".")))
+                        note + retentionText + " Contract offered: " + CareerFinance.money(CareerFinance.contractFor(career, league.id, retained).toLong()) + "." +
+                            (if (captainOffer) " The franchise wants you as its captain." else ""), captainOffer)))
                 }
             }
             found.addAll(here.sortedByDescending { it.margin }.take(MAX_PER_LEAGUE))
@@ -255,10 +270,12 @@ object CareerLeagues {
         val adjust = formAdjust(career)
         val grace = (if (career.leagueMatches < 3) 1 else 0) + (when (career.specialism) { "White-ball" -> 1; "Test" -> -2; else -> 0 })
         val debut = career.leagueMatches == 0
-        val selected = debut || rank - adjust - grace <= cutoff
+        val captain = career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null && career.leagueCaptainTeamId == state.userTeamId
+        val selected = debut || captain || rank - adjust - grace <= cutoff
         val base = "You rank ${ordinal(rank)} of ${group.size} ${roleWord(me.role)} at ${team.name}${if (overseas) " as an overseas player" else ""}, and a T20 XI takes the top $cutoff.${formNote(adjust)}"
         val reason = when {
             debut -> "You are in the XI. The franchise gives every new signing a debut: this is your first league match. $base"
+            captain -> "You are in the XI: you are the captain of ${team.name}. $base"
             selected -> "You are in the XI. $base"
             else -> "You are not in the XI. $base Score runs, take wickets or improve your ratings to move up."
         }
