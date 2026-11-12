@@ -1,0 +1,161 @@
+{
+  "name": "My Player part eighteen: Career menu, all leagues for Indian players, Champions Trophy for all, franchise captaincy",
+  "message": "Career: organised Career menu, Indian players can play every league, Champions Trophy and Asia Cup for India and Pakistan, franchise captaincy",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+    "contains": "fun captainScore("
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val movedSeason: Int = 0\n) {",
+      "replace": "    val movedSeason: Int = 0,\n    // Part eighteen: franchise captaincy.\n    /** The franchise he captains this season (null = none); only counts in the season in which he signed (see leagueDecidedSeason). */\n    val leagueCaptainTeamId: String? = null\n) {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "    /** The champions once every match is played: the club top of the table, or the winner of a state tournament. */\n",
+      "replace": "    /**\n     * Whether he is the captain in this competition (part eighteen): the club captain in a club league, the national captain in a series or an international tournament, the franchise captain\n     * in the league he signed for this season, and never in a state tournament. A national captain is no longer the captain of his franchise unless the franchise has made him its captain.\n     */\n    fun captainIn(career: CareerProfile, state: TournamentState): Boolean = when {\n        isClub(state) -> career.leadership == \"Captain\" && !career.isState && !career.isInternational\n        CareerInternational.isInternational(state) -> career.isInternational && career.nationalRole == \"Captain\"\n        CareerLeagues.isLeague(state) -> career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null && career.leagueCaptainTeamId == state.userTeamId\n        else -> false\n    }\n\n    /** The champions once every match is played: the club top of the table, or the winner of a state tournament. */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "    val note: String\n)\n",
+      "replace": "    val note: String,\n    /** True if the franchise also offers him its captaincy. */\n    val captain: Boolean = false\n)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "        \"India\" -> LEAGUES.filter { it.id == \"ipl\" }\n",
+      "replace": "",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "    // ------------------------------------------------------------ the offers\n",
+      "replace": "    /** League matches he must have played before a franchise offers him its captaincy. */\n    const val CAPTAIN_MATCHES = 10\n\n    /**\n     * A franchise's leadership score for him: a point for every ten league matches, 0.3 for every place of form, his standing among the franchise's players (top two +2, top five +1),\n     * an international +1.5, 25 or over +1. At 4.0, with [CAPTAIN_MATCHES] league matches played, the franchise offers him its captaincy with its contract.\n     */\n    private fun captainScore(career: CareerProfile, standing: Int, adjust: Int): Double =\n        career.leagueMatches / 10.0 + adjust * 0.3 + (if (standing <= 2) 2.0 else if (standing <= 5) 1.0 else 0.0) +\n            (if (career.isInternational) 1.5 else 0.0) + (if (career.age >= 25) 1.0 else 0.0)\n\n    // ------------------------------------------------------------ the offers\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "                val retentionText = if (retained) \" Your franchise wants to keep you.\" else \"\"\n",
+      "replace": "                val retentionText = if (retained) \" Your franchise wants to keep you.\" else \"\"\n                val standing = 1 + team.players.count { value(it) > mine }\n                val captainOffer = career.leagueMatches >= CAPTAIN_MATCHES && captainScore(career, standing, adjust) >= 4.0\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "CareerFinance.contractFor(career, league.id, retained).toLong()) + \".\")))",
+      "replace": "CareerFinance.contractFor(career, league.id, retained).toLong()) + \".\" +\n                            (if (captainOffer) \" The franchise wants you as its captain.\" else \"\"), captainOffer)))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "        val selected = debut || rank - adjust - grace <= cutoff\n",
+      "replace": "        val captain = career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null && career.leagueCaptainTeamId == state.userTeamId\n        val selected = debut || captain || rank - adjust - grace <= cutoff\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "            selected -> \"You are in the XI. $base\"\n",
+      "replace": "            captain -> \"You are in the XI: you are the captain of ${team.name}. $base\"\n            selected -> \"You are in the XI. $base\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    private fun tournamentFor(career: CareerProfile, season: Int, me: Player, startAt: Long): TournamentState? {",
+      "replace": "    private fun tournamentFor(career: CareerProfile, season: Int, me: Player, startAt: Long, asiaCup: Boolean = false): TournamentState? {",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "            asian && season % 4 == 3 -> TourDef(\"Asia Cup\"",
+      "replace": "            asiaCup -> TourDef(\"Asia Cup\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        tournamentFor(career, season, me, tournamentStart)?.let { out.add(it) }\n",
+      "replace": "        tournamentFor(career, season, me, tournamentStart)?.let { out.add(it) }\n        // India and Pakistan also play the Asia Cup in the seasons of the Champions Trophy, after it.\n        if ((career.nation == \"India\" || career.nation == \"Pakistan\") && season % 4 == 3) {\n            val asiaStart = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * (offsetWeeks + 8)) }.timeInMillis\n            tournamentFor(career, season, me, asiaStart, true)?.let { out.add(it) }\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                val back = { play = if (career.isCaptain) CPlay.PickXI(flow.comp, flow.fixtureId) else null }\n",
+      "replace": "                val back = { play = if (CareerSeason.captainIn(career, current[flow.comp])) CPlay.PickXI(flow.comp, flow.fixtureId) else null }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                if (career.isCaptain) {\n                    // The captain does the toss himself",
+      "replace": "                if (CareerSeason.captainIn(career, state)) {\n                    // The captain does the toss himself",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                        careerCaptain = career.isCaptain,\n",
+      "replace": "                        careerCaptain = CareerSeason.captainIn(career, state),\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, career.isCaptain)",
+      "replace": "CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, CareerSeason.captainIn(career, state))",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                                    } else if (career.isCaptain) {\n",
+      "replace": "                                    } else if (CareerSeason.captainIn(career, updated)) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "description = if (career.isCaptain) \"You are the captain: you pick the XI",
+      "replace": "description = if (next != null && CareerSeason.captainIn(career, seasons[next.first])) \"You are the captain: you pick the XI",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                            leagueContract = deal,\n",
+      "replace": "                            leagueContract = deal,\n                            leagueCaptainTeamId = if (offer.captain) offer.teamId else null,\n                            honours = if (offer.captain) (career.honours.orEmpty() + \"Season ${career.season}: appointed captain of ${offer.teamName}.\").takeLast(60) else career.honours,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "Your contract is worth ${CareerFinance.money(deal.toLong())}.\"",
+      "replace": "Your contract is worth ${CareerFinance.money(deal.toLong())}.${if (offer.captain) \" You are the captain.\" else \"\"}\"",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_EIGHTEEN.md",
+      "content": "# My Player, part eighteen: the Career menu, every league for Indian players, the Champions Trophy for all, franchise captaincy\n\n**The Career tab is a menu.** It lists the pages under four headings: *This season* (Season objectives, Fitness, Training and specialism), *Your career* (Career record, Honours, Rankings, Captaincy), *Money and the papers* (Earnings, In the news), *Changes* (Move to another country, Retirement).\nEach button says in one sentence how that page stands (\"2 of 3 reached\", the fitness line, the first ranking, the career totals, the latest honour). A page opens with **Back to the Career menu** first, then its heading and its sentences.\nA retired player's menu has the Career summary first and leaves out the playing pages. The state of the menu is kept while the tab is open.\n\n**Indian players can play every league.** The old rule (only the IPL for an Indian player) is gone; the Pakistani player is still not offered the IPL.\n\n**The Champions Trophy is played by every country** in the seasons 3, 7, 11 ... (the 50-over event of the odd seasons that are not an ODI World Cup season). India and Pakistan also play the **Asia Cup** in those seasons, 8 weeks after the Champions Trophy begins.\n\n**Franchise captaincy** (`CareerLeagues.captainScore`, `CareerSeason.captainIn`). After 10 league matches (`CAPTAIN_MATCHES`) a franchise may offer its captaincy together with its contract: a leadership score of 4.0 or more (a point for every ten league matches, 0.3 for every place of form, his standing in the squad: top two +2, top five +1,\nan international +1.5, age 25 or over +1). The offer says so, accepting it makes him the captain of that franchise for the season (an honour is added), and in that league he picks the XI, does the toss and plays the captain's role, as the club and national captains do.\nA national captain is no longer the captain of his franchise unless the franchise has made him its captain: who is the captain is now decided for each competition (`CareerSeason.captainIn`).\n\n**Dials.** `CAPTAIN_MATCHES`, the thresholds in `captainScore`.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "content": "package com.cricketsim.ui.career\n\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.CareerFinance\nimport com.cricketsim.logic.CareerHealth\nimport com.cricketsim.logic.CareerInternational\nimport com.cricketsim.logic.CareerLeagues\nimport com.cricketsim.logic.CareerProfile\nimport com.cricketsim.logic.CareerRecords\nimport com.cricketsim.logic.CareerSeason\nimport com.cricketsim.logic.CareerWorld\nimport com.cricketsim.logic.MoveRequest\nimport com.cricketsim.logic.TournamentState\nimport com.cricketsim.ui.custom.OptionButton\nimport com.cricketsim.ui.custom.PageHeading\n\n/**\n * The career's Career tab (My Player, parts eleven to eighteen). It opens as a menu: groups with a heading (This season, Your career, Money and the papers, Changes), and under each\n * heading a button for every page with its state in one sentence (\"2 of 3 reached\", \"Injured with a hamstring strain...\"). A page opens with a Back button (first, so a screen reader\n * reaches it at once), then its heading and its plain sentences.\n */\n@Composable\ninternal fun CareerRecordTab(\n    career: CareerProfile,\n    seasons: List<TournamentState>?,\n    rankLines: List<String>,\n    onFocus: (String?) -> Unit,\n    onSpecialism: (String?) -> Unit,\n    onMove: (MoveRequest?) -> Unit,\n    onRetire: () -> Unit\n) {\n    var page by remember { mutableStateOf<String?>(null) }\n    val open = page\n    if (open == null) {\n        CareerMenu(career, seasons, rankLines) { page = it }\n        return\n    }\n    val back = { page = null }\n    when (open) {\n        \"summary\" -> CareerPage(\"Career summary\", back) { CareerHealth.summaryLines(career).forEach { BodyLine(it) } }\n        \"objectives\" -> CareerPage(\"Season objectives\", back) {\n            val lines = if (seasons == null) emptyList() else CareerRecords.objectiveLines(career, seasons)\n            if (lines.isEmpty()) {\n                BodyLine(\"Objectives appear when the season has loaded.\")\n            } else {\n                lines.forEach { BodyLine(it) }\n                BodyLine(\"Every objective you reach gives +1 to the rating it is about when the season ends.\")\n            }\n        }\n        \"fitness\" -> CareerPage(\"Fitness\", back) {\n            BodyLine(CareerHealth.statusLine(career) ?: \"Fitness: you are fit and well.\")\n            BodyLine(\"Injuries are more likely in Test cricket, for bowlers, after thirty and when you are tired. From 33 your ratings slowly fall with age.\")\n        }\n        \"training\" -> CareerPage(\"Training and specialism\", back) { TrainingPage(career, onFocus, onSpecialism) }\n        \"record\" -> CareerPage(\"Career record\", back) {\n            val record = CareerRecords.recordLines(career)\n            if (record.isEmpty()) BodyLine(\"No matches yet. Your record grows with every match you play.\") else record.forEach { BodyLine(it) }\n        }\n        \"honours\" -> CareerPage(\"Honours\", back) {\n            val honours = career.honours.orEmpty()\n            if (honours.isEmpty()) BodyLine(\"None yet. Win a competition or be Player of the Series.\") else honours.reversed().forEach { BodyLine(it) }\n        }\n        \"rankings\" -> CareerPage(\"Rankings\", back) {\n            if (rankLines.isEmpty()) BodyLine(\"Working out your rankings.\") else rankLines.forEach { BodyLine(it) }\n        }\n        \"captaincy\" -> CareerPage(\"Captaincy\", back) { CaptaincyPage(career) }\n        \"earnings\" -> CareerPage(\"Earnings\", back) { CareerFinance.lines(career).forEach { BodyLine(it) } }\n        \"news\" -> CareerPage(\"In the news\", back) {\n            val news = career.media.orEmpty()\n            if (news.isEmpty()) BodyLine(\"Nothing yet. The papers write about you when a competition ends.\") else news.reversed().forEach { BodyLine(it) }\n        }\n        \"move\" -> CareerPage(\"Move to another country\", back) { MovePage(career, onMove) }\n        \"retire\" -> CareerPage(\"Retirement\", back) { RetirementPage(career, seasons, onRetire) }\n        else -> CareerMenu(career, seasons, rankLines) { page = it }\n    }\n}\n\n// ---------------------------------------------------------------- the menu\n\nprivate fun captaincyStatus(career: CareerProfile): String {\n    val parts = ArrayList<String>()\n    val role = career.nationalRole\n    if (career.isInternational && role != null) parts.add(\"${role.lowercase()} of ${career.nation}\")\n    if (career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null) parts.add(\"franchise captain\")\n    if (!career.atOrAboveState && career.leadership.isNotEmpty()) parts.add(\"club ${career.leadership.lowercase()}\")\n    return if (parts.isEmpty()) \"No captaincy yet.\" else parts.joinToString(\", \") + \".\"\n}\n\n@Composable\nprivate fun CareerMenu(career: CareerProfile, seasons: List<TournamentState>?, rankLines: List<String>, onOpen: (String) -> Unit) {\n    PageHeading(\"Career\")\n    Spacer(modifier = Modifier.height(8.dp))\n    if (career.retired) {\n        GroupHeading(\"Your career\")\n        MenuItem(\"Career summary\", \"Your career in a few sentences.\", \"summary\", onOpen)\n    } else {\n        GroupHeading(\"This season\")\n        val objectives = if (seasons == null) emptyList() else CareerRecords.objectiveLines(career, seasons)\n        MenuItem(\n            \"Season objectives\",\n            if (objectives.isEmpty()) \"Loading.\" else \"${objectives.count { it.endsWith(\"done.\") }} of ${objectives.size} reached.\",\n            \"objectives\", onOpen\n        )\n        MenuItem(\"Fitness\", CareerHealth.statusLine(career) ?: \"You are fit and well.\", \"fitness\", onOpen)\n        val spec = when (career.specialism) {\n            \"Test\" -> \"Test specialist\"\n            \"White-ball\" -> \"white-ball specialist\"\n            else -> \"all formats\"\n        }\n        MenuItem(\"Training and specialism\", \"Training: ${career.trainingFocus ?: \"balanced\"}. Format: $spec.\", \"training\", onOpen)\n    }\n    GroupHeading(\"Your career\")\n    val record = CareerRecords.recordLines(career)\n    MenuItem(\"Career record\", record.lastOrNull() ?: \"No matches yet.\", \"record\", onOpen)\n    val honours = career.honours.orEmpty()\n    MenuItem(\"Honours\", if (honours.isEmpty()) \"None yet.\" else \"${honours.size} ${if (honours.size == 1) \"honour\" else \"honours\"}. Latest: ${honours.last()}\", \"honours\", onOpen)\n    MenuItem(\"Rankings\", rankLines.firstOrNull() ?: \"Working out your rankings.\", \"rankings\", onOpen)\n    if (!career.retired) MenuItem(\"Captaincy\", captaincyStatus(career), \"captaincy\", onOpen)\n    GroupHeading(\"Money and the papers\")\n    MenuItem(\"Earnings\", \"Career earnings: ${CareerFinance.money(career.money)}.\", \"earnings\", onOpen)\n    val news = career.media.orEmpty()\n    MenuItem(\"In the news\", news.lastOrNull() ?: \"Nothing yet.\", \"news\", onOpen)\n    if (!career.retired) {\n        GroupHeading(\"Changes\")\n        if (!career.isInternational && career.internationalMatches == 0 && career.clubs.isNotEmpty()) {\n            val pending = career.pendingMove\n            MenuItem(\n                \"Move to another country\",\n                if (pending != null) \"Planned: ${pending.club}, ${pending.country}, at the start of the next season.\" else \"Not planned.\",\n                \"move\", onOpen\n            )\n        }\n        MenuItem(\"Retirement\", \"You are ${career.age}. Players usually retire between 36 and 42.\", \"retire\", onOpen)\n    }\n}\n\n@Composable\nprivate fun MenuItem(title: String, description: String, key: String, onOpen: (String) -> Unit) {\n    Spacer(modifier = Modifier.height(6.dp))\n    OptionButton(title, description, true, false) { onOpen(key) }\n}\n\n@Composable\nprivate fun CareerPage(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {\n    OptionButton(\"Back to the Career menu\", \"Return to the list.\", true, false) { onBack() }\n    Spacer(modifier = Modifier.height(12.dp))\n    PageHeading(title)\n    Spacer(modifier = Modifier.height(8.dp))\n    content()\n}\n\n@Composable\nprivate fun GroupHeading(text: String) {\n    Spacer(modifier = Modifier.height(16.dp))\n    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n    Spacer(modifier = Modifier.height(2.dp))\n}\n\n@Composable\nprivate fun BodyLine(text: String) {\n    Text(text, style = MaterialTheme.typography.bodyMedium)\n    Spacer(modifier = Modifier.height(4.dp))\n}\n\n// ---------------------------------------------------------------- the pages\n\n@Composable\nprivate fun TrainingPage(career: CareerProfile, onFocus: (String?) -> Unit, onSpecialism: (String?) -> Unit) {\n    BodyLine(\"Training focus. The skill you work on grows faster after matches, the others a little slower. Now: ${career.trainingFocus ?: \"balanced\"}.\")\n    listOf<Pair<String?, String>>(\n        null to \"Balanced\",\n        \"Batting\" to \"Batting\",\n        \"Bowling\" to \"Bowling\",\n        \"Fielding\" to \"Fielding\"\n    ).forEach { (value, label) ->\n        val chosen = career.trainingFocus == value\n        Spacer(modifier = Modifier.height(6.dp))\n        OptionButton(\n            if (chosen) \"$label (chosen)\" else label,\n            if (value == null) \"All three skills grow at the normal rate.\" else \"$label grows faster, the other skills slower.\",\n            !chosen, false\n        ) { onFocus(value) }\n    }\n    if (career.atOrAboveState) {\n        Spacer(modifier = Modifier.height(16.dp))\n        Text(\"Format specialism\", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })\n        Spacer(modifier = Modifier.height(4.dp))\n        BodyLine(\n            \"A specialist is preferred by the selectors in his format (a place in his favour) and less in the other (a place against). \" +\n                \"A white-ball specialist also gets more franchise league offers; a Test specialist gets fewer. Now: ${career.specialism?.let { if (it == \"Test\") \"Test specialist\" else \"white-ball specialist\" } ?: \"all formats\"}.\"\n        )\n        listOf<Pair<String?, String>>(\n            null to \"All formats\",\n            \"Test\" to \"Test specialist\",\n            \"White-ball\" to \"White-ball specialist\"\n        ).forEach { (value, label) ->\n            val chosen = career.specialism == value\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(\n                if (chosen) \"$label (chosen)\" else label,\n                when (value) {\n                    \"Test\" -> \"Test series are yours; one-day and T20 matches and leagues are harder to get into.\"\n                    \"White-ball\" -> \"One-day and T20 matches and leagues are yours; Test series are harder to get into.\"\n                    else -> \"No preference: every format is judged the same.\"\n                },\n                !chosen, false\n            ) { onSpecialism(value) }\n        }\n    }\n}\n\n@Composable\nprivate fun CaptaincyPage(career: CareerProfile) {\n    val club = career.leadershipLine()\n    if (club.isNotEmpty() && !career.atOrAboveState) BodyLine(club)\n    if (career.isInternational) {\n        BodyLine(CareerInternational.captaincyLine(career))\n    } else {\n        BodyLine(\"National captaincy: it comes after you have played for your country.\")\n    }\n    if (career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null) {\n        BodyLine(\"Franchise captaincy: you are the captain of your franchise this season. You pick the XI and do the toss in its matches.\")\n    } else {\n        BodyLine(\n            \"Franchise captaincy: after ${CareerLeagues.CAPTAIN_MATCHES} league matches a franchise may offer you its captaincy with its contract, if your form and your standing in its squad are good. \" +\n                \"You have played ${career.leagueMatches} league matches.\"\n        )\n    }\n}\n\n@Composable\nprivate fun MovePage(career: CareerProfile, onMove: (MoveRequest?) -> Unit) {\n    val pending = career.pendingMove\n    if (pending != null) {\n        BodyLine(\"Planned: a move to ${pending.club}, ${pending.state}, ${pending.country}. It happens when you start the next season.\")\n        Spacer(modifier = Modifier.height(6.dp))\n        OptionButton(\"Cancel the move\", \"Stay where you are.\", true, false) { onMove(null) }\n        return\n    }\n    BodyLine(\n        \"You can move your career to a district club in another country that has domestic cricket in the game. You start again at that club, keeping your ratings, age, money, honours and record. \" +\n            \"The national selectors of the new country want you to have lived there for ${CareerInternational.RESIDENCY_SEASONS} seasons. \" +\n            \"The move happens when you start the next season, and you can move until your first international match.\"\n    )\n    var pickCountry by remember { mutableStateOf<String?>(null) }\n    var pickState by remember { mutableStateOf<String?>(null) }\n    val c = pickCountry\n    val st = pickState\n    if (c == null) {\n        CareerWorld.COUNTRIES.filter { it != career.country }.forEach { country ->\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(country, \"Choose a state of $country.\", true, false) { pickCountry = country }\n        }\n    } else if (st == null) {\n        BodyLine(\"Country: $c. Now choose a state.\")\n        CareerWorld.states(c).forEach { state ->\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(state.name, \"Domestic team${if (state.domesticTeams.size > 1) \"s\" else \"\"}: ${state.domesticTeams.joinToString(\", \")}.\", true, false) { pickState = state.name }\n        }\n        Spacer(modifier = Modifier.height(6.dp))\n        OptionButton(\"Back\", \"Choose another country.\", true, false) { pickCountry = null }\n    } else {\n        BodyLine(\"State: $st, $c. Now choose a district club.\")\n        CareerWorld.clubs(c, st).forEach { club ->\n            Spacer(modifier = Modifier.height(6.dp))\n            OptionButton(club, \"Move to this club at the start of the next season.\", true, true) {\n                onMove(MoveRequest(c, st, club))\n                pickCountry = null\n                pickState = null\n            }\n        }\n        Spacer(modifier = Modifier.height(6.dp))\n        OptionButton(\"Back\", \"Choose another state.\", true, false) { pickState = null }\n    }\n}\n\n@Composable\nprivate fun RetirementPage(career: CareerProfile, seasons: List<TournamentState>?, onRetire: () -> Unit) {\n    BodyLine(\"You are ${career.age}. Players usually retire between 36 and 42, earlier if their ratings fall.\")\n    var confirm by remember { mutableStateOf(false) }\n    val seasonDone = seasons != null && seasons.isNotEmpty() && seasons.all { CareerSeason.isComplete(it) }\n    Spacer(modifier = Modifier.height(6.dp))\n    if (!confirm) {\n        OptionButton(\n            \"Retire from cricket\",\n            if (seasonDone) \"End your career and see your career summary.\" else \"You can retire when the season is finished.\",\n            seasonDone, false\n        ) { confirm = true }\n    } else {\n        BodyLine(\"Are you sure? Retiring ends your career for good.\")\n        OptionButton(\"Yes, retire now\", \"Your career ends and the summary appears here.\", true, true) {\n            confirm = false\n            onRetire()\n        }\n        Spacer(modifier = Modifier.height(6.dp))\n        OptionButton(\"No, keep playing\", \"Go back to your career.\", true, false) { confirm = false }\n    }\n}\n"
+    }
+  ]
+}
