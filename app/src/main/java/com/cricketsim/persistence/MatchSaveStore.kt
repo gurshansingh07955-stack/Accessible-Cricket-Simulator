@@ -47,7 +47,9 @@ data class MatchSnapshot(
     val state: MatchState,
     val recentCommentary: List<String>,
     val showInningsBreak: Boolean,
-    val breakLastBall: String
+    val breakLastBall: String,
+    /** When the app was installed or updated: a match saved by another build is not resumed (see MatchSaveStore). Old saves read 0. */
+    val buildStamp: Long = 0L
 )
 
 /**
@@ -88,6 +90,16 @@ class MatchSaveStore(context: Context, fileName: String = "saved_match.json") {
     private val file = File(context.applicationContext.filesDir, fileName)
     private val lock = Mutex()
 
+    /**
+     * The time this build of the app was installed or last updated. Every save carries it, and a save made by another build is thrown away when it is loaded: after an update the game's
+     * classes may have changed shape, and resuming such a match could crash the game. A half-played match does not survive an update (finish it first); tournaments, seasons and careers do.
+     * If the time cannot be read it is 0 for every build and nothing is discarded.
+     */
+    private val buildStamp: Long = runCatching {
+        val app = context.applicationContext
+        app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime
+    }.getOrDefault(0L)
+
     private val gson: Gson = GsonBuilder()
         // A hierarchy adapter, because the enums that implement
         // DeliveryLength would otherwise be written as bare names, losing
@@ -100,7 +112,7 @@ class MatchSaveStore(context: Context, fileName: String = "saved_match.json") {
             lock.withLock {
                 try {
                     val temp = File(file.parentFile, file.name + ".part")
-                    temp.writeText(gson.toJson(snapshot))
+                    temp.writeText(gson.toJson(snapshot.copy(buildStamp = buildStamp)))
                     if (!temp.renameTo(file)) {
                         file.delete()
                         temp.renameTo(file)
@@ -121,7 +133,13 @@ class MatchSaveStore(context: Context, fileName: String = "saved_match.json") {
                     null
                 } else {
                     val snapshot = gson.fromJson(file.readText(), MatchSnapshot::class.java)
-                    if (snapshot != null && isUsable(snapshot)) snapshot else null
+                    if (snapshot != null && snapshot.buildStamp == buildStamp && isUsable(snapshot)) {
+                        snapshot
+                    } else {
+                        // Saved by another build, or not usable: it is never resumed, and is deleted so that it cannot cause trouble later.
+                        runCatching { file.delete() }
+                        null
+                    }
                 }
             } catch (e: Exception) {
                 null

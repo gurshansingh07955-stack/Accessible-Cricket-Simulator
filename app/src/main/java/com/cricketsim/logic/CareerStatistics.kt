@@ -318,9 +318,8 @@ object CareerStatistics {
                 "Test" -> "International|Test"
                 "ODI" -> "International|ODI"
                 "T20I" -> "International|T20"
-                "Club" -> "Club|$EARLIER"
-                "State" -> "State|$EARLIER"
-                else -> "League|$EARLIER"
+                // The records kept before the full record began have no tournament detail and no tab: only the international formats (which have one) are kept.
+                else -> continue
             }
             out[key] = (out[key] ?: DetailedRecord()) + legacy(rec)
         }
@@ -342,9 +341,9 @@ object CareerStatistics {
         val present = entries(career).keys.filter { it.startsWith("$group|") }.map { it.substringAfter('|') }
         return when (group) {
             "All" -> listOf("All")
-            "Club" -> listOf("All", "Three-day", "One-day", "T20") + present.filter { it == EARLIER }
+            "Club" -> listOf("All", "Three-day", "One-day", "T20")
             "International" -> listOf("All", "Test", "ODI", "T20")
-            else -> listOf("All") + present.filter { it != EARLIER }.sorted() + present.filter { it == EARLIER }
+            else -> listOf("All") + present.sorted()
         }
     }
 
