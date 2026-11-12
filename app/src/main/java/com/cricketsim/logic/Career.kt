@@ -126,7 +126,10 @@ data class CareerProfile(
     val movedSeason: Int = 0,
     // Part eighteen: franchise captaincy.
     /** The franchise he captains this season (null = none); only counts in the season in which he signed (see leagueDecidedSeason). */
-    val leagueCaptainTeamId: String? = null
+    val leagueCaptainTeamId: String? = null,
+    // Part nineteen: the full career record (see CareerStatistics).
+    /** The detailed record of every kind of cricket he has played, under "Group|Tab" keys. */
+    val detail: Map<String, DetailedRecord>? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 

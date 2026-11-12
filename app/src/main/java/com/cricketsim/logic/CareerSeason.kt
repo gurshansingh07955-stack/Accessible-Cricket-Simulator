@@ -289,7 +289,8 @@ object CareerSeason {
             val before = if (pid != null) ran.playerStats[pid] else null
             val played = simulateMine(ran, mine, c, random)
             val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random, CareerInternational.formatKeyOf(ran), CareerLeagues.isLeague(ran))
-            c = result.career
+            // The full career record (part nineteen) reads the scorecard of the match he has just played.
+            c = CareerStatistics.record(result.career, played, mine.id, before, if (pid != null) played.playerStats[pid] else null)
             val updated = withUserPlayer(played, c)
             list = list.mapIndexed { i, x -> if (i == ci) updated else x }
             lines.add(

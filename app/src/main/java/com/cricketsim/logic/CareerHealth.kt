@@ -125,14 +125,14 @@ object CareerHealth {
         }
         out.add("The highest level you reached: $highest.")
         if (career.leagueMatches > 0) out.add("You also played ${career.leagueMatches} franchise league matches.")
-        out.addAll(CareerRecords.recordLines(career))
+        out.addAll(CareerStatistics.summaryLines(career))
         val honours = career.honours.orEmpty()
         out.add(if (honours.isEmpty()) "You won no honours." else "You won ${honours.size} ${if (honours.size == 1) "honour" else "honours"}.")
         out.add("Your final ratings: batting ${career.batting}, bowling ${career.bowling}, fielding ${career.fielding}.")
         out.add("Career earnings: ${CareerFinance.money(career.money)}.")
-        val recs = career.records.orEmpty().values
+        val total = CareerStatistics.total(career)
         val points = career.internationalMatches * 2.0 + career.leagueMatches + career.stateMatches * 0.5 + honours.size * 5.0 +
-            recs.sumOf { it.runs } / 100.0 + recs.sumOf { it.wickets } / 10.0
+            total.runs / 100.0 + total.wickets / 10.0
         out.add(
             when {
                 points >= 300 -> "A true great of the game: your name will be remembered."

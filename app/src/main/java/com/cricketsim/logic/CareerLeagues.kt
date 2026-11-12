@@ -94,6 +94,16 @@ object CareerLeagues {
         MajorLeagueCricket.TOURNAMENT_ID, LankaPremierLeague.TOURNAMENT_ID, AbuDhabiT10.TOURNAMENT_ID, InternationalLeagueT20.TOURNAMENT_ID
     )
 
+    private val LEAGUE_NAMES = mapOf(
+        IplSeason.TOURNAMENT_ID to "Indian Premier League", BigBashLeague.TOURNAMENT_ID to "Big Bash League", Sa20.TOURNAMENT_ID to "SA20",
+        CplData.TOURNAMENT_ID to "Caribbean Premier League", MajorLeagueCricket.TOURNAMENT_ID to "Major League Cricket",
+        LankaPremierLeague.TOURNAMENT_ID to "Lanka Premier League", AbuDhabiT10.TOURNAMENT_ID to "Abu Dhabi T10",
+        InternationalLeagueT20.TOURNAMENT_ID to "International League T20"
+    )
+
+    /** The name of a league (without the season) for the career record's tabs. */
+    fun leagueNameOf(state: TournamentState): String = LEAGUE_NAMES[state.tournamentId] ?: state.name
+
     /** True for the season of a franchise league a career is playing in. */
     fun isLeague(state: TournamentState): Boolean = state.tournamentId in LEAGUE_IDS
 

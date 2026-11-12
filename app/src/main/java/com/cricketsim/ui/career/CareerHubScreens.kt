@@ -52,6 +52,7 @@ import com.cricketsim.logic.BigBashLeague
 import com.cricketsim.logic.CareerLeagues
 import com.cricketsim.logic.CareerMove
 import com.cricketsim.logic.CareerRecords
+import com.cricketsim.logic.CareerStatistics
 import com.cricketsim.logic.LeagueOffer
 import com.cricketsim.logic.CareerSelection
 import com.cricketsim.logic.CareerTables
@@ -383,11 +384,17 @@ fun CareerHub(
                                 CareerInternational.formatKeyOf(latest),
                                 CareerLeagues.isLeague(latest)
                             )
+                            // The full career record (part nineteen) reads the scorecard of the match.
+                            val detailed = CareerStatistics.record(
+                                progress.career, recorded, flow.fixtureId,
+                                if (pid != null) latest.playerStats[pid] else null,
+                                if (pid != null) recorded.playerStats[pid] else null
+                            )
                             val newList = latestList.mapIndexed { i, s ->
-                                CareerSeason.withUserPlayer(if (i == flow.comp) recorded else s, progress.career)
+                                CareerSeason.withUserPlayer(if (i == flow.comp) recorded else s, detailed)
                             }
                             seasons = newList
-                            if (progress.career !== career) onCareerChanged(progress.career)
+                            if (detailed !== career) onCareerChanged(detailed)
                             message = lastResultText(newList[flow.comp]) + " " + progress.text
                             saveSeasons(newList)
                         }

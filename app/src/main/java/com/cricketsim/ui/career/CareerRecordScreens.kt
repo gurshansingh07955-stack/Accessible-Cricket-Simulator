@@ -20,6 +20,8 @@ import com.cricketsim.logic.CareerLeagues
 import com.cricketsim.logic.CareerProfile
 import com.cricketsim.logic.CareerRecords
 import com.cricketsim.logic.CareerSeason
+import com.cricketsim.logic.CareerStatistics
+import com.cricketsim.logic.DetailedRecord
 import com.cricketsim.logic.CareerWorld
 import com.cricketsim.logic.MoveRequest
 import com.cricketsim.logic.TournamentState
@@ -64,10 +66,7 @@ internal fun CareerRecordTab(
             BodyLine("Injuries are more likely in Test cricket, for bowlers, after thirty and when you are tired. From 33 your ratings slowly fall with age.")
         }
         "training" -> CareerPage("Training and specialism", back) { TrainingPage(career, onFocus, onSpecialism) }
-        "record" -> CareerPage("Career record", back) {
-            val record = CareerRecords.recordLines(career)
-            if (record.isEmpty()) BodyLine("No matches yet. Your record grows with every match you play.") else record.forEach { BodyLine(it) }
-        }
+        "record" -> CareerPage("Career record", back) { RecordPage(career) }
         "honours" -> CareerPage("Honours", back) {
             val honours = career.honours.orEmpty()
             if (honours.isEmpty()) BodyLine("None yet. Win a competition or be Player of the Series.") else honours.reversed().forEach { BodyLine(it) }
@@ -122,8 +121,7 @@ private fun CareerMenu(career: CareerProfile, seasons: List<TournamentState>?, r
         MenuItem("Training and specialism", "Training: ${career.trainingFocus ?: "balanced"}. Format: $spec.", "training", onOpen)
     }
     GroupHeading("Your career")
-    val record = CareerRecords.recordLines(career)
-    MenuItem("Career record", record.lastOrNull() ?: "No matches yet.", "record", onOpen)
+    MenuItem("Career record", CareerStatistics.headline(career), "record", onOpen)
     val honours = career.honours.orEmpty()
     MenuItem("Honours", if (honours.isEmpty()) "None yet." else "${honours.size} ${if (honours.size == 1) "honour" else "honours"}. Latest: ${honours.last()}", "honours", onOpen)
     MenuItem("Rankings", rankLines.firstOrNull() ?: "Working out your rankings.", "rankings", onOpen)
@@ -306,5 +304,62 @@ private fun RetirementPage(career: CareerProfile, seasons: List<TournamentState>
         }
         Spacer(modifier = Modifier.height(6.dp))
         OptionButton("No, keep playing", "Go back to your career.", true, false) { confirm = false }
+    }
+}
+
+// ---------------------------------------------------------------- the career record
+
+/**
+ * The Career record: first the kind of cricket (all cricket, club, state, international, franchise leagues); then, for club and international cricket, the tabs of the formats
+ * (all, three-day, one-day, T20; all, Test, ODI, T20) and, for state cricket and the leagues, the tab of each tournament (all, Ranji Trophy, Vijay Hazare Trophy ... all, IPL, Big Bash ...);
+ * then the record: batting, bowling, fielding, awards, results and captaincy, one statistic to a line.
+ */
+@Composable
+private fun RecordPage(career: CareerProfile) {
+    var group by remember { mutableStateOf<String?>(null) }
+    var tab by remember { mutableStateOf("All") }
+    val g = group
+    if (g == null) {
+        BodyLine("Choose which record you want to see.")
+        CareerStatistics.GROUPS.forEach { (key, title) ->
+            val total = CareerStatistics.view(career, key, "All")
+            Spacer(modifier = Modifier.height(6.dp))
+            OptionButton(
+                title,
+                if (total.matches == 0) "No matches yet." else "${total.matches} matches, ${total.runs} runs, ${total.wickets} wickets.",
+                true, false
+            ) {
+                group = key
+                tab = "All"
+            }
+        }
+        return
+    }
+    OptionButton("Choose another kind of cricket", "Return to the list of records.", true, false) { group = null }
+    Spacer(modifier = Modifier.height(12.dp))
+    val title = CareerStatistics.GROUPS.first { it.first == g }.second
+    Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+    val tabs = CareerStatistics.tabsOf(career, g)
+    if (tabs.size > 1) {
+        Spacer(modifier = Modifier.height(8.dp))
+        BodyLine("Showing: $tab. Choose another tab:")
+        tabs.forEach { t ->
+            Spacer(modifier = Modifier.height(6.dp))
+            OptionButton(if (t == tab) "$t (showing)" else t, "Show the record for $t.", t != tab, false) { tab = t }
+        }
+    }
+    StatsView(CareerStatistics.view(career, g, if (tabs.contains(tab)) tab else "All"))
+}
+
+@Composable
+private fun StatsView(record: DetailedRecord) {
+    if (record.matches == 0) {
+        Spacer(modifier = Modifier.height(8.dp))
+        BodyLine("No matches yet in this record.")
+        return
+    }
+    CareerStatistics.sections(record).forEach { (heading, lines) ->
+        GroupHeading(heading)
+        lines.forEach { BodyLine(it) }
     }
 }

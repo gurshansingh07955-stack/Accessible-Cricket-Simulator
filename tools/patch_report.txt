@@ -1,6 +1,6 @@
-Patch run: 43128739866
-Timestamp (UTC): 2026-11-12T00:38:32Z
+Patch run: 43201653105
+Timestamp (UTC): 2026-11-12T10:35:15Z
 Result: OK
 -----
-Patch 2026-11-11-104-career-menu-leagues-captaincy.json
-  applied 22 operation(s) to 7 file(s)
+Patch 2026-11-11-105-career-full-record.json
+  applied 13 operation(s) to 10 file(s)

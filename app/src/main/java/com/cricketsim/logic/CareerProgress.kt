@@ -87,7 +87,6 @@ object CareerProgress {
             stateMatches = if (career.isState && !league) career.stateMatches + 1 else career.stateMatches,
             internationalMatches = if (career.isInternational && !league) career.internationalMatches + 1 else career.internationalMatches,
             leagueMatches = if (league) career.leagueMatches + 1 else career.leagueMatches,
-            records = CareerRecords.updated(career, before, after, format, league),
             form = (career.form.orEmpty() + impact).takeLast(5),
             formByFormat = if (format.isEmpty()) career.formByFormat
             else career.formByFormat.orEmpty() + (format to (career.formByFormat?.get(format).orEmpty() + impact).takeLast(5))
