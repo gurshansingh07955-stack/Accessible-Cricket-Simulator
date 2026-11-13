@@ -1,0 +1,98 @@
+{
+  "name": "Saved matches survive an update (repair of old saves) and a crash on resume cannot repeat (crash guard)",
+  "message": "Old matches are repaired and resumed after an update instead of being deleted; a match that crashes the game on resume is discarded once so it cannot loop",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/persistence/CrashGuard.kt",
+    "contains": "object CrashGuard"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "import com.google.gson.JsonParseException\n",
+      "replace": "import com.google.gson.JsonParseException\nimport com.google.gson.JsonParser\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "     * The time this build of the app was installed or last updated. Every save carries it, and a save made by another build is thrown away when it is loaded: after an update the game's\n",
+      "replace": "     * The time this build of the app was installed or last updated, kept in every save for information. It is no longer used to throw old matches away (they are repaired and resumed:\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "     * classes may have changed shape, and resuming such a match could crash the game. A half-played match does not survive an update (finish it first); tournaments, seasons and careers do.\n",
+      "replace": "     * see SnapshotRepair and CrashGuard).\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "     * If the time cannot be read it is 0 for every build and nothing is discarded.\n",
+      "replace": "",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "                } else {\n                    val snapshot = gson.fromJson(file.readText(), MatchSnapshot::class.java)\n                    if (snapshot != null && snapshot.buildStamp == buildStamp && isUsable(snapshot)) {\n",
+      "replace": "                } else if (crashedWhileResumed()) {\n                    // The game crashed while this saved match was open after being resumed: it is discarded so that the crash cannot repeat (CrashGuard).\n                    discardFiles()\n                    null\n                } else {\n                    // A match saved by an older build lacks the lists and maps added since: they are filled in before it is read, so an update does not make it unreadable (SnapshotRepair).\n                    val tree = JsonParser.parseString(file.readText())\n                    SnapshotRepair.fill(tree, MatchSnapshot::class.java)\n                    val snapshot = gson.fromJson(tree, MatchSnapshot::class.java)\n                    if (snapshot != null && isUsable(snapshot)) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "                        // Saved by another build, or not usable: it is never resumed, and is deleted so that it cannot cause trouble later.\n",
+      "replace": "                        // Damaged or incomplete: it is deleted so that it cannot cause trouble later.\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt",
+      "find": "    suspend fun clear() {\n",
+      "replace": "    private val marker = File(context.applicationContext.filesDir, fileName + \".resuming\")\n\n    /** Called when a resumed match opens: if the game crashes while it is open, the next load discards this save (CrashGuard). */\n    fun markResume() {\n        runCatching { marker.writeText(System.currentTimeMillis().toString()) }\n    }\n\n    /** Called when the resumed match's screen is left normally. */\n    fun clearResumeMarker() {\n        runCatching { marker.delete() }\n    }\n\n    private fun crashedWhileResumed(): Boolean {\n        if (!marker.exists()) return false\n        val crashed = CrashGuard.crashedSince(file.parentFile, marker.lastModified())\n        // No crash: the game was only closed or killed while the match was open, so the save is kept.\n        if (!crashed) runCatching { marker.delete() }\n        return crashed\n    }\n\n    private fun discardFiles() {\n        runCatching { file.delete() }\n        runCatching { File(file.parentFile, file.name + \".part\").delete() }\n        runCatching { marker.delete() }\n    }\n\n    suspend fun clear() {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    val director = remember(services) { services?.let { MatchAudioDirector(it) } }\n",
+      "replace": "    val director = remember(services) { services?.let { MatchAudioDirector(it) } }\n\n    // A resumed match marks itself while its screen is open. If the game crashes while it is open, the next start discards that saved match instead of resuming it again and crashing again (CrashGuard).\n    if (resume != null) {\n        val markStore = saveStore ?: services?.saves\n        DisposableEffect(markStore) {\n            markStore?.markResume()\n            onDispose { markStore?.clearResumeMarker() }\n        }\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "import com.cricketsim.persistence.MatchSnapshot\n",
+      "replace": "import com.cricketsim.persistence.CrashGuard\nimport com.cricketsim.persistence.MatchSnapshot\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "        Customisation.init(applicationContext)\n",
+      "replace": "        CrashGuard.install(applicationContext)\n        Customisation.init(applicationContext)\n",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_TWENTYONE.md",
+      "content": "# My Player, part twenty-one: old matches are resumed after an update, and a crash cannot repeat\n\n**Why a half-played match is no longer thrown away.** Patch 106 discarded every saved match made by an older build. That was the wrong answer: an update replaces the whole app, so old code cannot run again, but the new code can read an old save. Now it does.\n\n**Repair** (`SnapshotRepair`). A saved match is JSON. When a class has gained a list or a map since the match was saved, Gson would read it as null and the game would crash at the first use. Before the saved match is read, the JSON is walked against the classes as they are now, and an empty list or map is added wherever one is missing\n(numbers and true/false already read as 0 and false; fields the new code no longer has are ignored). This covers the usual kind of change. Rule for future changes: a new field on a saved class should be nullable or have a safe default (a list or map is repaired automatically).\n\n**Crash guard** (`CrashGuard`, `MatchSaveStore.markResume`). A resumed match marks itself while its screen is open and clears the mark when the screen is left normally. If the game crashes while a resumed match is open, a flag is written; the next time that saved match is loaded, the flag shows that resuming it crashed the game, and only that\nsaved match is discarded, instead of resuming it and crashing again for ever. A match whose screen was only closed by the system (no crash) is kept. This is the safety net for a change the repair cannot cover.\n\n**The install-time stamp** (patch 106) is still written into each save but no longer discards anything. A match saved by the build of patch 106 resumes as normal.\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/persistence/SnapshotRepair.kt",
+      "content": "package com.cricketsim.persistence\n\nimport com.google.gson.JsonArray\nimport com.google.gson.JsonElement\nimport com.google.gson.JsonObject\nimport java.lang.reflect.Field\nimport java.lang.reflect.Modifier\nimport java.lang.reflect.ParameterizedType\nimport java.lang.reflect.Type\n\n/**\n * Makes a match saved by an older build readable by a newer one. Gson builds the game's classes without running their constructors, so a list or a map that the saved JSON does not have\n * (because it was added to a class after the match was saved) would come out null in a Kotlin property that is never null, and the game would crash when it reads it. Before the JSON is read,\n * [fill] walks it against the classes as they are now and adds an empty list or map wherever one is missing (numbers and booleans already read as 0 and false). Fields the new code no longer has are\n * ignored by Gson. This covers the usual change (a new list or map in a saved class); a changed meaning or a new object field cannot be repaired, and the crash guard (CrashGuard) catches what is left.\n */\nobject SnapshotRepair {\n\n    private const val MAX_DEPTH = 14\n\n    fun fill(json: JsonElement, type: Type, depth: Int = 0) {\n        if (depth > MAX_DEPTH) return\n        when (type) {\n            is Class<*> -> if (json is JsonObject) fillObject(json, type, depth)\n            is ParameterizedType -> {\n                val raw = type.rawType as? Class<*> ?: return\n                val args = type.actualTypeArguments\n                if (Collection::class.java.isAssignableFrom(raw) && json is JsonArray && args.isNotEmpty()) {\n                    json.forEach { fill(it, args[0], depth + 1) }\n                } else if (Map::class.java.isAssignableFrom(raw) && json is JsonObject && args.size == 2) {\n                    json.entrySet().forEach { fill(it.value, args[1], depth + 1) }\n                }\n            }\n            else -> Unit\n        }\n    }\n\n    private fun fieldsOf(clazz: Class<*>): List<Field> =\n        clazz.declaredFields.filter { !Modifier.isStatic(it.modifiers) && !Modifier.isTransient(it.modifiers) && !it.isSynthetic }\n\n    private fun fillObject(json: JsonObject, clazz: Class<*>, depth: Int) {\n        if (clazz.isPrimitive || clazz.isEnum || clazz.isInterface || clazz.isArray) return\n        if (!clazz.name.startsWith(\"com.cricketsim.\")) return\n        for (field in fieldsOf(clazz)) {\n            val name = field.name\n            val child = json.get(name)\n            if (child == null) {\n                val raw = field.type\n                if (List::class.java.isAssignableFrom(raw) || Set::class.java.isAssignableFrom(raw)) {\n                    json.add(name, JsonArray())\n                } else if (Map::class.java.isAssignableFrom(raw)) {\n                    json.add(name, JsonObject())\n                }\n            } else {\n                fill(child, field.genericType, depth + 1)\n            }\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/persistence/CrashGuard.kt",
+      "content": "package com.cricketsim.persistence\n\nimport android.content.Context\nimport java.io.File\n\n/**\n * Stops a crash from repeating. When the game crashes it writes a small flag file (and then crashes as it would have). A match that was resumed marks itself while it is open\n * (MatchSaveStore.markResume, cleared when the match screen is left normally); the next time that saved match is loaded, if a crash happened after it was marked, the saved match is\n * discarded instead of being resumed again, so a match that crashes the game on resume cannot lock the player out of the game. A match whose screen was only closed by the system (no crash)\n * is kept. Installed once, from MainActivity.\n */\nobject CrashGuard {\n\n    private const val FLAG = \"crash_flag\"\n\n    @Volatile\n    private var installed = false\n\n    fun install(context: Context) {\n        if (installed) return\n        installed = true\n        val dir = context.applicationContext.filesDir\n        val previous = Thread.getDefaultUncaughtExceptionHandler()\n        Thread.setDefaultUncaughtExceptionHandler { thread, error ->\n            runCatching { File(dir, FLAG).writeText(System.currentTimeMillis().toString()) }\n            previous?.uncaughtException(thread, error)\n        }\n    }\n\n    /** True if the game crashed at or after [time] (milliseconds since 1970). */\n    fun crashedSince(dir: File?, time: Long): Boolean {\n        val flag = File(dir, FLAG)\n        return flag.exists() && flag.lastModified() >= time\n    }\n}\n",
+      "mustNotExist": true
+    }
+  ]
+}
