@@ -19,6 +19,7 @@ import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.Anthems
 import com.cricketsim.logic.CricketData
 import com.cricketsim.logic.Team
+import com.cricketsim.persistence.CrashGuard
 import com.cricketsim.persistence.MatchSnapshot
 import com.cricketsim.persistence.summary
 import com.cricketsim.ui.Screen
@@ -66,6 +67,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // The player's customised teams and players must be loaded before any team is read.
+        CrashGuard.install(applicationContext)
         Customisation.init(applicationContext)
         val gameServices = GameServices(applicationContext)
         services = gameServices

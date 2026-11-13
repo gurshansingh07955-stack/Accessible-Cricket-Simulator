@@ -1,6 +1,6 @@
-Patch run: 43210365536
-Timestamp (UTC): 2026-11-12T11:35:00Z
+Patch run: 43339592379
+Timestamp (UTC): 2026-11-13T00:45:39Z
 Result: OK
 -----
-Patch 2026-11-12-106-record-cleanup-save-safety.json
-  applied 8 operation(s) to 3 file(s)
+Patch 2026-11-12-107-saves-repair-crash-guard.json
+  applied 13 operation(s) to 6 file(s)

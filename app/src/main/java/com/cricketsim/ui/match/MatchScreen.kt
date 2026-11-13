@@ -216,6 +216,15 @@ fun MatchScreen(
     val settings = services?.settings ?: GameSettings()
     val director = remember(services) { services?.let { MatchAudioDirector(it) } }
 
+    // A resumed match marks itself while its screen is open. If the game crashes while it is open, the next start discards that saved match instead of resuming it again and crashing again (CrashGuard).
+    if (resume != null) {
+        val markStore = saveStore ?: services?.saves
+        DisposableEffect(markStore) {
+            markStore?.markResume()
+            onDispose { markStore?.clearResumeMarker() }
+        }
+    }
+
     var matchState by remember {
         mutableStateOf(
             (resume?.state ?: MatchStateMachine.createNewMatch(

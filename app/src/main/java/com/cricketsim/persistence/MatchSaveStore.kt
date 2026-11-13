@@ -15,6 +15,7 @@ import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParseException
+import com.google.gson.JsonParser
 import com.google.gson.JsonSerializationContext
 import com.google.gson.JsonSerializer
 import kotlinx.coroutines.Dispatchers
@@ -91,9 +92,8 @@ class MatchSaveStore(context: Context, fileName: String = "saved_match.json") {
     private val lock = Mutex()
 
     /**
-     * The time this build of the app was installed or last updated. Every save carries it, and a save made by another build is thrown away when it is loaded: after an update the game's
-     * classes may have changed shape, and resuming such a match could crash the game. A half-played match does not survive an update (finish it first); tournaments, seasons and careers do.
-     * If the time cannot be read it is 0 for every build and nothing is discarded.
+     * The time this build of the app was installed or last updated, kept in every save for information. It is no longer used to throw old matches away (they are repaired and resumed:
+     * see SnapshotRepair and CrashGuard).
      */
     private val buildStamp: Long = runCatching {
         val app = context.applicationContext
@@ -131,12 +131,19 @@ class MatchSaveStore(context: Context, fileName: String = "saved_match.json") {
             try {
                 if (!file.exists()) {
                     null
+                } else if (crashedWhileResumed()) {
+                    // The game crashed while this saved match was open after being resumed: it is discarded so that the crash cannot repeat (CrashGuard).
+                    discardFiles()
+                    null
                 } else {
-                    val snapshot = gson.fromJson(file.readText(), MatchSnapshot::class.java)
-                    if (snapshot != null && snapshot.buildStamp == buildStamp && isUsable(snapshot)) {
+                    // A match saved by an older build lacks the lists and maps added since: they are filled in before it is read, so an update does not make it unreadable (SnapshotRepair).
+                    val tree = JsonParser.parseString(file.readText())
+                    SnapshotRepair.fill(tree, MatchSnapshot::class.java)
+                    val snapshot = gson.fromJson(tree, MatchSnapshot::class.java)
+                    if (snapshot != null && isUsable(snapshot)) {
                         snapshot
                     } else {
-                        // Saved by another build, or not usable: it is never resumed, and is deleted so that it cannot cause trouble later.
+                        // Damaged or incomplete: it is deleted so that it cannot cause trouble later.
                         runCatching { file.delete() }
                         null
                     }
@@ -145,6 +152,32 @@ class MatchSaveStore(context: Context, fileName: String = "saved_match.json") {
                 null
             }
         }
+    }
+
+    private val marker = File(context.applicationContext.filesDir, fileName + ".resuming")
+
+    /** Called when a resumed match opens: if the game crashes while it is open, the next load discards this save (CrashGuard). */
+    fun markResume() {
+        runCatching { marker.writeText(System.currentTimeMillis().toString()) }
+    }
+
+    /** Called when the resumed match's screen is left normally. */
+    fun clearResumeMarker() {
+        runCatching { marker.delete() }
+    }
+
+    private fun crashedWhileResumed(): Boolean {
+        if (!marker.exists()) return false
+        val crashed = CrashGuard.crashedSince(file.parentFile, marker.lastModified())
+        // No crash: the game was only closed or killed while the match was open, so the save is kept.
+        if (!crashed) runCatching { marker.delete() }
+        return crashed
+    }
+
+    private fun discardFiles() {
+        runCatching { file.delete() }
+        runCatching { File(file.parentFile, file.name + ".part").delete() }
+        runCatching { marker.delete() }
     }
 
     suspend fun clear() {
