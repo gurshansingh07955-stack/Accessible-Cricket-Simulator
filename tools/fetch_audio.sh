@@ -93,6 +93,10 @@ drs_firecracker|/_cdn/sfx/drs_firecracker.mp3
 drs_lose|/_cdn/sfx/drs_lose.mp3
 drs_umpires_call_against|/_cdn/sfx/drs_umpires_call_against.mp3
 drinks_break_drinking|/_cdn/sfx/drinks_break_drinking.mp3
+press_camera|/_cdn/sfx/press_camera.mp3
+press_murmur|/_cdn/sfx/press_murmur.mp3
+press_hush|/_cdn/sfx/press_hush.mp3
+press_applause|/_cdn/sfx/press_applause.mp3
 appeal_1|/_cdn/sfx/appeal_1.mp3
 appeal_2|/_cdn/sfx/appeal_2.mp3
 appeal_3|/_cdn/sfx/appeal_3.mp3
@@ -140,6 +144,21 @@ if command -v python3 >/dev/null 2>&1 && [ -f tools/umpire_clip_ids.py ]; then
   echo "Umpire clips listed: $umpire_count"
 else
   echo "python3 or tools/umpire_clip_ids.py not found; skipping the umpires' voices."
+fi
+
+echo
+echo "== Downloading the press conference voices =="
+# The four reporters (they take turns) and the player (one voice). The list comes from tools/press_clip_ids.py, which reads CareerPress.kt;
+# each clip is on the web app at /_cdn/press/<id>.mp3 and is stored in the pack as <id>.mp3.
+press_count=0
+if command -v python3 >/dev/null 2>&1 && [ -f tools/press_clip_ids.py ]; then
+  for id in $(python3 tools/press_clip_ids.py); do
+    press_count=$((press_count + 1))
+    fetch "$BASE_URL/_cdn/press/$id.mp3" "$SCRATCH_DIR/$id.mp3"
+  done
+  echo "Press conference clips listed: $press_count"
+else
+  echo "python3 or tools/press_clip_ids.py not found; skipping the press conference voices."
 fi
 
 echo

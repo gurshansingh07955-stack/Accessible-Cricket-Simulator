@@ -54,6 +54,12 @@ object CareerPress {
     const val PRESS_CONFERENCES = true
     private const val QUESTIONS_BEYOND_THE_FOUR = 2
 
+    /** The reporters take turns: the question in position n (from 0) of a press conference is asked by reporter n mod 4, so no two in a row sound alike. */
+    const val REPORTER_VOICES = 4
+
+    /** The recording of a question as that reporter asks it (the clip id: <question id>_r0 to _r3). The player's answers are recorded as their own ids. */
+    fun questionClipId(q: PressQuestion, position: Int): String = "${q.id}_r${position % REPORTER_VOICES}"
+
     private fun a(tone: String, mood: Int, text: String) = Triple(tone, mood, text)
 
     private fun q(id: String, topic: String, text: String, vararg answers: Triple<String, Int, String>): PressQuestion =

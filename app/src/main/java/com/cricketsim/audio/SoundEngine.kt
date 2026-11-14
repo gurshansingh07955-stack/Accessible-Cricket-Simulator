@@ -409,6 +409,38 @@ class SoundEngine(context: Context) {
         return umpireVoice.play(clipIds.toList())
     }
 
+    // ---- The career press conference: the reporters and the player share one queue (a clip cuts off the one before), the room's own
+    // sounds (camera flashes, murmur, a hush, applause) have another, so a sound can play under or between the voices.
+    internal val pressVoice: AuctionVoice by lazy { AuctionVoice(appContext) }
+    internal val pressRoom: AuctionVoice by lazy { AuctionVoice(appContext) }
+
+    /** True if this press conference clip is in the audio pack and sound effects are on. */
+    fun hasPressClip(id: String): Boolean = settings.soundEffects && AudioPack.bytesFor(appContext, "$id.mp3") != null
+
+    /** Plays a press conference voice clip now, cutting off the one before. False if it is missing (or sound effects are off): the caller then speaks the text itself. */
+    fun playPress(id: String): Boolean {
+        if (!settings.soundEffects) return false
+        return pressVoice.play(listOf(id), interrupt = true)
+    }
+
+    /** A press room sound (press_camera, press_murmur, press_hush, press_applause). False if it is missing; nothing is said instead. */
+    fun playPressRoom(id: String): Boolean {
+        if (!settings.soundEffects) return false
+        return pressRoom.play(listOf(id), interrupt = true)
+    }
+
+    fun isPressSpeaking(): Boolean = pressVoice.isSpeaking
+
+    /** Stops the voices only; a room sound that is playing finishes (the applause as the page closes). */
+    fun stopPressVoice() {
+        pressVoice.stop()
+    }
+
+    fun stopPress() {
+        pressVoice.stop()
+        pressRoom.stop()
+    }
+
     // True from the moment the no-ball siren sounds until the ball it was for has been
     // resolved, so the same no-ball is never given two sirens (see takeSirenSounded).
     private var sirenSounded = false
