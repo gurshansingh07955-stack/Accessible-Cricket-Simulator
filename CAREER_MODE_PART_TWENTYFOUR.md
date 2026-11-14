@@ -5,6 +5,13 @@
 - `CareerProfile.newsFeed` (`NewsItem(text, mine)`, the last 80 lines). The season-end lines of `CareerMedia` are put in the feed too; older saves keep their `media` lines, shown first.
 - Career tab > In the news: two tabs, All and My news, the newest first.
 
-## Still to come
-- Second part: the press conference (after a Player of the Match or Player of the Series in international matches and tournaments and in league matches): a pop-up, 5 or 6 questions with several variants, 4 or 5 answers each, in text.
-- Third part: its audio (ElevenLabs: reporters' voices, the player's voices, crowd and camera sound effects) and the player speaking the chosen answer.
+## Second part (patch 111): the press conference, in text
+- `logic/CareerPress.kt` (the questions and the rules) and `ui/career/CareerPressScreen.kt` (the page).
+- **When:** after a Player of the Match award (a match he played) or a Player of the Series award (the competition has just ended) in an international match, an international tournament or a franchise league. Not at club or state level. `CareerProfile.pendingPress` keeps it until it is held, so it also comes after a simulated match, or after the app was closed. The newest award replaces an older one that was not held yet. `PRESS_CONFERENCES = false` switches it off.
+- **What:** six questions: an opener, the award, what he did (batting, bowling or both), the match (a win or a defeat), and two more from pressure (always asked in a final or knockout), the team, what comes next and his life. 31 questions in all, each with four or five answers in a tone: Humble, Team first, Confident, Bold, Careful. The context (award, what he did, win or defeat, big occasion) picks which variant is asked; the trigger's `seed` fixes the six.
+- **Question and answer texts never hold a name or a number**, so their recordings (third part) are always right. Every answer has a stable id: `<question id>_a` to `_e` (for example `pq_open_1_c`).
+- **What it changes:** `pressMood` (what the papers make of the answers; each answer carries its own mood) and one line in the news ("Press conference: ..."). It does not touch ratings or selection. Skipping costs one point of mood.
+- **Page:** Skip (first button), the opening words, then for each question the reporter's question, the answers (each with its tone), what he answered, and Next question or Finish.
+
+## Third part (still to come): the audio
+- ElevenLabs: reporters' voices (several), the player's voices for the answers (new voices), press-room sound effects (camera clicks, murmur, a microphone being handed over); the player speaks the answer he chooses, the reporter's question is played before it is shown as text.

@@ -52,6 +52,7 @@ import com.cricketsim.logic.BigBashLeague
 import com.cricketsim.logic.CareerLeagues
 import com.cricketsim.logic.CareerMove
 import com.cricketsim.logic.CareerNews
+import com.cricketsim.logic.CareerPress
 import com.cricketsim.logic.CareerRecords
 import com.cricketsim.logic.CareerStatistics
 import com.cricketsim.logic.LeagueOffer
@@ -282,6 +283,27 @@ fun CareerHub(
         )
     }
 
+    // ---------------------------------------------------------------- a press conference after an award (full screen, part twenty-four)
+    val pressNow = career.pendingPress
+    if (pressNow != null && play == null && !busy) {
+        // No Back here: the Skip button is the first thing on the page.
+        BackHandler { }
+        CareerPressScreen(
+            trigger = pressNow,
+            onFinish = { answers ->
+                val done = CareerPress.finish(career, pressNow, answers)
+                message = done.second
+                onCareerChanged(done.first)
+            },
+            onSkip = {
+                val done = CareerPress.skip(career, pressNow)
+                message = done.second
+                onCareerChanged(done.first)
+            }
+        )
+        return
+    }
+
     // ---------------------------------------------------------------- a scorecard opened from the Calendar (full screen)
     val cardWanted = viewCard
     val cardSeasons = seasons
@@ -426,7 +448,17 @@ fun CareerHub(
                                 Random.Default
                             )
                             val playedList = latestList.mapIndexed { i, s -> if (i == flow.comp) recorded else s }
-                            val noted = CareerNews.afterMatches(afterMyMatch, latestList, playedList, Random.Default)
+                            val newsed = CareerNews.afterMatches(afterMyMatch, latestList, playedList, Random.Default)
+                            // A Player of the Match or Player of the Series award calls a press conference (it comes when he is back in the hub).
+                            val noted = CareerPress.afterSeries(
+                                CareerPress.afterMyMatch(
+                                    newsed, recorded, flow.fixtureId,
+                                    if (pid != null) latest.playerStats[pid] else null,
+                                    if (pid != null) recorded.playerStats[pid] else null,
+                                    Random.Default
+                                ),
+                                latestList, playedList, Random.Default
+                            )
                             val newList = playedList.map { CareerSeason.withUserPlayer(it, noted) }
                             seasons = newList
                             if (noted !== career) onCareerChanged(noted)

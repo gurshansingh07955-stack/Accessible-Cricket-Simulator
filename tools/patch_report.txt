@@ -1,6 +1,6 @@
-Patch run: 43563865313
-Timestamp (UTC): 2026-11-14T05:56:08Z
+Patch run: 43585869944
+Timestamp (UTC): 2026-11-14T10:33:55Z
 Result: OK
 -----
-Patch 2026-11-14-110-career-news-after-every-match.json
-  applied 16 operation(s) to 7 file(s)
+Patch 2026-11-14-111-career-press-conference-text.json
+  applied 9 operation(s) to 6 file(s)
