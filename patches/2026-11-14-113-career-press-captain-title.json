@@ -1,0 +1,87 @@
+{
+  "name": "Career press conference after a final won as captain (captaincy and performance questions)",
+  "message": "When you are the captain and your side wins the final of an international or league tournament, a press conference follows with questions about your captaincy and, if you played very well, about your performance.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+    "contains": "pq_captain_5"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "    /** \"POM\" (Player of the Match) or \"SERIES\" (Player of the Series). */\n",
+      "replace": "    /** \"POM\" (Player of the Match), \"SERIES\" (Player of the Series) or \"TITLE\" (a final won as the captain). */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "    /** The competition's name, for the news line and the opening words. */\n    val place: String = \"\"\n)\n",
+      "replace": "    /** The competition's name, for the news line and the opening words. */\n    val place: String = \"\",\n    /** He is the captain of the side that won (a title press conference asks about leading the team). */\n    val captain: Boolean = false,\n    /** His own play in the match was very good (Player of the Match, fifty or more runs, three or more wickets): the questions then ask about it too. */\n    val goodPerf: Boolean = false\n)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "            a(\"Careful\", 0, \"Many people, in different ways. I would not like to leave anyone out by naming only one.\"))\n    )\n",
+      "replace": "            a(\"Careful\", 0, \"Many people, in different ways. I would not like to leave anyone out by naming only one.\")),\n\n        // ---- a final won as captain: the opener\n        q(\"pq_open_title_1\", \"open\", \"Congratulations, captain. You have won the title. What is going through your mind?\",\n            a(\"Humble\", 1, \"Mostly gratitude. So many people helped this group get here, and I am proud to lead them.\"),\n            a(\"Confident\", 1, \"That all the hard work was worth it. We believed in this plan, and it came off.\"),\n            a(\"Team first\", 1, \"That this belongs to every single person in the squad. I am just the one holding the trophy.\"),\n            a(\"Bold\", 2, \"That this is only the beginning. This team is built to win a lot more than this.\"),\n            a(\"Careful\", 0, \"I am still taking it in. I will enjoy tonight, and then we get back to work.\")).copy(kind = \"TITLE\"),\n        q(\"pq_open_title_2\", \"open\", \"Champions! How does it feel to lift the trophy as captain?\",\n            a(\"Humble\", 1, \"Unreal. I never imagined I would be doing this. I have to thank everybody who believed in me.\"),\n            a(\"Confident\", 1, \"It feels like the reward for the way we have played the whole tournament.\"),\n            a(\"Team first\", 1, \"Special, because I get to share it with the boys. I would not swap this group for anything.\"),\n            a(\"Bold\", 2, \"Exactly how I pictured it. I told the dressing room we were going to finish this.\")).copy(kind = \"TITLE\"),\n\n        // ---- the title\n        q(\"pq_title_1\", \"title\", \"It was a final, and you were the winners. When did you feel the title was yours?\",\n            a(\"Careful\", 0, \"Not until the last ball. In a final, nothing is certain until the job is done.\"),\n            a(\"Confident\", 1, \"Once we took control in the middle overs. From there I felt we would not let it go.\"),\n            a(\"Humble\", 1, \"I am not sure I did, even then. I just kept thinking about the next ball.\"),\n            a(\"Team first\", 1, \"When I looked around at the faces in the field. Everyone was giving everything, and that is when I knew.\")).copy(kind = \"TITLE\"),\n        q(\"pq_title_2\", \"title\", \"What will you remember most about this tournament?\",\n            a(\"Humble\", 1, \"The little moments: the early mornings, the nets, the long bus rides together.\"),\n            a(\"Team first\", 1, \"The way the group came together after tough days. That is what won us the title.\"),\n            a(\"Confident\", 1, \"The moment we lifted the trophy. All the effort came together in that one second.\"),\n            a(\"Bold\", 1, \"That we were the best side here, from the first match to the last. Nobody can argue with that.\")).copy(kind = \"TITLE\"),\n\n        // ---- his captaincy\n        q(\"pq_captain_1\", \"captain\", \"As captain, what was your plan for the final, and how did it work out?\",\n            a(\"Careful\", 0, \"Keep it simple, back our best players, and adjust as the game changed. It worked out.\"),\n            a(\"Confident\", 1, \"To take the game to them. I wanted us to be the side that made the first move.\"),\n            a(\"Team first\", 1, \"To let the senior players guide the key moments, and trust the group. It paid off.\"),\n            a(\"Bold\", 1, \"To win it by playing the way we believe in. We never changed our style.\")).copy(kind = \"TITLE\"),\n        q(\"pq_captain_2\", \"captain\", \"You made some bold decisions during the match. How hard is it to make those calls?\",\n            a(\"Humble\", 1, \"Very hard. Sometimes you get them right and sometimes not, and today we were lucky.\"),\n            a(\"Confident\", 1, \"You have to trust your gut. I would rather make a decision and stand by it.\"),\n            a(\"Team first\", 1, \"I do not make them alone. I talk to the bowlers and the coach all the time.\"),\n            a(\"Careful\", 0, \"I look at the pitch, the conditions and the players, and then I go with the best choice at that moment.\")).copy(kind = \"TITLE\"),\n        q(\"pq_captain_3\", \"captain\", \"What kind of team culture have you tried to build as captain?\",\n            a(\"Team first\", 1, \"One where everyone feels they matter, from the star player to the youngest in the squad.\"),\n            a(\"Humble\", 1, \"An honest one. We talk openly, we learn from mistakes, and we do not blame each other.\"),\n            a(\"Confident\", 1, \"A winning one. We expect to win, and we prepare like it every day.\"),\n            a(\"Careful\", 0, \"A calm one. I want players to enjoy the game and play without fear.\")).copy(kind = \"TITLE\"),\n        q(\"pq_captain_4\", \"captain\", \"How did you handle the pressure of leading the side in a final?\",\n            a(\"Humble\", 1, \"I felt it all the way. But the players around me helped me stay calm.\"),\n            a(\"Confident\", 1, \"I enjoy it. Leading in the big games is why I wanted to be captain.\"),\n            a(\"Careful\", 0, \"I broke it down into small jobs: one over at a time, one decision at a time.\"),\n            a(\"Team first\", 1, \"I leaned on my vice-captain and the senior guys. A captain is only as good as his team.\")).copy(kind = \"TITLE\"),\n        q(\"pq_captain_5\", \"captain\", \"Who helped you the most in your growth as a captain?\",\n            a(\"Humble\", 1, \"My coach and the captains before me. They shared so much with me, and I am still learning.\"),\n            a(\"Team first\", 1, \"The whole dressing room. They gave me their trust, and that is what makes a captain.\"),\n            a(\"Confident\", 1, \"Every tough game I have led. Mistakes teach you more than wins ever do.\"),\n            a(\"Careful\", 0, \"I do not want to name just one. A lot of people gave me small pieces of advice, and I used them all.\")).copy(kind = \"TITLE\")\n    )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "        fun pickFrom(topic: String): PressQuestion? {\n            val options = BANK.filter { it.topic == topic && fits(it) }\n            return if (options.isEmpty()) null else options[random.nextInt(options.size)]\n        }\n        val out = ArrayList<PressQuestion>()\n",
+      "replace": "        val used = HashSet<String>()\n        fun pickFrom(topic: String): PressQuestion? {\n            val options = BANK.filter { it.topic == topic && fits(it) && it.id !in used }\n            val pick = if (options.isEmpty()) null else options[random.nextInt(options.size)]\n            if (pick != null) used.add(pick.id)\n            return pick\n        }\n        val out = ArrayList<PressQuestion>()\n        if (t.kind == \"TITLE\") {\n            // A final won as captain: the title, his captaincy (twice if his own play was ordinary, once if it was very good), what he did if it\n            // was very good, then the match and the pressure of a final. Six questions.\n            val openers = BANK.filter { it.topic == \"open\" && it.kind == \"TITLE\" }\n            if (openers.isNotEmpty()) {\n                val opener = openers[random.nextInt(openers.size)]\n                used.add(opener.id)\n                out.add(opener)\n            }\n            listOf(\"title\", \"captain\", if (t.goodPerf) \"perf\" else \"captain\", \"match\", \"pressure\").forEach { topic -> pickFrom(topic)?.let { out.add(it) } }\n            return out\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "    /** After a match of his: a press conference is called if he played and was named Player of the Match. */\n",
+      "replace": "    /** After a match of his: a press conference is called if he played and was named Player of the Match, or if he is the captain and his side won a final. */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "        if (result.playerOfMatchId != pid) return career\n        val runs = after.runs - (before?.runs ?: 0)\n",
+      "replace": "        val pom = result.playerOfMatchId == pid\n        val won = result.winnerId == state.userTeamId\n        // A final won as the captain gets its own press conference, award or not (the questions mix his captaincy and, if it was very good, his play).\n        val title = fixture.stage == \"Final\" && won && CareerSeason.captainIn(career, state)\n        if (!pom && !title) return career\n        val runs = after.runs - (before?.runs ?: 0)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "            kind = \"POM\",\n",
+      "replace": "            kind = if (title) \"TITLE\" else \"POM\",\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "            won = result.winnerId == state.userTeamId,\n            big = fixture.stage != CplData.LEAGUE,\n            seed = random.nextLong(),\n            place = CareerSeason.competitionOf(state).label\n        )\n        return career.copy(pendingPress = trigger)\n",
+      "replace": "            won = won,\n            big = fixture.stage != CplData.LEAGUE,\n            seed = random.nextLong(),\n            place = CareerSeason.competitionOf(state).label,\n            captain = title,\n            goodPerf = pom || runs >= 50 || wickets >= 3\n        )\n        return career.copy(pendingPress = trigger)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerPress.kt",
+      "find": "            val pid = CareerSeason.playerIdIn(s, out) ?: return@forEachIndexed\n            val st = s.playerStats[pid] ?: return@forEachIndexed\n",
+      "replace": "            // The captain's title press conference of this competition already covers it.\n            if (out.pendingPress?.kind == \"TITLE\" && out.pendingPress?.place == CareerSeason.competitionOf(s).label) return@forEachIndexed\n            val pid = CareerSeason.playerIdIn(s, out) ?: return@forEachIndexed\n            val st = s.playerStats[pid] ?: return@forEachIndexed\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerPressScreen.kt",
+      "find": "    val intro = \"You have been named $award in the ${trigger.place}. The press are waiting for you, with ${questions.size} questions. Choose your answer to each one.\"\n",
+      "replace": "    val intro = if (trigger.kind == \"TITLE\") {\n        \"Your team have won the ${trigger.place}, and you are the captain. The press are waiting for you, with ${questions.size} questions. Choose your answer to each one.\"\n    } else {\n        \"You have been named $award in the ${trigger.place}. The press are waiting for you, with ${questions.size} questions. Choose your answer to each one.\"\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "CAREER_MODE_PART_TWENTYFOUR.md",
+      "find": "- **After this patch:** run \"Fetch audio into the app\", then \"Build APK\".\n",
+      "replace": "- **After this patch:** run \"Fetch audio into the app\", then \"Build APK\".\n\n## Fourth part (patch 113): a title won as captain\n- A new press conference, kind `TITLE`: called after a **Final** that his side wins when he is its captain (`CareerSeason.captainIn`: the national captain, or the franchise captain; international tournaments and franchise leagues), whether or not he got an award. A title press conference already waiting for a competition is not replaced by that competition's Player of the Series one.\n- Six questions: a title opener (2 variants), the title (2), his captaincy (5 variants; two of them if his own play was ordinary), what he did (the batting/bowling questions) **only if his play was very good** (Player of the Match, fifty or more runs, or three or more wickets in the match: `PressTrigger.goodPerf`), the match (a win) and the pressure of a final.\n- Nine new questions (their clips are made like the others: four reporter voices each, and the player's answers). Ids: `pq_open_title_*`, `pq_title_*`, `pq_captain_*`.\n- After this patch (and after the new clips are made): run \"Fetch audio into the app\", then \"Build APK\".\n",
+      "count": 1
+    }
+  ]
+}
