@@ -1,0 +1,128 @@
+{
+  "name": "Career: View scorecard in the Calendar, fair coin calling, team names in results",
+  "message": "Calendar: every played match has a View scorecard button; the toss caller is 50-50 in Career Mode; result lines show team names instead of ids (also in saves made before).",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/TossRoles.kt",
+    "contains": "CAREER_HOME_CALLS"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "    /** The fixture result (scores, winner, summary line) for a finished match, whoever played it. */\n",
+      "replace": "    /** A team's short code for a result line; a team without one (a career club) is written by its name, never by its id. */\n    private fun teamLabel(id: String, home: Team, away: Team): String {\n        val short = CplData.shortName(id)\n        return if (short != id) short else listOf(home, away).firstOrNull { it.id == id }?.name ?: short\n    }\n\n    /** The fixture result (scores, winner, summary line) for a finished match, whoever played it. */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        val summary = \"${CplData.shortName(first.battingTeamId)} ${firstScore.runs}/${firstScore.wickets}, \" +\n            \"${CplData.shortName(second.battingTeamId)} ${finished.score.runs}/${finished.score.wickets}. $resultText\"\n",
+      "replace": "        val summary = \"${teamLabel(first.battingTeamId, home, away)} ${firstScore.runs}/${firstScore.wickets}, \" +\n            \"${teamLabel(second.battingTeamId, home, away)} ${finished.score.runs}/${finished.score.wickets}. $resultText\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            playerOfMatch = award?.let { \"${it.name} (${CplData.shortName(it.teamId)}), ${it.summary}\" }\n        )\n        return result\n",
+      "replace": "            playerOfMatch = award?.let { \"${it.name} (${teamLabel(it.teamId, home, away)}), ${it.summary}\" }\n        )\n        return result\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            playerOfMatch = award?.let { \"${it.name} (${CplData.shortName(it.teamId)}), ${it.summary}\" },\n",
+      "replace": "            playerOfMatch = award?.let { \"${it.name} (${teamLabel(it.teamId, home, away)}), ${it.summary}\" },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "    fun nameOf(state: TournamentState, teamId: String?): String = state.teams.find { it.id == teamId }?.name ?: \"?\"\n",
+      "replace": "    fun nameOf(state: TournamentState, teamId: String?): String = state.teams.find { it.id == teamId }?.name ?: \"?\"\n\n    /** A saved result line with any team id in it replaced by the team's name (older saves hold ids; the longest id first, so c1 never eats c10). */\n    fun readable(state: TournamentState, text: String): String {\n        var out = text\n        state.teams.sortedByDescending { it.id.length }.forEach { out = out.replace(it.id, it.name) }\n        return out\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "${updated.fixtures.find { it.id == mine.id }?.result?.summary ?: \"\"}",
+      "replace": "${readable(updated, updated.fixtures.find { it.id == mine.id }?.result?.summary ?: \"\")}",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "import com.cricketsim.ui.match.MatchScreen\n",
+      "replace": "import com.cricketsim.ui.match.MatchScreen\nimport com.cricketsim.ui.match.ScorecardScreen\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    var xiProblem by remember { mutableStateOf<String?>(null) }\n",
+      "replace": "    var xiProblem by remember { mutableStateOf<String?>(null) }\n    // The scorecard open from the Calendar: (competition index, fixture id).\n    var viewCard by remember { mutableStateOf<Pair<Int, Int>?>(null) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    // ---------------------------------------------------------------- playing a match (full screen)\n",
+      "replace": "    // ---------------------------------------------------------------- a scorecard opened from the Calendar (full screen)\n    val cardWanted = viewCard\n    val cardSeasons = seasons\n    if (cardWanted != null && cardSeasons != null) {\n        val card = cardSeasons.getOrNull(cardWanted.first)?.fixtures?.find { it.id == cardWanted.second }?.scorecard\n        if (card != null) {\n            BackHandler { viewCard = null }\n            ScorecardScreen(state = card, onBack = { viewCard = null })\n            return\n        }\n    }\n\n    // ---------------------------------------------------------------- playing a match (full screen)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                        userCalls = TossRoles.userCalls(userHome, !userHome),\n",
+      "replace": "                        userCalls = if (TossRoles.CAREER_HOME_CALLS) TossRoles.userCalls(userHome, !userHome) else null,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                HubTab.Calendar -> CalendarTab(current, loaded)\n",
+      "replace": "                HubTab.Calendar -> CalendarTab(current, loaded) { comp, id -> viewCard = Pair(comp, id) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "private fun CalendarTab(seasons: List<TournamentState>?, loaded: Boolean) {\n",
+      "replace": "private fun CalendarTab(seasons: List<TournamentState>?, loaded: Boolean, onScorecard: (Int, Int) -> Unit) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                    (if (yours) \" Your match.\" else \"\") + (if (result != null) \" Result: ${result.summary}\" else \" Not played yet.\"),\n                style = MaterialTheme.typography.bodyLarge\n            )\n            Spacer(modifier = Modifier.height(8.dp))\n",
+      "replace": "                    (if (yours) \" Your match.\" else \"\") + (if (result != null) \" Result: ${CareerSeason.readable(s, result.summary)}\" else \" Not played yet.\"),\n                style = MaterialTheme.typography.bodyLarge\n            )\n            // Every played match has its scorecard (the player's own and the other clubs').\n            if (result != null && f.scorecard != null) {\n                Spacer(modifier = Modifier.height(4.dp))\n                OutlinedButton(\n                    onClick = { onScorecard(seasons.indexOf(s), f.id) },\n                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)\n                ) { Text(\"View scorecard, ${CareerSeason.competitionOf(s).label}, match ${f.number}\") }\n            }\n            Spacer(modifier = Modifier.height(8.dp))\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "v ${CareerSeason.nameOf(state, last.awayId)}. ${r.summary}\"",
+      "replace": "v ${CareerSeason.nameOf(state, last.awayId)}. ${CareerSeason.readable(state, r.summary)}\"",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TossRoles.kt",
+      "find": "    const val HOME_TEAM_CALLS = true\n",
+      "replace": "    const val HOME_TEAM_CALLS = true\n\n    /**\n     * In Career Mode: true = the home/away mark of the fixture decides who calls (the old way: the player's team was marked away most of the time,\n     * so he almost always only flipped the coin); false = chance decides, 50-50, each match.\n     */\n    const val CAREER_HOME_CALLS = false\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerTossScreen.kt",
+      "find": "        val caller = if (TossRoles.HOME_TEAM_CALLS) home else away\n",
+      "replace": "        val caller = if (!TossRoles.CAREER_HOME_CALLS) (if (Random.nextBoolean()) home else away) else if (TossRoles.HOME_TEAM_CALLS) home else away\n",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_TWENTYTHREE.md",
+      "mustNotExist": true,
+      "content": "# Career Mode, part twenty-three\n\nThree fixes (patch 109).\n\n1. **View scorecard in the Calendar.** Every played match (the player's own and the other clubs') has a \"View scorecard\" button under its result. The scorecard opens full screen; Back returns to the Calendar.\n2. **The toss.** `TossRoles.CAREER_HOME_CALLS = false`: in Career Mode who calls the coin is chosen by chance, 50-50, each match (before, the fixture's home/away mark decided it, and the player's team was mostly marked away, so he mostly flipped). Set it to true to bring the old rule back. The captain's toss (`TossScreen`) and the screen for a player who is not the captain (`CareerTossScreen`) both follow it.\n3. **Team names in results.** A result line used `CplData.shortName(teamId)`, which returns the id for a team without a short code (a career club), so the line read like `career_..._c3 125/10`. `CplSimulator.teamLabel` now falls back to the team name, and `CareerSeason.readable` replaces ids in results that were saved earlier (Calendar, latest result, the lines after a simulated match).\n"
+    }
+  ]
+}
