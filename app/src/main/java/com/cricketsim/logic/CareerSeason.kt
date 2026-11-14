@@ -270,6 +270,13 @@ object CareerSeason {
 
     fun nameOf(state: TournamentState, teamId: String?): String = state.teams.find { it.id == teamId }?.name ?: "?"
 
+    /** A saved result line with any team id in it replaced by the team's name (older saves hold ids; the longest id first, so c1 never eats c10). */
+    fun readable(state: TournamentState, text: String): String {
+        var out = text
+        state.teams.sortedByDescending { it.id.length }.forEach { out = out.replace(it.id, it.name) }
+        return out
+    }
+
     /** The game-player id of the career's player in the season (null on a career without club teams). */
     fun userPlayerId(career: CareerProfile): String? {
         val clubIndex = career.clubs.indexOfFirst { it.name == career.club }
@@ -357,7 +364,7 @@ object CareerSeason {
             list = list.mapIndexed { i, x -> if (i == ci) updated else x }
             lines.add(
                 "${competitionOf(updated).label}: ${nameOf(updated, mine.homeId)} v ${nameOf(updated, mine.awayId)}. " +
-                    "${updated.fixtures.find { it.id == mine.id }?.result?.summary ?: ""} ${if (blocked) "You missed it: a match that comes first was on the same day." else result.text}"
+                    "${readable(updated, updated.fixtures.find { it.id == mine.id }?.result?.summary ?: "")} ${if (blocked) "You missed it: a match that comes first was on the same day." else result.text}"
             )
             if (!whole) break
         }

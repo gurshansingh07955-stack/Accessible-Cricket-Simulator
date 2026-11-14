@@ -8,6 +8,12 @@ package com.cricketsim.logic
 object TossRoles {
     const val HOME_TEAM_CALLS = true
 
+    /**
+     * In Career Mode: true = the home/away mark of the fixture decides who calls (the old way: the player's team was marked away most of the time,
+     * so he almost always only flipped the coin); false = chance decides, 50-50, each match.
+     */
+    const val CAREER_HOME_CALLS = false
+
     /** true = the user calls heads or tails (the other captain flips); false = the user flips (the other captain calls); null = neutral. */
     fun userCalls(userHome: Boolean, opponentHome: Boolean): Boolean? = when {
         userHome && !opponentHome -> HOME_TEAM_CALLS

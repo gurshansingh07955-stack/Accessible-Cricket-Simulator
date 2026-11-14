@@ -1,6 +1,6 @@
-Patch run: 43537285223
-Timestamp (UTC): 2026-11-14T00:55:01Z
+Patch run: 43562527594
+Timestamp (UTC): 2026-11-14T05:38:57Z
 Result: OK
 -----
-Patch 2026-11-12-108-career-multi-league-clash.json
-  applied 24 operation(s) to 8 file(s)
+Patch 2026-11-14-109-career-scorecards-toss-result-names.json
+  applied 17 operation(s) to 6 file(s)

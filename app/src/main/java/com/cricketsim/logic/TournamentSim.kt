@@ -179,6 +179,12 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
         return SimResult(result, slim, home, away, finished)
     }
 
+    /** A team's short code for a result line; a team without one (a career club) is written by its name, never by its id. */
+    private fun teamLabel(id: String, home: Team, away: Team): String {
+        val short = CplData.shortName(id)
+        return if (short != id) short else listOf(home, away).firstOrNull { it.id == id }?.name ?: short
+    }
+
     /** The fixture result (scores, winner, summary line) for a finished match, whoever played it. */
     private fun buildResult(finished: MatchState, home: Team, away: Team): FixtureResult? {
         val first = finished.firstInningsData ?: return null
@@ -203,8 +209,8 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
                 // After rain the margin is measured against the revised (DLS) target, not the first-innings score.
                 (if (finished.dlsRevised && finished.target != null) " Target revised to ${finished.target} by DLS." else "")
         }
-        val summary = "${CplData.shortName(first.battingTeamId)} ${firstScore.runs}/${firstScore.wickets}, " +
-            "${CplData.shortName(second.battingTeamId)} ${finished.score.runs}/${finished.score.wickets}. $resultText"
+        val summary = "${teamLabel(first.battingTeamId, home, away)} ${firstScore.runs}/${firstScore.wickets}, " +
+            "${teamLabel(second.battingTeamId, home, away)} ${finished.score.runs}/${finished.score.wickets}. $resultText"
 
         val award = PlayerAwards.playerOfTheMatch(finished)
         val result = FixtureResult(
@@ -218,7 +224,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
             secondWickets = finished.score.wickets,
             secondBalls = finished.score.overs * 6 + finished.score.balls,
             playerOfMatchId = award?.playerId,
-            playerOfMatch = award?.let { "${it.name} (${CplData.shortName(it.teamId)}), ${it.summary}" }
+            playerOfMatch = award?.let { "${it.name} (${teamLabel(it.teamId, home, away)}), ${it.summary}" }
         )
         return result
     }
@@ -679,7 +685,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
             secondWickets = last.wickets,
             secondBalls = last.balls,
             playerOfMatchId = award?.playerId,
-            playerOfMatch = award?.let { "${it.name} (${CplData.shortName(it.teamId)}), ${it.summary}" },
+            playerOfMatch = award?.let { "${it.name} (${teamLabel(it.teamId, home, away)}), ${it.summary}" },
             fcInnings = innings,
             fcKind = FirstClass.kind(finished),
             homePoints = homePoints,

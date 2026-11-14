@@ -71,6 +71,7 @@ import com.cricketsim.persistence.summary
 import com.cricketsim.ui.custom.OptionButton
 import com.cricketsim.ui.custom.PageHeading
 import com.cricketsim.ui.match.MatchScreen
+import com.cricketsim.ui.match.ScorecardScreen
 import com.cricketsim.ui.setup.PlayingXIScreen
 import com.cricketsim.ui.setup.TossScreen
 import kotlinx.coroutines.Dispatchers
@@ -125,6 +126,8 @@ fun CareerHub(
     var tableTab by remember { mutableStateOf(0) }
     var statsTab by remember { mutableStateOf(0) }
     var xiProblem by remember { mutableStateOf<String?>(null) }
+    // The scorecard open from the Calendar: (competition index, fixture id).
+    var viewCard by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     // The selectors' decision for the player's next match (his rank in his role at the club, the difficulty and his form).
     // At the club: his rank among his club-mates. Once called up: his rank in the state squad. Read for the match that comes next.
     val sList = seasons
@@ -278,6 +281,18 @@ fun CareerHub(
         )
     }
 
+    // ---------------------------------------------------------------- a scorecard opened from the Calendar (full screen)
+    val cardWanted = viewCard
+    val cardSeasons = seasons
+    if (cardWanted != null && cardSeasons != null) {
+        val card = cardSeasons.getOrNull(cardWanted.first)?.fixtures?.find { it.id == cardWanted.second }?.scorecard
+        if (card != null) {
+            BackHandler { viewCard = null }
+            ScorecardScreen(state = card, onBack = { viewCard = null })
+            return
+        }
+    }
+
     // ---------------------------------------------------------------- playing a match (full screen)
     val flow = play
     val current = seasons
@@ -339,7 +354,7 @@ fun CareerHub(
                     TossScreen(
                         userTeam = flow.userXI,
                         opponentTeam = flow.oppXI,
-                        userCalls = TossRoles.userCalls(userHome, !userHome),
+                        userCalls = if (TossRoles.CAREER_HOME_CALLS) TossRoles.userCalls(userHome, !userHome) else null,
                         onTossComplete = { toss -> play = CPlay.Match(flow.comp, flow.fixtureId, flow.userXI, flow.oppXI, toss) },
                         onBack = back
                     )
@@ -543,7 +558,7 @@ fun CareerHub(
                         }
                     }
                 )
-                HubTab.Calendar -> CalendarTab(current, loaded)
+                HubTab.Calendar -> CalendarTab(current, loaded) { comp, id -> viewCard = Pair(comp, id) }
                 HubTab.Table -> TableTab(current, loaded, compTab, { compTab = it }, tableTab, { tableTab = it }, statsTab, { statsTab = it })
                 HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, { move -> onCareerChanged(career.copy(pendingMove = move)) }, retireNow)
             }
@@ -555,7 +570,7 @@ fun CareerHub(
 private fun lastResultText(state: TournamentState): String {
     val last = state.fixtures.lastOrNull { it.result != null && CplSimulator.involves(it, state.userTeamId) } ?: return ""
     val r = last.result ?: return ""
-    return "Latest result, ${CareerSeason.competitionOf(state).label}: ${CareerSeason.nameOf(state, last.homeId)} v ${CareerSeason.nameOf(state, last.awayId)}. ${r.summary}"
+    return "Latest result, ${CareerSeason.competitionOf(state).label}: ${CareerSeason.nameOf(state, last.homeId)} v ${CareerSeason.nameOf(state, last.awayId)}. ${CareerSeason.readable(state, r.summary)}"
 }
 
 private fun fixtureText(state: TournamentState, f: TournamentFixture): String {
@@ -739,7 +754,7 @@ private fun PlayTab(
 }
 
 @Composable
-private fun CalendarTab(seasons: List<TournamentState>?, loaded: Boolean) {
+private fun CalendarTab(seasons: List<TournamentState>?, loaded: Boolean, onScorecard: (Int, Int) -> Unit) {
     PageHeading("Calendar")
     Spacer(modifier = Modifier.height(8.dp))
     if (!loaded) {
@@ -773,9 +788,17 @@ private fun CalendarTab(seasons: List<TournamentState>?, loaded: Boolean) {
             val result = f.result
             Text(
                 text = "${CareerSeason.competitionOf(s).label}${if (f.stage != CplData.LEAGUE) ", ${f.stage}" else ""}, match ${f.number}: ${fixtureText(s, f)}." +
-                    (if (yours) " Your match." else "") + (if (result != null) " Result: ${result.summary}" else " Not played yet."),
+                    (if (yours) " Your match." else "") + (if (result != null) " Result: ${CareerSeason.readable(s, result.summary)}" else " Not played yet."),
                 style = MaterialTheme.typography.bodyLarge
             )
+            // Every played match has its scorecard (the player's own and the other clubs').
+            if (result != null && f.scorecard != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = { onScorecard(seasons.indexOf(s), f.id) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) { Text("View scorecard, ${CareerSeason.competitionOf(s).label}, match ${f.number}") }
+            }
             Spacer(modifier = Modifier.height(8.dp))
         }
         Spacer(modifier = Modifier.height(8.dp))

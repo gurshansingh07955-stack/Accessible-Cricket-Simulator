@@ -37,7 +37,7 @@ fun CareerTossScreen(userXI: Team, oppXI: Team, userIsHome: Boolean, onDone: (To
     val outcome = remember {
         val home = if (userIsHome) userXI else oppXI
         val away = if (userIsHome) oppXI else userXI
-        val caller = if (TossRoles.HOME_TEAM_CALLS) home else away
+        val caller = if (!TossRoles.CAREER_HOME_CALLS) (if (Random.nextBoolean()) home else away) else if (TossRoles.HOME_TEAM_CALLS) home else away
         val flipper = if (caller === home) away else home
         val call = if (Random.nextBoolean()) "heads" else "tails"
         val coin = if (Random.nextBoolean()) "heads" else "tails"
