@@ -92,7 +92,7 @@ private fun captaincyStatus(career: CareerProfile): String {
     val parts = ArrayList<String>()
     val role = career.nationalRole
     if (career.isInternational && role != null) parts.add("${role.lowercase()} of ${career.nation}")
-    if (career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null) parts.add("franchise captain")
+    if (career.isLeagueCaptain) parts.add("franchise captain")
     if (!career.atOrAboveState && career.leadership.isNotEmpty()) parts.add("club ${career.leadership.lowercase()}")
     return if (parts.isEmpty()) "No captaincy yet." else parts.joinToString(", ") + "."
 }
@@ -228,8 +228,8 @@ private fun CaptaincyPage(career: CareerProfile) {
     } else {
         BodyLine("National captaincy: it comes after you have played for your country.")
     }
-    if (career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null) {
-        BodyLine("Franchise captaincy: you are the captain of your franchise this season. You pick the XI and do the toss in its matches.")
+    if (career.isLeagueCaptain) {
+        BodyLine("Franchise captaincy: you are the captain of a franchise this season. You pick the XI and do the toss in its matches.")
     } else {
         BodyLine(
             "Franchise captaincy: after ${CareerLeagues.CAPTAIN_MATCHES} league matches a franchise may offer you its captaincy with its contract, if your form and your standing in its squad are good. " +

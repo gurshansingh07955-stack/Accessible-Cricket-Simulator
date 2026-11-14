@@ -104,6 +104,23 @@ object CareerLeagues {
     /** The name of a league (without the season) for the career record's tabs. */
     fun leagueNameOf(state: TournamentState): String = LEAGUE_NAMES[state.tournamentId] ?: state.name
 
+    private val LEAGUE_PRESTIGE = mapOf(
+        IplSeason.TOURNAMENT_ID to 7, BigBashLeague.TOURNAMENT_ID to 6, Sa20.TOURNAMENT_ID to 5, CplData.TOURNAMENT_ID to 4,
+        MajorLeagueCricket.TOURNAMENT_ID to 3, InternationalLeagueT20.TOURNAMENT_ID to 3, LankaPremierLeague.TOURNAMENT_ID to 2, AbuDhabiT10.TOURNAMENT_ID to 1
+    )
+
+    /** How good a league is: when two league matches are on the same day, the better league is played. */
+    fun prestigeOf(state: TournamentState): Int = LEAGUE_PRESTIGE[state.tournamentId] ?: 0
+
+    /** Days after the start of the season on which each league begins, so the leagues fall at different times of the season (and overlap a little). */
+    private val START_OFFSET_DAYS = mapOf("adt10" to 0, "bbl" to 14, "ilt20" to 28, "sa20" to 42, "ipl" to 70, "lpl" to 105, "mlc" to 119, "cpl" to 140)
+
+    /** The day a league starts: the start of the season (the first competition) plus the league's offset. */
+    fun startAt(states: List<TournamentState>, leagueId: String): Long {
+        val base = states.minOfOrNull { it.createdAt } ?: System.currentTimeMillis()
+        return base + 86_400_000L * (START_OFFSET_DAYS[leagueId] ?: 0)
+    }
+
     /** True for the season of a franchise league a career is playing in. */
     fun isLeague(state: TournamentState): Boolean = state.tournamentId in LEAGUE_IDS
 
@@ -196,7 +213,9 @@ object CareerLeagues {
         val grace = (if (career.isInternational) 1 else 0) + (when (career.specialism) { "White-ball" -> 1; "Test" -> -2; else -> 0 })
         val seed = career.id.hashCode().toLong() * 1000L + career.season
         val found = ArrayList<Candidate>()
-        for (league in eligible(career)) {
+        // A league he has already signed for this season makes no second offer.
+        val taken = if (career.leagueDecidedSeason == career.season) career.signedLeagues.orEmpty() else emptyList()
+        for (league in eligible(career).filter { it.id !in taken }) {
             val built = (try { league.build(seed) } catch (e: Exception) { null }) ?: continue
             val overseas = league.country != career.nation
             val here = ArrayList<Candidate>()
@@ -205,7 +224,7 @@ object CareerLeagues {
                 val rank = 1 + group.count { value(it) > mine }
                 val cutoff = ((slots(role) / factor).roundToInt() - (if (overseas) 1 else 0)).coerceIn(1, group.size + 1)
                 // The franchise he played for last season wants to keep him: a place in his favour.
-                val retained = career.lastLeagueTeamId == team.id
+                val retained = career.lastLeagueTeamId == team.id || team.id in career.retainedTeamIds.orEmpty()
                 val margin = cutoff - (rank - adjust - grace - (if (retained) 1 else 0))
                 val retentionText = if (retained) " Your franchise wants to keep you." else ""
                 val standing = 1 + team.players.count { value(it) > mine }
@@ -280,7 +299,7 @@ object CareerLeagues {
         val adjust = formAdjust(career)
         val grace = (if (career.leagueMatches < 3) 1 else 0) + (when (career.specialism) { "White-ball" -> 1; "Test" -> -2; else -> 0 })
         val debut = career.leagueMatches == 0
-        val captain = career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null && career.leagueCaptainTeamId == state.userTeamId
+        val captain = career.isLeagueCaptain && (career.leagueCaptainTeamId == state.userTeamId || state.userTeamId in career.leagueCaptainTeamIds.orEmpty())
         val selected = debut || captain || rank - adjust - grace <= cutoff
         val base = "You rank ${ordinal(rank)} of ${group.size} ${roleWord(me.role)} at ${team.name}${if (overseas) " as an overseas player" else ""}, and a T20 XI takes the top $cutoff.${formNote(adjust)}"
         val reason = when {

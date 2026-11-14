@@ -129,7 +129,16 @@ data class CareerProfile(
     val leagueCaptainTeamId: String? = null,
     // Part nineteen: the full career record (see CareerStatistics).
     /** The detailed record of every kind of cricket he has played, under "Group|Tab" keys. */
-    val detail: Map<String, DetailedRecord>? = null
+    val detail: Map<String, DetailedRecord>? = null,
+    // Part twenty-two: several leagues in a season.
+    /** The ids of the leagues he has signed for this season (valid in the season of leagueDecidedSeason). */
+    val signedLeagues: List<String>? = null,
+    /** The season in which he told the franchises that he is looking for no more offers. */
+    val leagueClosedSeason: Int = 0,
+    /** The franchises he captains this season. */
+    val leagueCaptainTeamIds: List<String>? = null,
+    /** The franchises he has played for (the last eight): each of them wants to keep him. */
+    val retainedTeamIds: List<String>? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
@@ -147,6 +156,9 @@ data class CareerProfile(
 
     /** The country of the national team he plays for or aims for. */
     val nation: String get() = represents ?: country
+
+    /** True if he captains a franchise this season. */
+    val isLeagueCaptain: Boolean get() = leagueDecidedSeason == season && (leagueCaptainTeamId != null || !leagueCaptainTeamIds.isNullOrEmpty())
 
     /** One spoken line about the level he plays at. */
     fun levelLine(): String {

@@ -129,7 +129,7 @@ fun CareerHub(
     // At the club: his rank among his club-mates. Once called up: his rank in the state squad. Read for the match that comes next.
     val sList = seasons
     val nextForDecision = if (sList != null) CareerSeason.nextMine(sList) else null
-    val decision = if (sList != null && nextForDecision != null) CareerSelection.forState(career, sList[nextForDecision.first]) else CareerSelection.decide(career)
+    val decision = if (sList != null && nextForDecision != null) CareerSeason.selectionFor(career, sList, nextForDecision.first, nextForDecision.second) else CareerSelection.decide(career)
 
     LaunchedEffect(career.id, career.season, seasonKeys) {
         seasons = null
@@ -233,7 +233,7 @@ fun CareerHub(
             busy = true
             message = "Joining ${offer.teamName}."
             scope.launch {
-                val startAt = (list.maxOfOrNull { it.createdAt } ?: System.currentTimeMillis()) + 10L * 7L * 24L * 3600L * 1000L
+                val startAt = CareerLeagues.startAt(list, offer.leagueId)
                 val signed = withContext(Dispatchers.Default) { CareerLeagues.buildSeason(career, offer, startAt) }
                 if (signed == null) {
                     busy = false
@@ -241,20 +241,26 @@ fun CareerHub(
                 } else {
                     val leagueKey = CareerSeason.keyOf(signed)
                     val deal = CareerFinance.contract(career, offer)
+                    val sameSeason = career.leagueDecidedSeason == career.season
                     TournamentSaveStore(context, CareerSeason.seasonFile(career.id, career.season, leagueKey)).save(signed)
                     busy = false
                     message = "You have signed for ${offer.teamName} in the ${offer.leagueName}. Its matches are in your calendar."
                     onCareerChanged(
                         career.copy(
                             seasonKeys = seasonKeys + leagueKey,
-                            leagueOffers = null,
+                            // The offers of the other leagues stay on the table: he can sign for as many leagues as he likes (one franchise in each).
+                            leagueOffers = career.leagueOffers.orEmpty().filter { it.leagueId != offer.leagueId },
                             leagueDecidedSeason = career.season,
-                            leagueContract = deal,
-                            leagueCaptainTeamId = if (offer.captain) offer.teamId else null,
+                            leagueContract = (if (sameSeason) career.leagueContract else 0) + deal,
+                            signedLeagues = (if (sameSeason) career.signedLeagues.orEmpty() else emptyList()) + offer.leagueId,
+                            leagueCaptainTeamIds = (if (sameSeason) career.leagueCaptainTeamIds.orEmpty() + listOfNotNull(career.leagueCaptainTeamId) else emptyList()) +
+                                (if (offer.captain) listOf(offer.teamId) else emptyList()),
+                            leagueCaptainTeamId = null,
+                            retainedTeamIds = (career.retainedTeamIds.orEmpty() + offer.teamId).distinct().takeLast(8),
                             honours = if (offer.captain) (career.honours.orEmpty() + "Season ${career.season}: appointed captain of ${offer.teamName}.").takeLast(60) else career.honours,
                             lastLeagueId = offer.leagueId,
                             lastLeagueTeamId = offer.teamId,
-                            leagueLine = "This season you also play for ${offer.teamName} in the ${offer.leagueName}. Your contract is worth ${CareerFinance.money(deal.toLong())}.${if (offer.captain) " You are the captain." else ""}"
+                            leagueLine = (if (sameSeason && career.leagueLine != null) career.leagueLine + " " else "") + "This season you also play for ${offer.teamName} in the ${offer.leagueName}. Your contract is worth ${CareerFinance.money(deal.toLong())}.${if (offer.captain) " You are the captain." else ""}"
                         )
                     )
                 }
@@ -263,7 +269,13 @@ fun CareerHub(
     }
     val declineOffers: () -> Unit = {
         message = "You turned the offers down."
-        onCareerChanged(career.copy(leagueOffers = null, leagueDecidedSeason = career.season, leagueLine = "You turned down this season's league offers."))
+        val signedSome = career.leagueDecidedSeason == career.season && !career.signedLeagues.isNullOrEmpty()
+        onCareerChanged(
+            career.copy(
+                leagueOffers = null, leagueDecidedSeason = career.season, leagueClosedSeason = career.season,
+                leagueLine = if (signedSome) (career.leagueLine ?: "") + " You turned down the other offers." else "You turned down this season's league offers."
+            )
+        )
     }
 
     // ---------------------------------------------------------------- playing a match (full screen)
@@ -462,7 +474,7 @@ fun CareerHub(
                                     val mine = next.second
                                     val updated = adv.states[ci]
                                     val pid = CareerSeason.playerIdIn(updated, career)
-                                    val chosen = CareerSelection.forState(career, updated)
+                                    val chosen = CareerSeason.selectionFor(career, adv.states, ci, mine)
                                     val squad = updated.teams.find { it.id == updated.userTeamId }
                                     val oppId = if (mine.homeId == updated.userTeamId) mine.awayId else mine.homeId
                                     val oppSquad = updated.teams.find { it.id == oppId }

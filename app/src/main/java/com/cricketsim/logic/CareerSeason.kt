@@ -161,6 +161,66 @@ object CareerSeason {
     /** The weeks of the three competitions take turns: T20 in week 1, 50-over in week 2, 3-day in week 3, T20 in week 4... */
     fun weekOf(state: TournamentState, fixture: TournamentFixture): Int = roundOf(state, fixture) * COMPETITIONS.size + compIndex(state)
 
+    /** Days between the player's matches in a competition: a franchise league plays its player's matches about every four days, everything else weekly. */
+    fun stepDays(state: TournamentState): Int = if (CareerLeagues.isLeague(state)) 4 else 7
+
+    /** Which competition wins when two of his matches fall on the same day (part twenty-two): international cricket, then the better league, then state cricket, then club cricket. */
+    fun priorityOf(state: TournamentState): Int = when {
+        CareerInternational.isInternational(state) -> 1000
+        CareerLeagues.isLeague(state) -> 500 + CareerLeagues.prestigeOf(state)
+        isClub(state) -> 100
+        else -> 200
+    }
+
+    private fun dayNumber(millis: Long): Long {
+        val c = Calendar.getInstance()
+        c.timeInMillis = millis
+        c.set(Calendar.HOUR_OF_DAY, 0)
+        c.set(Calendar.MINUTE, 0)
+        c.set(Calendar.SECOND, 0)
+        c.set(Calendar.MILLISECOND, 0)
+        return Math.round(c.timeInMillis / 86_400_000.0)
+    }
+
+    /** The days a match takes up: one, three for a three-day match, five for a Test. */
+    private fun daysOf(state: TournamentState, fixture: TournamentFixture): LongRange {
+        val first = dayNumber(dateMillis(state, fixture))
+        return first..(first + competitionOf(state).days - 1)
+    }
+
+    /**
+     * Why he cannot play this match, or null if he can: another match of his, in a competition that comes before this one ([priorityOf]), is on one of the same days. Between two
+     * competitions of the same kind the one that comes earlier in the list wins. The match that loses is played without him.
+     */
+    fun clashReason(states: List<TournamentState>, index: Int, fixture: TournamentFixture): String? {
+        val state = states.getOrNull(index) ?: return null
+        val mine = daysOf(state, fixture)
+        val myPriority = priorityOf(state)
+        for ((i, other) in states.withIndex()) {
+            if (i == index) continue
+            val p = priorityOf(other)
+            if (p < myPriority || (p == myPriority && i > index)) continue
+            for (g in other.fixtures) {
+                if (!CplSimulator.involves(g, other.userTeamId)) continue
+                val theirs = daysOf(other, g)
+                if (theirs.first <= mine.last && mine.first <= theirs.last) return "the ${competitionOf(other).label} has a match on ${dateText(dateMillis(other, g))}"
+            }
+        }
+        return null
+    }
+
+    /** The selectors' decision for his next match in a competition: out if a match that comes first is on the same day, else the competition's own selectors. */
+    fun selectionFor(career: CareerProfile, states: List<TournamentState>, index: Int, fixture: TournamentFixture): CareerSelection.Decision {
+        val clash = clashReason(states, index, fixture)
+        if (clash != null) {
+            return CareerSelection.Decision(
+                false, 1, 11, 15, 0,
+                "You cannot play this match: $clash. International cricket comes first, then the better league, then state cricket, then club cricket."
+            )
+        }
+        return CareerSelection.forState(career, states[index])
+    }
+
     /** The first day of the match: a Saturday, or the Friday before it for a three-day match. */
     fun dateMillis(state: TournamentState, fixture: TournamentFixture): Long {
         val c = Calendar.getInstance()
@@ -171,7 +231,7 @@ object CareerSeason {
             // A state tournament: the player's matches, one a week, from the week the tournament starts.
             val mine = state.fixtures.filter { CplSimulator.involves(it, state.userTeamId) }
             val index = mine.indexOfFirst { it.id == fixture.id }.let { if (it < 0) fixture.number else it }
-            c.add(Calendar.DAY_OF_YEAR, 7 * index)
+            c.add(Calendar.DAY_OF_YEAR, stepDays(state) * index)
         }
         return c.timeInMillis
     }
@@ -197,7 +257,7 @@ object CareerSeason {
     fun captainIn(career: CareerProfile, state: TournamentState): Boolean = when {
         isClub(state) -> career.leadership == "Captain" && !career.isState && !career.isInternational
         CareerInternational.isInternational(state) -> career.isInternational && career.nationalRole == "Captain"
-        CareerLeagues.isLeague(state) -> career.leagueDecidedSeason == career.season && career.leagueCaptainTeamId != null && career.leagueCaptainTeamId == state.userTeamId
+        CareerLeagues.isLeague(state) -> career.isLeagueCaptain && (career.leagueCaptainTeamId == state.userTeamId || state.userTeamId in career.leagueCaptainTeamIds.orEmpty())
         else -> false
     }
 
@@ -234,10 +294,10 @@ object CareerSeason {
     }
 
     /** Simulates the player's own fixture with the selectors' decision: he is in the club's XI or left out of it. Any competition's format. */
-    fun simulateMine(state: TournamentState, fixture: TournamentFixture, career: CareerProfile, random: Random): TournamentState {
+    fun simulateMine(state: TournamentState, fixture: TournamentFixture, career: CareerProfile, random: Random, blocked: Boolean = false): TournamentState {
         val stadium = CplData.stadium(fixture.stadiumId) ?: return state
         val pid = playerIdIn(state, career) ?: return CplSimulator.simulateFixture(state, fixture, random)
-        val selected = CareerSelection.forState(career, state).selected
+        val selected = !blocked && CareerSelection.forState(career, state).selected
         val mine = state.teams.find { it.id == state.userTeamId } ?: return state
         val adjusted = CareerSelection.squadForMatch(mine, state.tags, stadium, pid, selected)
         val after = CplSimulator.simulateFixture(state.copy(teams = state.teams.map { if (it.id == state.userTeamId) adjusted else it }), fixture, random)
@@ -287,7 +347,9 @@ object CareerSeason {
             val mine = ran.fixtures.firstOrNull { it.result == null && CplSimulator.involves(it, ran.userTeamId) } ?: break
             val pid = playerIdIn(ran, c)
             val before = if (pid != null) ran.playerStats[pid] else null
-            val played = simulateMine(ran, mine, c, random)
+            // A match of higher priority on the same day: he cannot play this one (part twenty-two).
+            val blocked = clashReason(list, ci, mine) != null
+            val played = simulateMine(ran, mine, c, random, blocked)
             val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random, CareerInternational.formatKeyOf(ran), CareerLeagues.isLeague(ran))
             // The full career record (part nineteen) reads the scorecard of the match he has just played.
             c = CareerStatistics.record(result.career, played, mine.id, before, if (pid != null) played.playerStats[pid] else null)
@@ -295,7 +357,7 @@ object CareerSeason {
             list = list.mapIndexed { i, x -> if (i == ci) updated else x }
             lines.add(
                 "${competitionOf(updated).label}: ${nameOf(updated, mine.homeId)} v ${nameOf(updated, mine.awayId)}. " +
-                    "${updated.fixtures.find { it.id == mine.id }?.result?.summary ?: ""} ${result.text}"
+                    "${updated.fixtures.find { it.id == mine.id }?.result?.summary ?: ""} ${if (blocked) "You missed it: a match that comes first was on the same day." else result.text}"
             )
             if (!whole) break
         }

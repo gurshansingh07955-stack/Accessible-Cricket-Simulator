@@ -1,6 +1,6 @@
-Patch run: 43339592379
-Timestamp (UTC): 2026-11-13T00:45:39Z
+Patch run: 43537285223
+Timestamp (UTC): 2026-11-14T00:55:01Z
 Result: OK
 -----
-Patch 2026-11-12-107-saves-repair-crash-guard.json
-  applied 13 operation(s) to 6 file(s)
+Patch 2026-11-12-108-career-multi-league-clash.json
+  applied 24 operation(s) to 8 file(s)
