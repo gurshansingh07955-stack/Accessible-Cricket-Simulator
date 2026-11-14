@@ -18,3 +18,9 @@
 - **Room sounds (ElevenLabs sound generation, `/_cdn/sfx/`):** `press_camera` (photographers' flashes: at the start and after each answer), `press_hush` (the room goes quiet before each question), `press_murmur` (generated; not used yet), `press_applause` (at the end). Not heard by the assistant.
 - **In the app:** `SoundEngine.playPress / playPressRoom / hasPressClip / stopPressVoice` (two `AuctionVoice` queues: the voices, and the room sounds under them). A missing clip, or sound effects off, falls back to the phone's own speech. When a recorded voice says a line, the screen reader does not read it again. Choosing an answer cuts off the question at once.
 - **After this patch:** run "Fetch audio into the app", then "Build APK".
+
+## Fourth part (patch 113): a title won as captain
+- A new press conference, kind `TITLE`: called after a **Final** that his side wins when he is its captain (`CareerSeason.captainIn`: the national captain, or the franchise captain; international tournaments and franchise leagues), whether or not he got an award. A title press conference already waiting for a competition is not replaced by that competition's Player of the Series one.
+- Six questions: a title opener (2 variants), the title (2), his captaincy (5 variants; two of them if his own play was ordinary), what he did (the batting/bowling questions) **only if his play was very good** (Player of the Match, fifty or more runs, or three or more wickets in the match: `PressTrigger.goodPerf`), the match (a win) and the pressure of a final.
+- Nine new questions (their clips are made like the others: four reporter voices each, and the player's answers). Ids: `pq_open_title_*`, `pq_title_*`, `pq_captain_*`.
+- After this patch (and after the new clips are made): run "Fetch audio into the app", then "Build APK".

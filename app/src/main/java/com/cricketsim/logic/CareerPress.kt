@@ -4,7 +4,7 @@ import kotlin.random.Random
 
 /** What the press conference is about; kept on the career until it has been held (it survives closing the app). */
 data class PressTrigger(
-    /** "POM" (Player of the Match) or "SERIES" (Player of the Series). */
+    /** "POM" (Player of the Match), "SERIES" (Player of the Series) or "TITLE" (a final won as the captain). */
     val kind: String = "POM",
     /** "international" or "league". */
     val level: String = "league",
@@ -16,7 +16,11 @@ data class PressTrigger(
     /** Picks the questions, so the same press conference comes back the same after the app is closed. */
     val seed: Long = 0L,
     /** The competition's name, for the news line and the opening words. */
-    val place: String = ""
+    val place: String = "",
+    /** He is the captain of the side that won (a title press conference asks about leading the team). */
+    val captain: Boolean = false,
+    /** His own play in the match was very good (Player of the Match, fifty or more runs, three or more wickets): the questions then ask about it too. */
+    val goodPerf: Boolean = false
 )
 
 /** One choice. [id] names its recording (part three); [mood] is what the press make of it. */
@@ -245,7 +249,59 @@ object CareerPress {
             a("Humble", 1, "My family. They sacrificed a lot so that I could play."),
             a("Team first", 1, "My first coach, and every teammate since. I owe them all."),
             a("Confident", 1, "The great players I watched growing up. I want to be remembered the way they are."),
-            a("Careful", 0, "Many people, in different ways. I would not like to leave anyone out by naming only one."))
+            a("Careful", 0, "Many people, in different ways. I would not like to leave anyone out by naming only one.")),
+
+        // ---- a final won as captain: the opener
+        q("pq_open_title_1", "open", "Congratulations, captain. You have won the title. What is going through your mind?",
+            a("Humble", 1, "Mostly gratitude. So many people helped this group get here, and I am proud to lead them."),
+            a("Confident", 1, "That all the hard work was worth it. We believed in this plan, and it came off."),
+            a("Team first", 1, "That this belongs to every single person in the squad. I am just the one holding the trophy."),
+            a("Bold", 2, "That this is only the beginning. This team is built to win a lot more than this."),
+            a("Careful", 0, "I am still taking it in. I will enjoy tonight, and then we get back to work.")).copy(kind = "TITLE"),
+        q("pq_open_title_2", "open", "Champions! How does it feel to lift the trophy as captain?",
+            a("Humble", 1, "Unreal. I never imagined I would be doing this. I have to thank everybody who believed in me."),
+            a("Confident", 1, "It feels like the reward for the way we have played the whole tournament."),
+            a("Team first", 1, "Special, because I get to share it with the boys. I would not swap this group for anything."),
+            a("Bold", 2, "Exactly how I pictured it. I told the dressing room we were going to finish this.")).copy(kind = "TITLE"),
+
+        // ---- the title
+        q("pq_title_1", "title", "It was a final, and you were the winners. When did you feel the title was yours?",
+            a("Careful", 0, "Not until the last ball. In a final, nothing is certain until the job is done."),
+            a("Confident", 1, "Once we took control in the middle overs. From there I felt we would not let it go."),
+            a("Humble", 1, "I am not sure I did, even then. I just kept thinking about the next ball."),
+            a("Team first", 1, "When I looked around at the faces in the field. Everyone was giving everything, and that is when I knew.")).copy(kind = "TITLE"),
+        q("pq_title_2", "title", "What will you remember most about this tournament?",
+            a("Humble", 1, "The little moments: the early mornings, the nets, the long bus rides together."),
+            a("Team first", 1, "The way the group came together after tough days. That is what won us the title."),
+            a("Confident", 1, "The moment we lifted the trophy. All the effort came together in that one second."),
+            a("Bold", 1, "That we were the best side here, from the first match to the last. Nobody can argue with that.")).copy(kind = "TITLE"),
+
+        // ---- his captaincy
+        q("pq_captain_1", "captain", "As captain, what was your plan for the final, and how did it work out?",
+            a("Careful", 0, "Keep it simple, back our best players, and adjust as the game changed. It worked out."),
+            a("Confident", 1, "To take the game to them. I wanted us to be the side that made the first move."),
+            a("Team first", 1, "To let the senior players guide the key moments, and trust the group. It paid off."),
+            a("Bold", 1, "To win it by playing the way we believe in. We never changed our style.")).copy(kind = "TITLE"),
+        q("pq_captain_2", "captain", "You made some bold decisions during the match. How hard is it to make those calls?",
+            a("Humble", 1, "Very hard. Sometimes you get them right and sometimes not, and today we were lucky."),
+            a("Confident", 1, "You have to trust your gut. I would rather make a decision and stand by it."),
+            a("Team first", 1, "I do not make them alone. I talk to the bowlers and the coach all the time."),
+            a("Careful", 0, "I look at the pitch, the conditions and the players, and then I go with the best choice at that moment.")).copy(kind = "TITLE"),
+        q("pq_captain_3", "captain", "What kind of team culture have you tried to build as captain?",
+            a("Team first", 1, "One where everyone feels they matter, from the star player to the youngest in the squad."),
+            a("Humble", 1, "An honest one. We talk openly, we learn from mistakes, and we do not blame each other."),
+            a("Confident", 1, "A winning one. We expect to win, and we prepare like it every day."),
+            a("Careful", 0, "A calm one. I want players to enjoy the game and play without fear.")).copy(kind = "TITLE"),
+        q("pq_captain_4", "captain", "How did you handle the pressure of leading the side in a final?",
+            a("Humble", 1, "I felt it all the way. But the players around me helped me stay calm."),
+            a("Confident", 1, "I enjoy it. Leading in the big games is why I wanted to be captain."),
+            a("Careful", 0, "I broke it down into small jobs: one over at a time, one decision at a time."),
+            a("Team first", 1, "I leaned on my vice-captain and the senior guys. A captain is only as good as his team.")).copy(kind = "TITLE"),
+        q("pq_captain_5", "captain", "Who helped you the most in your growth as a captain?",
+            a("Humble", 1, "My coach and the captains before me. They shared so much with me, and I am still learning."),
+            a("Team first", 1, "The whole dressing room. They gave me their trust, and that is what makes a captain."),
+            a("Confident", 1, "Every tough game I have led. Mistakes teach you more than wins ever do."),
+            a("Careful", 0, "I do not want to name just one. A lot of people gave me small pieces of advice, and I used them all.")).copy(kind = "TITLE")
     )
 
     // ---------------------------------------------------------------- choosing the questions
@@ -256,11 +312,26 @@ object CareerPress {
         fun fits(q: PressQuestion): Boolean =
             (q.kind == null || q.kind == t.kind) && (q.perfs == null || t.perf in q.perfs) &&
                 (q.won == null || q.won == t.won) && (q.big == null || q.big == t.big)
+        val used = HashSet<String>()
         fun pickFrom(topic: String): PressQuestion? {
-            val options = BANK.filter { it.topic == topic && fits(it) }
-            return if (options.isEmpty()) null else options[random.nextInt(options.size)]
+            val options = BANK.filter { it.topic == topic && fits(it) && it.id !in used }
+            val pick = if (options.isEmpty()) null else options[random.nextInt(options.size)]
+            if (pick != null) used.add(pick.id)
+            return pick
         }
         val out = ArrayList<PressQuestion>()
+        if (t.kind == "TITLE") {
+            // A final won as captain: the title, his captaincy (twice if his own play was ordinary, once if it was very good), what he did if it
+            // was very good, then the match and the pressure of a final. Six questions.
+            val openers = BANK.filter { it.topic == "open" && it.kind == "TITLE" }
+            if (openers.isNotEmpty()) {
+                val opener = openers[random.nextInt(openers.size)]
+                used.add(opener.id)
+                out.add(opener)
+            }
+            listOf("title", "captain", if (t.goodPerf) "perf" else "captain", "match", "pressure").forEach { topic -> pickFrom(topic)?.let { out.add(it) } }
+            return out
+        }
         listOf("open", "award", "perf", "match").forEach { topic -> pickFrom(topic)?.let { out.add(it) } }
         val extras = listOf("pressure", "role", "next", "personal").shuffled(random)
         // A big occasion always gets its question about pressure.
@@ -282,14 +353,18 @@ object CareerPress {
         }
     }
 
-    /** After a match of his: a press conference is called if he played and was named Player of the Match. */
+    /** After a match of his: a press conference is called if he played and was named Player of the Match, or if he is the captain and his side won a final. */
     fun afterMyMatch(career: CareerProfile, state: TournamentState, fixtureId: Int, before: PlayerStats?, after: PlayerStats?, random: Random): CareerProfile {
         if (!PRESS_CONFERENCES || career.retired || !eligible(state)) return career
         val fixture = state.fixtures.find { it.id == fixtureId } ?: return career
         val result = fixture.result ?: return career
         val pid = CareerSeason.playerIdIn(state, career) ?: return career
         if (after == null || after.matches <= (before?.matches ?: 0)) return career
-        if (result.playerOfMatchId != pid) return career
+        val pom = result.playerOfMatchId == pid
+        val won = result.winnerId == state.userTeamId
+        // A final won as the captain gets its own press conference, award or not (the questions mix his captaincy and, if it was very good, his play).
+        val title = fixture.stage == "Final" && won && CareerSeason.captainIn(career, state)
+        if (!pom && !title) return career
         val runs = after.runs - (before?.runs ?: 0)
         val wickets = after.wickets - (before?.wickets ?: 0)
         val perf = when {
@@ -299,13 +374,15 @@ object CareerPress {
             else -> roleFallback(career)
         }
         val trigger = PressTrigger(
-            kind = "POM",
+            kind = if (title) "TITLE" else "POM",
             level = if (CareerInternational.isInternational(state)) "international" else "league",
             perf = perf,
-            won = result.winnerId == state.userTeamId,
+            won = won,
             big = fixture.stage != CplData.LEAGUE,
             seed = random.nextLong(),
-            place = CareerSeason.competitionOf(state).label
+            place = CareerSeason.competitionOf(state).label,
+            captain = title,
+            goodPerf = pom || runs >= 50 || wickets >= 3
         )
         return career.copy(pendingPress = trigger)
     }
@@ -317,6 +394,8 @@ object CareerPress {
         after.forEachIndexed { i, s ->
             val old = before.getOrNull(i) ?: return@forEachIndexed
             if (!eligible(s) || CareerSeason.isComplete(old) || !CareerSeason.isComplete(s)) return@forEachIndexed
+            // The captain's title press conference of this competition already covers it.
+            if (out.pendingPress?.kind == "TITLE" && out.pendingPress?.place == CareerSeason.competitionOf(s).label) return@forEachIndexed
             val pid = CareerSeason.playerIdIn(s, out) ?: return@forEachIndexed
             val st = s.playerStats[pid] ?: return@forEachIndexed
             if (st.matches == 0) return@forEachIndexed

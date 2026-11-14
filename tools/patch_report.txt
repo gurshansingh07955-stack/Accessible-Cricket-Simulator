@@ -1,6 +1,6 @@
-Patch run: 43610913111
-Timestamp (UTC): 2026-11-14T15:34:42Z
+Patch run: 43612448079
+Timestamp (UTC): 2026-11-14T15:52:00Z
 Result: OK
 -----
-Patch 2026-11-14-112-career-press-conference-voices.json
-  applied 7 operation(s) to 6 file(s)
+Patch 2026-11-14-113-career-press-captain-title.json
+  applied 11 operation(s) to 3 file(s)

@@ -53,7 +53,11 @@ fun CareerPressScreen(trigger: PressTrigger, onFinish: (List<PressAnswer>) -> Un
     var chosen by remember(trigger.seed) { mutableStateOf<PressAnswer?>(null) }
     var given by remember(trigger.seed) { mutableStateOf<List<PressAnswer>>(emptyList()) }
     val award = if (trigger.kind == "SERIES") "Player of the Series" else "Player of the Match"
-    val intro = "You have been named $award in the ${trigger.place}. The press are waiting for you, with ${questions.size} questions. Choose your answer to each one."
+    val intro = if (trigger.kind == "TITLE") {
+        "Your team have won the ${trigger.place}, and you are the captain. The press are waiting for you, with ${questions.size} questions. Choose your answer to each one."
+    } else {
+        "You have been named $award in the ${trigger.place}. The press are waiting for you, with ${questions.size} questions. Choose your answer to each one."
+    }
     val current = questions.getOrNull(index)
     val answered = chosen
     val questionClip = current?.let { CareerPress.questionClipId(it, index) }
