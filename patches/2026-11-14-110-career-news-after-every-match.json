@@ -1,0 +1,120 @@
+{
+  "name": "Career: news after every match (my news and world cricket), All / My news tabs",
+  "message": "The news is written after every match, not only when a season ends: about you, about the other matches and about world cricket. Career > In the news has two tabs, All and My news.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerNews.kt",
+    "contains": "object CareerNews"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerNews.kt",
+      "mustNotExist": true,
+      "content": "package com.cricketsim.logic\n\nimport kotlin.math.exp\nimport kotlin.random.Random\n\n/** One line of the career's news: mine = about the player or his team; false = what is happening in world cricket. */\ndata class NewsItem(val text: String, val mine: Boolean = false)\n\n/**\n * My Player, part twenty-four, first part: the news after every match, and world cricket in it.\n *\n *  - After a match of the player's (played or simulated): the result, what he did (a hundred, a fifty, wickets, Player of the Match) and, in a final, the title.\n *  - After any step of the season: the real results of the other matches that were just played in his competitions (finals first), and a made-up\n *    headline or two about world cricket (an international result, a star's performance, a squad or a series). The made-up ones are the game's own world:\n *    they are not real results. Switch them off with [GENERATED_WORLD_NEWS].\n *  - The Career tab > In the news has two tabs: All, and My news.\n *\n * [NEWS_AFTER_EVERY_MATCH] false brings back the old way (the papers write only when a season ends).\n */\nobject CareerNews {\n    const val NEWS_AFTER_EVERY_MATCH = true\n    const val GENERATED_WORLD_NEWS = true\n    private const val KEEP = 80\n\n    fun add(career: CareerProfile, items: List<NewsItem>): CareerProfile =\n        if (items.isEmpty()) career else career.copy(newsFeed = (career.newsFeed.orEmpty() + items).takeLast(KEEP))\n\n    /** Everything, oldest first. The season-end lines saved before the feed existed come first. */\n    fun all(career: CareerProfile): List<NewsItem> {\n        val feed = career.newsFeed.orEmpty()\n        val texts = feed.map { it.text }.toSet()\n        val old = career.media.orEmpty().filter { it !in texts }.map { NewsItem(it, true) }\n        return old + feed\n    }\n\n    private fun pick(random: Random, vararg options: String): String = options[random.nextInt(options.size)]\n\n    private fun wicketsText(n: Int): String = if (n == 1) \"a wicket\" else \"$n wickets\"\n\n    /** The news about the player's own match: the result, what he did, the title. */\n    fun afterMyMatch(career: CareerProfile, state: TournamentState, fixtureId: Int, before: PlayerStats?, after: PlayerStats?, random: Random): CareerProfile {\n        if (!NEWS_AFTER_EVERY_MATCH) return career\n        val fixture = state.fixtures.find { it.id == fixtureId } ?: return career\n        val result = fixture.result ?: return career\n        val label = CareerSeason.competitionOf(state).label\n        val stage = if (fixture.stage != CplData.LEAGUE) \", ${fixture.stage}\" else \"\"\n        val out = ArrayList<NewsItem>()\n        out.add(NewsItem(\"$label$stage: ${CareerSeason.readable(state, result.summary)}\", true))\n        if (fixture.stage == \"Final\" && result.winnerId == state.userTeamId) {\n            out.add(NewsItem(\"$label: ${CareerSeason.nameOf(state, state.userTeamId)} win the final and the title.\", true))\n        }\n        val pid = CareerSeason.playerIdIn(state, career)\n        if (pid != null && after != null && after.matches > (before?.matches ?: 0)) {\n            val runs = after.runs - (before?.runs ?: 0)\n            val balls = after.balls - (before?.balls ?: 0)\n            val wkts = after.wickets - (before?.wickets ?: 0)\n            val conceded = after.runsConceded - (before?.runsConceded ?: 0)\n            val ballsText = if (balls > 0) \" from $balls balls\" else \"\"\n            val line: String? = when {\n                after.hundreds > (before?.hundreds ?: 0) -> pick(\n                    random,\n                    \"You make a hundred: $runs runs$ballsText. The papers love it.\",\n                    \"A hundred from you: $runs runs$ballsText, and the match is yours.\"\n                )\n                after.fiveWickets > (before?.fiveWickets ?: 0) ->\n                    \"You take ${wicketsText(wkts)} for $conceded runs: a five-wicket haul that makes the headlines.\"\n                after.fifties > (before?.fifties ?: 0) -> pick(\n                    random,\n                    \"A fine fifty from you: $runs runs$ballsText.\",\n                    \"You score $runs runs$ballsText: a half-century the coach praises.\"\n                )\n                wkts >= 3 -> \"You take ${wicketsText(wkts)} for $conceded runs.\"\n                runs >= 30 -> \"You score $runs runs$ballsText.\"\n                wkts > 0 -> \"You take ${wicketsText(wkts)} for $conceded runs.\"\n                else -> null\n            }\n            if (line != null) out.add(NewsItem(line, true))\n            if (result.playerOfMatchId == pid) out.add(NewsItem(\"You are named Player of the Match.\", true))\n        }\n        return add(career, out)\n    }\n\n    /**\n     * The news about everybody else after a step of the season: the real results (of the matches that went from unplayed to played between [before] and\n     * [after], not the player's own; knockout matches first, at most two) and, if switched on, made-up world cricket headlines.\n     */\n    fun afterMatches(career: CareerProfile, before: List<TournamentState>, after: List<TournamentState>, random: Random): CareerProfile {\n        if (!NEWS_AFTER_EVERY_MATCH) return career\n        val fresh = ArrayList<Pair<TournamentState, TournamentFixture>>()\n        after.forEachIndexed { i, s ->\n            val old = before.getOrNull(i) ?: return@forEachIndexed\n            val done = old.fixtures.filter { it.result != null }.map { it.id }.toSet()\n            s.fixtures.forEach { f ->\n                if (f.result != null && f.id !in done && !CplSimulator.involves(f, s.userTeamId)) fresh.add(Pair(s, f))\n            }\n        }\n        val chosen = (fresh.filter { it.second.stage != CplData.LEAGUE }.shuffled(random) + fresh.filter { it.second.stage == CplData.LEAGUE }.shuffled(random)).take(2)\n        val out = ArrayList<NewsItem>()\n        chosen.forEach { (s, f) ->\n            val r = f.result ?: return@forEach\n            val stage = if (f.stage != CplData.LEAGUE) \", ${f.stage}\" else \"\"\n            val pom = r.playerOfMatch?.let { \" Player of the Match: ${CareerSeason.readable(s, it)}.\" } ?: \"\"\n            out.add(NewsItem(\"${CareerSeason.competitionOf(s).label}$stage: ${CareerSeason.readable(s, r.summary)}$pom\", false))\n        }\n        if (GENERATED_WORLD_NEWS) {\n            val n = if (random.nextInt(3) == 0) 2 else 1\n            repeat(n) { generated(random)?.let { out.add(NewsItem(it, false)) } }\n        }\n        return add(career, out)\n    }\n\n    // ---------------------------------------------------------------- made-up world cricket\n\n    private fun generated(random: Random): String? {\n        val teams = CricketData.getAllTeams()\n        if (teams.size < 2) return null\n        val roll = random.nextInt(100)\n        return when {\n            roll < 45 -> internationalResult(teams, random)\n            roll < 80 -> starPerformance(teams, random)\n            else -> otherNews(teams, random)\n        }\n    }\n\n    private fun twoTeams(teams: List<Team>, random: Random): Pair<Team, Team> {\n        val a = teams[random.nextInt(teams.size)]\n        var b = teams[random.nextInt(teams.size)]\n        var guard = 0\n        while (b.id == a.id && guard < 20) {\n            b = teams[random.nextInt(teams.size)]\n            guard++\n        }\n        return Pair(a, b)\n    }\n\n    private fun internationalResult(teams: List<Team>, random: Random): String {\n        val (a, b) = twoTeams(teams, random)\n        val sa = (a.battingRating + a.bowlingRating) / 2.0\n        val sb = (b.battingRating + b.bowlingRating) / 2.0\n        val aWins = random.nextDouble() < 1.0 / (1.0 + exp(-(sa - sb) / 10.0))\n        val winner = if (aWins) a else b\n        val loser = if (aWins) b else a\n        val first = 135 + random.nextInt(65)\n        return if (random.nextBoolean()) {\n            // The winner bats first and defends the total.\n            val lost = maxOf(70, first - 1 - random.nextInt(45))\n            \"World cricket, T20 international: ${winner.name} $first/${3 + random.nextInt(6)}, ${loser.name} $lost/${5 + random.nextInt(6)}. ${winner.name} won by ${first - lost} runs.\"\n        } else {\n            // The winner chases.\n            val chase = first + 1 + random.nextInt(6)\n            val lostWickets = random.nextInt(8)\n            \"World cricket, T20 international: ${loser.name} $first/${4 + random.nextInt(6)}, ${winner.name} $chase/$lostWickets. ${winner.name} won by ${10 - lostWickets} wickets.\"\n        }\n    }\n\n    private fun starPerformance(teams: List<Team>, random: Random): String {\n        val team = teams[random.nextInt(teams.size)]\n        val others = teams.filter { it.id != team.id }\n        val opp = others[random.nextInt(others.size)]\n        val batter = team.players.filter { it.battingRating >= 80 }.randomOrNull(random)\n        val bowler = team.players.filter { it.bowlingRating >= 80 }.randomOrNull(random)\n        return when {\n            batter != null && (bowler == null || random.nextBoolean()) -> {\n                val runs = 60 + random.nextInt(85)\n                val balls = (runs * (60 + random.nextInt(45)) / 100).coerceAtLeast(20)\n                \"World cricket: ${batter.name} scores $runs off $balls balls for ${team.name} against ${opp.name}.\"\n            }\n            bowler != null -> {\n                val w = 3 + random.nextInt(4)\n                val conceded = w * (5 + random.nextInt(8)) + random.nextInt(8)\n                \"World cricket: ${bowler.name} takes $w wickets for $conceded runs for ${team.name} against ${opp.name}.\"\n            }\n            else -> otherNews(teams, random)\n        }\n    }\n\n    private fun otherNews(teams: List<Team>, random: Random): String {\n        val (a, b) = twoTeams(teams, random)\n        return when (random.nextInt(4)) {\n            0 -> \"World cricket: ${a.name} win the series against ${b.name} ${pick(random, \"2-1\", \"3-0\", \"2-0\", \"3-2\")}.\"\n            1 -> \"World cricket: ${a.name} name their squad for the next series.\"\n            2 -> {\n                val star = a.players.maxByOrNull { maxOf(it.battingRating, it.bowlingRating) }\n                if (star != null) \"World cricket: an injury scare for ${star.name} ahead of ${a.name}'s next match.\"\n                else \"World cricket: ${a.name} wait on the fitness of their squad.\"\n            }\n            else -> \"World cricket: the ${a.name} coach says the side is ready for the next big tournament.\"\n        }\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val retainedTeamIds: List<String>? = null\n) {\n",
+      "replace": "    val retainedTeamIds: List<String>? = null,\n    // Part twenty-four: the news feed (see CareerNews). Every line is flagged: about the player, or world cricket.\n    val newsFeed: List<NewsItem>? = null\n) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerRecords.kt",
+      "find": "        val withMedia = CareerStatistics.withSeriesAwards(paid.career, states).copy(media = (decided.media.orEmpty() + CareerMedia.lines(decided, states)).takeLast(15))\n",
+      "replace": "        val mediaLines = CareerMedia.lines(decided, states)\n        val withMedia = CareerNews.add(\n            CareerStatistics.withSeriesAwards(paid.career, states).copy(media = (decided.media.orEmpty() + mediaLines).takeLast(15)),\n            mediaLines.map { NewsItem(it, true) }\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "            c = CareerStatistics.record(result.career, played, mine.id, before, if (pid != null) played.playerStats[pid] else null)\n",
+      "replace": "            c = CareerStatistics.record(result.career, played, mine.id, before, if (pid != null) played.playerStats[pid] else null)\n            // The news about the match (part twenty-four).\n            c = CareerNews.afterMyMatch(c, played, mine.id, before, if (pid != null) played.playerStats[pid] else null, random)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        if (whole) list = list.map { withUserPlayer(CplSimulator.run(it, SimMode.ALL, random), c) }\n        return Advance(list, c, lines)\n",
+      "replace": "        if (whole) list = list.map { withUserPlayer(CplSimulator.run(it, SimMode.ALL, random), c) }\n        // The other matches that were just played, and the world (part twenty-four).\n        c = CareerNews.afterMatches(c, states, list, random)\n        return Advance(list, c, lines)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "import com.cricketsim.logic.CareerMove\n",
+      "replace": "import com.cricketsim.logic.CareerMove\nimport com.cricketsim.logic.CareerNews\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                                seasons = adv.states\n                                adv.states.forEachIndexed { i, s -> seasonStores[i].save(s) }\n                                busy = false\n                                message = \"\"\n",
+      "replace": "                                seasons = adv.states\n                                adv.states.forEachIndexed { i, s -> seasonStores[i].save(s) }\n                                // The news of the matches just played by the other clubs.\n                                if (adv.career !== career) onCareerChanged(adv.career)\n                                busy = false\n                                message = \"\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                            val newList = latestList.mapIndexed { i, s ->\n                                CareerSeason.withUserPlayer(if (i == flow.comp) recorded else s, detailed)\n                            }\n                            seasons = newList\n                            if (detailed !== career) onCareerChanged(detailed)\n",
+      "replace": "                            // The news after the match: about him, and about the rest of cricket (part twenty-four).\n                            val afterMyMatch = CareerNews.afterMyMatch(\n                                detailed, recorded, flow.fixtureId,\n                                if (pid != null) latest.playerStats[pid] else null,\n                                if (pid != null) recorded.playerStats[pid] else null,\n                                Random.Default\n                            )\n                            val playedList = latestList.mapIndexed { i, s -> if (i == flow.comp) recorded else s }\n                            val noted = CareerNews.afterMatches(afterMyMatch, latestList, playedList, Random.Default)\n                            val newList = playedList.map { CareerSeason.withUserPlayer(it, noted) }\n                            seasons = newList\n                            if (noted !== career) onCareerChanged(noted)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "import androidx.compose.foundation.layout.Spacer\n",
+      "replace": "import androidx.compose.foundation.layout.Arrangement\nimport androidx.compose.foundation.layout.Row\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.heightIn\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "import androidx.compose.material3.MaterialTheme\n",
+      "replace": "import androidx.compose.material3.Button\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.OutlinedButton\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "import androidx.compose.ui.semantics.heading\n",
+      "replace": "import androidx.compose.ui.semantics.Role\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.role\nimport androidx.compose.ui.semantics.selected\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "import com.cricketsim.logic.CareerFinance\n",
+      "replace": "import com.cricketsim.logic.CareerFinance\nimport com.cricketsim.logic.CareerNews\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "        \"news\" -> CareerPage(\"In the news\", back) {\n            val news = career.media.orEmpty()\n            if (news.isEmpty()) BodyLine(\"Nothing yet. The papers write about you when a competition ends.\") else news.reversed().forEach { BodyLine(it) }\n        }\n",
+      "replace": "        \"news\" -> CareerPage(\"In the news\", back) { NewsPage(career) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "    val news = career.media.orEmpty()\n    MenuItem(\"In the news\", news.lastOrNull() ?: \"Nothing yet.\", \"news\", onOpen)\n",
+      "replace": "    val news = CareerNews.all(career)\n    MenuItem(\"In the news\", news.lastOrNull()?.text ?: \"Nothing yet.\", \"news\", onOpen)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "// ---------------------------------------------------------------- the pages\n",
+      "replace": "// ---------------------------------------------------------------- the pages\n\n/** The news: two tabs, All (about you and world cricket) and My news; the newest first. */\n@Composable\nprivate fun NewsPage(career: CareerProfile) {\n    var tab by remember { mutableStateOf(0) }\n    val all = CareerNews.all(career)\n    val shown = (if (tab == 0) all else all.filter { it.mine }).reversed()\n    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {\n        listOf(\"All\", \"My news\").forEachIndexed { i, label ->\n            val chosen = i == tab\n            val modifier = Modifier\n                .weight(1f)\n                .heightIn(min = 48.dp)\n                .semantics { role = Role.Tab; selected = chosen }\n            if (chosen) Button(onClick = { tab = i }, modifier = modifier) { Text(label) }\n            else OutlinedButton(onClick = { tab = i }, modifier = modifier) { Text(label) }\n        }\n    }\n    Spacer(modifier = Modifier.height(12.dp))\n    if (shown.isEmpty()) {\n        BodyLine(if (tab == 0) \"Nothing yet. The news is written after every match.\" else \"Nothing about you yet. Play or simulate a match.\")\n    } else {\n        shown.forEach { BodyLine(it.text) }\n    }\n}\n",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_TWENTYFOUR.md",
+      "mustNotExist": true,
+      "content": "# Career Mode, part twenty-four (the news and the press conference)\n\n## First part (patch 110): the news after every match\n- `logic/CareerNews.kt`. After a match of the player's (played or simulated): the result, what he did (a hundred, a fifty, a five-wicket haul, three or more wickets, 30 or more runs, Player of the Match) and, in a final, the title. After every step of the season: the real results of the other matches just played in his competitions (knockout matches first, at most two) and one or two made-up headlines about world cricket (an international result, a star's performance, a series, a squad, an injury scare). The made-up ones are not real results; `GENERATED_WORLD_NEWS = false` removes them. `NEWS_AFTER_EVERY_MATCH = false` brings back the old way.\n- `CareerProfile.newsFeed` (`NewsItem(text, mine)`, the last 80 lines). The season-end lines of `CareerMedia` are put in the feed too; older saves keep their `media` lines, shown first.\n- Career tab > In the news: two tabs, All and My news, the newest first.\n\n## Still to come\n- Second part: the press conference (after a Player of the Match or Player of the Series in international matches and tournaments and in league matches): a pop-up, 5 or 6 questions with several variants, 4 or 5 answers each, in text.\n- Third part: its audio (ElevenLabs: reporters' voices, the player's voices, crowd and camera sound effects) and the player speaking the chosen answer.\n"
+    }
+  ]
+}
