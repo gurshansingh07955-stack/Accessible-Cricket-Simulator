@@ -308,7 +308,11 @@ object CareerRecords {
         val retiredText = if (decided.retired && !updated.retired) " " + CareerHealth.retirementText(decided) else ""
         // Money and the papers (part fifteen).
         val paid = CareerFinance.settle(decided, states)
-        val withMedia = CareerStatistics.withSeriesAwards(paid.career, states).copy(media = (decided.media.orEmpty() + CareerMedia.lines(decided, states)).takeLast(15))
+        val mediaLines = CareerMedia.lines(decided, states)
+        val withMedia = CareerNews.add(
+            CareerStatistics.withSeriesAwards(paid.career, states).copy(media = (decided.media.orEmpty() + mediaLines).takeLast(15)),
+            mediaLines.map { NewsItem(it, true) }
+        )
         return Settlement(withMedia, (objectiveText + honourText + agedText + retiredText + paid.text).trim())
     }
 }

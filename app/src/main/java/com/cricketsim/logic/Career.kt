@@ -138,7 +138,9 @@ data class CareerProfile(
     /** The franchises he captains this season. */
     val leagueCaptainTeamIds: List<String>? = null,
     /** The franchises he has played for (the last eight): each of them wants to keep him. */
-    val retainedTeamIds: List<String>? = null
+    val retainedTeamIds: List<String>? = null,
+    // Part twenty-four: the news feed (see CareerNews). Every line is flagged: about the player, or world cricket.
+    val newsFeed: List<NewsItem>? = null
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 

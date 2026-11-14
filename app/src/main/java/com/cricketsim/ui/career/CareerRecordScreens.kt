@@ -1,8 +1,14 @@
 package com.cricketsim.ui.career
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -10,10 +16,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.CareerFinance
+import com.cricketsim.logic.CareerNews
 import com.cricketsim.logic.CareerHealth
 import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerLeagues
@@ -76,10 +86,7 @@ internal fun CareerRecordTab(
         }
         "captaincy" -> CareerPage("Captaincy", back) { CaptaincyPage(career) }
         "earnings" -> CareerPage("Earnings", back) { CareerFinance.lines(career).forEach { BodyLine(it) } }
-        "news" -> CareerPage("In the news", back) {
-            val news = career.media.orEmpty()
-            if (news.isEmpty()) BodyLine("Nothing yet. The papers write about you when a competition ends.") else news.reversed().forEach { BodyLine(it) }
-        }
+        "news" -> CareerPage("In the news", back) { NewsPage(career) }
         "move" -> CareerPage("Move to another country", back) { MovePage(career, onMove) }
         "retire" -> CareerPage("Retirement", back) { RetirementPage(career, seasons, onRetire) }
         else -> CareerMenu(career, seasons, rankLines) { page = it }
@@ -128,8 +135,8 @@ private fun CareerMenu(career: CareerProfile, seasons: List<TournamentState>?, r
     if (!career.retired) MenuItem("Captaincy", captaincyStatus(career), "captaincy", onOpen)
     GroupHeading("Money and the papers")
     MenuItem("Earnings", "Career earnings: ${CareerFinance.money(career.money)}.", "earnings", onOpen)
-    val news = career.media.orEmpty()
-    MenuItem("In the news", news.lastOrNull() ?: "Nothing yet.", "news", onOpen)
+    val news = CareerNews.all(career)
+    MenuItem("In the news", news.lastOrNull()?.text ?: "Nothing yet.", "news", onOpen)
     if (!career.retired) {
         GroupHeading("Changes")
         if (!career.isInternational && career.internationalMatches == 0 && career.clubs.isNotEmpty()) {
@@ -173,6 +180,31 @@ private fun BodyLine(text: String) {
 }
 
 // ---------------------------------------------------------------- the pages
+
+/** The news: two tabs, All (about you and world cricket) and My news; the newest first. */
+@Composable
+private fun NewsPage(career: CareerProfile) {
+    var tab by remember { mutableStateOf(0) }
+    val all = CareerNews.all(career)
+    val shown = (if (tab == 0) all else all.filter { it.mine }).reversed()
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        listOf("All", "My news").forEachIndexed { i, label ->
+            val chosen = i == tab
+            val modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 48.dp)
+                .semantics { role = Role.Tab; selected = chosen }
+            if (chosen) Button(onClick = { tab = i }, modifier = modifier) { Text(label) }
+            else OutlinedButton(onClick = { tab = i }, modifier = modifier) { Text(label) }
+        }
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+    if (shown.isEmpty()) {
+        BodyLine(if (tab == 0) "Nothing yet. The news is written after every match." else "Nothing about you yet. Play or simulate a match.")
+    } else {
+        shown.forEach { BodyLine(it.text) }
+    }
+}
 
 @Composable
 private fun TrainingPage(career: CareerProfile, onFocus: (String?) -> Unit, onSpecialism: (String?) -> Unit) {

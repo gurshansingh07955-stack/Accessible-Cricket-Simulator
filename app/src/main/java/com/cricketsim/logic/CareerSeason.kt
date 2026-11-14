@@ -360,6 +360,8 @@ object CareerSeason {
             val result = CareerProgress.afterMatch(c, before, if (pid != null) played.playerStats[pid] else null, random, CareerInternational.formatKeyOf(ran), CareerLeagues.isLeague(ran))
             // The full career record (part nineteen) reads the scorecard of the match he has just played.
             c = CareerStatistics.record(result.career, played, mine.id, before, if (pid != null) played.playerStats[pid] else null)
+            // The news about the match (part twenty-four).
+            c = CareerNews.afterMyMatch(c, played, mine.id, before, if (pid != null) played.playerStats[pid] else null, random)
             val updated = withUserPlayer(played, c)
             list = list.mapIndexed { i, x -> if (i == ci) updated else x }
             lines.add(
@@ -369,6 +371,8 @@ object CareerSeason {
             if (!whole) break
         }
         if (whole) list = list.map { withUserPlayer(CplSimulator.run(it, SimMode.ALL, random), c) }
+        // The other matches that were just played, and the world (part twenty-four).
+        c = CareerNews.afterMatches(c, states, list, random)
         return Advance(list, c, lines)
     }
 

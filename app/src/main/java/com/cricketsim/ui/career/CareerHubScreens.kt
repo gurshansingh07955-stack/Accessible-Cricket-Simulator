@@ -51,6 +51,7 @@ import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.BigBashLeague
 import com.cricketsim.logic.CareerLeagues
 import com.cricketsim.logic.CareerMove
+import com.cricketsim.logic.CareerNews
 import com.cricketsim.logic.CareerRecords
 import com.cricketsim.logic.CareerStatistics
 import com.cricketsim.logic.LeagueOffer
@@ -417,11 +418,18 @@ fun CareerHub(
                                 if (pid != null) latest.playerStats[pid] else null,
                                 if (pid != null) recorded.playerStats[pid] else null
                             )
-                            val newList = latestList.mapIndexed { i, s ->
-                                CareerSeason.withUserPlayer(if (i == flow.comp) recorded else s, detailed)
-                            }
+                            // The news after the match: about him, and about the rest of cricket (part twenty-four).
+                            val afterMyMatch = CareerNews.afterMyMatch(
+                                detailed, recorded, flow.fixtureId,
+                                if (pid != null) latest.playerStats[pid] else null,
+                                if (pid != null) recorded.playerStats[pid] else null,
+                                Random.Default
+                            )
+                            val playedList = latestList.mapIndexed { i, s -> if (i == flow.comp) recorded else s }
+                            val noted = CareerNews.afterMatches(afterMyMatch, latestList, playedList, Random.Default)
+                            val newList = playedList.map { CareerSeason.withUserPlayer(it, noted) }
                             seasons = newList
-                            if (detailed !== career) onCareerChanged(detailed)
+                            if (noted !== career) onCareerChanged(noted)
                             message = lastResultText(newList[flow.comp]) + " " + progress.text
                             saveSeasons(newList)
                         }
@@ -481,6 +489,8 @@ fun CareerHub(
                                 val adv = withContext(Dispatchers.Default) { CareerSeason.advance(list, career, Random.Default, false, false) }
                                 seasons = adv.states
                                 adv.states.forEachIndexed { i, s -> seasonStores[i].save(s) }
+                                // The news of the matches just played by the other clubs.
+                                if (adv.career !== career) onCareerChanged(adv.career)
                                 busy = false
                                 message = ""
                                 val next = CareerSeason.nextMine(adv.states)
