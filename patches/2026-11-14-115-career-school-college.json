@@ -1,0 +1,231 @@
+{
+  "name": "Career: school (12 to 15) and college (16 to 18) for new careers, with ratings by age",
+  "message": "New careers: ages 12 to 15 start at one of three schools of the state, 16 to 18 at one of three colleges, 19 and over as before. School leavers choose a college; college leavers join their district club. Ratings follow age. Existing careers are not changed.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerStudent.kt",
+    "contains": "object CareerStudent"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerStudent.kt",
+      "mustNotExist": true,
+      "content": "package com.cricketsim.logic\n\nimport java.util.Random\n\n/**\n * My Player, part twenty-six: school and college.\n *\n * A NEW career whose age is 12 to 15 starts in SCHOOL cricket, one of 16 to 18 in COLLEGE cricket; from 19 it starts in district club cricket exactly as it always\n * did. (A career made before this part has no stage and is not touched.) A student plays the same three leagues as a club player (T20, 50-over, 3-day), but between the\n * THREE schools (or three colleges) of his state, each pair twice (home and away), so a season is 12 matches. His district club, chosen on the club page, waits for him:\n *  - school lasts until he is 15: the season after that he finishes school and is asked to choose one of the state's three colleges;\n *  - college lasts until he is 18: the season after that he finishes college and joins his district club (a squad of adults, made when he arrives);\n *  - the state selectors and the franchises look at him only once he plays district club cricket (from 19).\n *\n * RATINGS follow age. The rating he starts with is multiplied by [ageFactor] (a 12-year-old 0.55, a 15-year-old 0.78, an 18-year-old 0.96, 19 and over 1.0) and the made-up\n * squads of the schools by [squadScale] (0.66) and of the colleges (0.90). He then grows as he plays, as before (a young player grows at full speed).\n * The scale-down of school and college ratings is a model: how it changes the scoring of the simulated matches was not measured.\n */\nobject CareerStudent {\n    const val SCHOOL_MAX_AGE = 15\n    const val COLLEGE_MAX_AGE = 18\n\n    fun stageForAge(age: Int): String = when {\n        age in CareerWorld.MIN_AGE..SCHOOL_MAX_AGE -> \"School\"\n        age in (SCHOOL_MAX_AGE + 1)..COLLEGE_MAX_AGE -> \"College\"\n        else -> \"\"\n    }\n\n    /** What a starting rating is multiplied by at this age (1.0 from the age of 19). */\n    fun ageFactor(age: Int): Double = when {\n        age <= 12 -> 0.55\n        age == 13 -> 0.62\n        age == 14 -> 0.70\n        age == 15 -> 0.78\n        age == 16 -> 0.85\n        age == 17 -> 0.91\n        age == 18 -> 0.96\n        else -> 1.0\n    }\n\n    /** What the ratings of the made-up players of a school or a college are multiplied by. */\n    fun squadScale(stage: String): Double = when (stage) {\n        \"School\" -> 0.66\n        \"College\" -> 0.90\n        else -> 1.0\n    }\n\n    /** The player's starting ratings [batting, bowling, fielding]: as always from 19, scaled by his age below it. */\n    fun startingRatings(role: String, age: Int, random: Random): List<Int> {\n        val base = CareerGenerator.startingRatings(role, random)\n        if (stageForAge(age).isEmpty()) return base\n        val f = ageFactor(age)\n        return base.map { maxOf(3, Math.round(it * f).toInt()) }\n    }\n\n    /** The made-up teams of a school or college league: the three of the state, the player in his own team's squad. */\n    fun generateTeams(country: String, state: String, stage: String, userTeam: String, user: CareerPlayer, random: Random): List<CareerClub> {\n        val names = if (stage == \"School\") CareerWorld.schools(country, state) else CareerWorld.colleges(country, state)\n        return CareerGenerator.generateClubs(country, state, userTeam, user, random, names, squadScale(stage))\n    }\n\n    private fun playerOf(c: CareerProfile): CareerPlayer = CareerPlayer(\n        name = c.fullName, role = c.role, battingHand = c.battingHand, bowlingHand = c.bowlingHand, bowlingStyle = c.bowlingStyle,\n        batting = c.batting, bowling = c.bowling, fielding = c.fielding, isUser = true\n    )\n\n    /** He joins a college (with his ratings as they are now): its league, its squads. */\n    fun joinCollege(c: CareerProfile, college: String, random: Random): CareerProfile {\n        val clubs = generateTeams(c.country, c.state, \"College\", college, playerOf(c), random)\n        return c.copy(stage = \"College\", club = college, clubTeams = clubs, leadership = \"\", level = \"District\")\n    }\n\n    /** He finishes college and joins his district club: a squad of adults, made now, with him in it. */\n    private fun graduate(c: CareerProfile, random: Random): CareerProfile {\n        val names = CareerWorld.clubs(c.country, c.state)\n        val club = if (c.homeClub in names) c.homeClub else names.firstOrNull() ?: c.club\n        val clubs = CareerGenerator.generateClubs(c.country, c.state, club, playerOf(c), random)\n        return c.copy(stage = \"\", homeClub = \"\", club = club, clubTeams = clubs, leadership = \"\", level = \"District\")\n    }\n\n    /** The next season of a student ([older] is the career a year older): school, college or the district club. */\n    fun next(career: CareerProfile, older: CareerProfile): CareerSeason.NextSeason {\n        val random = Random(career.id.hashCode().toLong() * 31L + older.season)\n        var text = \"A new season begins. You are ${older.age}. \"\n        var c = older.copy(level = \"District\")\n        if (career.stage == \"School\" && older.age > SCHOOL_MAX_AGE) {\n            // He finishes school. He is put in the first college until he chooses (the hub asks at once and rebuilds the season).\n            val colleges = CareerWorld.colleges(c.country, c.state)\n            c = joinCollege(c, colleges.firstOrNull() ?: c.club, random).copy(pendingCollege = true)\n            text += \"You finish school and move on to college. Choose your college.\"\n        } else if (career.stage == \"College\" && older.age > COLLEGE_MAX_AGE) {\n            c = graduate(c, random)\n            text += \"You finish college and join ${c.club}, your district club.\"\n        } else {\n            text += \"You stay at ${c.club} for another season of ${career.stage.lowercase()} cricket.\"\n        }\n        val states = CareerSeason.newSeason(c) ?: emptyList()\n        val keys = states.map { CareerSeason.keyOf(it) }\n        return CareerSeason.NextSeason(c.copy(seasonKeys = keys), states, keys, text)\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    const val MIN_AGE = 16\n",
+      "replace": "    const val MIN_AGE = 12\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    fun clubs(country: String, state: String): List<String> {\n",
+      "replace": "    /** The three schools of a state (a new career of 12 to 15 starts in one of them). Named after the state's places. */\n    fun schools(country: String, state: String): List<String> {\n        val places = findState(country, state)?.places ?: return emptyList()\n        val kind = when (country) {\n            \"England\" -> \"Grammar School\"\n            \"India\", \"Pakistan\" -> \"Public School\"\n            else -> \"High School\"\n        }\n        return places.take(3).map { \"$it $kind\" }\n    }\n\n    /** The three colleges of a state (a new career of 16 to 18 starts in one of them; a school leaver moves to one). */\n    fun colleges(country: String, state: String): List<String> {\n        val places = findState(country, state)?.places ?: return emptyList()\n        return places.takeLast(3).map { \"$it College\" }\n    }\n\n    fun clubs(country: String, state: String): List<String> {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val padsTier: Int = 0\n) {\n",
+      "replace": "    val padsTier: Int = 0,\n    // Part twenty-six: school and college. stage is \"\" (district club and above, as always), \"School\" or \"College\"; homeClub is the district club he chose and\n    // joins when college ends; pendingCollege is set when he has finished school and still has to choose his college.\n    val stage: String = \"\",\n    val homeClub: String = \"\",\n    val pendingCollege: Boolean = false\n) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "        return if (isState) \"You play for the ${domesticTeams.firstOrNull() ?: state} squad. Season $n, age $age.\"\n        else \"You play district club cricket for $club. Season $n, age $age.\"\n",
+      "replace": "        if (stage == \"School\") return \"You play school cricket for $club. Season $n, age $age.\"\n        if (stage == \"College\") return \"You play college cricket for $club. Season $n, age $age.\"\n        return if (isState) \"You play for the ${domesticTeams.firstOrNull() ?: state} squad. Season $n, age $age.\"\n        else \"You play district club cricket for $club. Season $n, age $age.\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerGenerator.kt",
+      "find": "    private fun makePlayer(role: String, pool: Pair<List<String>, List<String>>, random: Random, used: MutableSet<String>): CareerPlayer {\n",
+      "replace": "    /** A rating scaled for younger squads (part twenty-six); scale 1.0 leaves it as it is. */\n    private fun scaled(v: Int, scale: Double): Int = if (scale == 1.0) v else maxOf(3, Math.round(v * scale).toInt())\n\n    private fun makePlayer(role: String, pool: Pair<List<String>, List<String>>, random: Random, used: MutableSet<String>, scale: Double = 1.0): CareerPlayer {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerGenerator.kt",
+      "find": "            batting = batting,\n            bowling = bowling,\n            fielding = fielding\n        )\n",
+      "replace": "            batting = scaled(batting, scale),\n            bowling = scaled(bowling, scale),\n            fielding = scaled(fielding, scale)\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerGenerator.kt",
+      "find": "    fun generateClubs(country: String, state: String, userClub: String, user: CareerPlayer, random: Random): List<CareerClub> {\n",
+      "replace": "    fun generateClubs(\n        country: String, state: String, userClub: String, user: CareerPlayer, random: Random,\n        names: List<String>? = null, scale: Double = 1.0\n    ): List<CareerClub> {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerGenerator.kt",
+      "find": "        return CareerWorld.clubs(country, state).map { clubName ->\n",
+      "replace": "        return (names ?: CareerWorld.clubs(country, state)).map { clubName ->\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerGenerator.kt",
+      "find": "            val players = SQUAD_ROLES.map { makePlayer(it, pool, random, used) }.toMutableList()\n",
+      "replace": "            val players = SQUAD_ROLES.map { makePlayer(it, pool, random, used, scale) }.toMutableList()\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "            roundRobin(teams.map { it.id }).forEach { (home, away) ->\n                fixtures.add(TournamentFixture(fixtures.size, fixtures.size + 1, CplData.LEAGUE, home, away, groundOf.getValue(home)))\n            }\n",
+      "replace": "            // A school or college league has only three teams, so every pair plays twice (home and away); a district league once, as always.\n            repeat(if (career.stage.isNotEmpty()) 2 else 1) { lap ->\n                roundRobin(teams.map { it.id }).forEach { (a, b) ->\n                    val home = if (lap % 2 == 0) a else b\n                    val away = if (lap % 2 == 0) b else a\n                    fixtures.add(TournamentFixture(fixtures.size, fixtures.size + 1, CplData.LEAGUE, home, away, groundOf.getValue(home)))\n                }\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "                name = \"${career.state} ${comp.label} $year\",\n",
+      "replace": "                name = \"${career.state} ${if (career.stage == \"School\") \"School \" else if (career.stage == \"College\") \"College \" else \"\"}${comp.label} $year\",\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        var text = \"A new season begins. You are ${older.age}. \"\n",
+      "replace": "        // A student stays at school or college until he is old enough, then moves on; the state selectors and the franchises do not look at him (part twenty-six).\n        if (career.stage.isNotEmpty()) return CareerStudent.next(career, older)\n        var text = \"A new season begins. You are ${older.age}. \"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "    fun pathway(career: CareerProfile): List<String> {\n        val out = ArrayList<String>()\n",
+      "replace": "    fun pathway(career: CareerProfile): List<String> {\n        if (career.stage.isNotEmpty()) {\n            return listOf(\n                \"The road: school, then college, then district club, then the ${career.state} state squad, then the ${career.nation} national team.\",\n                \"You are playing ${career.stage.lowercase()} cricket for ${career.club}. The state selectors look at you once you play district club cricket, from the age of 19.\"\n            )\n        }\n        val out = ArrayList<String>()\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "import com.cricketsim.logic.CareerPlayer\n",
+      "replace": "import com.cricketsim.logic.CareerPlayer\nimport com.cricketsim.logic.CareerStudent\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "private enum class CStep { Menu, Resume, Details, Name, Age, Gender, Jersey, Country, State, Club, Role,",
+      "replace": "private enum class CStep { Menu, Resume, Details, Name, Age, Gender, Jersey, Country, State, Club, School, College, Role,",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "    var clubName by remember { mutableStateOf<String?>(null) }\n",
+      "replace": "    var clubName by remember { mutableStateOf<String?>(null) }\n    var schoolName by remember { mutableStateOf<String?>(null) }\n    var collegeName by remember { mutableStateOf<String?>(null) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "        val ratings = CareerGenerator.startingRatings(role ?: \"\", random)\n",
+      "replace": "        val startAge = ageText.toIntOrNull() ?: CareerWorld.MIN_AGE\n        val stage = CareerStudent.stageForAge(startAge)\n        // A student's ratings follow his age (a twelve-year-old is far below an adult); from 19 they are what they always were.\n        val ratings = CareerStudent.startingRatings(role ?: \"\", startAge, random)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "        val clubs = CareerGenerator.generateClubs(chosenCountry, chosenState, clubName ?: \"\", me, random)\n",
+      "replace": "        val myTeam = when (stage) {\n            \"School\" -> schoolName ?: \"\"\n            \"College\" -> collegeName ?: \"\"\n            else -> clubName ?: \"\"\n        }\n        val clubs = if (stage.isEmpty()) CareerGenerator.generateClubs(chosenCountry, chosenState, clubName ?: \"\", me, random)\n        else CareerStudent.generateTeams(chosenCountry, chosenState, stage, myTeam, me, random)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "            club = clubName ?: \"\",\n",
+      "replace": "            club = myTeam,\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "            startRatings = listOf(me.batting, me.bowling, me.fielding)\n        )\n",
+      "replace": "            startRatings = listOf(me.batting, me.bowling, me.fielding),\n            stage = stage,\n            homeClub = if (stage.isEmpty()) \"\" else clubName ?: \"\"\n        )\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "            hint = \"Type your age, from ${CareerWorld.MIN_AGE} to ${CareerWorld.MAX_AGE}. Ages ${CareerWorld.MIN_AGE} to ${CareerWorld.RECOMMENDED_MAX_AGE} are recommended: they give you the longest career.\",\n",
+      "replace": "            hint = \"Type your age, from ${CareerWorld.MIN_AGE} to ${CareerWorld.MAX_AGE}. At 12 to 15 you start in school cricket, at 16 to 18 in college cricket, and from 19 in district club cricket. The younger you start, the longer your career.\",\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "                            clubName = club\n                            step = CStep.Role\n",
+      "replace": "                            clubName = club\n                            // Ages 12 to 15 choose a school next, 16 to 18 a college, everybody else goes straight on.\n                            step = when (CareerStudent.stageForAge(ageText.toIntOrNull() ?: 19)) {\n                                \"School\" -> CStep.School\n                                \"College\" -> CStep.College\n                                else -> CStep.Role\n                            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "        CStep.Role -> {\n            val back = { step = CStep.Club }\n",
+      "replace": "        CStep.School -> {\n            val chosenCountry = country ?: CareerWorld.COUNTRIES.first()\n            val chosenState = stateName\n            val back = { step = CStep.Club }\n            BackHandler(onBack = back)\n            PageColumn {\n                BackButton(back)\n                Spacer(modifier = Modifier.height(16.dp))\n                PageHeading(\"Your school\")\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(\n                    text = \"At your age you start in school cricket. Choose your school${if (chosenState != null) \" in $chosenState\" else \"\"}. You will join ${clubName ?: \"your district club\"} when you finish college.\",\n                    style = MaterialTheme.typography.bodyLarge\n                )\n                Spacer(modifier = Modifier.height(16.dp))\n                if (chosenState != null) {\n                    CareerWorld.schools(chosenCountry, chosenState).forEach { school ->\n                        OptionButton(school, \"A school in $chosenState.\", true, school == schoolName) {\n                            schoolName = school\n                            step = CStep.Role\n                        }\n                        Spacer(modifier = Modifier.height(8.dp))\n                    }\n                }\n            }\n        }\n\n        CStep.College -> {\n            val chosenCountry = country ?: CareerWorld.COUNTRIES.first()\n            val chosenState = stateName\n            val back = { step = CStep.Club }\n            BackHandler(onBack = back)\n            PageColumn {\n                BackButton(back)\n                Spacer(modifier = Modifier.height(16.dp))\n                PageHeading(\"Your college\")\n                Spacer(modifier = Modifier.height(8.dp))\n                Text(\n                    text = \"At your age you start in college cricket. Choose your college${if (chosenState != null) \" in $chosenState\" else \"\"}. You will join ${clubName ?: \"your district club\"} when you finish college.\",\n                    style = MaterialTheme.typography.bodyLarge\n                )\n                Spacer(modifier = Modifier.height(16.dp))\n                if (chosenState != null) {\n                    CareerWorld.colleges(chosenCountry, chosenState).forEach { college ->\n                        OptionButton(college, \"A college in $chosenState.\", true, college == collegeName) {\n                            collegeName = college\n                            step = CStep.Role\n                        }\n                        Spacer(modifier = Modifier.height(8.dp))\n                    }\n                }\n            }\n        }\n\n        CStep.Role -> {\n            val back = {\n                step = when (CareerStudent.stageForAge(ageText.toIntOrNull() ?: 19)) {\n                    \"School\" -> CStep.School\n                    \"College\" -> CStep.College\n                    else -> CStep.Club\n                }\n            }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "                    \"District club: ${clubName ?: \"\"}\",\n",
+      "replace": "                    \"District club: ${clubName ?: \"\"}\",\n                    when (CareerStudent.stageForAge(ageText.toIntOrNull() ?: 19)) {\n                        \"School\" -> \"School: ${schoolName ?: \"\"}\"\n                        \"College\" -> \"College: ${collegeName ?: \"\"}\"\n                        else -> null\n                    },\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "import com.cricketsim.logic.CareerPress\n",
+      "replace": "import com.cricketsim.logic.CareerPress\nimport com.cricketsim.logic.CareerStudent\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    // ---------------------------------------------------------------- a scorecard opened from the Calendar (full screen)\n",
+      "replace": "    // ---------------------------------------------------------------- a school leaver chooses his college (full screen, part twenty-six)\n    if (career.pendingCollege && play == null && !busy) {\n        // No Back here: he has to choose.\n        BackHandler { }\n        CollegeChoiceScreen(\n            colleges = CareerWorld.colleges(career.country, career.state),\n            onChoose = { name ->\n                busy = true\n                scope.launch {\n                    val chosen = CareerStudent.joinCollege(career, name, java.util.Random(System.nanoTime())).copy(pendingCollege = false)\n                    val rebuilt = withContext(Dispatchers.Default) { CareerSeason.newSeason(chosen) } ?: emptyList()\n                    val keys = rebuilt.map { CareerSeason.keyOf(it) }\n                    rebuilt.forEachIndexed { i, s ->\n                        TournamentSaveStore(context, CareerSeason.seasonFile(chosen.id, chosen.season, keys[i])).save(s)\n                    }\n                    seasons = rebuilt\n                    message = \"You join $name for a season of college cricket.\"\n                    busy = false\n                    onCareerChanged(chosen.copy(seasonKeys = keys))\n                }\n            }\n        )\n        return\n    }\n\n    // ---------------------------------------------------------------- a scorecard opened from the Calendar (full screen)\n",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerStudentScreens.kt",
+      "mustNotExist": true,
+      "content": "package com.cricketsim.ui.career\n\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.ui.custom.OptionButton\nimport com.cricketsim.ui.custom.PageColumn\nimport com.cricketsim.ui.custom.PageHeading\n\n/** A school leaver chooses one of the three colleges of his state (My Player, part twenty-six). It comes by itself when he is back in the hub. */\n@Composable\nfun CollegeChoiceScreen(colleges: List<String>, onChoose: (String) -> Unit) {\n    PageColumn {\n        PageHeading(\"Choose your college\")\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\n            \"You have finished school. Choose the college you will play for. You join your district club when you finish college.\",\n            style = MaterialTheme.typography.bodyLarge\n        )\n        Spacer(modifier = Modifier.height(16.dp))\n        colleges.forEach { college ->\n            OptionButton(college, \"A college in your state.\", true, false) { onChoose(college) }\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n    }\n}\n"
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_TWENTYSIX.md",
+      "mustNotExist": true,
+      "content": "# Career Mode, part twenty-six: school and college\n\n**Only new careers.** A career made before this patch has `stage = \"\"` and plays exactly as before.\n\n- **Ages:** the age page now takes 12 to 30. A new career of **12 to 15** starts in **school** cricket, **16 to 18** in **college** cricket, **19 and over** in district club cricket as it always did.\n- **Making a career:** Name, Age, Gender, Jersey, Country, State, **district club** (as before), then for 12 to 15 **Your school** and for 16 to 18 **Your college** (three each, named after the state's places: `CareerWorld.schools` and `colleges`), then role and the rest as before. The district club is kept (`homeClub`): he joins it when college ends.\n- **The leagues:** a student plays the same three leagues (T20, 50-over, 3-day) between the **three** schools or colleges of his state, each pair twice (home and away), so a season is 12 matches. Everything else of club cricket works as before (selection into the XI, captaincy, form, growth, injuries, the shop).\n- **Ratings by age** (`CareerStudent`): the starting rating is multiplied by 0.55 at 12, 0.62 at 13, 0.70 at 14, 0.78 at 15, 0.85 at 16, 0.91 at 17, 0.96 at 18 (1.0 from 19, as before). The made-up players of the schools are scaled by 0.66, of the colleges by 0.90 (and floor at 3). Growth is as before (a young player grows at full speed). **Not measured:** how these lower ratings change the scoring of the simulated matches; if school matches feel too low or too high scoring, turn `squadScale` and `ageFactor`.\n- **Moving on:** school lasts until 15. The season after that he finishes school and a page, **Choose your college**, comes by itself when he is back in the hub (until he chooses he is in the first college). College lasts until 18. The season after that he joins his district club (a squad of adults, made then, with his current ratings). The state selectors, the national selectors and the franchises look at him only from district club cricket (the Career road page says so).\n- **No move abroad** while he is a student (the Career tab does not offer it; a planned one is dropped).\n- **Not changed:** match fees (a student is paid as a club player), objectives and rankings (they treat school and college as club cricket), the press conference (only international and league).\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "import com.cricketsim.logic.CareerMove\n",
+      "replace": "import com.cricketsim.logic.CareerMove\nimport com.cricketsim.logic.CareerWorld\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerMove.kt",
+      "find": "        val move = career.pendingMove ?: return career\n",
+      "replace": "        val move = career.pendingMove ?: return career\n        // A school or college student does not move abroad (part twenty-six): his league is the school or college league of his state.\n        if (career.stage.isNotEmpty()) return career.copy(pendingMove = null)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "        if (!career.isInternational && career.internationalMatches == 0 && career.clubs.isNotEmpty()) {\n",
+      "replace": "        if (!career.isInternational && career.internationalMatches == 0 && career.clubs.isNotEmpty() && career.stage.isEmpty()) {\n",
+      "count": 1
+    }
+  ]
+}
