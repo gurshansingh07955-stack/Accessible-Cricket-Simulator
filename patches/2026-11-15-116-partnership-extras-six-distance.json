@@ -1,0 +1,78 @@
+{
+  "name": "Partnerships count extras; every six says how long it was",
+  "message": "Partnership totals now include wides and no-balls as in real cricket. The last ball of a six says how many metres it went, worked out from the timing, the ball quality, the ball speed and the ground, not random.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/SixDistance.kt",
+    "contains": "object SixDistance"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/SixDistance.kt",
+      "mustNotExist": true,
+      "content": "package com.cricketsim.logic\n\n/**\n * How far a six went, in metres: worked out, never random. The same ball, the same shot and the same ground always give the same number.\n *\n * The distance is the ground's boundary (a small ground 66 m, a medium one 73 m, a large one 80 m) plus 2 metres to clear the rope plus a carry of up to 38 metres\n * that depends on how hard the ball was hit ([strength], 0 to 1):\n *   - the TIMING of the shot, the biggest part (Perfect hits it farthest, Very bad barely over the rope): 55%\n *   - the QUALITY of the ball (a bad ball, a full toss or a half-volley, goes farther than a perfect one): 15%\n *   - the SPEED of the ball (the ball's own pace comes back off the bat: a fast ball goes farther than a slow spinner): 10%\n *   - the batter's own batting rating: 10%\n *   - the shot (a helicopter shot or a pull sends it farther than a glance): 10%\n * A six that came off the edge only just clears the rope (the strength is cut to 35%). A high ground (thin air) adds 3% of the carry for every 1,000 m.\n * The strength is squeezed by [CURVE] so that a poorly timed six is short and only a well-timed one reaches 100 m.\n *\n * [SHOW_SIX_DISTANCE] false removes the distance from the ball's text. The weights are a model, not measured on real shots.\n */\nobject SixDistance {\n    const val SHOW_SIX_DISTANCE = true\n    private const val ROPE_CLEARANCE = 2.0\n    private const val MAX_CARRY = 38.0\n    private const val CURVE = 1.3\n    private const val RECORD = 125\n\n    fun boundaryMetres(size: BoundarySize): Double = when (size) {\n        BoundarySize.SMALL -> 66.0\n        BoundarySize.MEDIUM -> 73.0\n        BoundarySize.LARGE -> 80.0\n    }\n\n    private fun timingPower(t: TimingTier): Double = when (t) {\n        BowlingQualityTier.PERFECT -> 1.0\n        BowlingQualityTier.IDEAL -> 0.8\n        BowlingQualityTier.GOOD -> 0.5\n        BowlingQualityTier.BAD -> 0.25\n        BowlingQualityTier.VERY_BAD -> 0.1\n    }\n\n    /** How easy the ball was to hit far: a bad ball is, a perfect one is not. */\n    private fun looseness(q: BowlingQualityTier): Double = when (q) {\n        BowlingQualityTier.VERY_BAD -> 1.0\n        BowlingQualityTier.BAD -> 0.8\n        BowlingQualityTier.GOOD -> 0.5\n        BowlingQualityTier.IDEAL -> 0.35\n        BowlingQualityTier.PERFECT -> 0.2\n    }\n\n    private fun shotPower(s: NamedShot): Double = when (s) {\n        NamedShot.HELICOPTER_SHOT, NamedShot.SWITCH_HIT -> 1.0\n        NamedShot.PULL_SHOT, NamedShot.HOOK_SHOT, NamedShot.STRAIGHT_DRIVE, NamedShot.OFF_DRIVE, NamedShot.ON_DRIVE -> 0.9\n        NamedShot.COVER_DRIVE, NamedShot.SQUARE_DRIVE -> 0.8\n        NamedShot.SHORT_PUNCH -> 0.7\n        NamedShot.SCOOP_SHOT, NamedShot.SWEEP_SHOT, NamedShot.REVERSE_SWEEP, NamedShot.UPPER_CUT, NamedShot.CUT_SHOT, NamedShot.LATE_CUT, NamedShot.LEG_GLANCE_FLICK -> 0.6\n        NamedShot.FORWARD_DEFENSE, NamedShot.BACKWARD_DEFENSE, NamedShot.LEAVE -> 0.3\n    }\n\n    /** How hard the ball was hit, 0 to 1. */\n    fun strength(outcome: BallOutcome, decision: BattingDecision?, speedKmh: Int, batterRating: Int): Double {\n        val timing = decision?.let { timingPower(it.timingTier) } ?: 0.6\n        val loose = outcome.bowlingQualityTier?.let { looseness(it) } ?: 0.5\n        val pace = ((speedKmh - 70) / 80.0).coerceIn(0.0, 1.0)\n        val bat = (batterRating / 100.0).coerceIn(0.0, 1.0)\n        val shot = decision?.let { shotPower(it.shot) } ?: 0.7\n        val raw = 0.55 * timing + 0.15 * loose + 0.10 * pace + 0.10 * bat + 0.10 * shot\n        // The weakest possible combination is about 0.13 and the strongest about 1.0.\n        val normal = ((raw - 0.13) / 0.87).coerceIn(0.0, 1.0)\n        val squeezed = Math.pow(normal, CURVE)\n        return if (outcome.isEdge == true) squeezed * 0.35 else squeezed\n    }\n\n    /** The length of this ball's six in whole metres, or null if the ball was not a six off the bat. */\n    fun metres(outcome: BallOutcome, decision: BattingDecision?, speedKmh: Int, stadium: Stadium?, batterRating: Int): Int? {\n        if (!SHOW_SIX_DISTANCE || outcome.runs != 6 || outcome.isWide || outcome.isWicket) return null\n        val boundary = stadium?.let { boundaryMetres(it.boundarySize) } ?: boundaryMetres(BoundarySize.MEDIUM)\n        val thinAir = 1.0 + (stadium?.altitudeM ?: 0) * 0.00003\n        val carry = MAX_CARRY * strength(outcome, decision, speedKmh, batterRating) * thinAir\n        return Math.round(boundary + ROPE_CLEARANCE + carry).toInt().coerceAtMost(RECORD)\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null): String {\n",
+      "replace": "    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null, sixMetres: Int? = null): String {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "        return base + quality + shot\n",
+      "replace": "        // A six says how long it was, after the ball quality and the timing (SixDistance).\n        val six = sixMetres?.let { \" That six was $it metres long.\" } ?: \"\"\n        return base + quality + shot + six\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        val summary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote)\n",
+      "replace": "        // The length of a six: the ball, the speed, the timing and the ground decide it, nothing is random.\n        val sixMetres = com.cricketsim.logic.SixDistance.metres(\n            result.outcome, result.battingDecision, result.bowlingDecision.speedKmh,\n            com.cricketsim.logic.StadiumData.getStadiumById(before.stadiumId) ?: com.cricketsim.logic.CplData.stadium(before.stadiumId),\n            before.currentBatsmen.first.battingRating\n        )\n        val summary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "    val totalRuns: Int,\n    val balls: Int\n)\n",
+      "replace": "    val totalRuns: Int,\n    val balls: Int,\n    /** Of totalRuns, the extras (wides and no-balls) scored while the two were together: they count for the partnership, not for either batter. */\n    val extras: Int = 0\n)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "    fun updatePartnership(inningsData: InningsData, strikerId: String, runs: Int, ballFaced: Boolean): InningsData {\n",
+      "replace": "    fun updatePartnership(inningsData: InningsData, strikerId: String, runs: Int, ballFaced: Boolean, extraRuns: Int = 0): InningsData {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "                totalRuns = partnership.totalRuns + runs,\n",
+      "replace": "                totalRuns = partnership.totalRuns + runs + extraRuns,\n                extras = partnership.extras + extraRuns,\n",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "        // Update partnership\n        if (!outcome.isWicket) {\n            updated = updatePartnership(updated, strikerId, outcome.runs, isLegalDelivery)\n        }\n",
+      "replace": "        // Update partnership: as in real cricket it counts everything the team scores while the two are together, the extras (wides, no-balls) as well as the runs off the bat.\n        if (!outcome.isWicket) {\n            updated = updatePartnership(updated, strikerId, outcome.runs, isLegalDelivery, outcome.extraRuns)\n        } else if (outcome.extraRuns > 0) {\n            // A wicket on a no-ball or a wide (a run out, a stumping): the extra still belongs to the partnership that ends.\n            updated = updatePartnership(updated, strikerId, 0, false, outcome.extraRuns)\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "            \"${countOf(p.totalRuns, \"run\")} off ${countOf(p.balls, \"ball\")}.\"\n",
+      "replace": "            \"${countOf(p.totalRuns, \"run\")}${if (p.extras > 0) \" including ${countOf(p.extras, \"extra\")}\" else \"\"} off ${countOf(p.balls, \"ball\")}.\"\n",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "PARTNERSHIPS_AND_SIX_DISTANCE.md",
+      "mustNotExist": true,
+      "content": "# Partnerships with extras, and the length of a six (patch 116)\n\n## Partnerships count the extras\nA partnership now counts everything the team scores while the two batters are together, as in real cricket: the runs off the bat **and the extras** (wides and no-balls; the game has no byes or leg-byes). The extras are added to the partnership total only, not to either batter's own runs. A partnership with extras reads on the scorecard \"Partnership 2: A 20 and B 15, 40 runs including 5 extras, off 30 balls.\" Partnership milestone commentary (50, 100...) uses the new total. A wicket that falls on a wide or a no-ball (a run out, a stumping) still adds that extra to the partnership that ends. `Partnership.extras` is a new field (0 on older saves); partnerships already saved keep the totals they had.\n\n## The length of a six\nThe last ball's text, after the ball quality and the timing, says how long a six was: \"That six was 94 metres long.\" Not random: `SixDistance` works it out from the ground (a small ground's boundary is 66 m, a medium one 73 m, a large one 80 m, plus 2 m to clear the rope), then a carry of up to 38 m that depends on how hard the ball was hit: the **timing** of the shot (55%), the **quality** of the ball (a bad ball goes farther, 15%), the **speed** of the ball (10%), the batter's batting rating (10%) and the shot (10%). An edged six only just clears the rope; a high ground adds 3% of the carry per 1,000 m. A poorly timed six is about 80 m on a medium ground, a perfect one about 108 m. The weights are a model, not measured on real shots. `SHOW_SIX_DISTANCE = false` removes it.\nNot done: a longest-six record for the match or the innings; the distance is not in the AI voice commentary.\n"
+    }
+  ]
+}
