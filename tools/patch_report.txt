@@ -1,6 +1,6 @@
-Patch run: 43731607560
-Timestamp (UTC): 2026-11-15T15:45:15Z
+Patch run: 43732021045
+Timestamp (UTC): 2026-11-15T15:49:42Z
 Result: OK
 -----
-Patch 2026-11-15-117-manual-fielding-catches.json
-  applied 23 operation(s) to 11 file(s)
+Patch 2026-11-15-118-fix-manual-fielding-import.json
+  applied 1 operation(s) to 1 file(s)

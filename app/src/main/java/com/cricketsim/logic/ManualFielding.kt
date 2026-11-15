@@ -1,5 +1,6 @@
 package com.cricketsim.logic
 
+import com.cricketsim.ui.match.BallResult
 import kotlin.math.abs
 import kotlin.random.Random
 
