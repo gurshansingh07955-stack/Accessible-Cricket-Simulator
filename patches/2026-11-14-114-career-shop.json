@@ -1,0 +1,99 @@
+{
+  "name": "Career shop: gloves and pads (Silver, Golden, Diamond) bought with earnings, protecting from injuries",
+  "message": "Career > Earnings has two tabs, Earnings and Shop. In the shop you buy Silver, Golden or Diamond gloves and pads with your earnings; they cut your chance of injury, best at the level they are made for.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerShop.kt",
+    "contains": "object CareerShop"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerShop.kt",
+      "mustNotExist": true,
+      "content": "package com.cricketsim.logic\n\nimport kotlin.random.Random\n\n/**\n * My Player, part twenty-five: the shop (Career tab > Earnings > Shop).\n *\n * He spends his career earnings on batting gloves and pads, in three kinds: Silver, Golden and Diamond. They protect him from injuries: each item that is\n * working cuts the chance of an injury after a match by up to [CUT_PER_ITEM] (20%), so gloves and pads together cut it by up to 40%. How well an item works\n * depends on the level of the match against the kind of gear:\n *   - Silver is made for club cricket, Golden for state cricket, Diamond for international and franchise league cricket (the levels 1, 2, 3).\n *   - Gear at or above the level of the match works fully; one level below works at half strength; two levels below at a quarter ([coverage]).\n *   - A franchise league match counts as level 3, like an international one.\n * Prices follow what a player earns at each level (a club match fee is 25 dollars, a state one 120, an international 1,500 to 4,000, a contract tens of thousands):\n * Silver gloves 120 and pads 180, Golden 1,500 and 2,200, Diamond 18,000 and 26,000 ([price]). Buying a better kind replaces the old one (no refund); gear does not wear out.\n *\n * [SHOP_ENABLED] false closes the shop; [GEAR_PROTECTS] false keeps the shop but gear no longer changes the injury chance.\n */\nobject CareerShop {\n    const val SHOP_ENABLED = true\n    const val GEAR_PROTECTS = true\n    const val CUT_PER_ITEM = 0.20\n\n    private val TIER_NAMES = listOf(\"Silver\", \"Golden\", \"Diamond\")\n    private val GLOVES = longArrayOf(0L, 120L, 1_500L, 18_000L)\n    private val PADS = longArrayOf(0L, 180L, 2_200L, 26_000L)\n\n    fun tierName(tier: Int): String = if (tier in 1..3) TIER_NAMES[tier - 1] else \"No\"\n\n    fun price(item: String, tier: Int): Long {\n        val t = tier.coerceIn(0, 3)\n        return if (item == \"gloves\") GLOVES[t] else PADS[t]\n    }\n\n    fun owned(career: CareerProfile, item: String): Int = if (item == \"gloves\") career.glovesTier else career.padsTier\n\n    /** 1 = club, 2 = state, 3 = international (and franchise league matches). */\n    fun levelOf(career: CareerProfile): Int = when {\n        career.isInternational -> 3\n        career.isState -> 2\n        else -> 1\n    }\n\n    fun matchLevel(career: CareerProfile, league: Boolean): Int = if (league) 3 else levelOf(career)\n\n    fun levelName(level: Int): String = when (level) {\n        1 -> \"club\"\n        2 -> \"state\"\n        else -> \"international and league\"\n    }\n\n    /** How well a kind of gear works in a match of this level: 1.0 fully, 0.5 half, 0.25 a quarter, 0 none. */\n    fun coverage(tier: Int, level: Int): Double = when {\n        tier <= 0 -> 0.0\n        tier >= level -> 1.0\n        level - tier == 1 -> 0.5\n        else -> 0.25\n    }\n\n    /** What the chance of an injury is multiplied by (1.0 = no change; never below 0.5). */\n    fun injuryFactor(career: CareerProfile, level: Int): Double {\n        if (!GEAR_PROTECTS) return 1.0\n        val cut = CUT_PER_ITEM * coverage(career.glovesTier, level) + CUT_PER_ITEM * coverage(career.padsTier, level)\n        return (1.0 - cut).coerceAtLeast(0.5)\n    }\n\n    /** Which item took the knock when gear saved him from an injury (\"gloves\" or \"pads\"), or null if he wears none that works here. */\n    fun saverName(career: CareerProfile, level: Int, random: Random): String? {\n        val g = coverage(career.glovesTier, level)\n        val p = coverage(career.padsTier, level)\n        return when {\n            g <= 0.0 && p <= 0.0 -> null\n            g <= 0.0 -> \"pads\"\n            p <= 0.0 -> \"gloves\"\n            random.nextDouble() < g / (g + p) -> \"gloves\"\n            else -> \"pads\"\n        }\n    }\n\n    /** What a kind of gear is for, in one sentence. */\n    fun blurb(tier: Int): String = when (tier) {\n        1 -> \"Made for club cricket: full protection in club matches, half in state matches, a quarter in international and league matches.\"\n        2 -> \"Made for state cricket: full protection in club and state matches, half in international and league matches.\"\n        else -> \"Made for international and league cricket: full protection in every match.\"\n    }\n\n    /** Why this cannot be bought now, or null if it can. */\n    fun canBuy(career: CareerProfile, item: String, tier: Int): String? {\n        if (!SHOP_ENABLED) return \"The shop is closed.\"\n        if (career.retired) return \"You have retired.\"\n        if (tier !in 1..3) return \"There is no such gear.\"\n        val have = owned(career, item)\n        if (have == tier) return \"You already have these.\"\n        if (have > tier) return \"You already have better ${item}.\"\n        val cost = price(item, tier)\n        if (career.money < cost) return \"You need ${CareerFinance.money(cost - career.money)} more.\"\n        return null\n    }\n\n    /** The career after buying (unchanged if it cannot be bought). */\n    fun buy(career: CareerProfile, item: String, tier: Int): CareerProfile {\n        if (canBuy(career, item, tier) != null) return career\n        val paid = career.copy(money = career.money - price(item, tier))\n        return if (item == \"gloves\") paid.copy(glovesTier = tier) else paid.copy(padsTier = tier)\n    }\n\n    /** The shop's status: his money, what he wears and how well it works in his matches. */\n    fun statusLines(career: CareerProfile): List<String> {\n        val level = levelOf(career)\n        val out = ArrayList<String>()\n        out.add(\"You have ${CareerFinance.money(career.money)} to spend. Your matches are at ${levelName(level)} level.\")\n        for (item in listOf(\"gloves\", \"pads\")) {\n            val tier = owned(career, item)\n            val label = item.replaceFirstChar { it.uppercase() }\n            if (tier == 0) {\n                out.add(\"$label: none.\")\n            } else {\n                val works = when (coverage(tier, level)) {\n                    1.0 -> \"full protection at your level\"\n                    0.5 -> \"half protection at your level\"\n                    else -> \"a quarter of the protection at your level\"\n                }\n                out.add(\"$label: ${tierName(tier)}, $works.\")\n            }\n        }\n        val cutPercent = Math.round((1.0 - injuryFactor(career, level)) * 100).toInt()\n        out.add(if (cutPercent <= 0) \"You have no protection from injuries yet.\" else \"Together they cut your chance of an injury by $cutPercent% in your matches.\")\n        return out\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val pressConferences: Int = 0\n) {\n",
+      "replace": "    val pressConferences: Int = 0,\n    // Part twenty-five: the shop. The kind of gloves and pads he wears (0 = none, 1 = Silver, 2 = Golden, 3 = Diamond).\n    val glovesTier: Int = 0,\n    val padsTier: Int = 0\n) {\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerHealth.kt",
+      "find": "    fun roll(career: CareerProfile, random: Random, format: String): Injury? {\n        if (career.injuredMatches > 0 || career.retired) return null\n",
+      "replace": "    fun roll(career: CareerProfile, random: Random, format: String): Injury? = rollWithGear(career, random, format, 0).injury\n\n    /** The result of a roll: the injury (or null) and, if his gear saved him from one, which item took the knock. */\n    class Roll(val injury: Injury?, val savedBy: String?)\n\n    /** [roll] with his gloves and pads (part twenty-five): [level] is the level of the match (1 club, 2 state, 3 international or league; 0 = gear ignored). */\n    fun rollWithGear(career: CareerProfile, random: Random, format: String, level: Int): Roll {\n        if (career.injuredMatches > 0 || career.retired) return Roll(null, null)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerHealth.kt",
+      "find": "        if (random.nextDouble() >= p.coerceAtMost(0.10)) return null\n        val r = random.nextDouble()\n        return when {\n            r < 0.6 -> Injury(MINOR.random(random), 2 + random.nextInt(2))\n            r < 0.9 -> Injury(MODERATE.random(random), 4 + random.nextInt(5))\n            else -> Injury(SERIOUS.random(random), 10 + random.nextInt(9))\n        }\n    }\n",
+      "replace": "        val raw = p.coerceAtMost(0.10)\n        val factor = if (level > 0) CareerShop.injuryFactor(career, level) else 1.0\n        val d = random.nextDouble()\n        if (d >= raw * factor) {\n            // Hit by the chance without gear, not with it: the gear took the knock.\n            val saved = if (d < raw && factor < 1.0) CareerShop.saverName(career, level, random) else null\n            return Roll(null, saved)\n        }\n        val r = random.nextDouble()\n        val injury = when {\n            r < 0.6 -> Injury(MINOR.random(random), 2 + random.nextInt(2))\n            r < 0.9 -> Injury(MODERATE.random(random), 4 + random.nextInt(5))\n            else -> Injury(SERIOUS.random(random), 10 + random.nextInt(9))\n        }\n        return Roll(injury, null)\n    }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerProgress.kt",
+      "find": "        val hurt = CareerHealth.roll(updated, random, format)\n        val afterHurt = if (hurt == null) updated else updated.copy(injuredMatches = hurt.matches, injury = hurt.name)\n        val hurtText = if (hurt == null) \"\" else \" \" + CareerHealth.injuryAnnouncement(hurt)\n",
+      "replace": "        val rolled = CareerHealth.rollWithGear(updated, random, format, CareerShop.matchLevel(updated, league))\n        val hurt = rolled.injury\n        val afterHurt = if (hurt == null) updated else updated.copy(injuredMatches = hurt.matches, injury = hurt.name)\n        val hurtText = when {\n            hurt != null -> \" \" + CareerHealth.injuryAnnouncement(hurt)\n            rolled.savedBy != null -> \" Your ${rolled.savedBy} took a hard knock and saved you from an injury.\"\n            else -> \"\"\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "import androidx.compose.ui.semantics.heading\n",
+      "replace": "import androidx.compose.ui.semantics.LiveRegionMode\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.liveRegion\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "import com.cricketsim.logic.CareerNews\n",
+      "replace": "import com.cricketsim.logic.CareerNews\nimport com.cricketsim.logic.CareerShop\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "    onRetire: () -> Unit\n) {\n    var page by remember { mutableStateOf<String?>(null) }\n",
+      "replace": "    onRetire: () -> Unit,\n    onCareer: (CareerProfile) -> Unit\n) {\n    var page by remember { mutableStateOf<String?>(null) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "        \"earnings\" -> CareerPage(\"Earnings\", back) { CareerFinance.lines(career).forEach { BodyLine(it) } }\n",
+      "replace": "        \"earnings\" -> CareerPage(\"Earnings\", back) { EarningsPage(career, onCareer) }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "    MenuItem(\"Earnings\", \"Career earnings: ${CareerFinance.money(career.money)}.\", \"earnings\", onOpen)\n",
+      "replace": "    MenuItem(\"Earnings\", \"Career earnings: ${CareerFinance.money(career.money)}. The shop is here too.\", \"earnings\", onOpen)\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "/** The news: two tabs, All (about you and world cricket) and My news; the newest first. */\n",
+      "replace": "/** Earnings: two tabs, Earnings (the money) and Shop (gloves and pads that cut the chance of an injury). Buying asks first. */\n@Composable\nprivate fun EarningsPage(career: CareerProfile, onCareer: (CareerProfile) -> Unit) {\n    var tab by remember { mutableStateOf(0) }\n    var confirm by remember { mutableStateOf<Pair<String, Int>?>(null) }\n    var message by remember { mutableStateOf(\"\") }\n    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {\n        listOf(\"Earnings\", \"Shop\").forEachIndexed { i, label ->\n            val chosen = i == tab\n            val modifier = Modifier\n                .weight(1f)\n                .heightIn(min = 48.dp)\n                .semantics { role = Role.Tab; selected = chosen }\n            if (chosen) Button(onClick = { tab = i }, modifier = modifier) { Text(label) }\n            else OutlinedButton(onClick = { tab = i }, modifier = modifier) { Text(label) }\n        }\n    }\n    Spacer(modifier = Modifier.height(12.dp))\n    if (tab == 0) {\n        CareerFinance.lines(career).forEach { BodyLine(it) }\n    } else {\n        if (message.isNotEmpty()) {\n            Text(message, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n        CareerShop.statusLines(career).forEach { BodyLine(it) }\n        Spacer(modifier = Modifier.height(8.dp))\n        val pending = confirm\n        if (pending != null) {\n            val item = pending.first\n            val tier = pending.second\n            BodyLine(\"Buy ${CareerShop.tierName(tier)} $item for ${CareerFinance.money(CareerShop.price(item, tier))}?\")\n            Button(\n                onClick = {\n                    val bought = CareerShop.buy(career, item, tier)\n                    message = if (bought === career) \"That could not be bought.\"\n                    else \"You bought ${CareerShop.tierName(tier)} $item. You have ${CareerFinance.money(bought.money)} left.\"\n                    confirm = null\n                    if (bought !== career) onCareer(bought)\n                },\n                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n            ) { Text(\"Yes, buy\") }\n            Spacer(modifier = Modifier.height(8.dp))\n            OutlinedButton(onClick = { confirm = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(\"Cancel\") }\n            Spacer(modifier = Modifier.height(16.dp))\n        }\n        listOf(\"gloves\", \"pads\").forEach { item ->\n            GroupHeading(item.replaceFirstChar { it.uppercase() })\n            (1..3).forEach { tier ->\n                val reason = CareerShop.canBuy(career, item, tier)\n                OptionButton(\n                    \"${CareerShop.tierName(tier)} $item, ${CareerFinance.money(CareerShop.price(item, tier))}\",\n                    (if (reason != null) \"$reason \" else \"\") + CareerShop.blurb(tier),\n                    reason == null,\n                    false\n                ) { confirm = Pair(item, tier) }\n            }\n        }\n    }\n}\n\n/** The news: two tabs, All (about you and world cricket) and My news; the newest first. */\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "{ move -> onCareerChanged(career.copy(pendingMove = move)) }, retireNow)\n",
+      "replace": "{ move -> onCareerChanged(career.copy(pendingMove = move)) }, retireNow, { bought -> onCareerChanged(bought) })\n",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_TWENTYFIVE.md",
+      "mustNotExist": true,
+      "content": "# Career Mode, part twenty-five: the shop\n\nCareer tab > Earnings now has two tabs: **Earnings** (the money lines, as before) and **Shop**.\n\n- **Gear:** batting gloves and pads, each in three kinds: Silver, Golden, Diamond. Bought with career earnings (`CareerProfile.money`); buying asks first (\"Yes, buy\" / \"Cancel\"). Buying a better kind replaces the old one (no refund); gear does not wear out. You cannot buy what you already have or something worse.\n- **Prices (dollars, `CareerShop.price`):** Silver gloves 120, pads 180; Golden gloves 1,500, pads 2,200; Diamond gloves 18,000, pads 26,000. Chosen against what a player earns at each level: a club match fee is 25, state 120, international 1,500 to 4,000, a league or central contract tens of thousands.\n- **Protection (`CareerHealth.rollWithGear`):** each working item cuts the chance of an injury after a match by up to 20% (`CUT_PER_ITEM`), gloves and pads together by up to 40% (the chance is never cut below half). How well an item works depends on the level of the match: Silver is made for club cricket (level 1), Golden for state (2), Diamond for international and franchise league cricket (3). Gear at or above the level of the match works fully, one level below at half strength, two levels below at a quarter (`CareerShop.coverage`). A franchise league match counts as level 3. When gear turns an injury into none, the match report says so (\"Your gloves took a hard knock and saved you from an injury.\").\n- **Not changed:** how long an injury keeps him out, and the injury names (they do not depend on the item).\n- **Dials:** `SHOP_ENABLED` (false closes the shop), `GEAR_PROTECTS` (false keeps the shop but gear no longer changes the chance), `CUT_PER_ITEM`, the prices.\n- The 20% per item and the prices are the game's own numbers, not measured on play.\n"
+    }
+  ]
+}
