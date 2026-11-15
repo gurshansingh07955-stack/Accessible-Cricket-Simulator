@@ -141,7 +141,7 @@ object MatchLines {
      * right after the timing tier it explains. Null (an AI batter, or a
      * Perfect swing) adds nothing.
      */
-    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null): String {
+    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null, sixMetres: Int? = null): String {
         val base = when {
             outcome.isWicket -> "WICKET. ${outcome.commentary}"
             outcome.isWide -> "Wide, 1 run. ${outcome.commentary}"
@@ -159,7 +159,9 @@ object MatchLines {
                 (if (it.shot == NamedShot.LEAVE) "" else " Timing: ${BowlingSystem.qualityTierLabel(it.timingTier)}.") +
                 (swingNote?.let { note -> " $note" } ?: "")
         } ?: ""
-        return base + quality + shot
+        // A six says how long it was, after the ball quality and the timing (SixDistance).
+        val six = sixMetres?.let { " That six was $it metres long." } ?: ""
+        return base + quality + shot + six
     }
 
     /** Both innings' totals, for the match-result screen. */
@@ -225,7 +227,7 @@ object ScorecardLines {
 
     private fun describe(p: Partnership, roles: Map<String, String>): String =
         "${named(p.batsman1Name, p.batsman1Id, roles)} ${p.batsman1Runs} and ${named(p.batsman2Name, p.batsman2Id, roles)} ${p.batsman2Runs}, " +
-            "${countOf(p.totalRuns, "run")} off ${countOf(p.balls, "ball")}."
+            "${countOf(p.totalRuns, "run")}${if (p.extras > 0) " including ${countOf(p.extras, "extra")}" else ""} off ${countOf(p.balls, "ball")}."
 
     fun partnershipRows(innings: InningsData, roles: Map<String, String> = emptyMap()): List<String> {
         // The live partnership first: it's the one that matters mid-match,

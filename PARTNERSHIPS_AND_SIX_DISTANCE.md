@@ -1,0 +1,8 @@
+# Partnerships with extras, and the length of a six (patch 116)
+
+## Partnerships count the extras
+A partnership now counts everything the team scores while the two batters are together, as in real cricket: the runs off the bat **and the extras** (wides and no-balls; the game has no byes or leg-byes). The extras are added to the partnership total only, not to either batter's own runs. A partnership with extras reads on the scorecard "Partnership 2: A 20 and B 15, 40 runs including 5 extras, off 30 balls." Partnership milestone commentary (50, 100...) uses the new total. A wicket that falls on a wide or a no-ball (a run out, a stumping) still adds that extra to the partnership that ends. `Partnership.extras` is a new field (0 on older saves); partnerships already saved keep the totals they had.
+
+## The length of a six
+The last ball's text, after the ball quality and the timing, says how long a six was: "That six was 94 metres long." Not random: `SixDistance` works it out from the ground (a small ground's boundary is 66 m, a medium one 73 m, a large one 80 m, plus 2 m to clear the rope), then a carry of up to 38 m that depends on how hard the ball was hit: the **timing** of the shot (55%), the **quality** of the ball (a bad ball goes farther, 15%), the **speed** of the ball (10%), the batter's batting rating (10%) and the shot (10%). An edged six only just clears the rope; a high ground adds 3% of the carry per 1,000 m. A poorly timed six is about 80 m on a medium ground, a perfect one about 108 m. The weights are a model, not measured on real shots. `SHOW_SIX_DISTANCE = false` removes it.
+Not done: a longest-six record for the match or the innings; the distance is not in the AI voice commentary.

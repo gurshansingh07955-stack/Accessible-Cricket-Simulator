@@ -88,7 +88,9 @@ data class Partnership(
     val batsman2Name: String,
     val batsman2Runs: Int,
     val totalRuns: Int,
-    val balls: Int
+    val balls: Int,
+    /** Of totalRuns, the extras (wides and no-balls) scored while the two were together: they count for the partnership, not for either batter. */
+    val extras: Int = 0
 )
 
 data class Extras(val wides: Int, val noBalls: Int, val total: Int)
@@ -358,19 +360,21 @@ object MatchStats {
         return inningsData.copy(batsmanStats = batsmanStats, fallOfWickets = fallOfWickets)
     }
 
-    fun updatePartnership(inningsData: InningsData, strikerId: String, runs: Int, ballFaced: Boolean): InningsData {
+    fun updatePartnership(inningsData: InningsData, strikerId: String, runs: Int, ballFaced: Boolean, extraRuns: Int = 0): InningsData {
         val partnership = inningsData.currentPartnership
 
         val newPartnership = if (partnership.batsman1Id == strikerId) {
             partnership.copy(
                 batsman1Runs = partnership.batsman1Runs + runs,
-                totalRuns = partnership.totalRuns + runs,
+                totalRuns = partnership.totalRuns + runs + extraRuns,
+                extras = partnership.extras + extraRuns,
                 balls = partnership.balls + if (ballFaced) 1 else 0
             )
         } else {
             partnership.copy(
                 batsman2Runs = partnership.batsman2Runs + runs,
-                totalRuns = partnership.totalRuns + runs,
+                totalRuns = partnership.totalRuns + runs + extraRuns,
+                extras = partnership.extras + extraRuns,
                 balls = partnership.balls + if (ballFaced) 1 else 0
             )
         }
@@ -438,9 +442,12 @@ object MatchStats {
             isMaiden
         )
 
-        // Update partnership
+        // Update partnership: as in real cricket it counts everything the team scores while the two are together, the extras (wides, no-balls) as well as the runs off the bat.
         if (!outcome.isWicket) {
-            updated = updatePartnership(updated, strikerId, outcome.runs, isLegalDelivery)
+            updated = updatePartnership(updated, strikerId, outcome.runs, isLegalDelivery, outcome.extraRuns)
+        } else if (outcome.extraRuns > 0) {
+            // A wicket on a no-ball or a wide (a run out, a stumping): the extra still belongs to the partnership that ends.
+            updated = updatePartnership(updated, strikerId, 0, false, outcome.extraRuns)
         }
 
         // Update totals

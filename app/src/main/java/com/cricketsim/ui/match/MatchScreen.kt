@@ -517,7 +517,13 @@ fun MatchScreen(
         // later ball, including one the AI bats.
         val swingNote = pendingSwingNote
         pendingSwingNote = null
-        val summary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote)
+        // The length of a six: the ball, the speed, the timing and the ground decide it, nothing is random.
+        val sixMetres = com.cricketsim.logic.SixDistance.metres(
+            result.outcome, result.battingDecision, result.bowlingDecision.speedKmh,
+            com.cricketsim.logic.StadiumData.getStadiumById(before.stadiumId) ?: com.cricketsim.logic.CplData.stadium(before.stadiumId),
+            before.currentBatsmen.first.battingRating
+        )
+        val summary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres)
         matchState = nextState
         recentCommentary = (recentCommentary + summary).takeLast(6)
 
