@@ -45,5 +45,7 @@ data class BallOutcome(
     // For a catch: where the fielder took it, as a phrase ("at long-on", "behind the stumps").
     val fielderPosition: String? = null,
     /** The batter chose to leave the ball (no shot): it went to the keeper, or hit the stumps. */
-    val leftAlone: Boolean = false
+    val leftAlone: Boolean = false,
+    /** A catch was put down (by a computer fielder, or by the user's own attempt): the batter is NOT out. */
+    val droppedCatch: Boolean = false
 )

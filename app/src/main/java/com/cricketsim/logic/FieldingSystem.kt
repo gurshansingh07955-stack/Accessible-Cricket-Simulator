@@ -146,6 +146,14 @@ object FieldingSystem {
         return if (d > 180.0) 360.0 - d else d
     }
 
+    /** From sector [from] to sector [to] round the ground, in degrees from -180 to 180 (negative one way round, positive the other). Used for which side a catch comes from. */
+    fun sectorSignedGapDegrees(from: FieldingSector, to: FieldingSector): Double {
+        var d = (SECTOR_GEOMETRY.getValue(to).angleDeg - SECTOR_GEOMETRY.getValue(from).angleDeg) % 360.0
+        if (d > 180.0) d -= 360.0
+        if (d <= -180.0) d += 360.0
+        return d
+    }
+
     /**
      * Normalized (0-1) x/y coordinates for rendering a fielding spot on
      * the circular field map. (0.5, 0.5) is the center of the ground;

@@ -302,6 +302,10 @@ fun MatchScreen(
     // --- The IPL's Impact Player rule (logic/ImpactPlayer.kt) ---
     // An LBW waiting for the appeal and the umpire's decision (AppealScreens.kt).
     var pendingAppeal by remember { mutableStateOf<PendingAppeal?>(null) }
+    // A catch on its way to one of the user's fielders, waiting for his swipe (ManualFieldingScreens.kt, manual fielding).
+    var pendingCatch by remember { mutableStateOf<PendingCatch?>(null) }
+    // Career mode: "Skip to my turn" is on (the game plays the balls that are not the player's by itself). It is declared here, before the ball logic that reads it.
+    var skipping by remember { mutableStateOf(false) }
     var showImpactUse by remember { mutableStateOf(false) }
     // The computer's Power Surge (or one that started by itself), shown as a pop-up until the user continues.
     var surgeNotice by remember { mutableStateOf<String?>(null) }
@@ -560,25 +564,59 @@ fun MatchScreen(
         }
     }
 
+    // MANUAL FIELDING: is this catch for the user to take? Only when his team is fielding and Settings > Manual fielding is on. In career mode he takes
+    // the catches while he is watching; "Skip to my turn" hands them to the computer, except a wicketkeeper's own catches.
+    fun manualCatchFor(before: MatchState, simulated: BallResult): com.cricketsim.logic.CatchChance? {
+        if (settings.fieldingMode == com.cricketsim.audio.FieldingMode.AUTOMATIC) return null
+        if (before.bowlingTeam.id != before.userTeam.id) return null
+        val chance = com.cricketsim.logic.ManualCatch.build(before, simulated) ?: return null
+        val careerPid = before.careerPlayerId
+        if (careerPid != null && skipping) {
+            val keeperId = before.bowlingTeam.wicketkeeperId
+                ?: before.bowlingTeam.players.find { it.role == com.cricketsim.logic.PlayerRole.WICKETKEEPER }?.id
+            if (!(careerPid == keeperId && chance.fielderId == keeperId)) return null
+        }
+        return chance
+    }
+
+    // AUTOMATIC FIELDING: the fielder (the computer's, or the user's when he fields automatically) may put the catch down: the same ball, no wicket.
+    fun autoDropped(before: MatchState, simulated: BallResult): BallResult {
+        val dropped = com.cricketsim.logic.CatchDrops.autoDrop(before, simulated) ?: return simulated
+        return MatchSimulation.simulateOneBall(
+            before, stadium, settings.difficulty, simulated.bowlingDecision, simulated.battingDecision, outcomeOverride = dropped
+        )
+    }
+
     fun advanceOneBall(
         presetBowlingDecision: ResolvedBowlingDecision? = null,
         presetBattingDecision: BattingDecision? = null,
         /** The ball of an LBW appeal that has just been decided: carry on with that ball. */
-        resumed: PendingAppeal? = null
+        resumed: PendingAppeal? = null,
+        /** A ball already simulated and settled by the catching step (a catch taken, or one put down): carry on with it. */
+        preResult: BallResult? = null
     ) {
         if (matchOver) return
         fieldMessage = ""
         playNotice = ""
         // After an LBW appeal the ball has already been bowled and simulated: carry on with that ball.
         val before = resumed?.before ?: matchState
-        if (resumed == null) director?.onDelivery()
-        val result = resumed?.result ?: MatchSimulation.simulateOneBall(
+        if (resumed == null && preResult == null) director?.onDelivery()
+        val simulated = preResult ?: resumed?.result ?: MatchSimulation.simulateOneBall(
             before,
             stadium,
             settings.difficulty,
             presetBowlingDecision,
             presetBattingDecision
         )
+        if (resumed == null && preResult == null) {
+            // A catch for the user to take: stop here, and come back with the ball once he has swiped.
+            val chance = manualCatchFor(before, simulated)
+            if (chance != null) {
+                pendingCatch = PendingCatch(before, simulated, chance)
+                return
+            }
+        }
+        val result = if (resumed == null && preResult == null) autoDropped(before, simulated) else simulated
         // Every dismissal: the fielding side appeals and the umpire decides before anything else (AppealScreens.kt).
         // In career mode only the player's own dismissal, or a wicket he takes, goes through the appeal: a team-mate's or an opponent's is just given.
         val careerPid = before.careerPlayerId
@@ -628,14 +666,13 @@ fun MatchScreen(
 
     // CAREER MODE: when it is not the player's turn to bat (he is not on strike) or to bowl (he is not the bowler), the game plays the ball
     // for his team by itself, a pause between balls so each one can be heard; "Skip to my turn" shortens the pause until his turn comes.
-    var skipping by remember { mutableStateOf(false) }
     LaunchedEffect(
-        matchState, matchOver, pendingAppeal, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
+        matchState, matchOver, pendingAppeal, pendingCatch, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
         confirmingDeclare, showImpactUse, surgeNotice, showPitchingScreen, showBattingScreen, showFieldScreen, showChangeBowler, skipping
     ) {
         val pid = matchState.careerPlayerId ?: return@LaunchedEffect
         val s = matchState
-        if (matchOver || pendingAppeal != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
+        if (matchOver || pendingAppeal != null || pendingCatch != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
             confirmingLeave || confirmingDeclare || showImpactUse || surgeNotice != null || showPitchingScreen || showBattingScreen ||
             showFieldScreen || showChangeBowler
         ) return@LaunchedEffect
@@ -731,6 +768,40 @@ fun MatchScreen(
             state = matchState,
             startOnFirstInnings = showInningsBreak && !matchOver,
             onBack = { showScorecard = false }
+        )
+        return
+    }
+
+    // A catch for the user to take (manual fielding): the phone says who and from where, then the buzzes, then his swipe.
+    val catchNow = pendingCatch
+    if (catchNow != null) {
+        CatchScreen(
+            chance = catchNow.chance,
+            onResolved = { outcome ->
+                pendingCatch = null
+                val before = catchNow.before
+                val original = catchNow.result
+                when (outcome) {
+                    // He held it: on to the appeal, the review and the scoring exactly as for any catch.
+                    com.cricketsim.logic.CatchOutcome.TAKEN -> advanceOneBall(preResult = original)
+                    // He put it down: the same ball, but the batter is not out.
+                    com.cricketsim.logic.CatchOutcome.DROPPED -> {
+                        val fielder = before.bowlingTeam.players.find { it.id == catchNow.chance.fielderId }
+                        val dropped = fielder?.let { com.cricketsim.logic.CatchDrops.droppedOutcome(before, original.outcome, it) }
+                        if (dropped == null) {
+                            advanceOneBall(preResult = original)
+                        } else {
+                            advanceOneBall(
+                                preResult = MatchSimulation.simulateOneBall(
+                                    before, stadium, settings.difficulty, original.bowlingDecision, original.battingDecision, outcomeOverride = dropped
+                                )
+                            )
+                        }
+                    }
+                    // He left it to the computer: its fielder may or may not drop it, as in automatic fielding.
+                    com.cricketsim.logic.CatchOutcome.COMPUTER -> advanceOneBall(preResult = autoDropped(before, original))
+                }
+            }
         )
         return
     }
@@ -1352,6 +1423,9 @@ private class PendingReview(
 
 /** An LBW that has been bowled and simulated, waiting for the appeal and the umpire's decision. */
 private class PendingAppeal(val before: MatchState, val result: BallResult, val userBowling: Boolean)
+
+/** A catch waiting for the user's swipe: the state before the ball, the ball as simulated (a wicket), and the chance he is given. */
+private class PendingCatch(val before: MatchState, val result: BallResult, val chance: com.cricketsim.logic.CatchChance)
 
 /**
  * The single control that both starts the next ball AND commits

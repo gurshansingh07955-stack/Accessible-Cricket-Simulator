@@ -63,6 +63,9 @@ class GameServices(context: Context) {
     val sound = SoundEngine(context)
     private val spoken = SpokenCommentary(context)
 
+    /** The phone's own voice, always on (even with a screen reader): the manual fielding calls. */
+    val phoneSpeech = PhoneSpeech(context)
+
     /** The match in progress, autosaved by the match screen (see MatchSaveStore). */
     val saves = MatchSaveStore(context)
 
@@ -107,6 +110,7 @@ class GameServices(context: Context) {
     fun release() {
         sound.release()
         spoken.shutdown()
+        phoneSpeech.shutdown()
     }
 }
 

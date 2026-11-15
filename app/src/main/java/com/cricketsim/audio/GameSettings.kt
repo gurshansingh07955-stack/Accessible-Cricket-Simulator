@@ -22,6 +22,13 @@ enum class AiCommentaryMode(val label: String, val description: String) {
     CALM("Calm commentator only", "Only the composed co-commentator.")
 }
 
+/** Who does the fielding (Settings > Manual fielding). */
+enum class FieldingMode(val label: String, val description: String) {
+    AUTOMATIC("Automatic fielding", "The computer fields for you, as it always has. Its fielders now and then drop a catch, the better the fielder the less often."),
+    HALF_MANUAL("Half manual fielding", "You take the catches. Your phone's own voice says who is catching, his fielding rating and where the catch is coming from, then you swipe up, left or right with two fingers on the last buzz."),
+    FULL_MANUAL("Full manual fielding", "You take the catches and, in the next update, you will also stop singles and doubles, stump and run out. Until that arrives it works like half manual fielding.")
+}
+
 data class GameSettings(
     val difficulty: Difficulty = Difficulty.MEDIUM,
     val vibration: Boolean = true,
@@ -39,7 +46,9 @@ data class GameSettings(
     // "Face next ball" button (on = tap / long-press as before; off = the ball comes by itself after
     // autoBowlSeconds and footwork is chosen by tilting the phone). Ignored while menuBatting is on.
     val faceNextBall: Boolean = true,
-    val autoBowlSeconds: Int = 10
+    val autoBowlSeconds: Int = 10,
+    // Manual fielding: who takes the catches (and, later, stops the ball and stumps).
+    val fieldingMode: FieldingMode = FieldingMode.AUTOMATIC
 )
 
 class SettingsStore(context: Context) {
@@ -57,7 +66,8 @@ class SettingsStore(context: Context) {
             musicVolume = prefs.getFloat(KEY_MUSIC_VOLUME, defaults.musicVolume).coerceIn(0f, 1f),
             menuBatting = prefs.getBoolean(KEY_MENU_BATTING, defaults.menuBatting),
             faceNextBall = prefs.getBoolean(KEY_FACE_NEXT_BALL, defaults.faceNextBall),
-            autoBowlSeconds = prefs.getInt(KEY_AUTO_BOWL_SECONDS, defaults.autoBowlSeconds).coerceIn(5, 30)
+            autoBowlSeconds = prefs.getInt(KEY_AUTO_BOWL_SECONDS, defaults.autoBowlSeconds).coerceIn(5, 30),
+            fieldingMode = readEnum(KEY_FIELDING_MODE, defaults.fieldingMode)
         )
     }
 
@@ -73,6 +83,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_MENU_BATTING, settings.menuBatting)
             .putBoolean(KEY_FACE_NEXT_BALL, settings.faceNextBall)
             .putInt(KEY_AUTO_BOWL_SECONDS, settings.autoBowlSeconds)
+            .putString(KEY_FIELDING_MODE, settings.fieldingMode.name)
             .apply()
     }
 
@@ -95,5 +106,6 @@ class SettingsStore(context: Context) {
         const val KEY_MENU_BATTING = "menu_batting"
         const val KEY_FACE_NEXT_BALL = "face_next_ball"
         const val KEY_AUTO_BOWL_SECONDS = "auto_bowl_seconds"
+        const val KEY_FIELDING_MODE = "fielding_mode"
     }
 }

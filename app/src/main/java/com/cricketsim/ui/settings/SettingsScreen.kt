@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.cricketsim.audio.AiCommentaryMode
+import com.cricketsim.audio.FieldingMode
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.Difficulty
 import kotlin.math.roundToInt
@@ -173,6 +174,22 @@ fun SettingsScreen(onBack: () -> Unit) {
                         onSelect = { services.update { it.copy(autoBowlSeconds = option) } }
                     )
                 }
+            }
+        }
+
+        SectionHeading("Manual fielding")
+        Text(
+            "Choose who does the fielding. With manual fielding your phone's own voice tells you who is catching, his fielding rating and where the catch is coming from, with or without a screen reader.",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Column(modifier = Modifier.selectableGroup()) {
+            FieldingMode.values().forEach { mode ->
+                RadioRow(
+                    label = mode.label,
+                    description = mode.description,
+                    selected = settings.fieldingMode == mode,
+                    onSelect = { services.update { it.copy(fieldingMode = mode) } }
+                )
             }
         }
 
