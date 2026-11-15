@@ -147,7 +147,12 @@ data class CareerProfile(
     val pressConferences: Int = 0,
     // Part twenty-five: the shop. The kind of gloves and pads he wears (0 = none, 1 = Silver, 2 = Golden, 3 = Diamond).
     val glovesTier: Int = 0,
-    val padsTier: Int = 0
+    val padsTier: Int = 0,
+    // Part twenty-six: school and college. stage is "" (district club and above, as always), "School" or "College"; homeClub is the district club he chose and
+    // joins when college ends; pendingCollege is set when he has finished school and still has to choose his college.
+    val stage: String = "",
+    val homeClub: String = "",
+    val pendingCollege: Boolean = false
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
@@ -173,6 +178,8 @@ data class CareerProfile(
     fun levelLine(): String {
         val n = maxOf(1, season)
         if (isInternational) return "You play for the $nation national squad. Season $n, age $age. International matches: $internationalMatches."
+        if (stage == "School") return "You play school cricket for $club. Season $n, age $age."
+        if (stage == "College") return "You play college cricket for $club. Season $n, age $age."
         return if (isState) "You play for the ${domesticTeams.firstOrNull() ?: state} squad. Season $n, age $age."
         else "You play district club cricket for $club. Season $n, age $age."
     }
@@ -252,7 +259,7 @@ data class CareerState(val name: String, val domesticTeams: List<String>, val pl
  */
 object CareerWorld {
     const val MAX_CAREERS = 5
-    const val MIN_AGE = 16
+    const val MIN_AGE = 12
     const val MAX_AGE = 30
     /** Ages up to this are recommended: the longest careers. */
     const val RECOMMENDED_MAX_AGE = 19
@@ -496,6 +503,23 @@ Northern Cape|Northern Cape|Kimberley;Upington;Springbok;De Aar
     fun findState(country: String, state: String): CareerState? = states(country).find { it.name == state }
 
     /** Three or four district clubs of a state. India and Pakistan call them district clubs; the others, plain cricket clubs. */
+    /** The three schools of a state (a new career of 12 to 15 starts in one of them). Named after the state's places. */
+    fun schools(country: String, state: String): List<String> {
+        val places = findState(country, state)?.places ?: return emptyList()
+        val kind = when (country) {
+            "England" -> "Grammar School"
+            "India", "Pakistan" -> "Public School"
+            else -> "High School"
+        }
+        return places.take(3).map { "$it $kind" }
+    }
+
+    /** The three colleges of a state (a new career of 16 to 18 starts in one of them; a school leaver moves to one). */
+    fun colleges(country: String, state: String): List<String> {
+        val places = findState(country, state)?.places ?: return emptyList()
+        return places.takeLast(3).map { "$it College" }
+    }
+
     fun clubs(country: String, state: String): List<String> {
         val places = findState(country, state)?.places ?: return emptyList()
         val suffix = if (country == "India" || country == "Pakistan") "District Cricket Club" else "Cricket Club"

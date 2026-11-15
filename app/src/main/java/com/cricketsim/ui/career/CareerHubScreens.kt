@@ -51,8 +51,10 @@ import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.BigBashLeague
 import com.cricketsim.logic.CareerLeagues
 import com.cricketsim.logic.CareerMove
+import com.cricketsim.logic.CareerWorld
 import com.cricketsim.logic.CareerNews
 import com.cricketsim.logic.CareerPress
+import com.cricketsim.logic.CareerStudent
 import com.cricketsim.logic.CareerRecords
 import com.cricketsim.logic.CareerStatistics
 import com.cricketsim.logic.LeagueOffer
@@ -299,6 +301,31 @@ fun CareerHub(
                 val done = CareerPress.skip(career, pressNow)
                 message = done.second
                 onCareerChanged(done.first)
+            }
+        )
+        return
+    }
+
+    // ---------------------------------------------------------------- a school leaver chooses his college (full screen, part twenty-six)
+    if (career.pendingCollege && play == null && !busy) {
+        // No Back here: he has to choose.
+        BackHandler { }
+        CollegeChoiceScreen(
+            colleges = CareerWorld.colleges(career.country, career.state),
+            onChoose = { name ->
+                busy = true
+                scope.launch {
+                    val chosen = CareerStudent.joinCollege(career, name, java.util.Random(System.nanoTime())).copy(pendingCollege = false)
+                    val rebuilt = withContext(Dispatchers.Default) { CareerSeason.newSeason(chosen) } ?: emptyList()
+                    val keys = rebuilt.map { CareerSeason.keyOf(it) }
+                    rebuilt.forEachIndexed { i, s ->
+                        TournamentSaveStore(context, CareerSeason.seasonFile(chosen.id, chosen.season, keys[i])).save(s)
+                    }
+                    seasons = rebuilt
+                    message = "You join $name for a season of college cricket."
+                    busy = false
+                    onCareerChanged(chosen.copy(seasonKeys = keys))
+                }
             }
         )
         return

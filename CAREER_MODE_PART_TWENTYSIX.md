@@ -1,0 +1,11 @@
+# Career Mode, part twenty-six: school and college
+
+**Only new careers.** A career made before this patch has `stage = ""` and plays exactly as before.
+
+- **Ages:** the age page now takes 12 to 30. A new career of **12 to 15** starts in **school** cricket, **16 to 18** in **college** cricket, **19 and over** in district club cricket as it always did.
+- **Making a career:** Name, Age, Gender, Jersey, Country, State, **district club** (as before), then for 12 to 15 **Your school** and for 16 to 18 **Your college** (three each, named after the state's places: `CareerWorld.schools` and `colleges`), then role and the rest as before. The district club is kept (`homeClub`): he joins it when college ends.
+- **The leagues:** a student plays the same three leagues (T20, 50-over, 3-day) between the **three** schools or colleges of his state, each pair twice (home and away), so a season is 12 matches. Everything else of club cricket works as before (selection into the XI, captaincy, form, growth, injuries, the shop).
+- **Ratings by age** (`CareerStudent`): the starting rating is multiplied by 0.55 at 12, 0.62 at 13, 0.70 at 14, 0.78 at 15, 0.85 at 16, 0.91 at 17, 0.96 at 18 (1.0 from 19, as before). The made-up players of the schools are scaled by 0.66, of the colleges by 0.90 (and floor at 3). Growth is as before (a young player grows at full speed). **Not measured:** how these lower ratings change the scoring of the simulated matches; if school matches feel too low or too high scoring, turn `squadScale` and `ageFactor`.
+- **Moving on:** school lasts until 15. The season after that he finishes school and a page, **Choose your college**, comes by itself when he is back in the hub (until he chooses he is in the first college). College lasts until 18. The season after that he joins his district club (a squad of adults, made then, with his current ratings). The state selectors, the national selectors and the franchises look at him only from district club cricket (the Career road page says so).
+- **No move abroad** while he is a student (the Career tab does not offer it; a planned one is dropped).
+- **Not changed:** match fees (a student is paid as a club player), objectives and rankings (they treat school and college as club cricket), the press conference (only international and league).

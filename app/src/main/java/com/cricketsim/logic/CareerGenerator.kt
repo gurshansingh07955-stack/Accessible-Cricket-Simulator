@@ -106,7 +106,10 @@ kashmiri_pk|Tariq,Zahid,Aamir,Nadeem,Shakeel,Arif,Waheed,Yasir,Khalid,Sajjad,Jav
         else -> listOf(between(random, 33, 40), between(random, 45, 52), between(random, 38, 44))
     }
 
-    private fun makePlayer(role: String, pool: Pair<List<String>, List<String>>, random: Random, used: MutableSet<String>): CareerPlayer {
+    /** A rating scaled for younger squads (part twenty-six); scale 1.0 leaves it as it is. */
+    private fun scaled(v: Int, scale: Double): Int = if (scale == 1.0) v else maxOf(3, Math.round(v * scale).toInt())
+
+    private fun makePlayer(role: String, pool: Pair<List<String>, List<String>>, random: Random, used: MutableSet<String>, scale: Double = 1.0): CareerPlayer {
         val bowls = CareerWorld.bowls(role)
         val hand = if (random.nextInt(100) < 22) "Left-arm" else "Right-arm"
         val style = if (bowls) {
@@ -129,9 +132,9 @@ kashmiri_pk|Tariq,Zahid,Aamir,Nadeem,Shakeel,Arif,Waheed,Yasir,Khalid,Sajjad,Jav
             battingHand = if (random.nextInt(100) < 24) "Left-handed" else "Right-handed",
             bowlingHand = if (bowls) hand else "",
             bowlingStyle = style,
-            batting = batting,
-            bowling = bowling,
-            fielding = fielding
+            batting = scaled(batting, scale),
+            bowling = scaled(bowling, scale),
+            fielding = scaled(fielding, scale)
         )
     }
 
@@ -148,12 +151,15 @@ kashmiri_pk|Tariq,Zahid,Aamir,Nadeem,Shakeel,Arif,Waheed,Yasir,Khalid,Sajjad,Jav
      * Every district club of the state with its squad; [user] takes the first place of his role (a bowler's role is the last
      * place) in the squad of his own club. All the names of a state are different.
      */
-    fun generateClubs(country: String, state: String, userClub: String, user: CareerPlayer, random: Random): List<CareerClub> {
+    fun generateClubs(
+        country: String, state: String, userClub: String, user: CareerPlayer, random: Random,
+        names: List<String>? = null, scale: Double = 1.0
+    ): List<CareerClub> {
         val pool = POOLS[region(country, state)] ?: POOLS.getValue("english")
         val used = HashSet<String>()
         used.add(user.name)
-        return CareerWorld.clubs(country, state).map { clubName ->
-            val players = SQUAD_ROLES.map { makePlayer(it, pool, random, used) }.toMutableList()
+        return (names ?: CareerWorld.clubs(country, state)).map { clubName ->
+            val players = SQUAD_ROLES.map { makePlayer(it, pool, random, used, scale) }.toMutableList()
             if (clubName == userClub) {
                 val slot = players.indexOfFirst { it.role == user.role }.let { if (it >= 0) it else players.lastIndex }
                 players[slot] = user

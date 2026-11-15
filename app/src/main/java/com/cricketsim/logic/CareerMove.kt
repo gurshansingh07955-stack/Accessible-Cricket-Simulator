@@ -17,6 +17,8 @@ object CareerMove {
     /** The career after a planned move, or unchanged if no move is planned. [seed] makes up the new state's clubs. */
     fun apply(career: CareerProfile, seed: Long): CareerProfile {
         val move = career.pendingMove ?: return career
+        // A school or college student does not move abroad (part twenty-six): his league is the school or college league of his state.
+        if (career.stage.isNotEmpty()) return career.copy(pendingMove = null)
         val state = CareerWorld.findState(move.country, move.state) ?: return career.copy(pendingMove = null)
         val me = CareerPlayer(
             name = career.fullName,

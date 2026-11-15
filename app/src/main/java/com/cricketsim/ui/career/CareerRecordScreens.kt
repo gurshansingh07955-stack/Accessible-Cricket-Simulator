@@ -143,7 +143,7 @@ private fun CareerMenu(career: CareerProfile, seasons: List<TournamentState>?, r
     MenuItem("In the news", news.lastOrNull()?.text ?: "Nothing yet.", "news", onOpen)
     if (!career.retired) {
         GroupHeading("Changes")
-        if (!career.isInternational && career.internationalMatches == 0 && career.clubs.isNotEmpty()) {
+        if (!career.isInternational && career.internationalMatches == 0 && career.clubs.isNotEmpty() && career.stage.isEmpty()) {
             val pending = career.pendingMove
             MenuItem(
                 "Move to another country",

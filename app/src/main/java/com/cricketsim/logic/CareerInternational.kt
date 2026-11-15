@@ -707,6 +707,12 @@ object CareerInternational {
      * his rank against the squad he is aiming for, with what is missing. Builds squads, so call it off the main thread.
      */
     fun pathway(career: CareerProfile): List<String> {
+        if (career.stage.isNotEmpty()) {
+            return listOf(
+                "The road: school, then college, then district club, then the ${career.state} state squad, then the ${career.nation} national team.",
+                "You are playing ${career.stage.lowercase()} cricket for ${career.club}. The state selectors look at you once you play district club cricket, from the age of 19."
+            )
+        }
         val out = ArrayList<String>()
         out.add("The road: district club, then the ${career.state} state squad, then the ${career.nation} national team.")
         if (career.isInternational) {

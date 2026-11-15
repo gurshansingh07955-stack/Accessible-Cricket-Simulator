@@ -139,13 +139,18 @@ object CareerSeason {
         val year = start.get(Calendar.YEAR)
         return COMPETITIONS.map { comp ->
             val fixtures = ArrayList<TournamentFixture>()
-            roundRobin(teams.map { it.id }).forEach { (home, away) ->
-                fixtures.add(TournamentFixture(fixtures.size, fixtures.size + 1, CplData.LEAGUE, home, away, groundOf.getValue(home)))
+            // A school or college league has only three teams, so every pair plays twice (home and away); a district league once, as always.
+            repeat(if (career.stage.isNotEmpty()) 2 else 1) { lap ->
+                roundRobin(teams.map { it.id }).forEach { (a, b) ->
+                    val home = if (lap % 2 == 0) a else b
+                    val away = if (lap % 2 == 0) b else a
+                    fixtures.add(TournamentFixture(fixtures.size, fixtures.size + 1, CplData.LEAGUE, home, away, groundOf.getValue(home)))
+                }
             }
             TournamentState(
                 version = CplData.SAVE_VERSION,
                 tournamentId = tournamentId(career.id, comp.key),
-                name = "${career.state} ${comp.label} $year",
+                name = "${career.state} ${if (career.stage == "School") "School " else if (career.stage == "College") "College " else ""}${comp.label} $year",
                 userTeamId = userClubId(career) ?: teams.first().id,
                 teams = teams,
                 tags = tags,
@@ -389,6 +394,8 @@ object CareerSeason {
     fun nextSeason(career: CareerProfile): NextSeason {
         // A new season: a year older, a fresh workload, and the close season heals six matches of injury.
         val older = career.copy(age = career.age + 1, season = maxOf(1, career.season) + 1, workload = 0, injuredMatches = maxOf(0, career.injuredMatches - 6), seasonEarnings = 0L, leagueContract = 0)
+        // A student stays at school or college until he is old enough, then moves on; the state selectors and the franchises do not look at him (part twenty-six).
+        if (career.stage.isNotEmpty()) return CareerStudent.next(career, older)
         var text = "A new season begins. You are ${older.age}. "
         // The national selectors look first (state and international players only): called up or kept, he plays a season of international series.
         if (career.atOrAboveState) {

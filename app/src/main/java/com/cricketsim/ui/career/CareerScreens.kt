@@ -34,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.CareerGenerator
 import com.cricketsim.logic.CareerPlayer
+import com.cricketsim.logic.CareerStudent
 import com.cricketsim.logic.CareerProfile
 import com.cricketsim.logic.CareerWorld
 import com.cricketsim.persistence.CareerStore
@@ -58,7 +59,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
-private enum class CStep { Menu, Resume, Details, Name, Age, Gender, Jersey, Country, State, Club, Role, BatHand, BowlHand, BowlStyle, BatPosition, BowlPhase, BatNumber, Fielding, Difficulty, Summary, Home, MySquad, StateClubs, ClubSquad }
+private enum class CStep { Menu, Resume, Details, Name, Age, Gender, Jersey, Country, State, Club, School, College, Role, BatHand, BowlHand, BowlStyle, BatPosition, BowlPhase, BatNumber, Fielding, Difficulty, Summary, Home, MySquad, StateClubs, ClubSquad }
 
 /**
  * Home > My Player: the career mode. PART ONE: the menu (Start new career, Resume career), up to five saved careers, and the
@@ -87,6 +88,8 @@ fun CareerFlow(onExit: () -> Unit) {
     var selected by remember { mutableStateOf<CareerProfile?>(null) }
     var askDelete by remember { mutableStateOf(false) }
     var clubName by remember { mutableStateOf<String?>(null) }
+    var schoolName by remember { mutableStateOf<String?>(null) }
+    var collegeName by remember { mutableStateOf<String?>(null) }
     var role by remember { mutableStateOf<String?>(null) }
     var batHand by remember { mutableStateOf<String?>(null) }
     var bowlHand by remember { mutableStateOf<String?>(null) }
@@ -130,7 +133,10 @@ fun CareerFlow(onExit: () -> Unit) {
         val bitmap = photo
         val fullName = "${firstName.trim()} ${lastName.trim()}"
         val random = java.util.Random(System.nanoTime() xor id.hashCode().toLong())
-        val ratings = CareerGenerator.startingRatings(role ?: "", random)
+        val startAge = ageText.toIntOrNull() ?: CareerWorld.MIN_AGE
+        val stage = CareerStudent.stageForAge(startAge)
+        // A student's ratings follow his age (a twelve-year-old is far below an adult); from 19 they are what they always were.
+        val ratings = CareerStudent.startingRatings(role ?: "", startAge, random)
         val me = CareerPlayer(
             name = fullName,
             role = role ?: "",
@@ -142,7 +148,13 @@ fun CareerFlow(onExit: () -> Unit) {
             fielding = ratings[2],
             isUser = true
         )
-        val clubs = CareerGenerator.generateClubs(chosenCountry, chosenState, clubName ?: "", me, random)
+        val myTeam = when (stage) {
+            "School" -> schoolName ?: ""
+            "College" -> collegeName ?: ""
+            else -> clubName ?: ""
+        }
+        val clubs = if (stage.isEmpty()) CareerGenerator.generateClubs(chosenCountry, chosenState, clubName ?: "", me, random)
+        else CareerStudent.generateTeams(chosenCountry, chosenState, stage, myTeam, me, random)
         val profile = CareerProfile(
             id = id,
             firstName = firstName.trim(),
@@ -153,7 +165,7 @@ fun CareerFlow(onExit: () -> Unit) {
             country = chosenCountry,
             state = chosenState,
             domesticTeams = CareerWorld.findState(chosenCountry, chosenState)?.domesticTeams ?: emptyList(),
-            club = clubName ?: "",
+            club = myTeam,
             createdAt = System.currentTimeMillis(),
             role = role ?: "",
             battingHand = batHand ?: "",
@@ -169,7 +181,9 @@ fun CareerFlow(onExit: () -> Unit) {
             bowling = me.bowling,
             fielding = me.fielding,
             clubTeams = clubs,
-            startRatings = listOf(me.batting, me.bowling, me.fielding)
+            startRatings = listOf(me.batting, me.bowling, me.fielding),
+            stage = stage,
+            homeClub = if (stage.isEmpty()) "" else clubName ?: ""
         )
         val updated = (list + profile).take(CareerWorld.MAX_CAREERS)
         careers = updated
@@ -311,7 +325,7 @@ fun CareerFlow(onExit: () -> Unit) {
 
         CStep.Age -> TextInputPage(
             title = "Your age",
-            hint = "Type your age, from ${CareerWorld.MIN_AGE} to ${CareerWorld.MAX_AGE}. Ages ${CareerWorld.MIN_AGE} to ${CareerWorld.RECOMMENDED_MAX_AGE} are recommended: they give you the longest career.",
+            hint = "Type your age, from ${CareerWorld.MIN_AGE} to ${CareerWorld.MAX_AGE}. At 12 to 15 you start in school cricket, at 16 to 18 in college cricket, and from 19 in district club cricket. The younger you start, the longer your career.",
             label = "Age",
             value = ageText,
             onValueChange = { ageText = it.filter(Char::isDigit).take(2) },
@@ -419,6 +433,65 @@ fun CareerFlow(onExit: () -> Unit) {
                     CareerWorld.clubs(chosenCountry, chosenState).forEach { club ->
                         OptionButton(club, "A club in $chosenState.", true, false) {
                             clubName = club
+                            // Ages 12 to 15 choose a school next, 16 to 18 a college, everybody else goes straight on.
+                            step = when (CareerStudent.stageForAge(ageText.toIntOrNull() ?: 19)) {
+                                "School" -> CStep.School
+                                "College" -> CStep.College
+                                else -> CStep.Role
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+
+        CStep.School -> {
+            val chosenCountry = country ?: CareerWorld.COUNTRIES.first()
+            val chosenState = stateName
+            val back = { step = CStep.Club }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Your school")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "At your age you start in school cricket. Choose your school${if (chosenState != null) " in $chosenState" else ""}. You will join ${clubName ?: "your district club"} when you finish college.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (chosenState != null) {
+                    CareerWorld.schools(chosenCountry, chosenState).forEach { school ->
+                        OptionButton(school, "A school in $chosenState.", true, school == schoolName) {
+                            schoolName = school
+                            step = CStep.Role
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+
+        CStep.College -> {
+            val chosenCountry = country ?: CareerWorld.COUNTRIES.first()
+            val chosenState = stateName
+            val back = { step = CStep.Club }
+            BackHandler(onBack = back)
+            PageColumn {
+                BackButton(back)
+                Spacer(modifier = Modifier.height(16.dp))
+                PageHeading("Your college")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "At your age you start in college cricket. Choose your college${if (chosenState != null) " in $chosenState" else ""}. You will join ${clubName ?: "your district club"} when you finish college.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (chosenState != null) {
+                    CareerWorld.colleges(chosenCountry, chosenState).forEach { college ->
+                        OptionButton(college, "A college in $chosenState.", true, college == collegeName) {
+                            collegeName = college
                             step = CStep.Role
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -428,7 +501,13 @@ fun CareerFlow(onExit: () -> Unit) {
         }
 
         CStep.Role -> {
-            val back = { step = CStep.Club }
+            val back = {
+                step = when (CareerStudent.stageForAge(ageText.toIntOrNull() ?: 19)) {
+                    "School" -> CStep.School
+                    "College" -> CStep.College
+                    else -> CStep.Club
+                }
+            }
             BackHandler(onBack = back)
             PageColumn {
                 BackButton(back)
@@ -639,6 +718,11 @@ fun CareerFlow(onExit: () -> Unit) {
                     "Country: ${country ?: ""}",
                     "State: ${stateName ?: ""}",
                     "District club: ${clubName ?: ""}",
+                    when (CareerStudent.stageForAge(ageText.toIntOrNull() ?: 19)) {
+                        "School" -> "School: ${schoolName ?: ""}"
+                        "College" -> "College: ${collegeName ?: ""}"
+                        else -> null
+                    },
                     "Role: ${role ?: ""}",
                     "Batting hand: ${batHand ?: ""}",
                     if (bowls) "Bowling: ${(bowlHand ?: "").lowercase()} ${(bowlStyle ?: "").lowercase()}" else "Bowling: does not bowl",
