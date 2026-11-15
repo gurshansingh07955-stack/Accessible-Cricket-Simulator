@@ -96,9 +96,14 @@ object CareerProgress {
         val updated = if (rank != null) played2.copy(leadership = rank, leadershipSince = played2.matchesPlayed) else played2
         val news = if (rank != null) " " + CareerLeadership.announcement(rank, career.club) else ""
         // A chance of an injury after the match (more in Tests, for bowlers, for the old and the tired).
-        val hurt = CareerHealth.roll(updated, random, format)
+        val rolled = CareerHealth.rollWithGear(updated, random, format, CareerShop.matchLevel(updated, league))
+        val hurt = rolled.injury
         val afterHurt = if (hurt == null) updated else updated.copy(injuredMatches = hurt.matches, injury = hurt.name)
-        val hurtText = if (hurt == null) "" else " " + CareerHealth.injuryAnnouncement(hurt)
+        val hurtText = when {
+            hurt != null -> " " + CareerHealth.injuryAnnouncement(hurt)
+            rolled.savedBy != null -> " Your ${rolled.savedBy} took a hard knock and saved you from an injury."
+            else -> ""
+        }
         return Result(afterHurt, "${parts.joinToString(" ")} Your impact was ${impact.roundToInt()}. $growth$news$hurtText")
     }
 }

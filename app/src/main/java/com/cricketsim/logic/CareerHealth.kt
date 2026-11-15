@@ -25,8 +25,14 @@ object CareerHealth {
     private val SERIOUS = listOf("a stress fracture of the back", "a knee ligament injury", "a shoulder dislocation", "a torn hamstring")
 
     /** The injury he picks up in a match he has just played, or null. */
-    fun roll(career: CareerProfile, random: Random, format: String): Injury? {
-        if (career.injuredMatches > 0 || career.retired) return null
+    fun roll(career: CareerProfile, random: Random, format: String): Injury? = rollWithGear(career, random, format, 0).injury
+
+    /** The result of a roll: the injury (or null) and, if his gear saved him from one, which item took the knock. */
+    class Roll(val injury: Injury?, val savedBy: String?)
+
+    /** [roll] with his gloves and pads (part twenty-five): [level] is the level of the match (1 club, 2 state, 3 international or league; 0 = gear ignored). */
+    fun rollWithGear(career: CareerProfile, random: Random, format: String, level: Int): Roll {
+        if (career.injuredMatches > 0 || career.retired) return Roll(null, null)
         var p = 0.012
         p *= when (format) {
             "test" -> 1.8
@@ -40,13 +46,21 @@ object CareerHealth {
         }
         if (career.age >= 30) p *= 1.0 + (career.age - 29) * 0.06
         p *= 1.0 + career.workload / 60.0
-        if (random.nextDouble() >= p.coerceAtMost(0.10)) return null
+        val raw = p.coerceAtMost(0.10)
+        val factor = if (level > 0) CareerShop.injuryFactor(career, level) else 1.0
+        val d = random.nextDouble()
+        if (d >= raw * factor) {
+            // Hit by the chance without gear, not with it: the gear took the knock.
+            val saved = if (d < raw && factor < 1.0) CareerShop.saverName(career, level, random) else null
+            return Roll(null, saved)
+        }
         val r = random.nextDouble()
-        return when {
+        val injury = when {
             r < 0.6 -> Injury(MINOR.random(random), 2 + random.nextInt(2))
             r < 0.9 -> Injury(MODERATE.random(random), 4 + random.nextInt(5))
             else -> Injury(SERIOUS.random(random), 10 + random.nextInt(9))
         }
+        return Roll(injury, null)
     }
 
     fun injuryAnnouncement(h: Injury): String = "You picked up ${h.name} and will miss the next ${h.matches} matches."

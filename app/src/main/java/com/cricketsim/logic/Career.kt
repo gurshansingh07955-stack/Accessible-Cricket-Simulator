@@ -144,7 +144,10 @@ data class CareerProfile(
     // Part twenty-four, second part: the press conference waiting to be held, and what the press make of his answers.
     val pendingPress: PressTrigger? = null,
     val pressMood: Int = 0,
-    val pressConferences: Int = 0
+    val pressConferences: Int = 0,
+    // Part twenty-five: the shop. The kind of gloves and pads he wears (0 = none, 1 = Silver, 2 = Golden, 3 = Diamond).
+    val glovesTier: Int = 0,
+    val padsTier: Int = 0
 ) {
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 

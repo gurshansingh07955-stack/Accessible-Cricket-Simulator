@@ -17,13 +17,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.CareerFinance
 import com.cricketsim.logic.CareerNews
+import com.cricketsim.logic.CareerShop
 import com.cricketsim.logic.CareerHealth
 import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerLeagues
@@ -51,7 +54,8 @@ internal fun CareerRecordTab(
     onFocus: (String?) -> Unit,
     onSpecialism: (String?) -> Unit,
     onMove: (MoveRequest?) -> Unit,
-    onRetire: () -> Unit
+    onRetire: () -> Unit,
+    onCareer: (CareerProfile) -> Unit
 ) {
     var page by remember { mutableStateOf<String?>(null) }
     val open = page
@@ -85,7 +89,7 @@ internal fun CareerRecordTab(
             if (rankLines.isEmpty()) BodyLine("Working out your rankings.") else rankLines.forEach { BodyLine(it) }
         }
         "captaincy" -> CareerPage("Captaincy", back) { CaptaincyPage(career) }
-        "earnings" -> CareerPage("Earnings", back) { CareerFinance.lines(career).forEach { BodyLine(it) } }
+        "earnings" -> CareerPage("Earnings", back) { EarningsPage(career, onCareer) }
         "news" -> CareerPage("In the news", back) { NewsPage(career) }
         "move" -> CareerPage("Move to another country", back) { MovePage(career, onMove) }
         "retire" -> CareerPage("Retirement", back) { RetirementPage(career, seasons, onRetire) }
@@ -134,7 +138,7 @@ private fun CareerMenu(career: CareerProfile, seasons: List<TournamentState>?, r
     MenuItem("Rankings", rankLines.firstOrNull() ?: "Working out your rankings.", "rankings", onOpen)
     if (!career.retired) MenuItem("Captaincy", captaincyStatus(career), "captaincy", onOpen)
     GroupHeading("Money and the papers")
-    MenuItem("Earnings", "Career earnings: ${CareerFinance.money(career.money)}.", "earnings", onOpen)
+    MenuItem("Earnings", "Career earnings: ${CareerFinance.money(career.money)}. The shop is here too.", "earnings", onOpen)
     val news = CareerNews.all(career)
     MenuItem("In the news", news.lastOrNull()?.text ?: "Nothing yet.", "news", onOpen)
     if (!career.retired) {
@@ -180,6 +184,67 @@ private fun BodyLine(text: String) {
 }
 
 // ---------------------------------------------------------------- the pages
+
+/** Earnings: two tabs, Earnings (the money) and Shop (gloves and pads that cut the chance of an injury). Buying asks first. */
+@Composable
+private fun EarningsPage(career: CareerProfile, onCareer: (CareerProfile) -> Unit) {
+    var tab by remember { mutableStateOf(0) }
+    var confirm by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    var message by remember { mutableStateOf("") }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        listOf("Earnings", "Shop").forEachIndexed { i, label ->
+            val chosen = i == tab
+            val modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 48.dp)
+                .semantics { role = Role.Tab; selected = chosen }
+            if (chosen) Button(onClick = { tab = i }, modifier = modifier) { Text(label) }
+            else OutlinedButton(onClick = { tab = i }, modifier = modifier) { Text(label) }
+        }
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+    if (tab == 0) {
+        CareerFinance.lines(career).forEach { BodyLine(it) }
+    } else {
+        if (message.isNotEmpty()) {
+            Text(message, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        CareerShop.statusLines(career).forEach { BodyLine(it) }
+        Spacer(modifier = Modifier.height(8.dp))
+        val pending = confirm
+        if (pending != null) {
+            val item = pending.first
+            val tier = pending.second
+            BodyLine("Buy ${CareerShop.tierName(tier)} $item for ${CareerFinance.money(CareerShop.price(item, tier))}?")
+            Button(
+                onClick = {
+                    val bought = CareerShop.buy(career, item, tier)
+                    message = if (bought === career) "That could not be bought."
+                    else "You bought ${CareerShop.tierName(tier)} $item. You have ${CareerFinance.money(bought.money)} left."
+                    confirm = null
+                    if (bought !== career) onCareer(bought)
+                },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            ) { Text("Yes, buy") }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(onClick = { confirm = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Cancel") }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        listOf("gloves", "pads").forEach { item ->
+            GroupHeading(item.replaceFirstChar { it.uppercase() })
+            (1..3).forEach { tier ->
+                val reason = CareerShop.canBuy(career, item, tier)
+                OptionButton(
+                    "${CareerShop.tierName(tier)} $item, ${CareerFinance.money(CareerShop.price(item, tier))}",
+                    (if (reason != null) "$reason " else "") + CareerShop.blurb(tier),
+                    reason == null,
+                    false
+                ) { confirm = Pair(item, tier) }
+            }
+        }
+    }
+}
 
 /** The news: two tabs, All (about you and world cricket) and My news; the newest first. */
 @Composable
