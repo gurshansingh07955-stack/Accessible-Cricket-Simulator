@@ -1,0 +1,17 @@
+{
+  "name": "Build fix: ManualFielding.kt imports BallResult",
+  "message": "Fixes the build of patch 117: the new fielding logic file did not import BallResult.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/ManualFielding.kt",
+    "contains": "import com.cricketsim.ui.match.BallResult"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/ManualFielding.kt",
+      "find": "import kotlin.math.abs\nimport kotlin.random.Random\n",
+      "replace": "import com.cricketsim.ui.match.BallResult\nimport kotlin.math.abs\nimport kotlin.random.Random\n",
+      "count": 1
+    }
+  ]
+}
