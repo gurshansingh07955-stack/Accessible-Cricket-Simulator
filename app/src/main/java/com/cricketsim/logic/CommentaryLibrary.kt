@@ -91,7 +91,9 @@ enum class CommentaryCategory {
     TOURNAMENT_CHAMPIONS, TOURNAMENT_CROWNED, PLAYER_OF_SERIES,
     // Five-day Test: sessions and days, the new ball, declarations, the end of an innings, the follow-on and a draw.
     TEST_SESSION_END, TEST_DAY_END, TEST_SESSION_START, TEST_DAY_START, TEST_NEW_BALL,
-    TEST_DECLARATION, TEST_INNINGS_END, TEST_FOLLOW_ON, TEST_DRAW
+    TEST_DECLARATION, TEST_INNINGS_END, TEST_FOLLOW_ON, TEST_DRAW,
+    // Manual fielding: a dropped catch, a missed stumping, a missed run out, a run saved by a good stop.
+    DROPPED_CATCH, STUMPING_MISSED, RUN_OUT_MISSED, GOOD_STOP
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -860,6 +862,86 @@ object CommentaryLibrary {
                 CommentaryLine("series_award_3_excited", "Give them a huge round of applause! Player of the Series, a performance to remember!", "/_cdn/commentary/series_award_3_excited.mp3"),
                 CommentaryLine("series_award_3_calm", "Match after match, they delivered. That is exactly what this award is for.", "/_cdn/commentary/series_award_3_calm.mp3")
             )
+        ),
+        CommentaryCategory.DROPPED_CATCH to listOf(
+            CommentaryPair(
+                CommentaryLine("dropcatch_1_excited", "Oh no, he's put it down! That was a straightforward chance, and the batter will hardly believe his luck!", "/_cdn/commentary/dropcatch_1_excited.mp3"),
+                CommentaryLine("dropcatch_1_calm", "A real let-off. Those are the moments that can turn an innings.", "/_cdn/commentary/dropcatch_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("dropcatch_2_excited", "Dropped! The ball burst through the hands, what a costly mistake!", "/_cdn/commentary/dropcatch_2_excited.mp3"),
+                CommentaryLine("dropcatch_2_calm", "Pressure does funny things. The fielding side will be kicking themselves.", "/_cdn/commentary/dropcatch_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("dropcatch_3_excited", "Down it goes! The catch is spilled, and the batter survives!", "/_cdn/commentary/dropcatch_3_excited.mp3"),
+                CommentaryLine("dropcatch_3_calm", "He got both hands to it, but just couldn't hold on. Unlucky, but it will hurt.", "/_cdn/commentary/dropcatch_3_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("dropcatch_4_excited", "A dropped catch! That could be the most expensive misfield of the day!", "/_cdn/commentary/dropcatch_4_excited.mp3"),
+                CommentaryLine("dropcatch_4_calm", "Absolutely. Give a good batter a second chance and he will make you pay.", "/_cdn/commentary/dropcatch_4_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("dropcatch_5_excited", "He has grassed it! Everyone saw that one, and the bowler cannot believe it!", "/_cdn/commentary/dropcatch_5_excited.mp3"),
+                CommentaryLine("dropcatch_5_calm", "You can see the frustration. A wicket was there for the taking.", "/_cdn/commentary/dropcatch_5_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("dropcatch_6_excited", "Chance goes begging! The fielder can't hang on, and the batter lives to fight another day!", "/_cdn/commentary/dropcatch_6_excited.mp3"),
+                CommentaryLine("dropcatch_6_calm", "Catches win matches, as they say, and this one has cost them.", "/_cdn/commentary/dropcatch_6_calm.mp3")
+            )
+        ),
+        CommentaryCategory.STUMPING_MISSED to listOf(
+            CommentaryPair(
+                CommentaryLine("stumpmiss_1_excited", "The keeper whips off the bails, but he's too slow! The batter scrambles back in time!", "/_cdn/commentary/stumpmiss_1_excited.mp3"),
+                CommentaryLine("stumpmiss_1_calm", "Just a fraction late. Another inch and he would have been gone.", "/_cdn/commentary/stumpmiss_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("stumpmiss_2_excited", "Missed stumping! The batter was out of his crease and got away with it!", "/_cdn/commentary/stumpmiss_2_excited.mp3"),
+                CommentaryLine("stumpmiss_2_calm", "A lovely chance for the keeper, and he just couldn't gather it cleanly.", "/_cdn/commentary/stumpmiss_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("stumpmiss_3_excited", "What a let-off! The bails are off, but the bat is back behind the line!", "/_cdn/commentary/stumpmiss_3_excited.mp3"),
+                CommentaryLine("stumpmiss_3_calm", "Quick work from the batter. He will not step out like that again.", "/_cdn/commentary/stumpmiss_3_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("stumpmiss_4_excited", "The keeper fumbles it! He had the batter stranded, and now he's safe!", "/_cdn/commentary/stumpmiss_4_excited.mp3"),
+                CommentaryLine("stumpmiss_4_calm", "That is the difference between a wicket and a lucky escape.", "/_cdn/commentary/stumpmiss_4_calm.mp3")
+            )
+        ),
+        CommentaryCategory.RUN_OUT_MISSED to listOf(
+            CommentaryPair(
+                CommentaryLine("runoutmiss_1_excited", "Direct hit needed, and it's missed! The batter is home safe!", "/_cdn/commentary/runoutmiss_1_excited.mp3"),
+                CommentaryLine("runoutmiss_1_calm", "A good throw, but just off the stumps. Great running between the wickets.", "/_cdn/commentary/runoutmiss_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("runoutmiss_2_excited", "Oh, that was close! The throw is wide and they get away with the run!", "/_cdn/commentary/runoutmiss_2_excited.mp3"),
+                CommentaryLine("runoutmiss_2_calm", "There was a chance there, but the fielder couldn't make it count.", "/_cdn/commentary/runoutmiss_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("runoutmiss_3_excited", "He was short, but the bails stay on! What a reprieve!", "/_cdn/commentary/runoutmiss_3_excited.mp3"),
+                CommentaryLine("runoutmiss_3_calm", "The fielding side will feel they should have had that one.", "/_cdn/commentary/runoutmiss_3_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("runoutmiss_4_excited", "A mix-up in the middle, and the fielder can't take advantage!", "/_cdn/commentary/runoutmiss_4_excited.mp3"),
+                CommentaryLine("runoutmiss_4_calm", "Sloppy fielding at the crucial moment, and the batters will be relieved.", "/_cdn/commentary/runoutmiss_4_calm.mp3")
+            )
+        ),
+        CommentaryCategory.GOOD_STOP to listOf(
+            CommentaryPair(
+                CommentaryLine("goodstop_1_excited", "Superb stop in the field! A run saved, and the fielder is right on it!", "/_cdn/commentary/goodstop_1_excited.mp3"),
+                CommentaryLine("goodstop_1_calm", "Great anticipation. Those little things add up to a lot of pressure.", "/_cdn/commentary/goodstop_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("goodstop_2_excited", "He dives and cuts it off! That's brilliant fielding, one run fewer!", "/_cdn/commentary/goodstop_2_excited.mp3"),
+                CommentaryLine("goodstop_2_calm", "Excellent effort. The batters thought there was a run there, and he said no.", "/_cdn/commentary/goodstop_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("goodstop_3_excited", "Great fielding! They had two on, but the fielder got there to hold them to less!", "/_cdn/commentary/goodstop_3_excited.mp3"),
+                CommentaryLine("goodstop_3_calm", "Quick hands and a sharp mind. That is how you squeeze the scoring.", "/_cdn/commentary/goodstop_3_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("goodstop_4_excited", "What a save! The ball is stopped dead, and the runs dry up!", "/_cdn/commentary/goodstop_4_excited.mp3"),
+                CommentaryLine("goodstop_4_calm", "Sharp fielding, and the bowler will appreciate that effort.", "/_cdn/commentary/goodstop_4_calm.mp3")
+            )
         )
     )
 
@@ -871,6 +953,13 @@ object CommentaryLibrary {
      * ball the same way.
      */
     fun categorizeBallOutcome(outcome: BallOutcome): CommentaryCategory {
+        // Manual fielding: a dropped catch, a missed stumping or run out, a run saved. (Not wickets, whatever runs they score.)
+        if (outcome.droppedCatch) return CommentaryCategory.DROPPED_CATCH
+        when (outcome.fieldingEvent) {
+            "missedStumping" -> return CommentaryCategory.STUMPING_MISSED
+            "missedRunOut" -> return CommentaryCategory.RUN_OUT_MISSED
+            "stopped" -> return CommentaryCategory.GOOD_STOP
+        }
         if (outcome.isWicket) {
             if (outcome.dismissalType == DismissalType.RUN_OUT) return CommentaryCategory.WICKET_RUN_OUT
             if (outcome.dismissalType == DismissalType.STUMPED) return CommentaryCategory.WICKET_STUMPED

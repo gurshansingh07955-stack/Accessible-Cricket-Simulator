@@ -26,7 +26,7 @@ enum class AiCommentaryMode(val label: String, val description: String) {
 enum class FieldingMode(val label: String, val description: String) {
     AUTOMATIC("Automatic fielding", "The computer fields for you, as it always has. Its fielders now and then drop a catch, the better the fielder the less often."),
     HALF_MANUAL("Half manual fielding", "You take the catches. Your phone's own voice says who is catching, his fielding rating and where the catch is coming from, then you swipe up, left or right with two fingers on the last buzz."),
-    FULL_MANUAL("Full manual fielding", "You take the catches and, in the next update, you will also stop singles and doubles, stump and run out. Until that arrives it works like half manual fielding.")
+    FULL_MANUAL("Full manual fielding", "You take the catches, stop singles and doubles, and do the stumpings and the run outs. Your phone's voice tells you who, where and which swipe: up, left or right for a catch or a stop, down for a stumping, down twice quickly for a run out.")
 }
 
 data class GameSettings(

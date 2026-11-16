@@ -47,5 +47,7 @@ data class BallOutcome(
     /** The batter chose to leave the ball (no shot): it went to the keeper, or hit the stumps. */
     val leftAlone: Boolean = false,
     /** A catch was put down (by a computer fielder, or by the user's own attempt): the batter is NOT out. */
-    val droppedCatch: Boolean = false
+    val droppedCatch: Boolean = false,
+    /** A fielding event other than a dropped catch: "missedStumping", "missedRunOut" or "stopped" (a run saved). Null otherwise. */
+    val fieldingEvent: String? = null
 )

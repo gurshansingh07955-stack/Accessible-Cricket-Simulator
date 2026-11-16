@@ -27,7 +27,11 @@ class CatchChance(
     val pulses: Int,
     val intervalMs: Double,
     /** How far from the last buzz a swipe can be and still hold the catch, as a fraction of [intervalMs]. A better fielder has more room. */
-    val window: Double
+    val window: Double,
+    /** What the user is asked to do: take a catch, stump, run out or stop the ball (FullFielding). */
+    val kind: FieldingKind = FieldingKind.CATCH,
+    /** For a stumping or a run out: the batter in trouble. */
+    val batterName: String = ""
 )
 
 class CatchJudgement(val caught: Boolean, val reason: String)

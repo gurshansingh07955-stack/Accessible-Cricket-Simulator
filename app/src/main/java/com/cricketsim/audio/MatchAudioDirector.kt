@@ -189,8 +189,7 @@ class MatchAudioDirector(private val services: GameServices) {
             )
             if (outcome.isWicket) sound.vibrate(200, 100, 200) else if (outcome.runs >= 4) sound.vibrate(100)
 
-            // A dropped catch scores 0 to 2 runs but is not a dot or a single: its own words (the ball's text) are spoken instead.
-            if (!outcome.droppedCatch) sound.enqueueCommentary(category)
+            sound.enqueueCommentary(category)
             hatTrick?.let { sound.enqueueCommentary(it) }
             bowlerWicketMilestone?.let { sound.enqueueCommentary(it) }
             backToBack?.let { sound.enqueueCommentary(it) }

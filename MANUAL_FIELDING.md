@@ -1,20 +1,35 @@
-# Manual fielding (first part, patch 117)
+# Manual fielding
 
-**Settings > Manual fielding:** Automatic fielding (as before), Half manual fielding, Full manual fielding. Full manual works like half manual until its own part arrives (stopping singles and doubles, stumping, run outs).
+**Settings > Manual fielding:** Automatic fielding, Half manual fielding, Full manual fielding. Part one is patch 117 (and its build fix 118), part two patch 119.
 
-## Taking the catches yourself (Half and Full manual)
-When your team is fielding and the ball is a catch (including a catch back to the bowler), a full-screen page comes by itself (`ui/match/ManualFieldingScreens.kt`, `CatchScreen`):
-1. **Your phone's own voice** (`audio/PhoneSpeech.kt`, always on, with or without TalkBack): "Virat Kohli is standing at long-on. Fielding rating 82. The catch is coming from the left. Swipe left with two fingers on the last buzz." The buzzes start only after the voice has finished.
-2. **The buzzes** (a vibration and a tick each, the last one accented: the same `vibratePulse` and `playTimingTick` as batting). The gap between them follows the **speed of the ball** (`BattingSystem.computeTimingIntervalMs`) shaped by the **timing of the shot**: a perfectly timed shot (0.85 times the gap, 3 buzzes) arrives sooner than a mistimed one that hangs in the air (1.2 times, 5 buzzes); an edge is 3 quick buzzes; a catch in the deep has one buzz more.
-3. **Your swipe** on the last buzz: up if the catch comes from straight on, left if from the left, right if from the right (`CatchDirection`; which side is worked out from where the fielder stands and where the shot went). A wrong direction, too early, too late or no swipe drops the catch. A better fielder forgives more: the allowed distance from the last buzz is 0.30 + 0.004 x rating of one gap (0.35 to 0.72, so 0.54 at a rating of 60 and 0.62 at 80).
-4. "Let the computer take it" (the last button) leaves the catch to the computer's fielder, for anyone who cannot swipe.
-A taken catch carries on exactly as before (appeal, review, wicket). A dropped one is **not a wicket**: the batter stays, 0 or 1 run for a catch near the bat, 1 or 2 for one in the deep.
+| | Automatic | Half manual | Full manual |
+|---|---|---|---|
+| Catches | the computer (and it sometimes drops one) | you | you |
+| Stumpings | the computer | the computer | you |
+| Run outs | the computer | the computer | you |
+| Singles and doubles | the computer | the computer | you stop them |
+
+Every chance is a full-screen page (`ui/match/ManualFieldingScreens.kt`) that comes by itself when your team is fielding:
+1. **Your phone's own voice** (`audio/PhoneSpeech.kt`, always on, with or without TalkBack) says who, where, his fielding rating and what to do. The buzzes start only after it has finished.
+2. **Buzzes** (a vibration and a tick each, the last accented: the batting timing system). The gap follows the **speed of the ball** and is shaped by the **timing of the shot** (a perfectly timed shot is 0.85 times the gap, a very bad one 1.2 times; 3 buzzes for a well-timed shot, 5 for a mistimed one that hangs; an edge is 3 quick buzzes; a fielder in the deep has one buzz more).
+3. **Your swipe** (two fingers with a screen reader, one or two without) on the last buzz. A better fielder forgives more: the allowed distance from the last buzz is 0.30 + 0.004 x rating of one gap (0.54 at 60, 0.62 at 80), plus 0.05 for a stop.
+4. "Let the computer take it" (the last button) leaves it to the computer.
+
+## What each chance is
+- **Catch** (Half and Full): swipe **up** if it comes from straight on, **left** from the left, **right** from the right (which side is worked out from where the fielder stands and where the shot went). A catch put down is **not a wicket**: the batter stays, 0 or 1 run for a catch near the bat, 1 or 2 for one in the deep.
+- **Stumping** (Full): the ball was a stumping. The keeper (his rating counts) swipes **down** on the last buzz. Missed: **not out**, no run.
+- **Run out** (Full): the ball was a run out. **Down twice** within 0.7 s, the first on the last buzz. Missed: **not out**, the run he ran counts.
+- **Stop** (Full): a ball hit along the ground (not an edge) that the computer scored **1, 2 or 3** runs off. The fielder nearest to it in the shot's direction (not the keeper or the bowler) is yours: swipe up, left or right. Stopped: **one run fewer**. Missed: the runs stand. (This can be a chance on nearly every scoring ball, so a long innings takes longer in Full manual.)
+A taken catch, a stumping or a run out carries on exactly as before (appeal, review, wicket).
 
 ## Dropped catches in Automatic fielding
-Every caught dismissal can be dropped by its fielder, by his fielding rating (`CatchDrops.dropChance`: about 6% at 95, 21% at 60, 34% at 30), at most twice an innings, so an innings has none, one or two. Applies to the computer's fielders and to yours when you field automatically (and when you use "Let the computer take it"). **Balance:** about 57% of wickets are catches, so a fifth of those now survive: roughly one wicket an innings fewer in T20 than before. Not measured on play. `CatchDrops.AUTO_DROPS = false` switches it off; `MAX_DROPS_PER_INNINGS`, `DROP_BASE`, `DROP_BY_RATING` are the dials. A dropped catch's commentary is text (six wordings, spoken by the phone / screen reader); it has no recorded commentator voice yet.
+Every caught dismissal can be dropped by its fielder, by his fielding rating (`CatchDrops.dropChance`: about 6% at 95, 21% at 60, 34% at 30), at most twice an innings, so an innings has none, one or two. Applies to the computer's fielders and to yours when you field automatically (and when you use "Let the computer take it" on a catch). **Balance:** about 57% of wickets are catches, so a fifth of those now survive: roughly one wicket an innings fewer in T20 than before. Not measured on play. `CatchDrops.AUTO_DROPS = false` switches it off; `MAX_DROPS_PER_INNINGS`, `DROP_BASE`, `DROP_BY_RATING` are the dials. In Full manual the computer's stumpings, run outs and stops are not dropped or changed except by what you do.
+
+## Commentary
+Dropped catch, missed stumping, missed run out and a good stop have their own **recorded commentator lines** (`CommentaryCategory.DROPPED_CATCH`, `STUMPING_MISSED`, `RUN_OUT_MISSED`, `GOOD_STOP`: 6, 4, 4 and 4 pairs, clips `dropcatch_*`, `stumpmiss_*`, `runoutmiss_*`, `goodstop_*`) and text lines with the names (the ball's text, read by the phone or a screen reader). `BallOutcome.droppedCatch` and `BallOutcome.fieldingEvent` say which. After this patch run "Fetch audio into the app", then "Build APK".
 
 ## Career mode
-You take the catches while you are watching. "Skip to my turn" hands the fielding to the computer; a wicketkeeper (the career player is his team's keeper) still takes his own catches while skipping. Computer-v-computer tournament matches and the quick sim do not have catches to drop.
+You field while you are watching. "Skip to my turn" hands the fielding to the computer, except for the wicketkeeper: if the career player is his team's keeper he still takes his own catches, his stumpings and anything the ball brings to him. Computer-v-computer tournament matches and the quick sim have no fielding chances.
 
-## Not in this part
-Stopping singles and doubles, stumping (swipe down with two fingers) and run outs (swipe down twice), the recorded commentators' lines for a dropped catch.
+## Not done
+Stopping a boundary (a four along the ground), a keeper's own byes (the game has none), measuring how Full manual changes the scoring.

@@ -569,7 +569,10 @@ fun MatchScreen(
     fun manualCatchFor(before: MatchState, simulated: BallResult): com.cricketsim.logic.CatchChance? {
         if (settings.fieldingMode == com.cricketsim.audio.FieldingMode.AUTOMATIC) return null
         if (before.bowlingTeam.id != before.userTeam.id) return null
-        val chance = com.cricketsim.logic.ManualCatch.build(before, simulated) ?: return null
+        // A catch in Half and Full manual; in Full manual also a stumping, a run out and a ball to stop.
+        val chance = com.cricketsim.logic.ManualCatch.build(before, simulated)
+            ?: (if (settings.fieldingMode == com.cricketsim.audio.FieldingMode.FULL_MANUAL) com.cricketsim.logic.FullFielding.build(before, simulated) else null)
+            ?: return null
         val careerPid = before.careerPlayerId
         if (careerPid != null && skipping) {
             val keeperId = before.bowlingTeam.wicketkeeperId
@@ -782,25 +785,25 @@ fun MatchScreen(
                 val before = catchNow.before
                 val original = catchNow.result
                 when (outcome) {
-                    // He held it: on to the appeal, the review and the scoring exactly as for any catch.
-                    com.cricketsim.logic.CatchOutcome.TAKEN -> advanceOneBall(preResult = original)
-                    // He put it down: the same ball, but the batter is not out.
-                    com.cricketsim.logic.CatchOutcome.DROPPED -> {
-                        val fielder = before.bowlingTeam.players.find { it.id == catchNow.chance.fielderId }
-                        val dropped = fielder?.let { com.cricketsim.logic.CatchDrops.droppedOutcome(before, original.outcome, it) }
-                        if (dropped == null) {
+                    // He left it to the computer: for a catch its fielder may or may not drop it, as in automatic fielding; anything else stands as simulated.
+                    com.cricketsim.logic.CatchOutcome.COMPUTER ->
+                        advanceOneBall(preResult = if (catchNow.chance.kind == com.cricketsim.logic.FieldingKind.CATCH) autoDropped(before, original) else original)
+                    // He did it or he did not. What that changes depends on what it was: a catch put down is not out; a missed stumping or run out is not out;
+                    // a stop that worked saves a run.
+                    else -> {
+                        val changed = com.cricketsim.logic.FullFielding.outcomeFor(catchNow.chance, outcome, before, original.outcome)
+                        if (changed == null) {
                             advanceOneBall(preResult = original)
                         } else {
                             advanceOneBall(
                                 preResult = MatchSimulation.simulateOneBall(
-                                    before, stadium, settings.difficulty, original.bowlingDecision, original.battingDecision, outcomeOverride = dropped
+                                    before, stadium, settings.difficulty, original.bowlingDecision, original.battingDecision, outcomeOverride = changed
                                 )
                             )
                         }
                     }
-                    // He left it to the computer: its fielder may or may not drop it, as in automatic fielding.
-                    com.cricketsim.logic.CatchOutcome.COMPUTER -> advanceOneBall(preResult = autoDropped(before, original))
                 }
+
             }
         )
         return
