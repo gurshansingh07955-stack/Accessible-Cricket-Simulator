@@ -1,6 +1,6 @@
-Patch run: 43849897363
-Timestamp (UTC): 2026-11-16T10:33:31Z
+Patch run: 43850631670
+Timestamp (UTC): 2026-11-16T10:38:24Z
 Result: OK
 -----
-Patch 2026-11-15-120-fix-old-career-crash-and-career-fielding.json
-  applied 9 operation(s) to 6 file(s)
+Patch 2026-11-15-121-fielding-two-second-window.json
+  applied 5 operation(s) to 4 file(s)

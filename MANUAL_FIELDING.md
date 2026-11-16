@@ -13,6 +13,7 @@ Every chance is a full-screen page (`ui/match/ManualFieldingScreens.kt`) that co
 1. **Your phone's own voice** (`audio/PhoneSpeech.kt`, always on, with or without TalkBack) says who, where, his fielding rating and what to do. The buzzes start only after it has finished.
 2. **Buzzes** (a vibration and a tick each, the last accented: the batting timing system). The gap follows the **speed of the ball** and is shaped by the **timing of the shot** (a perfectly timed shot is 0.85 times the gap, a very bad one 1.2 times; 3 buzzes for a well-timed shot, 5 for a mistimed one that hangs; an edge is 3 quick buzzes; a fielder in the deep has one buzz more).
 3. **Your swipe** (two fingers with a screen reader, one or two without) on the last buzz. A better fielder forgives more: the allowed distance from the last buzz is 0.30 + 0.004 x rating of one gap (0.54 at 60, 0.62 at 80), plus 0.05 for a stop.
+**The 2-second window (patch 121):** after the last buzz the swipe still counts for 2 seconds (`ManualCatch.LATE_GRACE_MS`), so there is time to swipe properly. Only a swipe before the last buzz can be "too early"; inside the 2 seconds nothing is "too late". The way (up, left, right, down) must still be right. Set `LATE_GRACE_MS` to 0 for the strict timing.
 4. "Let the computer take it" (the last button) leaves it to the computer.
 
 ## What each chance is

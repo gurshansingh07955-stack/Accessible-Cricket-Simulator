@@ -51,6 +51,12 @@ object ManualCatch {
     private const val STRAIGHT_CONE_DEGREES = 25.0
     private const val SHORTEST_INTERVAL_MS = 150.0
 
+    /**
+     * After the last buzz the swipe still counts for this long (2 seconds), so there is time to swipe properly. A swipe BEFORE the last buzz still has to be
+     * within the fielder's window of it (a better fielder forgives more); a swipe after it is never "too late" inside these 2 seconds. Set 0 for the old, strict timing.
+     */
+    const val LATE_GRACE_MS = 2000.0
+
     fun isCatch(o: BallOutcome): Boolean =
         o.isWicket && (o.dismissalType == DismissalType.CAUGHT || o.dismissalType == DismissalType.CAUGHT_AND_BOWLED)
 
@@ -120,9 +126,16 @@ object ManualCatch {
             IntentDirection.DOWN -> null
         }
         if (way != c.direction) return CatchJudgement(false, "Wrong way.")
-        val off = abs(actualMs - expectedMs) / c.intervalMs
-        if (off <= c.window) return CatchJudgement(true, "Caught.")
-        return CatchJudgement(false, if (actualMs < expectedMs) "Too early." else "Too late.")
+        return judgeTiming(c, actualMs, expectedMs, "Caught.")
+    }
+
+    /** The timing of a right swipe: before the last buzz it must be within the fielder's window of it, after it anything up to [LATE_GRACE_MS] counts. */
+    fun judgeTiming(c: CatchChance, actualMs: Double, expectedMs: Double, success: String): CatchJudgement {
+        if (actualMs <= expectedMs) {
+            val early = (expectedMs - actualMs) / c.intervalMs
+            return if (early <= c.window) CatchJudgement(true, success) else CatchJudgement(false, "Too early.")
+        }
+        return if (actualMs - expectedMs <= LATE_GRACE_MS) CatchJudgement(true, success) else CatchJudgement(false, "Too late.")
     }
 }
 

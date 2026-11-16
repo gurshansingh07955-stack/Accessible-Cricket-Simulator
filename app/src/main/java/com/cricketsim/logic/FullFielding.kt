@@ -140,9 +140,7 @@ object FullFielding {
         if (swiped == null) return CatchJudgement(false, "You did not swipe in time.")
         if (swiped != IntentDirection.DOWN) return CatchJudgement(false, "Wrong way.")
         if (c.kind == FieldingKind.RUN_OUT && !doubleSwipe) return CatchJudgement(false, "You need two quick swipes.")
-        val off = abs(actualMs - expectedMs) / c.intervalMs
-        if (off <= c.window) return CatchJudgement(true, "Done.")
-        return CatchJudgement(false, if (actualMs < expectedMs) "Too early." else "Too late.")
+        return ManualCatch.judgeTiming(c, actualMs, expectedMs, "Done.")
     }
 
     /**

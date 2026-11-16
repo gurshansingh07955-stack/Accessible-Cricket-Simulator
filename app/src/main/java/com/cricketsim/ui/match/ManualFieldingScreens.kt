@@ -122,7 +122,8 @@ fun CatchScreen(chance: CatchChance, onResolved: (CatchOutcome) -> Unit) {
             sound?.playTimingTick(accent = i == chance.pulses - 1)
         }
         // 3. No swipe at all: after a grace period it goes wrong.
-        delay((chance.intervalMs * CATCH_NO_SWIPE_GRACE_INTERVALS).toLong())
+        status = "Swipe now."
+        delay((com.cricketsim.logic.ManualCatch.LATE_GRACE_MS + 400.0).toLong())
         val verdict = FullFielding.judge(chance, null, 0.0, expectedMs, false)
         finish(CatchOutcome.DROPPED, verdict.reason)
     }
