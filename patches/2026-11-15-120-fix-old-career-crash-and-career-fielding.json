@@ -1,0 +1,72 @@
+{
+  "name": "Fix the crash of careers saved before school and college; manual fielding in career mode only for your own player; fielding shown on the match screen",
+  "message": "Older careers load again (fields added in the school and college update were missing in old saves and crashed the game). In career mode manual fielding now comes only to your own player, while you are watching. The match screen says which fielding is on.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+    "contains": "stageSaved"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "package com.cricketsim.logic\n\n/**\n * One saved career of the My Player mode",
+      "replace": "package com.cricketsim.logic\n\nimport com.google.gson.annotations.SerializedName\n\n/**\n * One saved career of the My Player mode",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val stage: String = \"\",\n    val homeClub: String = \"\",\n    val pendingCollege: Boolean = false\n) {\n",
+      "replace": "    // These two are nullable on purpose: a career saved before this part has no value for them, and Gson then leaves a String as null (it skips the default),\n    // which crashed every screen that read it. They keep their saved names (\"stage\", \"homeClub\") and are read through [stage] and [homeClub].\n    @field:SerializedName(\"stage\") val stageSaved: String? = null,\n    @field:SerializedName(\"homeClub\") val homeClubSaved: String? = null,\n    val pendingCollege: Boolean = false\n) {\n    /** \"\" (district club and above, as always), \"School\" or \"College\". Never null, whatever the save held. */\n    val stage: String get() = stageSaved ?: \"\"\n\n    /** The district club he joins when college ends (\"\" for a career that is not a student). */\n    val homeClub: String get() = homeClubSaved ?: \"\"\n\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerStudent.kt",
+      "find": "        return c.copy(stage = \"College\", club = college, clubTeams = clubs, leadership = \"\", level = \"District\")\n",
+      "replace": "        return c.copy(stageSaved = \"College\", club = college, clubTeams = clubs, leadership = \"\", level = \"District\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerStudent.kt",
+      "find": "        return c.copy(stage = \"\", homeClub = \"\", club = club, clubTeams = clubs, leadership = \"\", level = \"District\")\n",
+      "replace": "        return c.copy(stageSaved = \"\", homeClubSaved = \"\", club = club, clubTeams = clubs, leadership = \"\", level = \"District\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "            stage = stage,\n            homeClub = if (stage.isEmpty()) \"\" else clubName ?: \"\"\n",
+      "replace": "            stageSaved = stage,\n            homeClubSaved = if (stage.isEmpty()) \"\" else clubName ?: \"\"\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        val careerPid = before.careerPlayerId\n        if (careerPid != null && skipping) {\n            val keeperId = before.bowlingTeam.wicketkeeperId\n                ?: before.bowlingTeam.players.find { it.role == com.cricketsim.logic.PlayerRole.WICKETKEEPER }?.id\n            if (!(careerPid == keeperId && chance.fielderId == keeperId)) return null\n        }\n",
+      "replace": "        val careerPid = before.careerPlayerId\n        if (careerPid != null) {\n            // Career mode: only the chances that come to OUR player (a catch he takes, a stumping if he keeps wicket, a ball he stops),\n            // never his team-mates' or the computer's.\n            if (chance.fielderId != careerPid) return null\n            // And only while he is watching: \"Skip to my turn\" hands the fielding to the computer, except for the wicketkeeper.\n            if (skipping) {\n                val keeperId = before.bowlingTeam.wicketkeeperId\n                    ?: before.bowlingTeam.players.find { it.role == com.cricketsim.logic.PlayerRole.WICKETKEEPER }?.id\n                if (careerPid != keeperId) return null\n            }\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Settings\")\n        }\n        Spacer(modifier = Modifier.height(16.dp))\n",
+      "replace": "        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {\n            Text(\"Settings\")\n        }\n        Spacer(modifier = Modifier.height(16.dp))\n\n        // Which fielding is on (Settings > Manual fielding), so it is clear at once that it is active in this match.\n        if (settings.fieldingMode != com.cricketsim.audio.FieldingMode.AUTOMATIC) {\n            Text(\n                text = \"Fielding: ${settings.fieldingMode.label}.\" +\n                    (if (matchState.careerPlayerId != null) \" In career mode only the chances that come to your own player.\" else \" Your team's catches are yours to take.\"),\n                style = MaterialTheme.typography.bodyMedium\n            )\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "MANUAL_FIELDING.md",
+      "find": "## Career mode\nYou field while you are watching.",
+      "replace": "## Career mode\nManual fielding works **only for your own player, while you are watching**: the chances that come to him (a catch he takes, a stumping if he keeps wicket, a ball he stops). Your team-mates' and the computer's chances are never yours. (Patch 120; patch 117 had given you every team-mate's catches too.) Everywhere else (quick match, tournaments, leagues) all your team's chances are yours. You field while you are watching.",
+      "count": 1
+    },
+    {
+      "op": "write",
+      "file": "CRASH_OLD_CAREERS.md",
+      "mustNotExist": true,
+      "content": "# The crash on careers saved before patch 115 (fixed in patch 120)\n\n**What happened:** patch 115 added `stage` and `homeClub` to `CareerProfile` as non-null Strings with default values. Gson (which loads the saved career) does not run default values for a field the save does not contain, so for a career saved before patch 115 they were `null`. The first screen to read `career.stage` (the career's Home road, the Career tab, the next season) crashed, and since the save itself was unchanged, it crashed again every time.\n\n**The fix:** the two fields are now nullable (`stageSaved`, `homeClubSaved`, saved under the same names \"stage\" and \"homeClub\", so careers made after patch 115 keep their school or college) and `career.stage` / `career.homeClub` are read through getters that turn a missing value into \"\". The same rule applies from now on: **a new field on a saved class is a primitive, or nullable.** The other fields added since (`newsFeed`, `pendingPress`, `pressMood`, `pressConferences`, `glovesTier`, `padsTier`, `pendingCollege`, `Partnership.extras`, `BallOutcome.droppedCatch`, `BallOutcome.fieldingEvent`) already follow it.\n"
+    }
+  ]
+}
