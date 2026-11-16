@@ -1,0 +1,45 @@
+{
+  "name": "Manual fielding: a 2-second window after the last buzz to swipe",
+  "message": "After the last buzz you now have 2 seconds to swipe, so catches are easier. The swipe must still go the right way.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/ManualFielding.kt",
+    "contains": "LATE_GRACE_MS"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/ManualFielding.kt",
+      "find": "    private const val STRAIGHT_CONE_DEGREES = 25.0\n    private const val SHORTEST_INTERVAL_MS = 150.0\n",
+      "replace": "    private const val STRAIGHT_CONE_DEGREES = 25.0\n    private const val SHORTEST_INTERVAL_MS = 150.0\n\n    /**\n     * After the last buzz the swipe still counts for this long (2 seconds), so there is time to swipe properly. A swipe BEFORE the last buzz still has to be\n     * within the fielder's window of it (a better fielder forgives more); a swipe after it is never \"too late\" inside these 2 seconds. Set 0 for the old, strict timing.\n     */\n    const val LATE_GRACE_MS = 2000.0\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/ManualFielding.kt",
+      "find": "        val off = abs(actualMs - expectedMs) / c.intervalMs\n        if (off <= c.window) return CatchJudgement(true, \"Caught.\")\n        return CatchJudgement(false, if (actualMs < expectedMs) \"Too early.\" else \"Too late.\")\n",
+      "replace": "        return judgeTiming(c, actualMs, expectedMs, \"Caught.\")\n    }\n\n    /** The timing of a right swipe: before the last buzz it must be within the fielder's window of it, after it anything up to [LATE_GRACE_MS] counts. */\n    fun judgeTiming(c: CatchChance, actualMs: Double, expectedMs: Double, success: String): CatchJudgement {\n        if (actualMs <= expectedMs) {\n            val early = (expectedMs - actualMs) / c.intervalMs\n            return if (early <= c.window) CatchJudgement(true, success) else CatchJudgement(false, \"Too early.\")\n        }\n        return if (actualMs - expectedMs <= LATE_GRACE_MS) CatchJudgement(true, success) else CatchJudgement(false, \"Too late.\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/FullFielding.kt",
+      "find": "        val off = abs(actualMs - expectedMs) / c.intervalMs\n        if (off <= c.window) return CatchJudgement(true, \"Done.\")\n        return CatchJudgement(false, if (actualMs < expectedMs) \"Too early.\" else \"Too late.\")\n",
+      "replace": "        return ManualCatch.judgeTiming(c, actualMs, expectedMs, \"Done.\")\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "        delay((chance.intervalMs * CATCH_NO_SWIPE_GRACE_INTERVALS).toLong())\n",
+      "replace": "        status = \"Swipe now.\"\n        delay((com.cricketsim.logic.ManualCatch.LATE_GRACE_MS + 400.0).toLong())\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "MANUAL_FIELDING.md",
+      "find": "4. \"Let the computer take it\" (the last button) leaves it to the computer.\n",
+      "replace": "**The 2-second window (patch 121):** after the last buzz the swipe still counts for 2 seconds (`ManualCatch.LATE_GRACE_MS`), so there is time to swipe properly. Only a swipe before the last buzz can be \"too early\"; inside the 2 seconds nothing is \"too late\". The way (up, left, right, down) must still be right. Set `LATE_GRACE_MS` to 0 for the strict timing.\n4. \"Let the computer take it\" (the last button) leaves it to the computer.\n",
+      "count": 1
+    }
+  ]
+}
