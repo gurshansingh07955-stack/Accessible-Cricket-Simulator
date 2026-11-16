@@ -1,6 +1,6 @@
-Patch run: 43782091461
-Timestamp (UTC): 2026-11-16T00:43:59Z
+Patch run: 43849897363
+Timestamp (UTC): 2026-11-16T10:33:31Z
 Result: OK
 -----
-Patch 2026-11-15-119-manual-fielding-full.json
-  applied 12 operation(s) to 9 file(s)
+Patch 2026-11-15-120-fix-old-career-crash-and-career-fielding.json
+  applied 9 operation(s) to 6 file(s)

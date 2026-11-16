@@ -67,7 +67,7 @@ object CareerStudent {
     /** He joins a college (with his ratings as they are now): its league, its squads. */
     fun joinCollege(c: CareerProfile, college: String, random: Random): CareerProfile {
         val clubs = generateTeams(c.country, c.state, "College", college, playerOf(c), random)
-        return c.copy(stage = "College", club = college, clubTeams = clubs, leadership = "", level = "District")
+        return c.copy(stageSaved = "College", club = college, clubTeams = clubs, leadership = "", level = "District")
     }
 
     /** He finishes college and joins his district club: a squad of adults, made now, with him in it. */
@@ -75,7 +75,7 @@ object CareerStudent {
         val names = CareerWorld.clubs(c.country, c.state)
         val club = if (c.homeClub in names) c.homeClub else names.firstOrNull() ?: c.club
         val clubs = CareerGenerator.generateClubs(c.country, c.state, club, playerOf(c), random)
-        return c.copy(stage = "", homeClub = "", club = club, clubTeams = clubs, leadership = "", level = "District")
+        return c.copy(stageSaved = "", homeClubSaved = "", club = club, clubTeams = clubs, leadership = "", level = "District")
     }
 
     /** The next season of a student ([older] is the career a year older): school, college or the district club. */

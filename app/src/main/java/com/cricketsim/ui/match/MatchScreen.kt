@@ -574,10 +574,16 @@ fun MatchScreen(
             ?: (if (settings.fieldingMode == com.cricketsim.audio.FieldingMode.FULL_MANUAL) com.cricketsim.logic.FullFielding.build(before, simulated) else null)
             ?: return null
         val careerPid = before.careerPlayerId
-        if (careerPid != null && skipping) {
-            val keeperId = before.bowlingTeam.wicketkeeperId
-                ?: before.bowlingTeam.players.find { it.role == com.cricketsim.logic.PlayerRole.WICKETKEEPER }?.id
-            if (!(careerPid == keeperId && chance.fielderId == keeperId)) return null
+        if (careerPid != null) {
+            // Career mode: only the chances that come to OUR player (a catch he takes, a stumping if he keeps wicket, a ball he stops),
+            // never his team-mates' or the computer's.
+            if (chance.fielderId != careerPid) return null
+            // And only while he is watching: "Skip to my turn" hands the fielding to the computer, except for the wicketkeeper.
+            if (skipping) {
+                val keeperId = before.bowlingTeam.wicketkeeperId
+                    ?: before.bowlingTeam.players.find { it.role == com.cricketsim.logic.PlayerRole.WICKETKEEPER }?.id
+                if (careerPid != keeperId) return null
+            }
         }
         return chance
     }
@@ -1234,6 +1240,16 @@ fun MatchScreen(
             Text("Settings")
         }
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Which fielding is on (Settings > Manual fielding), so it is clear at once that it is active in this match.
+        if (settings.fieldingMode != com.cricketsim.audio.FieldingMode.AUTOMATIC) {
+            Text(
+                text = "Fielding: ${settings.fieldingMode.label}." +
+                    (if (matchState.careerPlayerId != null) " In career mode only the chances that come to your own player." else " Your team's catches are yours to take."),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // A no-ball makes the NEXT ball a free hit. Said here, before the player acts, for
         // both roles (the batter also hears it as the delivery is revealed).

@@ -1,0 +1,5 @@
+# The crash on careers saved before patch 115 (fixed in patch 120)
+
+**What happened:** patch 115 added `stage` and `homeClub` to `CareerProfile` as non-null Strings with default values. Gson (which loads the saved career) does not run default values for a field the save does not contain, so for a career saved before patch 115 they were `null`. The first screen to read `career.stage` (the career's Home road, the Career tab, the next season) crashed, and since the save itself was unchanged, it crashed again every time.
+
+**The fix:** the two fields are now nullable (`stageSaved`, `homeClubSaved`, saved under the same names "stage" and "homeClub", so careers made after patch 115 keep their school or college) and `career.stage` / `career.homeClub` are read through getters that turn a missing value into "". The same rule applies from now on: **a new field on a saved class is a primitive, or nullable.** The other fields added since (`newsFeed`, `pendingPress`, `pressMood`, `pressConferences`, `glovesTier`, `padsTier`, `pendingCollege`, `Partnership.extras`, `BallOutcome.droppedCatch`, `BallOutcome.fieldingEvent`) already follow it.

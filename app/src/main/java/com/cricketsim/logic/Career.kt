@@ -1,5 +1,7 @@
 package com.cricketsim.logic
 
+import com.google.gson.annotations.SerializedName
+
 /**
  * One saved career of the My Player mode (Home > My Player). Part one holds only what the player chose while starting it;
  * the club's squad (players made up at random, with their own batting, bowling and fielding ratings), the matches and the
@@ -150,10 +152,18 @@ data class CareerProfile(
     val padsTier: Int = 0,
     // Part twenty-six: school and college. stage is "" (district club and above, as always), "School" or "College"; homeClub is the district club he chose and
     // joins when college ends; pendingCollege is set when he has finished school and still has to choose his college.
-    val stage: String = "",
-    val homeClub: String = "",
+    // These two are nullable on purpose: a career saved before this part has no value for them, and Gson then leaves a String as null (it skips the default),
+    // which crashed every screen that read it. They keep their saved names ("stage", "homeClub") and are read through [stage] and [homeClub].
+    @field:SerializedName("stage") val stageSaved: String? = null,
+    @field:SerializedName("homeClub") val homeClubSaved: String? = null,
     val pendingCollege: Boolean = false
 ) {
+    /** "" (district club and above, as always), "School" or "College". Never null, whatever the save held. */
+    val stage: String get() = stageSaved ?: ""
+
+    /** The district club he joins when college ends ("" for a career that is not a student). */
+    val homeClub: String get() = homeClubSaved ?: ""
+
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 
     /** The club captain makes the team decisions in his matches: the XI, the toss, the bowlers, the field, the batting order. */
