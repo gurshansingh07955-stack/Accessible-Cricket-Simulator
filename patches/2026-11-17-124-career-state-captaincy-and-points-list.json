@@ -1,0 +1,105 @@
+{
+  "name": "Career: state captaincy, Captaincy page for every level, Points table lists every competition",
+  "message": "Career: a state player can be vice-captain then captain of the state squad (XI, toss, bowlers); the Captaincy page shows school, college, club, state, national and franchise captaincy with progress; the Points table tab lists every competition (club, state, international, every franchise league) by name.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerLeadership.kt",
+    "contains": "fun statePromotion"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeadership.kt",
+      "content": "package com.cricketsim.logic\n\nimport java.util.Locale\n\n/**\n * Promotion to the leadership of the club, of the state squad. A player who keeps scoring runs and taking wickets is made VICE-CAPTAIN, and a vice-captain who keeps doing it is made CAPTAIN.\n * Judged on the average impact of his last five matches (the game's Player of the Match points; about 25 is an ordinary match in the XI):\n *  - club (also a school or a college): vice-captain at least five matches played and an average of 28 or more; captain five more matches as vice-captain and an average of 32 or more;\n *  - state squad (part twenty-seven): vice-captain at least five state matches and an average of 30 or more; captain five more state matches and an average of 34 or more.\n * The harder the career difficulty, the more the selectors ask (the averages are scaled from 0.92 on Very easy to 1.12 on Legend).\n * The captain makes the team decisions in his matches (the XI, the toss, the bowlers, the field, the batting order); the vice-captain plays as a player.\n */\nobject CareerLeadership {\n    const val VICE = \"Vice-captain\"\n    const val CAPTAIN = \"Captain\"\n\n    /** The new rank if the player has earned one, else null. */\n    fun promotion(career: CareerProfile): String? {\n        if (career.isState || career.isInternational) return null // the club's captaincy is a district matter\n        val form = career.form.orEmpty().takeLast(5)\n        if (form.size < 5) return null\n        val average = form.average()\n        val need = 0.8 + 0.2 * CareerWorld.selectionFactor(career.difficulty)\n        return when (career.leadership) {\n            \"\" -> if (career.matchesPlayed >= 5 && average >= 28.0 * need) VICE else null\n            VICE -> if (career.matchesPlayed - career.leadershipSince >= 5 && average >= 32.0 * need) CAPTAIN else null\n            else -> null\n        }\n    }\n\n    fun announcement(rank: String, club: String): String = when (rank) {\n        CAPTAIN -> \"Big news: you have been made captain of $club! From now on you pick the XI, take the toss, choose the bowlers, set the field and decide the batting order.\"\n        else -> \"Good news: after your performances you have been made vice-captain of $club.\"\n    }\n\n    // ------------------------------------------------------------ the state squad\n\n    private fun need(career: CareerProfile): Double = 0.8 + 0.2 * CareerWorld.selectionFactor(career.difficulty)\n\n    /** The new rank in the state squad if he has earned one (only while he plays for the state), else null. */\n    fun statePromotion(career: CareerProfile): String? {\n        if (!career.isState) return null\n        val form = career.form.orEmpty().takeLast(5)\n        if (form.size < 5) return null\n        val average = form.average()\n        val need = need(career)\n        return when (career.stateRole) {\n            \"\" -> if (career.stateMatches >= 5 && average >= 30.0 * need) VICE else null\n            VICE -> if (career.stateMatches - career.stateLeadershipSince >= 5 && average >= 34.0 * need) CAPTAIN else null\n            else -> null\n        }\n    }\n\n    fun stateAnnouncement(rank: String, team: String): String = when (rank) {\n        CAPTAIN -> \"Big news: you have been made captain of $team! In the state's matches you now pick the XI, take the toss, choose the bowlers, set the field and decide the batting order.\"\n        else -> \"Good news: after your performances you have been made vice-captain of $team.\"\n    }\n\n    // ------------------------------------------------------------ the Captaincy page\n\n    private fun one(x: Double): String = String.format(Locale.US, \"%.1f\", x)\n\n    /** How far he is from the next rank: the matches it takes and the form the selectors read. */\n    private fun progress(next: String, played: Int, form: List<Double>, target: Double): String {\n        val matches = \"You have played ${played.coerceIn(0, 5)} of the 5 matches it takes.\"\n        val formText = if (form.size < 5) \"Your form is read from your last five matches, and you have played ${form.size}.\"\n        else \"Your average impact over your last five matches is ${one(form.average())}; the selectors want about ${one(target)}.\"\n        return \"To be made $next: $matches $formText\"\n    }\n\n    private fun clubLines(career: CareerProfile): List<String> {\n        val title = when (career.stage) { \"School\" -> \"School captaincy\"; \"College\" -> \"College captaincy\"; else -> \"Club captaincy\" }\n        val place = when (career.stage) { \"School\" -> \"school\"; \"College\" -> \"college\"; else -> \"club\" }\n        val form = career.form.orEmpty().takeLast(5)\n        val need = need(career)\n        val away = if (career.atOrAboveState) \" You are not playing $place cricket this season; you lead again when you do.\" else \"\"\n        return when (career.leadership) {\n            CAPTAIN -> listOf(\"$title: you are the captain of ${career.club}. In its matches you pick the XI, do the toss, choose the bowlers, set the field and decide the batting order.$away\")\n            VICE -> listOf(\n                \"$title: you are the vice-captain of ${career.club}. The vice-captain plays as a player; the captain makes the team decisions.$away\",\n                progress(\"captain\", career.matchesPlayed - career.leadershipSince, form, 32.0 * need)\n            )\n            else -> listOf(\n                \"$title: you are not a captain yet. A player who keeps playing well is made vice-captain, then captain.\",\n                progress(\"vice-captain\", career.matchesPlayed, form, 28.0 * need)\n            )\n        }\n    }\n\n    private fun stateLines(career: CareerProfile): List<String> {\n        if (career.stage.isNotEmpty()) return listOf(\"State captaincy: the state selectors look at you once you play district club cricket, from the age of 19.\")\n        val team = career.domesticTeams.firstOrNull() ?: career.state\n        val away = if (career.isState) \"\" else \" You are not in the state squad this season; you lead it again if you are called up.\"\n        val form = career.form.orEmpty().takeLast(5)\n        val need = need(career)\n        return when (career.stateRole) {\n            CAPTAIN -> listOf(\"State captaincy: you are the captain of $team. In the state's matches you pick the XI, do the toss, choose the bowlers, set the field and decide the batting order.$away\")\n            VICE -> listOf(\n                \"State captaincy: you are the vice-captain of $team. The vice-captain plays as a player; the captain makes the team decisions.$away\",\n                progress(\"state captain\", career.stateMatches - career.stateLeadershipSince, form, 34.0 * need)\n            )\n            else -> if (career.isState) listOf(\n                \"State captaincy: you are not a captain yet. A state player who keeps playing well is made vice-captain, then captain.\",\n                progress(\"state vice-captain\", career.stateMatches, form, 30.0 * need)\n            ) else listOf(\"State captaincy: it comes after you have played for the $team state squad.\")\n        }\n    }\n\n    /** Every captaincy he can hold, one or two sentences each: school, college or club; the state squad; the nation; a franchise. */\n    fun lines(career: CareerProfile): List<String> {\n        val out = ArrayList<String>()\n        out.addAll(clubLines(career))\n        out.addAll(stateLines(career))\n        out.add(if (career.isInternational) CareerInternational.captaincyLine(career) else \"National captaincy: it comes after you have played for your country.\")\n        out.add(\n            if (career.isLeagueCaptain) \"Franchise captaincy: you are the captain of a franchise this season. You pick the XI and do the toss in its matches.\"\n            else \"Franchise captaincy: after ${CareerLeagues.CAPTAIN_MATCHES} league matches a franchise may offer you its captaincy with its contract, if your form and your standing in its squad are good. You have played ${career.leagueMatches} league matches.\"\n        )\n        return out\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val pendingCollege: Boolean = false\n) {",
+      "replace": "    val pendingCollege: Boolean = false,\n    // Part twenty-seven: captaincy of the state squad (the club's is `leadership`, the nation's `nationalRole`). Nullable like the school fields: an older save has no value.\n    val stateLeadership: String? = null,\n    /** Matches played for the state when he was last promoted in the state squad. */\n    val stateLeadershipSince: Int = 0,\n    // Part twenty-eight: league contracts. What each league he signed for this season pays (league id to dollars; a league he has left holds only what he is still owed), and the leagues he has left.\n    val leagueDeals: Map<String, Int>? = null,\n    val leftLeagues: List<String>? = null\n) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val homeClub: String get() = homeClubSaved ?: \"\"",
+      "replace": "    val homeClub: String get() = homeClubSaved ?: \"\"\n\n    /** \"\", \"Vice-captain\" or \"Captain\" of the state squad. Never null, whatever the save held. */\n    val stateRole: String get() = stateLeadership ?: \"\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerProgress.kt",
+      "find": "        val rank = CareerLeadership.promotion(played2)\n        val updated = if (rank != null) played2.copy(leadership = rank, leadershipSince = played2.matchesPlayed) else played2\n        val news = if (rank != null) \" \" + CareerLeadership.announcement(rank, career.club) else \"\"",
+      "replace": "        val rank = CareerLeadership.promotion(played2)\n        // At the state level the same run of good matches makes him vice-captain, then captain, of the state squad.\n        val stateRank = if (league) null else CareerLeadership.statePromotion(played2)\n        val updated = when {\n            rank != null -> played2.copy(leadership = rank, leadershipSince = played2.matchesPlayed)\n            stateRank != null -> played2.copy(stateLeadership = stateRank, stateLeadershipSince = played2.stateMatches)\n            else -> played2\n        }\n        val news = when {\n            rank != null -> \" \" + CareerLeadership.announcement(rank, career.club)\n            stateRank != null -> \" \" + CareerLeadership.stateAnnouncement(stateRank, played2.domesticTeams.firstOrNull() ?: played2.state)\n            else -> \"\"\n        }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "state.userTeamId in career.leagueCaptainTeamIds.orEmpty())\n        else -> false",
+      "replace": "state.userTeamId in career.leagueCaptainTeamIds.orEmpty())\n        else -> career.isState && career.stateRole == CareerLeadership.CAPTAIN"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "in the league he signed for this season, and never in a state tournament.",
+      "replace": "in the league he signed for this season, and the state captain in a state tournament (part twenty-seven)."
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        val club = older.copy(level = \"District\")\n        val states = newSeason(club) ?: emptyList()",
+      "replace": "        // Back at district level he is no longer a state captain or vice-captain.\n        val club = older.copy(level = \"District\", stateLeadership = null, stateLeadershipSince = 0)\n        val states = newSeason(club) ?: emptyList()"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "        val selected = debut || rank - adjust - grace <= cutoff",
+      "replace": "        val captain = career.stateRole == CareerLeadership.CAPTAIN\n        val selected = captain || debut || rank - adjust - grace <= cutoff"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSelection.kt",
+      "find": "            debut -> \"You are in the XI. The state selectors give every new player a debut: this is your first state match. $base\"",
+      "replace": "            captain -> \"You are the captain of the ${team.name} squad, so you always play, and you make the team decisions. $base\"\n            debut -> \"You are in the XI. The state selectors give every new player a debut: this is your first state match. $base\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "import com.cricketsim.logic.CareerHealth\nimport com.cricketsim.logic.CareerInternational",
+      "replace": "import com.cricketsim.logic.CareerHealth\nimport com.cricketsim.logic.CareerLeadership\nimport com.cricketsim.logic.CareerInternational"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "    if (!career.atOrAboveState && career.leadership.isNotEmpty()) parts.add(\"club ${career.leadership.lowercase()}\")",
+      "replace": "    if (career.stateRole.isNotEmpty()) parts.add(\"state ${career.stateRole.lowercase()}\")\n    if (career.leadership.isNotEmpty()) parts.add(\"${if (career.stage == \"School\") \"school\" else if (career.stage == \"College\") \"college\" else \"club\"} ${career.leadership.lowercase()}\")"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "    val club = career.leadershipLine()\n    if (club.isNotEmpty() && !career.atOrAboveState) BodyLine(club)\n    if (career.isInternational) {\n        BodyLine(CareerInternational.captaincyLine(career))\n    } else {\n        BodyLine(\"National captaincy: it comes after you have played for your country.\")\n    }\n    if (career.isLeagueCaptain) {\n        BodyLine(\"Franchise captaincy: you are the captain of a franchise this season. You pick the XI and do the toss in its matches.\")\n    } else {\n        BodyLine(\n            \"Franchise captaincy: after ${CareerLeagues.CAPTAIN_MATCHES} league matches a franchise may offer you its captaincy with its contract, if your form and your standing in its squad are good. \" +\n                \"You have played ${career.leagueMatches} league matches.\"\n        )\n    }\n}",
+      "replace": "    // Every captaincy he can hold: school, college or club; the state squad; the nation; a franchise (CareerLeadership).\n    CareerLeadership.lines(career).forEach { BodyLine(it) }\n}"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    var compTab by remember { mutableStateOf(0) }",
+      "replace": "    // -1 = the list of competitions on the Points table tab.\n    var compTab by remember { mutableStateOf(-1) }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "@Composable\nprivate fun TableTab(",
+      "replace": "/** What kind of competition this is, for the list on the Points table tab. */\nprivate fun competitionKind(s: TournamentState): String = when {\n    CareerInternational.isInternational(s) -> \"International cricket\"\n    CareerLeagues.isLeague(s) -> \"Franchise league\"\n    CareerSeason.isClub(s) -> \"League\"\n    else -> \"State tournament\"\n}\n\n/** One sentence about a competition for the list on the Points table tab: its kind, the player's team, how many matches are played, the champions. */\nprivate fun competitionStatus(s: TournamentState): String {\n    val played = s.fixtures.count { it.result != null }\n    val team = if (s.userTeamId.isEmpty()) \"You have left this league.\" else \"Your team: ${CareerSeason.nameOf(s, s.userTeamId)}.\"\n    val champion = CareerSeason.champion(s)\n    val end = if (champion != null) \" Champions: ${champion.name}.\" else \"\"\n    return \"${competitionKind(s)}. $team $played of ${s.fixtures.size} matches played.$end\"\n}\n\n@Composable\nprivate fun TableTab("
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    // Which competition: each has its own table and its own statistics.\n    SubTabs(seasons.map { CareerSeason.competitionOf(it).shortLabel }, compTab.coerceIn(0, seasons.size - 1), onCompTab)\n    Spacer(modifier = Modifier.height(8.dp))\n    val state = seasons[compTab.coerceIn(0, seasons.size - 1)]\n    SubTabs(listOf(\"Points table\", \"Stats\"), tableTab, onTableTab)\n    Spacer(modifier = Modifier.height(12.dp))\n    Text(state.name, style = MaterialTheme.typography.titleMedium)",
+      "replace": "    // Which competition: a list of every competition of the season (club leagues, state tournaments, international cricket, franchise leagues), each with its own table and statistics.\n    val open = compTab\n    if (open < 0 || open > seasons.size - 1) {\n        Text(\"Every competition you play this season is listed here. Choose one to see its points table and its statistics.\", style = MaterialTheme.typography.bodyMedium)\n        Spacer(modifier = Modifier.height(12.dp))\n        seasons.forEachIndexed { i, s ->\n            OptionButton(title = s.name, description = competitionStatus(s), enabled = true, emphasised = false) { onCompTab(i) }\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n        return\n    }\n    OutlinedButton(onClick = { onCompTab(-1) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(\"Back to the list of competitions\") }\n    Spacer(modifier = Modifier.height(12.dp))\n    val state = seasons[open]\n    SubTabs(listOf(\"Points table\", \"Stats\"), tableTab, onTableTab)\n    Spacer(modifier = Modifier.height(12.dp))\n    Text(state.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })"
+    },
+    {
+      "op": "write",
+      "file": "CAREER_MODE_PART_TWENTYSEVEN.md",
+      "content": "# Career Mode, part twenty-seven (captaincy at every level, a list of competitions on the Points table)\n\n- **State captaincy** (`CareerLeadership.statePromotion`, `CareerProfile.stateLeadership`): a player in the state squad is made vice-captain after five state matches with an average impact of about 30, and captain five state matches later with about 34 (the club's are 28 and 32; both scaled by the career difficulty). The state captain always plays, and in a state tournament he picks the XI, does the toss, chooses the bowlers, sets the field and decides the batting order, as the club, national and franchise captains do (`CareerSeason.captainIn`). He loses it if the state selectors drop him back to district cricket. The averages are the game's own numbers, not measured on play.\n- **Career > Captaincy** now lists every captaincy: school, college or club (it stays listed while he plays state or international cricket), the state squad, the nation and a franchise, each with how far he is from the next rank (matches played and the average impact the selectors read).\n- **Points table tab** is a list of every competition of the season by its full name (club leagues, state tournaments, international series and tournaments, every franchise league he signed for); each line says the kind, his team, matches played and the champions. Open one for its points table and statistics, with a button back to the list. Before, the competitions were a row of tabs that all said \"League\" for a franchise league.\n- **School and college captains:** the captain path (XI, toss, bowlers, field, batting order) is the same code at school, college and district level (`CareerSeason.captainIn`, `MatchScreen`); no break was found by reading it. The Captaincy page now shows the rank and the progress so a missing promotion is visible.\n",
+      "mustNotExist": true
+    }
+  ]
+}
