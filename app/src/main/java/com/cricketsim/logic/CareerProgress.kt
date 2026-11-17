@@ -93,8 +93,18 @@ object CareerProgress {
         )
         // A run of good matches is rewarded with the club's leadership.
         val rank = CareerLeadership.promotion(played2)
-        val updated = if (rank != null) played2.copy(leadership = rank, leadershipSince = played2.matchesPlayed) else played2
-        val news = if (rank != null) " " + CareerLeadership.announcement(rank, career.club) else ""
+        // At the state level the same run of good matches makes him vice-captain, then captain, of the state squad.
+        val stateRank = if (league) null else CareerLeadership.statePromotion(played2)
+        val updated = when {
+            rank != null -> played2.copy(leadership = rank, leadershipSince = played2.matchesPlayed)
+            stateRank != null -> played2.copy(stateLeadership = stateRank, stateLeadershipSince = played2.stateMatches)
+            else -> played2
+        }
+        val news = when {
+            rank != null -> " " + CareerLeadership.announcement(rank, career.club)
+            stateRank != null -> " " + CareerLeadership.stateAnnouncement(stateRank, played2.domesticTeams.firstOrNull() ?: played2.state)
+            else -> ""
+        }
         // A chance of an injury after the match (more in Tests, for bowlers, for the old and the tired).
         val rolled = CareerHealth.rollWithGear(updated, random, format, CareerShop.matchLevel(updated, league))
         val hurt = rolled.injury

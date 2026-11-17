@@ -156,13 +156,23 @@ data class CareerProfile(
     // which crashed every screen that read it. They keep their saved names ("stage", "homeClub") and are read through [stage] and [homeClub].
     @field:SerializedName("stage") val stageSaved: String? = null,
     @field:SerializedName("homeClub") val homeClubSaved: String? = null,
-    val pendingCollege: Boolean = false
+    val pendingCollege: Boolean = false,
+    // Part twenty-seven: captaincy of the state squad (the club's is `leadership`, the nation's `nationalRole`). Nullable like the school fields: an older save has no value.
+    val stateLeadership: String? = null,
+    /** Matches played for the state when he was last promoted in the state squad. */
+    val stateLeadershipSince: Int = 0,
+    // Part twenty-eight: league contracts. What each league he signed for this season pays (league id to dollars; a league he has left holds only what he is still owed), and the leagues he has left.
+    val leagueDeals: Map<String, Int>? = null,
+    val leftLeagues: List<String>? = null
 ) {
     /** "" (district club and above, as always), "School" or "College". Never null, whatever the save held. */
     val stage: String get() = stageSaved ?: ""
 
     /** The district club he joins when college ends ("" for a career that is not a student). */
     val homeClub: String get() = homeClubSaved ?: ""
+
+    /** "", "Vice-captain" or "Captain" of the state squad. Never null, whatever the save held. */
+    val stateRole: String get() = stateLeadership ?: ""
 
     val clubs: List<CareerClub> get() = clubTeams ?: emptyList()
 

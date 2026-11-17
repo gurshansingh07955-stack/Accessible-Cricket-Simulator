@@ -126,7 +126,8 @@ fun CareerHub(
     var play by remember { mutableStateOf<CPlay?>(null) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
-    var compTab by remember { mutableStateOf(0) }
+    // -1 = the list of competitions on the Points table tab.
+    var compTab by remember { mutableStateOf(-1) }
     var tableTab by remember { mutableStateOf(0) }
     var statsTab by remember { mutableStateOf(0) }
     var xiProblem by remember { mutableStateOf<String?>(null) }
@@ -260,6 +261,9 @@ fun CareerHub(
                             leagueDecidedSeason = career.season,
                             leagueContract = (if (sameSeason) career.leagueContract else 0) + deal,
                             signedLeagues = (if (sameSeason) career.signedLeagues.orEmpty() else emptyList()) + offer.leagueId,
+                            // What each league pays, kept league by league so one can be left later (part twenty-eight).
+                            leagueDeals = (if (sameSeason) CareerFinance.signedThisSeason(career).associateWith { CareerFinance.dealOf(career, it) } else emptyMap()) + (offer.leagueId to deal),
+                            leftLeagues = if (sameSeason) career.leftLeagues else null,
                             leagueCaptainTeamIds = (if (sameSeason) career.leagueCaptainTeamIds.orEmpty() + listOfNotNull(career.leagueCaptainTeamId) else emptyList()) +
                                 (if (offer.captain) listOf(offer.teamId) else emptyList()),
                             leagueCaptainTeamId = null,
@@ -283,6 +287,25 @@ fun CareerHub(
                 leagueLine = if (signedSome) (career.leagueLine ?: "") + " You turned down the other offers." else "You turned down this season's league offers."
             )
         )
+    }
+
+    // Part twenty-eight: he leaves a league he signed for. His contract is cut to the matches he played, the league goes on without him. Returns the sentence to show.
+    val leaveLeague: (String) -> String = { leagueId ->
+        val list = seasons
+        val idx = list?.indexOfFirst { CareerLeagues.leagueIdOf(it) == leagueId } ?: -1
+        if (busy) {
+            "Please wait a moment."
+        } else if (pendingMatch != null) {
+            "You have a half-played match. Finish it, or discard it on the Game play tab, before you leave a league."
+        } else if (list == null || idx < 0) {
+            "That league is not in your season."
+        } else {
+            val done = CareerLeagues.leave(career, list[idx])
+            seasons = list.mapIndexed { i, s -> if (i == idx) done.state else s }
+            scope.launch { seasonStores[idx].save(done.state) }
+            onCareerChanged(done.career)
+            done.text
+        }
     }
 
     // ---------------------------------------------------------------- a press conference after an award (full screen, part twenty-four)
@@ -629,7 +652,7 @@ fun CareerHub(
                 )
                 HubTab.Calendar -> CalendarTab(current, loaded) { comp, id -> viewCard = Pair(comp, id) }
                 HubTab.Table -> TableTab(current, loaded, compTab, { compTab = it }, tableTab, { tableTab = it }, statsTab, { statsTab = it })
-                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, { move -> onCareerChanged(career.copy(pendingMove = move)) }, retireNow, { bought -> onCareerChanged(bought) })
+                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, { move -> onCareerChanged(career.copy(pendingMove = move)) }, retireNow, { bought -> onCareerChanged(bought) }, leaveLeague)
             }
         }
     }
@@ -890,6 +913,23 @@ private fun SubTabs(labels: List<String>, selectedIndex: Int, onSelect: (Int) ->
     }
 }
 
+/** What kind of competition this is, for the list on the Points table tab. */
+private fun competitionKind(s: TournamentState): String = when {
+    CareerInternational.isInternational(s) -> "International cricket"
+    CareerLeagues.isLeague(s) -> "Franchise league"
+    CareerSeason.isClub(s) -> "League"
+    else -> "State tournament"
+}
+
+/** One sentence about a competition for the list on the Points table tab: its kind, the player's team, how many matches are played, the champions. */
+private fun competitionStatus(s: TournamentState): String {
+    val played = s.fixtures.count { it.result != null }
+    val team = if (s.userTeamId.isEmpty()) "You have left this league." else "Your team: ${CareerSeason.nameOf(s, s.userTeamId)}."
+    val champion = CareerSeason.champion(s)
+    val end = if (champion != null) " Champions: ${champion.name}." else ""
+    return "${competitionKind(s)}. $team $played of ${s.fixtures.size} matches played.$end"
+}
+
 @Composable
 private fun TableTab(
     seasons: List<TournamentState>?,
@@ -911,13 +951,23 @@ private fun TableTab(
         Text("This career has no season.", style = MaterialTheme.typography.bodyLarge)
         return
     }
-    // Which competition: each has its own table and its own statistics.
-    SubTabs(seasons.map { CareerSeason.competitionOf(it).shortLabel }, compTab.coerceIn(0, seasons.size - 1), onCompTab)
-    Spacer(modifier = Modifier.height(8.dp))
-    val state = seasons[compTab.coerceIn(0, seasons.size - 1)]
+    // Which competition: a list of every competition of the season (club leagues, state tournaments, international cricket, franchise leagues), each with its own table and statistics.
+    val open = compTab
+    if (open < 0 || open > seasons.size - 1) {
+        Text("Every competition you play this season is listed here. Choose one to see its points table and its statistics.", style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.height(12.dp))
+        seasons.forEachIndexed { i, s ->
+            OptionButton(title = s.name, description = competitionStatus(s), enabled = true, emphasised = false) { onCompTab(i) }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        return
+    }
+    OutlinedButton(onClick = { onCompTab(-1) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Back to the list of competitions") }
+    Spacer(modifier = Modifier.height(12.dp))
+    val state = seasons[open]
     SubTabs(listOf("Points table", "Stats"), tableTab, onTableTab)
     Spacer(modifier = Modifier.height(12.dp))
-    Text(state.name, style = MaterialTheme.typography.titleMedium)
+    Text(state.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     Spacer(modifier = Modifier.height(8.dp))
     if (tableTab == 0) {
         val champion = CareerSeason.champion(state)

@@ -44,6 +44,31 @@ object CareerFinance {
 
     fun contract(career: CareerProfile, offer: LeagueOffer): Int = contractFor(career, offer.leagueId, career.lastLeagueTeamId == offer.teamId)
 
+    /** The leagues he has signed for this season (the list is only valid in the season he decided). */
+    fun signedThisSeason(career: CareerProfile): List<String> =
+        if (career.leagueDecidedSeason == career.season) career.signedLeagues.orEmpty() else emptyList()
+
+    /**
+     * What the contract of one league he signed for this season is worth: the amount written down when he signed, or (a career that signed before contracts were kept league by league)
+     * the season's contracts shared equally. For a league he has left it is what he is still owed.
+     */
+    fun dealOf(career: CareerProfile, leagueId: String): Int {
+        val ids = signedThisSeason(career)
+        if (leagueId !in ids) return 0
+        career.leagueDeals?.get(leagueId)?.let { return it }
+        return career.leagueContract / ids.size
+    }
+
+    /** One sentence for the Career menu about his league contracts. */
+    fun contractsLine(career: CareerProfile): String {
+        val signed = signedThisSeason(career)
+        val offers = career.leagueOffers.orEmpty().size
+        val left = career.leftLeagues.orEmpty().count { it in signed }
+        if (signed.isEmpty()) return if (offers == 0) "No league contract this season." else "$offers league offers on the table."
+        val base = "${signed.size} league ${if (signed.size == 1) "contract" else "contracts"} this season" + (if (left > 0) ", $left left" else "")
+        return base + (if (offers > 0) ". $offers offers on the table." else ".")
+    }
+
     /** The national central contract for the season: 60,000, 20,000 more for a vice-captain, 40,000 more for a captain. */
     fun centralContract(career: CareerProfile): Long =
         if (!career.isInternational) 0L else 60_000L + when (career.nationalRole) {

@@ -1,6 +1,8 @@
-Patch run: 43992454550
-Timestamp (UTC): 2026-11-17T01:02:48Z
+Patch run: 44066667956
+Timestamp (UTC): 2026-11-17T10:38:26Z
 Result: OK
 -----
-Patch 2026-11-15-123-fielding-line-to-match-info.json
-  applied 3 operation(s) to 3 file(s)
+Patch 2026-11-17-124-career-state-captaincy-and-points-list.json
+  applied 16 operation(s) to 8 file(s)
+Patch 2026-11-17-125-career-league-contracts.json
+  applied 11 operation(s) to 6 file(s)

@@ -281,6 +281,64 @@ object CareerLeagues {
         )
     }
 
+    // ------------------------------------------------------------ leaving a league (part twenty-eight)
+
+    private val ID_OF_TOURNAMENT = mapOf(
+        IplSeason.TOURNAMENT_ID to "ipl", BigBashLeague.TOURNAMENT_ID to "bbl", Sa20.TOURNAMENT_ID to "sa20", CplData.TOURNAMENT_ID to "cpl",
+        MajorLeagueCricket.TOURNAMENT_ID to "mlc", LankaPremierLeague.TOURNAMENT_ID to "lpl", AbuDhabiT10.TOURNAMENT_ID to "adt10",
+        InternationalLeagueT20.TOURNAMENT_ID to "ilt20"
+    )
+
+    /** The id ("ipl", "bbl" ...) of the franchise league a career competition is, or null if it is not one. */
+    fun leagueIdOf(state: TournamentState): String? = ID_OF_TOURNAMENT[state.tournamentId]
+
+    /** The name of a league from its id. */
+    fun nameOfId(id: String): String = LEAGUES.find { it.id == id }?.name ?: id
+
+    /** What leaving a league now would mean: the league matches he has played, the matches his team has in the league, his contract, and what he would be paid. */
+    class LeaveTerms(val played: Int, val planned: Int, val deal: Int, val pay: Int)
+
+    /**
+     * The terms of leaving: he is paid his contract for the share of his team's league matches he played (never more than the contract), in whole hundreds of dollars.
+     */
+    fun leaveTerms(career: CareerProfile, state: TournamentState): LeaveTerms {
+        val id = leagueIdOf(state) ?: ""
+        val deal = CareerFinance.dealOf(career, id)
+        val played = state.playerStats[CareerDomestic.playerId(career.id)]?.matches ?: 0
+        val planned = maxOf(1, state.fixtures.count { it.stage == CplData.LEAGUE && CplSimulator.involves(it, state.userTeamId) })
+        val share = minOf(played, planned)
+        val pay = ((deal.toLong() * share / planned) / 100L * 100L).toInt()
+        return LeaveTerms(played, planned, deal, pay)
+    }
+
+    class Leave(val state: TournamentState, val career: CareerProfile, val text: String)
+
+    /**
+     * He leaves a league he signed for: his contract is cut to what he has earned so far (paid when the season ends with the other contracts), his place in the franchise's squad is
+     * taken away and the league has no team of his any more (an empty [TournamentState.userTeamId]), so it is no longer one of his competitions: its matches are played without him.
+     */
+    fun leave(career: CareerProfile, state: TournamentState): Leave {
+        val id = leagueIdOf(state) ?: ""
+        val terms = leaveTerms(career, state)
+        val pid = CareerDomestic.playerId(career.id)
+        val team = state.userTeamId
+        val deals = CareerFinance.signedThisSeason(career).associateWith { CareerFinance.dealOf(career, it) } + (id to terms.pay)
+        val left = state.copy(
+            userTeamId = "",
+            teams = state.teams.map { t -> if (t.id == team) t.copy(players = t.players.filter { it.id != pid }) else t }
+        )
+        val after = career.copy(
+            leagueContract = (career.leagueContract - terms.deal + terms.pay).coerceAtLeast(0),
+            leagueDeals = deals,
+            leftLeagues = career.leftLeagues.orEmpty() + id,
+            leagueCaptainTeamId = if (career.leagueCaptainTeamId == team) null else career.leagueCaptainTeamId,
+            leagueCaptainTeamIds = career.leagueCaptainTeamIds?.filter { it != team }
+        )
+        val text = "You have left the ${nameOfId(id)}. You played ${terms.played} of ${terms.planned} league matches, so you will be paid ${CareerFinance.money(terms.pay.toLong())} of the " +
+            "${CareerFinance.money(terms.deal.toLong())} contract when the season ends. The league goes on without you."
+        return Leave(left, after, text)
+    }
+
     // ------------------------------------------------------------ selection for a match
 
     /**

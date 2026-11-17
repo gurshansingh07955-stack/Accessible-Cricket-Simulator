@@ -257,13 +257,13 @@ object CareerSeason {
 
     /**
      * Whether he is the captain in this competition (part eighteen): the club captain in a club league, the national captain in a series or an international tournament, the franchise captain
-     * in the league he signed for this season, and never in a state tournament. A national captain is no longer the captain of his franchise unless the franchise has made him its captain.
+     * in the league he signed for this season, and the state captain in a state tournament (part twenty-seven). A national captain is no longer the captain of his franchise unless the franchise has made him its captain.
      */
     fun captainIn(career: CareerProfile, state: TournamentState): Boolean = when {
         isClub(state) -> career.leadership == "Captain" && !career.isState && !career.isInternational
         CareerInternational.isInternational(state) -> career.isInternational && career.nationalRole == "Captain"
         CareerLeagues.isLeague(state) -> career.isLeagueCaptain && (career.leagueCaptainTeamId == state.userTeamId || state.userTeamId in career.leagueCaptainTeamIds.orEmpty())
-        else -> false
+        else -> career.isState && career.stateRole == CareerLeadership.CAPTAIN
     }
 
     /** The champions once every match is played: the club top of the table, or the winner of a state tournament. */
@@ -342,6 +342,8 @@ object CareerSeason {
         var list = states
         var c = career
         val lines = ArrayList<String>()
+        // A league he has left has no team of his: it is played out without him as soon as the season moves (part twenty-eight).
+        list = list.map { if (it.userTeamId.isEmpty() && !isComplete(it)) CplSimulator.run(it, SimMode.ALL, random) else it }
         var guard = 0
         while (guard < 300) {
             guard++
@@ -426,7 +428,8 @@ object CareerSeason {
                 }
             }
         }
-        val club = older.copy(level = "District")
+        // Back at district level he is no longer a state captain or vice-captain.
+        val club = older.copy(level = "District", stateLeadership = null, stateLeadershipSince = 0)
         val states = newSeason(club) ?: emptyList()
         val keys = states.map { keyOf(it) }
         text += if (career.atOrAboveState) "You go back to district club cricket for ${career.club}." else "You stay with ${career.club} for another season of club cricket."

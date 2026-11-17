@@ -28,6 +28,7 @@ import com.cricketsim.logic.CareerFinance
 import com.cricketsim.logic.CareerNews
 import com.cricketsim.logic.CareerShop
 import com.cricketsim.logic.CareerHealth
+import com.cricketsim.logic.CareerLeadership
 import com.cricketsim.logic.CareerInternational
 import com.cricketsim.logic.CareerLeagues
 import com.cricketsim.logic.CareerProfile
@@ -55,7 +56,8 @@ internal fun CareerRecordTab(
     onSpecialism: (String?) -> Unit,
     onMove: (MoveRequest?) -> Unit,
     onRetire: () -> Unit,
-    onCareer: (CareerProfile) -> Unit
+    onCareer: (CareerProfile) -> Unit,
+    onLeaveLeague: (String) -> String
 ) {
     var page by remember { mutableStateOf<String?>(null) }
     val open = page
@@ -90,6 +92,7 @@ internal fun CareerRecordTab(
         }
         "captaincy" -> CareerPage("Captaincy", back) { CaptaincyPage(career) }
         "earnings" -> CareerPage("Earnings", back) { EarningsPage(career, onCareer) }
+        "leagues" -> CareerPage("League contracts", back) { LeagueContractsPage(career, seasons, onLeaveLeague, onCareer) }
         "news" -> CareerPage("In the news", back) { NewsPage(career) }
         "move" -> CareerPage("Move to another country", back) { MovePage(career, onMove) }
         "retire" -> CareerPage("Retirement", back) { RetirementPage(career, seasons, onRetire) }
@@ -104,7 +107,8 @@ private fun captaincyStatus(career: CareerProfile): String {
     val role = career.nationalRole
     if (career.isInternational && role != null) parts.add("${role.lowercase()} of ${career.nation}")
     if (career.isLeagueCaptain) parts.add("franchise captain")
-    if (!career.atOrAboveState && career.leadership.isNotEmpty()) parts.add("club ${career.leadership.lowercase()}")
+    if (career.stateRole.isNotEmpty()) parts.add("state ${career.stateRole.lowercase()}")
+    if (career.leadership.isNotEmpty()) parts.add("${if (career.stage == "School") "school" else if (career.stage == "College") "college" else "club"} ${career.leadership.lowercase()}")
     return if (parts.isEmpty()) "No captaincy yet." else parts.joinToString(", ") + "."
 }
 
@@ -139,6 +143,9 @@ private fun CareerMenu(career: CareerProfile, seasons: List<TournamentState>?, r
     if (!career.retired) MenuItem("Captaincy", captaincyStatus(career), "captaincy", onOpen)
     GroupHeading("Money and the papers")
     MenuItem("Earnings", "Career earnings: ${CareerFinance.money(career.money)}. The shop is here too.", "earnings", onOpen)
+    if (!career.retired && (career.atOrAboveState || career.leagueOffers.orEmpty().isNotEmpty() || CareerFinance.signedThisSeason(career).isNotEmpty())) {
+        MenuItem("League contracts", CareerFinance.contractsLine(career), "leagues", onOpen)
+    }
     val news = CareerNews.all(career)
     MenuItem("In the news", news.lastOrNull()?.text ?: "Nothing yet.", "news", onOpen)
     if (!career.retired) {
@@ -318,20 +325,63 @@ private fun TrainingPage(career: CareerProfile, onFocus: (String?) -> Unit, onSp
 
 @Composable
 private fun CaptaincyPage(career: CareerProfile) {
-    val club = career.leadershipLine()
-    if (club.isNotEmpty() && !career.atOrAboveState) BodyLine(club)
-    if (career.isInternational) {
-        BodyLine(CareerInternational.captaincyLine(career))
-    } else {
-        BodyLine("National captaincy: it comes after you have played for your country.")
+    // Every captaincy he can hold: school, college or club; the state squad; the nation; a franchise (CareerLeadership).
+    CareerLeadership.lines(career).forEach { BodyLine(it) }
+}
+
+/**
+ * League contracts (part twenty-eight): the leagues he has signed for this season, each of which he may leave (he plays no more matches in it and is paid only for the matches he played,
+ * out of the contract he signed), and the offers still on the table, each of which he may turn down. Leaving asks first.
+ */
+@Composable
+private fun LeagueContractsPage(career: CareerProfile, seasons: List<TournamentState>?, onLeave: (String) -> String, onCareer: (CareerProfile) -> Unit) {
+    var confirm by remember { mutableStateOf<String?>(null) }
+    var result by remember { mutableStateOf("") }
+    val signed = CareerFinance.signedThisSeason(career)
+    val left = career.leftLeagues.orEmpty()
+    if (result.isNotEmpty()) {
+        Text(result, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Spacer(modifier = Modifier.height(8.dp))
     }
-    if (career.isLeagueCaptain) {
-        BodyLine("Franchise captaincy: you are the captain of a franchise this season. You pick the XI and do the toss in its matches.")
-    } else {
-        BodyLine(
-            "Franchise captaincy: after ${CareerLeagues.CAPTAIN_MATCHES} league matches a franchise may offer you its captaincy with its contract, if your form and your standing in its squad are good. " +
-                "You have played ${career.leagueMatches} league matches."
-        )
+    BodyLine("A league contract is paid when the season ends. If you leave a league you play no more matches in it, and you are paid only for the matches you played, out of the contract you signed.")
+    GroupHeading("Leagues you have signed for this season")
+    if (signed.isEmpty()) BodyLine("None. You can ask the franchises for offers on the Home tab.")
+    signed.forEach { id ->
+        val name = CareerLeagues.nameOfId(id)
+        val state = seasons?.firstOrNull { CareerLeagues.leagueIdOf(it) == id }
+        val deal = CareerFinance.dealOf(career, id)
+        if (id in left) {
+            BodyLine("$name: you have left this league. You are owed ${CareerFinance.money(deal.toLong())} for the matches you played, paid when the season ends.")
+        } else if (state == null) {
+            BodyLine("$name: contract ${CareerFinance.money(deal.toLong())}. This league's season could not be found.")
+        } else if (CareerSeason.isComplete(state)) {
+            BodyLine("$name: contract ${CareerFinance.money(deal.toLong())}. The league is over, so the contract is paid when the season ends.")
+        } else {
+            val terms = CareerLeagues.leaveTerms(career, state)
+            BodyLine("$name: contract ${CareerFinance.money(deal.toLong())}. You have played ${terms.played} of ${terms.planned} league matches. If you leave now you are paid ${CareerFinance.money(terms.pay.toLong())}.")
+            if (confirm == id) {
+                BodyLine("Are you sure? You play no more matches in the $name.")
+                OptionButton("Yes, leave the $name", "You are paid ${CareerFinance.money(terms.pay.toLong())} when the season ends.", true, true) {
+                    result = onLeave(id)
+                    confirm = null
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                OptionButton("No, stay in the $name", "Keep your contract and your place.", true, false) { confirm = null }
+            } else {
+                OptionButton("Leave the $name", "End your contract; you are paid for the matches you played.", true, false) { confirm = id }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+    GroupHeading("Offers on the table")
+    val offers = career.leagueOffers.orEmpty()
+    if (offers.isEmpty()) BodyLine("No offers at the moment.")
+    offers.forEach { offer ->
+        BodyLine("${offer.teamName}, ${offer.leagueName}. ${offer.note}")
+        OptionButton("Turn down ${offer.teamName}", "Take this offer off the table.", true, false) {
+            onCareer(career.copy(leagueOffers = career.leagueOffers.orEmpty().filter { it.teamId != offer.teamId || it.leagueId != offer.leagueId }))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
