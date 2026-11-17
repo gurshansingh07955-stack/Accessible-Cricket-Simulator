@@ -77,6 +77,18 @@ fun MatchInfoScreen(
             modifier = Modifier.semantics { heading() }
         )
 
+        // Which fielding the user has chosen (Settings > Manual fielding). It is told here, on Match info, and not on the match screen, where it got in the way.
+        val fieldingMode = com.cricketsim.audio.LocalGameServices.current?.settings?.fieldingMode
+        if (fieldingMode != null && fieldingMode != com.cricketsim.audio.FieldingMode.AUTOMATIC) {
+            MatchInfoHeading("Fielding")
+            MatchInfoLine(
+                when (fieldingMode) {
+                    com.cricketsim.audio.FieldingMode.HALF_MANUAL -> "Half manual fielding: you take the catches."
+                    else -> "Full manual fielding: you take the catches, stop singles and doubles, stump and run out."
+                } + (if (state.careerPlayerId != null) " In career mode only the chances that come to your own player." else " Your team's chances are yours to take.")
+            )
+        }
+
         MatchInfoHeading("Teams")
         state.tournamentName?.let { MatchInfoLine("Tournament: $it.") }
         MatchInfoLine("${user.name} (your team) versus ${opponent.name}.")

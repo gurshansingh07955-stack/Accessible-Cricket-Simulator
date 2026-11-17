@@ -1241,16 +1241,6 @@ fun MatchScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Which fielding is on (Settings > Manual fielding), so it is clear at once that it is active in this match.
-        if (settings.fieldingMode != com.cricketsim.audio.FieldingMode.AUTOMATIC) {
-            Text(
-                text = "Fielding: ${settings.fieldingMode.label}." +
-                    (if (matchState.careerPlayerId != null) " In career mode only the chances that come to your own player." else " Your team's catches are yours to take."),
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
         // A no-ball makes the NEXT ball a free hit. Said here, before the player acts, for
         // both roles (the batter also hears it as the delivery is revealed).
         if (matchState.freeHit) {
