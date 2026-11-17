@@ -1,0 +1,31 @@
+{
+  "name": "Manual fielding line moved from the match screen to the Match info page",
+  "message": "The 'Fielding: Half/Full manual fielding' line no longer appears while you play. It is the first section of the Match info page.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+    "contains": "Which fielding the user has chosen"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        // Which fielding is on (Settings > Manual fielding), so it is clear at once that it is active in this match.\n        if (settings.fieldingMode != com.cricketsim.audio.FieldingMode.AUTOMATIC) {\n            Text(\n                text = \"Fielding: ${settings.fieldingMode.label}.\" +\n                    (if (matchState.careerPlayerId != null) \" In career mode only the chances that come to your own player.\" else \" Your team's catches are yours to take.\"),\n                style = MaterialTheme.typography.bodyMedium\n            )\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n\n",
+      "replace": "",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchInfoScreen.kt",
+      "find": "        MatchInfoHeading(\"Teams\")\n        state.tournamentName?.let { MatchInfoLine(\"Tournament: $it.\") }\n",
+      "replace": "        // Which fielding the user has chosen (Settings > Manual fielding). It is told here, on Match info, and not on the match screen, where it got in the way.\n        val fieldingMode = com.cricketsim.audio.LocalGameServices.current?.settings?.fieldingMode\n        if (fieldingMode != null && fieldingMode != com.cricketsim.audio.FieldingMode.AUTOMATIC) {\n            MatchInfoHeading(\"Fielding\")\n            MatchInfoLine(\n                when (fieldingMode) {\n                    com.cricketsim.audio.FieldingMode.HALF_MANUAL -> \"Half manual fielding: you take the catches.\"\n                    else -> \"Full manual fielding: you take the catches, stop singles and doubles, stump and run out.\"\n                } + (if (state.careerPlayerId != null) \" In career mode only the chances that come to your own player.\" else \" Your team's chances are yours to take.\")\n            )\n        }\n\n        MatchInfoHeading(\"Teams\")\n        state.tournamentName?.let { MatchInfoLine(\"Tournament: $it.\") }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "MANUAL_FIELDING.md",
+      "find": "**The 2-second window (patch 121):**",
+      "replace": "**Where the mode is told (patch 123):** on the Match info page, as its first section (\"Fielding\"), not on the match screen. The match screen shows nothing about it any more.\n\n**The 2-second window (patch 121):**",
+      "count": 1
+    }
+  ]
+}
