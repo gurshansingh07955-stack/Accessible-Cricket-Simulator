@@ -1,6 +1,6 @@
-Build run: 43992490802 (attempt 1)
-Commit: fe25916692ed98ff46b617371c6033bd217248d9
-Timestamp (UTC): 2026-11-17T01:05:34Z
+Build run: 44066701362 (attempt 1)
+Commit: a9aa69676fed5d3e37b5c909dc803016f0e5cb14
+Timestamp (UTC): 2026-11-17T10:40:48Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -21,9 +21,9 @@ Daemon will be stopped at the end of the build
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
-> Task :app:processDebugManifestForPackage
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
@@ -50,8 +50,8 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/logic/MatchEngine.kt:972:40 Elvis operator (?:) always returns the left operand of non-nullable type Int?
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/logic/TestMatch.kt:390:37 Parameter 'stadium' is never used
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/persistence/MatchSaveStore.kt:242:13 'when' is exhaustive so 'else' is redundant here
-w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt:358:77 Unnecessary safe call on a non-null receiver of type TournamentFixture?
-w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt:809:31 Condition 'next != null' is always 'true'
+w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt:381:77 Unnecessary safe call on a non-null receiver of type TournamentFixture?
+w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt:832:31 Condition 'next != null' is always 'true'
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt:618:9 Variable 'context' is never used
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/ipl/IplScreens.kt:287:87 Unnecessary safe call on a non-null receiver of type LotState?
 w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simulator/app/src/main/java/com/cricketsim/ui/match/BattingScreen.kt:274:5 Parameter 'batsman' is never used
@@ -70,7 +70,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1794877401307.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1794911938744.json
 
-BUILD SUCCESSFUL in 2m 17s
+BUILD SUCCESSFUL in 1m 53s
 37 actionable tasks: 37 executed
