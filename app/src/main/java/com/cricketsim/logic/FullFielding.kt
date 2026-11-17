@@ -77,21 +77,36 @@ object FullFielding {
     private fun stop(before: MatchState, result: BallResult): CatchChance? {
         val o = result.outcome
         if (o.runs !in 1..3 || o.isEdge == true || o.leftAlone || o.droppedCatch) return null
-        val shot = BattingSystem.getShotDirection(result.battingDecision.shot, result.battingDecision.intent) ?: return null
-        if (shot.isAerial) return null
+        // EVERY scoring ball that is not an edge can be stopped: a drive or a glance along the ground, a lofted shot that landed safe, and also a push or a
+        // block that ran for a single (patch 119 offered it only for a ground shot with a direction, which left out most of the computer's singles).
+        val shot = BattingSystem.getShotDirection(result.battingDecision.shot, result.battingDecision.intent)
         val keeperId = keeperOf(before.bowlingTeam)?.id
         val placed = before.fieldPlacements.filter { it.playerId.isNotEmpty() && it.playerId != before.currentBowler.id && it.playerId != keeperId }
-        val inSector = placed.filter { it.sector == shot.sector }
-        val pick = inSector.firstOrNull { it.depth != FieldingDepth.DEEP }
-            ?: inSector.firstOrNull()
-            ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, shot.sector) }
-            ?: return null
+        if (placed.isEmpty()) return null
+        val sector = shot?.sector
+        val pick = (if (sector == null) {
+            // A push or a block that ran for runs: a fielder close in front of the bat, else the one nearest mid-on.
+            placed.firstOrNull { it.depth == FieldingDepth.CLOSE }
+                ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, FieldingSector.MID_ON) }
+        } else {
+            val inSector = placed.filter { it.sector == sector }
+            val here = if (shot.isAerial) {
+                inSector.firstOrNull { it.depth == FieldingDepth.DEEP } ?: inSector.firstOrNull()
+            } else {
+                inSector.firstOrNull { it.depth != FieldingDepth.DEEP } ?: inSector.firstOrNull()
+            }
+            here ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, sector) }
+        }) ?: return null
         val fielder = before.bowlingTeam.players.find { it.id == pick.playerId } ?: return null
-        val gap = FieldingSystem.sectorSignedGapDegrees(pick.sector, shot.sector)
-        val direction = when {
-            abs(gap) <= STRAIGHT_CONE_DEGREES -> CatchDirection.STRAIGHT
-            gap < 0 -> CatchDirection.LEFT
-            else -> CatchDirection.RIGHT
+        val direction = if (sector == null) {
+            CatchDirection.STRAIGHT
+        } else {
+            val gap = FieldingSystem.sectorSignedGapDegrees(pick.sector, sector)
+            when {
+                abs(gap) <= STRAIGHT_CONE_DEGREES -> CatchDirection.STRAIGHT
+                gap < 0 -> CatchDirection.LEFT
+                else -> CatchDirection.RIGHT
+            }
         }
         val interval = maxOf(SHORTEST_INTERVAL_MS, BattingSystem.computeTimingIntervalMs(result.bowlingDecision.speedKmh) * shotFactor(result.battingDecision.timingTier))
         val pulses = 3 + (if (pick.depth == FieldingDepth.DEEP) 1 else 0)
