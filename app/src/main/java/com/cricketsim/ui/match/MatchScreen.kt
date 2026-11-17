@@ -304,6 +304,8 @@ fun MatchScreen(
     var pendingAppeal by remember { mutableStateOf<PendingAppeal?>(null) }
     // A catch on its way to one of the user's fielders, waiting for his swipe (ManualFieldingScreens.kt, manual fielding).
     var pendingCatch by remember { mutableStateOf<PendingCatch?>(null) }
+    // A ball the user is batting that is worth runs, waiting for his decision to run or stay (RunScreens.kt, running between the wickets).
+    var pendingRun by remember { mutableStateOf<PendingRun?>(null) }
     // Career mode: "Skip to my turn" is on (the game plays the balls that are not the player's by itself). It is declared here, before the ball logic that reads it.
     var skipping by remember { mutableStateOf(false) }
     var showImpactUse by remember { mutableStateOf(false) }
@@ -588,6 +590,22 @@ fun MatchScreen(
         return chance
     }
 
+    // RUNNING BETWEEN THE WICKETS: is this ball for the user to run on? Only when his team is batting and Settings > Running between the wickets is on. In career mode
+    // only when his player is at the crease: on strike he decides the runs himself, as the non-striker he accepts or refuses his partner's call. "Skip to my turn" does not ask.
+    fun runChanceFor(before: MatchState, simulated: BallResult): com.cricketsim.logic.RunChance? {
+        if (!settings.manualRunning) return null
+        if (before.battingTeam.id != before.userTeam.id) return null
+        var partnerCall = false
+        val careerPid = before.careerPlayerId
+        if (careerPid != null) {
+            if (skipping) return null
+            if (before.currentBatsmen.first.id == careerPid) partnerCall = false
+            else if (before.currentBatsmen.second.id == careerPid) partnerCall = true
+            else return null
+        }
+        return com.cricketsim.logic.RunDecisions.build(before, simulated, partnerCall)
+    }
+
     // AUTOMATIC FIELDING: the fielder (the computer's, or the user's when he fields automatically) may put the catch down: the same ball, no wicket.
     fun autoDropped(before: MatchState, simulated: BallResult): BallResult {
         val dropped = com.cricketsim.logic.CatchDrops.autoDrop(before, simulated) ?: return simulated
@@ -622,6 +640,12 @@ fun MatchScreen(
             val chance = manualCatchFor(before, simulated)
             if (chance != null) {
                 pendingCatch = PendingCatch(before, simulated, chance)
+                return
+            }
+            // A ball the user can run on: stop here, and come back with the ball once he has decided.
+            val run = runChanceFor(before, simulated)
+            if (run != null) {
+                pendingRun = PendingRun(before, simulated, run)
                 return
             }
         }
@@ -676,12 +700,12 @@ fun MatchScreen(
     // CAREER MODE: when it is not the player's turn to bat (he is not on strike) or to bowl (he is not the bowler), the game plays the ball
     // for his team by itself, a pause between balls so each one can be heard; "Skip to my turn" shortens the pause until his turn comes.
     LaunchedEffect(
-        matchState, matchOver, pendingAppeal, pendingCatch, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
+        matchState, matchOver, pendingAppeal, pendingCatch, pendingRun, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
         confirmingDeclare, showImpactUse, surgeNotice, showPitchingScreen, showBattingScreen, showFieldScreen, showChangeBowler, skipping
     ) {
         val pid = matchState.careerPlayerId ?: return@LaunchedEffect
         val s = matchState
-        if (matchOver || pendingAppeal != null || pendingCatch != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
+        if (matchOver || pendingAppeal != null || pendingCatch != null || pendingRun != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
             confirmingLeave || confirmingDeclare || showImpactUse || surgeNotice != null || showPitchingScreen || showBattingScreen ||
             showFieldScreen || showChangeBowler
         ) return@LaunchedEffect
@@ -810,6 +834,30 @@ fun MatchScreen(
                     }
                 }
 
+            }
+        )
+        return
+    }
+
+    // A run for the user to take (running between the wickets): the phone says where the ball went and who is closing in, then he swipes up (run) or down (stay) within five seconds.
+    val runNow = pendingRun
+    if (runNow != null) {
+        RunDecisionScreen(
+            chance = runNow.chance,
+            onDone = { verdict ->
+                pendingRun = null
+                val before = runNow.before
+                val original = runNow.result
+                val changed = com.cricketsim.logic.RunDecisions.finalOutcome(before, runNow.chance, original.outcome, verdict)
+                if (changed == null) {
+                    advanceOneBall(preResult = original)
+                } else {
+                    advanceOneBall(
+                        preResult = MatchSimulation.simulateOneBall(
+                            before, stadium, settings.difficulty, original.bowlingDecision, original.battingDecision, outcomeOverride = changed
+                        )
+                    )
+                }
             }
         )
         return
@@ -1435,6 +1483,9 @@ private class PendingAppeal(val before: MatchState, val result: BallResult, val 
 
 /** A catch waiting for the user's swipe: the state before the ball, the ball as simulated (a wicket), and the chance he is given. */
 private class PendingCatch(val before: MatchState, val result: BallResult, val chance: com.cricketsim.logic.CatchChance)
+
+/** A ball the user bats that is worth runs, waiting for his decision: the state before it, the ball as simulated, and what he is told about it. */
+private class PendingRun(val before: MatchState, val result: BallResult, val chance: com.cricketsim.logic.RunChance)
 
 /**
  * The single control that both starts the next ball AND commits

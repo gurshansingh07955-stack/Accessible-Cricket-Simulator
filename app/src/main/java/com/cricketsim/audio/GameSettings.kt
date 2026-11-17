@@ -48,7 +48,9 @@ data class GameSettings(
     val faceNextBall: Boolean = true,
     val autoBowlSeconds: Int = 10,
     // Manual fielding: who takes the catches (and, later, stops the ball and stumps).
-    val fieldingMode: FieldingMode = FieldingMode.AUTOMATIC
+    val fieldingMode: FieldingMode = FieldingMode.AUTOMATIC,
+    // Running between the wickets: on = the user decides each run when he bats (swipe up / down, five seconds); off = the computer decides, as before.
+    val manualRunning: Boolean = true
 )
 
 class SettingsStore(context: Context) {
@@ -67,7 +69,8 @@ class SettingsStore(context: Context) {
             menuBatting = prefs.getBoolean(KEY_MENU_BATTING, defaults.menuBatting),
             faceNextBall = prefs.getBoolean(KEY_FACE_NEXT_BALL, defaults.faceNextBall),
             autoBowlSeconds = prefs.getInt(KEY_AUTO_BOWL_SECONDS, defaults.autoBowlSeconds).coerceIn(5, 30),
-            fieldingMode = readEnum(KEY_FIELDING_MODE, defaults.fieldingMode)
+            fieldingMode = readEnum(KEY_FIELDING_MODE, defaults.fieldingMode),
+            manualRunning = prefs.getBoolean(KEY_MANUAL_RUNNING, defaults.manualRunning)
         )
     }
 
@@ -84,6 +87,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_FACE_NEXT_BALL, settings.faceNextBall)
             .putInt(KEY_AUTO_BOWL_SECONDS, settings.autoBowlSeconds)
             .putString(KEY_FIELDING_MODE, settings.fieldingMode.name)
+            .putBoolean(KEY_MANUAL_RUNNING, settings.manualRunning)
             .apply()
     }
 
@@ -107,5 +111,6 @@ class SettingsStore(context: Context) {
         const val KEY_FACE_NEXT_BALL = "face_next_ball"
         const val KEY_AUTO_BOWL_SECONDS = "auto_bowl_seconds"
         const val KEY_FIELDING_MODE = "fielding_mode"
+        const val KEY_MANUAL_RUNNING = "manual_running"
     }
 }

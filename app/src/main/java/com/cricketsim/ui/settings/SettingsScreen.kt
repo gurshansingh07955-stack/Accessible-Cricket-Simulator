@@ -193,6 +193,26 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
 
+        SectionHeading("Running between the wickets")
+        Text(
+            "When you bat, your phone's own voice tells you where the ball went and who is closing in on it. Swipe up with two fingers to run, down to stay; no swipe in five seconds means no run. After a run it tells you where the ball and the fielder are and you may go again. In career mode, when you are the non-striker, you accept or refuse your partner's calls.",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Column(modifier = Modifier.selectableGroup()) {
+            RadioRow(
+                label = "You decide the runs",
+                description = "You choose every run. Taking more than the shot is worth is risky.",
+                selected = settings.manualRunning,
+                onSelect = { services.update { it.copy(manualRunning = true) } }
+            )
+            RadioRow(
+                label = "The computer decides the runs",
+                description = "The runs are worked out for you, as they always were.",
+                selected = !settings.manualRunning,
+                onSelect = { services.update { it.copy(manualRunning = false) } }
+            )
+        }
+
         SectionHeading("Voice commentary")
         Text(
             "Pre-recorded commentators react to what happens in the match.",

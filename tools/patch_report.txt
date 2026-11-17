@@ -1,8 +1,6 @@
-Patch run: 44066667956
-Timestamp (UTC): 2026-11-17T10:38:26Z
+Patch run: 44116241550
+Timestamp (UTC): 2026-11-17T15:36:30Z
 Result: OK
 -----
-Patch 2026-11-17-124-career-state-captaincy-and-points-list.json
-  applied 16 operation(s) to 8 file(s)
-Patch 2026-11-17-125-career-league-contracts.json
-  applied 11 operation(s) to 6 file(s)
+Patch 2026-11-17-126-running-between-the-wickets.json
+  applied 15 operation(s) to 6 file(s)
