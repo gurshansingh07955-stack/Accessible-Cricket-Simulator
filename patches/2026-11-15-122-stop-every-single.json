@@ -1,0 +1,24 @@
+{
+  "name": "Full manual fielding: a stop chance on every single, two or three the computer scores (not only ground shots)",
+  "message": "In Full manual fielding you now get a stop chance on every ball the computer scores 1, 2 or 3 runs off (except edges), including pushes, blocks and lofted shots that landed safe.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/FullFielding.kt",
+    "contains": "EVERY scoring ball that is not an edge"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/FullFielding.kt",
+      "find": "        if (o.runs !in 1..3 || o.isEdge == true || o.leftAlone || o.droppedCatch) return null\n        val shot = BattingSystem.getShotDirection(result.battingDecision.shot, result.battingDecision.intent) ?: return null\n        if (shot.isAerial) return null\n        val keeperId = keeperOf(before.bowlingTeam)?.id\n        val placed = before.fieldPlacements.filter { it.playerId.isNotEmpty() && it.playerId != before.currentBowler.id && it.playerId != keeperId }\n        val inSector = placed.filter { it.sector == shot.sector }\n        val pick = inSector.firstOrNull { it.depth != FieldingDepth.DEEP }\n            ?: inSector.firstOrNull()\n            ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, shot.sector) }\n            ?: return null\n        val fielder = before.bowlingTeam.players.find { it.id == pick.playerId } ?: return null\n        val gap = FieldingSystem.sectorSignedGapDegrees(pick.sector, shot.sector)\n        val direction = when {\n            abs(gap) <= STRAIGHT_CONE_DEGREES -> CatchDirection.STRAIGHT\n            gap < 0 -> CatchDirection.LEFT\n            else -> CatchDirection.RIGHT\n        }\n",
+      "replace": "        if (o.runs !in 1..3 || o.isEdge == true || o.leftAlone || o.droppedCatch) return null\n        // EVERY scoring ball that is not an edge can be stopped: a drive or a glance along the ground, a lofted shot that landed safe, and also a push or a\n        // block that ran for a single (patch 119 offered it only for a ground shot with a direction, which left out most of the computer's singles).\n        val shot = BattingSystem.getShotDirection(result.battingDecision.shot, result.battingDecision.intent)\n        val keeperId = keeperOf(before.bowlingTeam)?.id\n        val placed = before.fieldPlacements.filter { it.playerId.isNotEmpty() && it.playerId != before.currentBowler.id && it.playerId != keeperId }\n        if (placed.isEmpty()) return null\n        val sector = shot?.sector\n        val pick = (if (sector == null) {\n            // A push or a block that ran for runs: a fielder close in front of the bat, else the one nearest mid-on.\n            placed.firstOrNull { it.depth == FieldingDepth.CLOSE }\n                ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, FieldingSector.MID_ON) }\n        } else {\n            val inSector = placed.filter { it.sector == sector }\n            val here = if (shot.isAerial) {\n                inSector.firstOrNull { it.depth == FieldingDepth.DEEP } ?: inSector.firstOrNull()\n            } else {\n                inSector.firstOrNull { it.depth != FieldingDepth.DEEP } ?: inSector.firstOrNull()\n            }\n            here ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, sector) }\n        }) ?: return null\n        val fielder = before.bowlingTeam.players.find { it.id == pick.playerId } ?: return null\n        val direction = if (sector == null) {\n            CatchDirection.STRAIGHT\n        } else {\n            val gap = FieldingSystem.sectorSignedGapDegrees(pick.sector, sector)\n            when {\n                abs(gap) <= STRAIGHT_CONE_DEGREES -> CatchDirection.STRAIGHT\n                gap < 0 -> CatchDirection.LEFT\n                else -> CatchDirection.RIGHT\n            }\n        }\n",
+      "count": 1
+    },
+    {
+      "op": "replace",
+      "file": "MANUAL_FIELDING.md",
+      "find": "- **Stop** (Full): a ball hit along the ground (not an edge) that the computer scored **1, 2 or 3** runs off. The fielder nearest to it in the shot's direction (not the keeper or the bowler) is yours:",
+      "replace": "- **Stop** (Full): **every ball the computer scores 1, 2 or 3 runs off, except an edge** (a drive or a glance along the ground, a lofted shot that landed safe, a push or a block that ran for a single; patch 119 left out the pushes, the blocks and the lofted shots). The fielder nearest to it in the shot's direction (not the keeper or the bowler; for a push, a fielder close in front of the bat) is yours:",
+      "count": 1
+    }
+  ]
+}
