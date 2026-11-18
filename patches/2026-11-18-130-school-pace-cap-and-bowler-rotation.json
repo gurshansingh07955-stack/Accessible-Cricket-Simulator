@@ -1,0 +1,52 @@
+{
+  "name": "School pace cap (new careers) and the computer's bowling changes",
+  "message": "School bowling in a career made after this update stays between 110 and 135 km/h (your own bowler and the computer's). The computer no longer bowls the same bowler over after over when its side has few bowlers: part-timers share the overs.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/BowlingSystem.kt",
+    "contains": "paceCapKmh"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BowlingSystem.kt",
+      "find": "    fun getSpeedRangeForVariation(style: BowlingStyle, variation: BowlingVariation): SpeedRangeKmh {\n        val options = getVariationOptions(style)\n        val found = options.find { it.value == variation }\n        return found?.speedRangeKmh ?: if (style == BowlingStyle.SPIN) SPIN_SPEED_RANGE else PACE_STOCK_SPEED_RANGE\n    }",
+      "replace": "    /**\n     * School cricket on a new career (patch 130): the fastest a ball can be bowled, for the user's own bowling and the computer's. Null = no limit.\n     * MatchScreen sets it for the match it plays (a school match of a career made after this patch) and clears it when it goes. Only pace balls are touched:\n     * spin never goes above 105.\n     */\n    @Volatile\n    var paceCapKmh: Int? = null\n\n    private fun capSpeedRange(range: SpeedRangeKmh): SpeedRangeKmh {\n        val cap = paceCapKmh ?: return range\n        return SpeedRangeKmh(minOf(range.min, cap), minOf(range.max, cap))\n    }\n\n    fun getSpeedRangeForVariation(style: BowlingStyle, variation: BowlingVariation): SpeedRangeKmh {\n        val options = getVariationOptions(style)\n        val found = options.find { it.value == variation }\n        return capSpeedRange(found?.speedRangeKmh ?: if (style == BowlingStyle.SPIN) SPIN_SPEED_RANGE else PACE_STOCK_SPEED_RANGE)\n    }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchState.kt",
+      "find": "        val underCap = state.bowlingTeam.players\n            .filter { it.role == PlayerRole.BOWLER || it.role == PlayerRole.ALL_ROUNDER }\n            .filter { oversBowledBy(state, it.id) < maxOvers }\n\n        if (noBallsBowledYet) return underCap\n\n        val excludingCurrent = underCap.filter { it.id != state.currentBowler.id }\n        // Fallback: if excluding the current bowler leaves nobody (very\n        // small bowling attack), allow reusing them rather than\n        // returning an empty list.\n        return excludingCurrent.ifEmpty { underCap }",
+      "replace": "        val team = state.bowlingTeam\n        val real = team.players.filter { it.role == PlayerRole.BOWLER || it.role == PlayerRole.ALL_ROUNDER }\n        // Patch 130: every bowler is limited to maxOvers, so the side needs enough bowlers to share the innings (five in a T20). A side with fewer real bowlers\n        // (some squads, such as the smaller Asian Games teams, have two or three) uses its best part-timers for the rest, instead of running out of bowlers and\n        // sending the same one down over after over. Wicketkeepers are the last resort.\n        val needed = if (maxOvers >= 999) 4 else (state.oversLimit + maxOvers - 1) / maxOvers\n        val partTimers = if (real.size >= needed) emptyList() else\n            team.players.filter { it !in real && it.role != PlayerRole.WICKETKEEPER }.sortedByDescending { it.bowlingRating }.take(needed - real.size)\n        val underCap = (real + partTimers).filter { oversBowledBy(state, it.id) < maxOvers }\n\n        if (noBallsBowledYet) return underCap.ifEmpty { team.players.filter { oversBowledBy(state, it.id) < maxOvers } }\n\n        val excludingCurrent = underCap.filter { it.id != state.currentBowler.id }\n        if (excludingCurrent.isNotEmpty()) return excludingCurrent\n        // Nobody left among them: anyone else under the cap who did not bowl the last over (a wicketkeeper only if there is no one else); only if there is\n        // truly nobody, the last bowler again.\n        val anyoneElse = team.players.filter { oversBowledBy(state, it.id) < maxOvers && it.id != state.currentBowler.id }\n        return anyoneElse.filter { it.role != PlayerRole.WICKETKEEPER }.ifEmpty { anyoneElse }.ifEmpty { underCap }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val leftLeagues: List<String>? = null\n) {",
+      "replace": "    val leftLeagues: List<String>? = null,\n    // Patch 130: true for a career made after the school pace limit existed (school bowling stays at or under 135 km/h); an older career has no value and keeps the old speeds.\n    val schoolPaceCap: Boolean? = null\n) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "            homeClubSaved = if (stage.isEmpty()) \"\" else clubName ?: \"\"\n        )",
+      "replace": "            homeClubSaved = if (stage.isEmpty()) \"\" else clubName ?: \"\",\n            schoolPaceCap = true\n        )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    careerCaptain: Boolean = false\n) {\n    val services = LocalGameServices.current",
+      "replace": "    careerCaptain: Boolean = false,\n    /** School cricket on a new career: no pace ball faster than this (km/h), for the user's bowling and the computer's. Null = no limit. */\n    maxPaceKmh: Int? = null\n) {\n    // Set for this match and cleared when the screen goes (BowlingSystem.paceCapKmh).\n    remember(maxPaceKmh) { com.cricketsim.logic.BowlingSystem.paceCapKmh = maxPaceKmh }\n    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.cricketsim.logic.BowlingSystem.paceCapKmh = null } }\n    val services = LocalGameServices.current"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                        careerCaptain = CareerSeason.captainIn(career, state),\n                        powerSurge = state.tournamentId == BigBashLeague.TOURNAMENT_ID,",
+      "replace": "                        careerCaptain = CareerSeason.captainIn(career, state),\n                        maxPaceKmh = if (career.stage == \"School\" && career.schoolPaceCap == true) 135 else null,\n                        powerSurge = state.tournamentId == BigBashLeague.TOURNAMENT_ID,"
+    },
+    {
+      "op": "write",
+      "file": "SCHOOL_PACE_AND_BOWLER_ROTATION.md",
+      "content": "# School bowling speed and the computer's bowling changes (patch 130)\n\n**School pace limit (new careers only).** `CareerProfile.schoolPaceCap` is set to true when a career is created (an older career has no value and keeps the old speeds). While such a career is in its **School** years, `MatchScreen(maxPaceKmh = 135)` sets `BowlingSystem.paceCapKmh`, and every pace ball, the user's own (the speed slider) and the computer's, stays between the stock minimum and **135 km/h** (the stock range 110 to 159 becomes 110 to 135, a cutter 115 to 135; the slower balls and every spin ball are below it already). College and later are as before. The cap is `135` in `CareerHubScreens.kt` (one number). Read from the message \"over 140... keep it at 110 to 135\"; tell me if you meant other numbers.\n\n**The computer's bowling changes** (`MatchStateMachine.getEligibleBowlers`). Only bowlers and all-rounders could bowl, each for at most a fifth of the innings (4 overs in a T20), so a side with two or three of them ran out after eight or twelve overs and the computer kept the last bowler on (back to back, and beyond his overs). Now a side with fewer real bowlers than the overs need (5 in a T20, 10 overs each in an ODI means 5, and so on) adds its best bowling ratings among the other players as part-timers from the start, so the overs are shared; a bowler never bowls two overs running while anyone else is under the cap (a wicketkeeper last of all). This also applies to the user's own choice list in a match like that. Computer against computer matches use the same rule.\n",
+      "mustNotExist": true
+    }
+  ]
+}
