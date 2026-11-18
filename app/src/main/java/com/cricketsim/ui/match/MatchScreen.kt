@@ -209,8 +209,13 @@ fun MatchScreen(
     /** Career mode: the player who takes over only his own batting and bowling (everything else is played for him). Null = the user plays the whole team. */
     careerPlayerId: String? = null,
     /** Career mode: the player is the captain, so he also makes the team decisions (XI, toss, bowlers, field, batting order). */
-    careerCaptain: Boolean = false
+    careerCaptain: Boolean = false,
+    /** School cricket on a new career: no pace ball faster than this (km/h), for the user's bowling and the computer's. Null = no limit. */
+    maxPaceKmh: Int? = null
 ) {
+    // Set for this match and cleared when the screen goes (BowlingSystem.paceCapKmh).
+    remember(maxPaceKmh) { com.cricketsim.logic.BowlingSystem.paceCapKmh = maxPaceKmh }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.cricketsim.logic.BowlingSystem.paceCapKmh = null } }
     val services = LocalGameServices.current
     val matchContext = LocalContext.current
     val settings = services?.settings ?: GameSettings()
@@ -844,6 +849,7 @@ fun MatchScreen(
     if (runNow != null) {
         RunDecisionScreen(
             chance = runNow.chance,
+            byButtons = settings.runByButtons,
             onDone = { verdict ->
                 pendingRun = null
                 val before = runNow.before

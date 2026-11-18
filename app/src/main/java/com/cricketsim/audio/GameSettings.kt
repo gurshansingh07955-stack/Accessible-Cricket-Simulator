@@ -50,7 +50,9 @@ data class GameSettings(
     // Manual fielding: who takes the catches (and, later, stops the ball and stumps).
     val fieldingMode: FieldingMode = FieldingMode.AUTOMATIC,
     // Running between the wickets: on = the user decides each run when he bats (swipe up / down, five seconds); off = the computer decides, as before.
-    val manualRunning: Boolean = false
+    val manualRunning: Boolean = false,
+    // How the user answers a running decision: false = two-finger swipes, true = Run / Stay buttons (only the chosen way is on the screen).
+    val runByButtons: Boolean = false
 )
 
 class SettingsStore(context: Context) {
@@ -70,7 +72,8 @@ class SettingsStore(context: Context) {
             faceNextBall = prefs.getBoolean(KEY_FACE_NEXT_BALL, defaults.faceNextBall),
             autoBowlSeconds = prefs.getInt(KEY_AUTO_BOWL_SECONDS, defaults.autoBowlSeconds).coerceIn(5, 30),
             fieldingMode = readEnum(KEY_FIELDING_MODE, defaults.fieldingMode),
-            manualRunning = prefs.getBoolean(KEY_MANUAL_RUNNING, defaults.manualRunning)
+            manualRunning = prefs.getBoolean(KEY_MANUAL_RUNNING, defaults.manualRunning),
+            runByButtons = prefs.getBoolean(KEY_RUN_BY_BUTTONS, defaults.runByButtons)
         )
     }
 
@@ -88,6 +91,7 @@ class SettingsStore(context: Context) {
             .putInt(KEY_AUTO_BOWL_SECONDS, settings.autoBowlSeconds)
             .putString(KEY_FIELDING_MODE, settings.fieldingMode.name)
             .putBoolean(KEY_MANUAL_RUNNING, settings.manualRunning)
+            .putBoolean(KEY_RUN_BY_BUTTONS, settings.runByButtons)
             .apply()
     }
 
@@ -112,5 +116,6 @@ class SettingsStore(context: Context) {
         const val KEY_AUTO_BOWL_SECONDS = "auto_bowl_seconds"
         const val KEY_FIELDING_MODE = "fielding_mode"
         const val KEY_MANUAL_RUNNING = "manual_running"
+        const val KEY_RUN_BY_BUTTONS = "run_by_buttons"
     }
 }

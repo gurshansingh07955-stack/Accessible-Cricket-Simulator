@@ -278,10 +278,23 @@ object BowlingSystem {
     fun getVariationOptions(style: BowlingStyle): List<VariationInfo> =
         if (style == BowlingStyle.SPIN) SPIN_VARIATIONS else PACE_VARIATIONS
 
+    /**
+     * School cricket on a new career (patch 130): the fastest a ball can be bowled, for the user's own bowling and the computer's. Null = no limit.
+     * MatchScreen sets it for the match it plays (a school match of a career made after this patch) and clears it when it goes. Only pace balls are touched:
+     * spin never goes above 105.
+     */
+    @Volatile
+    var paceCapKmh: Int? = null
+
+    private fun capSpeedRange(range: SpeedRangeKmh): SpeedRangeKmh {
+        val cap = paceCapKmh ?: return range
+        return SpeedRangeKmh(minOf(range.min, cap), minOf(range.max, cap))
+    }
+
     fun getSpeedRangeForVariation(style: BowlingStyle, variation: BowlingVariation): SpeedRangeKmh {
         val options = getVariationOptions(style)
         val found = options.find { it.value == variation }
-        return found?.speedRangeKmh ?: if (style == BowlingStyle.SPIN) SPIN_SPEED_RANGE else PACE_STOCK_SPEED_RANGE
+        return capSpeedRange(found?.speedRangeKmh ?: if (style == BowlingStyle.SPIN) SPIN_SPEED_RANGE else PACE_STOCK_SPEED_RANGE)
     }
 
     // ============================================================

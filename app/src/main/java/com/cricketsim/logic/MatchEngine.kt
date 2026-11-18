@@ -685,7 +685,8 @@ object MatchEngine {
         // not the batter's runs and not charged to the bowler; extraRuns carries them, so the team's score and the partnership count them.
         var byes = 0
         var legByes = 0
-        if (BYES_ENABLED && outcomeType == "dot" && !isWicket && !isWide && !isNoBall && !noBallCalled && matchState.superOverRound == 0) {
+        // (Patch 129: also on a no-ball, where the penalty run stays the bowler's and the byes are not, and in a Super Over.)
+        if (BYES_ENABLED && outcomeType == "dot" && !isWicket && !isWide) {
             val ballsInMatch = if (matchState.format == MatchFormat.TEST) 1500.0 else 2.0 * 6.0 * minOf(matchState.oversLimit, 90)
             val perBall = (BYES_PER_MATCH / ballsInMatch).coerceIn(0.0008, 0.02)
             if (Random.nextDouble() < perBall / BYE_DOT_SHARE) {
@@ -698,7 +699,7 @@ object MatchEngine {
                 val legSide = bowlingDecision.line == BowlingLine.LEG_STUMP || bowlingDecision.line == BowlingLine.OUTSIDE_LEG
                 val legBye = !leftAlone && Random.nextDouble() < (if (legSide) 0.65 else 0.4)
                 if (legBye) legByes = taken else byes = taken
-                extraRuns = taken
+                extraRuns += taken
             }
         }
 
@@ -726,7 +727,7 @@ object MatchEngine {
             generateCommentary(result, outBatterName ?: batsman.name, bowler.name)
         }
         // A no-ball is announced first; if the batter also hit it, what he did follows.
-        val commentary = if (noBallText == null) playText else if (runs == 0) noBallText else "$noBallText $playText"
+        val commentary = if (noBallText == null) playText else if (runs == 0 && byes + legByes == 0) noBallText else "$noBallText $playText"
         return result.copy(commentary = commentary)
     }
 

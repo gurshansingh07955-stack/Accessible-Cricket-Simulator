@@ -50,12 +50,13 @@ private val RUN_SWIPE_THRESHOLD_DP = 24.dp
 /**
  * Running between the wickets (patch 126), a full-screen page that comes by itself when the user is batting and the ball is worth runs (RunDecisions).
  *  1. The phone's own voice (always on, with or without TalkBack) says where the ball went, who is closing in and what to do.
- *  2. Five seconds (counted from the end of the voice) to swipe UP with two fingers (run) or DOWN (stay); no swipe = no run. "Run" and "Stay" buttons do the same.
- *  3. The answer is spoken ("Yes!" / "No!"), then after a run the runs completed and where the ball and the fielder are, and the next decision.
+ *  2. Five seconds (counted from the end of the voice) to answer: swipe UP with two fingers (run) or DOWN (stay), or, when Settings > Running between the
+ *     wickets > "Buttons on the screen" is chosen (patch 129, [byButtons]), press Run or Stay. The two ways are never both on the screen. No answer = no run.
+ *  3. The answer is spoken ("Yes!" / "No!" in recorded voices), then after a run the runs completed and where the ball and the fielder are, and the next decision.
  * A run out, a refusal, the last run he may take or a timeout ends the page with the runs completed ([RunVerdict]).
  */
 @Composable
-fun RunDecisionScreen(chance: RunChance, onDone: (RunVerdict) -> Unit) {
+fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (RunVerdict) -> Unit) {
     val services = LocalGameServices.current
     val sound = services?.sound
     val scope = rememberCoroutineScope()
@@ -64,7 +65,7 @@ fun RunDecisionScreen(chance: RunChance, onDone: (RunVerdict) -> Unit) {
     var finished by remember(chance) { mutableStateOf(false) }
     var deciding by remember(chance) { mutableStateOf(false) }
     var secondsLeft by remember(chance) { mutableStateOf(0) }
-    var shown by remember(chance) { mutableStateOf(RunDecisions.opening(chance)) }
+    var shown by remember(chance) { mutableStateOf(RunDecisions.opening(chance, byButtons)) }
     val random = remember(chance) { kotlin.random.Random.Default }
 
     suspend fun say(text: String) {
@@ -119,7 +120,7 @@ fun RunDecisionScreen(chance: RunChance, onDone: (RunVerdict) -> Unit) {
             }
             val n = completed + 1
             if (n >= RunDecisions.maxRunsFor(chance)) {
-                val line = RunDecisions.afterRun(chance, n, true)
+                val line = RunDecisions.afterRun(chance, n, true, byButtons)
                 shown = line
                 say(line)
                 conclude(n, false)
@@ -135,7 +136,7 @@ fun RunDecisionScreen(chance: RunChance, onDone: (RunVerdict) -> Unit) {
 
     LaunchedEffect(chance, completed) {
         if (finished) return@LaunchedEffect
-        val text = if (completed == 0) RunDecisions.opening(chance) else RunDecisions.afterRun(chance, completed, false)
+        val text = if (completed == 0) RunDecisions.opening(chance, byButtons) else RunDecisions.afterRun(chance, completed, false, byButtons)
         shown = text
         secondsLeft = 0
         say(text)
@@ -149,23 +150,30 @@ fun RunDecisionScreen(chance: RunChance, onDone: (RunVerdict) -> Unit) {
         decide(false, true)
     }
 
+    // Swipes only when he chose gestures; with buttons chosen the page ignores touches outside the buttons.
+    val swipeModifier = if (byButtons) Modifier else Modifier.pointerInput(chance) {
+        detectRunSwipe(RUN_SWIPE_THRESHOLD_DP.toPx()) { direction ->
+            when (direction) {
+                IntentDirection.UP -> decide(true, false)
+                IntentDirection.DOWN -> decide(false, false)
+                else -> Unit
+            }
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(chance) {
-                    detectRunSwipe(RUN_SWIPE_THRESHOLD_DP.toPx()) { direction ->
-                        when (direction) {
-                            IntentDirection.UP -> decide(true, false)
-                            IntentDirection.DOWN -> decide(false, false)
-                            else -> Unit
-                        }
-                    }
-                }
+                .then(swipeModifier)
                 .semantics {
-                    contentDescription = if (chance.partnerCall) "Your partner calls for a run. Swipe up with two fingers to accept, down with two fingers to refuse."
-                    else "Running decision. Swipe up with two fingers to run, down with two fingers to stay."
+                    contentDescription = when {
+                        byButtons && chance.partnerCall -> "Your partner calls for a run. Choose Accept the run or Refuse the run."
+                        byButtons -> "Running decision. Choose Run or Stay."
+                        chance.partnerCall -> "Your partner calls for a run. Swipe up with two fingers to accept, down with two fingers to refuse."
+                        else -> "Running decision. Swipe up with two fingers to run, down with two fingers to stay."
+                    }
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -181,16 +189,18 @@ fun RunDecisionScreen(chance: RunChance, onDone: (RunVerdict) -> Unit) {
                 Text(if (secondsLeft > 0) "Time left: $secondsLeft" else "", style = MaterialTheme.typography.headlineSmall)
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(
-            onClick = { decide(true, false) },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
-        ) { Text(if (chance.partnerCall) "Accept the run" else "Run") }
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedButton(
-            onClick = { decide(false, false) },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
-        ) { Text(if (chance.partnerCall) "Refuse the run" else "Stay, no run") }
+        if (byButtons) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { decide(true, false) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            ) { Text(if (chance.partnerCall) "Accept the run" else "Run") }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { decide(false, false) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            ) { Text(if (chance.partnerCall) "Refuse the run" else "Stay, no run") }
+        }
     }
 }
 

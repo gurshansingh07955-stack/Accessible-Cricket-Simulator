@@ -241,7 +241,7 @@ object AiBallModel {
         }
 
         // Byes and leg byes (patch 128): about MatchEngine.BYES_PER_MATCH a match, made out of balls that would have been dots.
-        if (MatchEngine.BYES_ENABLED && index == 0 && !noBall && state.superOverRound == 0) {
+        if (MatchEngine.BYES_ENABLED && index == 0 && !noBall) {
             val matchBalls = if (test) 1500.0 else 2.0 * 6.0 * minOf(state.oversLimit, 90)
             val perDot = (MatchEngine.BYES_PER_MATCH / matchBalls).coerceIn(0.0008, 0.02) / MatchEngine.BYE_DOT_SHARE
             if (random.nextDouble() < perDot) {

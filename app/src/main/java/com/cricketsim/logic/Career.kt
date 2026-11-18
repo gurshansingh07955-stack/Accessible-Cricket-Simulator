@@ -163,7 +163,9 @@ data class CareerProfile(
     val stateLeadershipSince: Int = 0,
     // Part twenty-eight: league contracts. What each league he signed for this season pays (league id to dollars; a league he has left holds only what he is still owed), and the leagues he has left.
     val leagueDeals: Map<String, Int>? = null,
-    val leftLeagues: List<String>? = null
+    val leftLeagues: List<String>? = null,
+    // Patch 130: true for a career made after the school pace limit existed (school bowling stays at or under 135 km/h); an older career has no value and keeps the old speeds.
+    val schoolPaceCap: Boolean? = null
 ) {
     /** "" (district club and above, as always), "School" or "College". Never null, whatever the save held. */
     val stage: String get() = stageSaved ?: ""

@@ -459,6 +459,7 @@ fun CareerHub(
                         rules = TournamentRules.rulesFor(state.tournamentId, fixture?.stage),
                         careerPlayerId = CareerSeason.playerIdIn(state, career),
                         careerCaptain = CareerSeason.captainIn(career, state),
+                        maxPaceKmh = if (career.stage == "School" && career.schoolPaceCap == true) 135 else null,
                         powerSurge = state.tournamentId == BigBashLeague.TOURNAMENT_ID,
                         impact = CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, CareerSeason.captainIn(career, state)),
                         stadium = stadium,

@@ -183,7 +183,8 @@ fun CareerFlow(onExit: () -> Unit) {
             clubTeams = clubs,
             startRatings = listOf(me.batting, me.bowling, me.fielding),
             stageSaved = stage,
-            homeClubSaved = if (stage.isEmpty()) "" else clubName ?: ""
+            homeClubSaved = if (stage.isEmpty()) "" else clubName ?: "",
+            schoolPaceCap = true
         )
         val updated = (list + profile).take(CareerWorld.MAX_CAREERS)
         careers = updated

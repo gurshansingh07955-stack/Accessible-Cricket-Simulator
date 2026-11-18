@@ -148,7 +148,12 @@ object MatchLines {
             outcome.isNoBall -> {
                 // The batter plays a no-ball: what he hit counts, plus the one extra.
                 val total = outcome.runs + outcome.extraRuns
-                val split = if (outcome.runs > 0) " (${outcome.runs} off the bat, 1 extra)" else ""
+                val split = when {
+                    outcome.byes > 0 -> " (1 extra, ${countOf(outcome.byes, "bye")})"
+                    outcome.legByes > 0 -> " (1 extra, ${countOf(outcome.legByes, "leg bye")})"
+                    outcome.runs > 0 -> " (${outcome.runs} off the bat, 1 extra)"
+                    else -> ""
+                }
                 "No ball, ${countOf(total, "run")}$split. ${outcome.commentary} Free hit next ball."
             }
             outcome.byes > 0 -> "${countOf(outcome.byes, "bye")}. ${outcome.commentary}"

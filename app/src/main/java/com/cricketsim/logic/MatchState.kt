@@ -370,17 +370,24 @@ object MatchStateMachine {
         val maxOvers = maxOversFor(state)
         val noBallsBowledYet = state.currentInningsData.totalBalls == 0 && state.currentInningsData.totalOvers == 0
 
-        val underCap = state.bowlingTeam.players
-            .filter { it.role == PlayerRole.BOWLER || it.role == PlayerRole.ALL_ROUNDER }
-            .filter { oversBowledBy(state, it.id) < maxOvers }
+        val team = state.bowlingTeam
+        val real = team.players.filter { it.role == PlayerRole.BOWLER || it.role == PlayerRole.ALL_ROUNDER }
+        // Patch 130: every bowler is limited to maxOvers, so the side needs enough bowlers to share the innings (five in a T20). A side with fewer real bowlers
+        // (some squads, such as the smaller Asian Games teams, have two or three) uses its best part-timers for the rest, instead of running out of bowlers and
+        // sending the same one down over after over. Wicketkeepers are the last resort.
+        val needed = if (maxOvers >= 999) 4 else (state.oversLimit + maxOvers - 1) / maxOvers
+        val partTimers = if (real.size >= needed) emptyList() else
+            team.players.filter { it !in real && it.role != PlayerRole.WICKETKEEPER }.sortedByDescending { it.bowlingRating }.take(needed - real.size)
+        val underCap = (real + partTimers).filter { oversBowledBy(state, it.id) < maxOvers }
 
-        if (noBallsBowledYet) return underCap
+        if (noBallsBowledYet) return underCap.ifEmpty { team.players.filter { oversBowledBy(state, it.id) < maxOvers } }
 
         val excludingCurrent = underCap.filter { it.id != state.currentBowler.id }
-        // Fallback: if excluding the current bowler leaves nobody (very
-        // small bowling attack), allow reusing them rather than
-        // returning an empty list.
-        return excludingCurrent.ifEmpty { underCap }
+        if (excludingCurrent.isNotEmpty()) return excludingCurrent
+        // Nobody left among them: anyone else under the cap who did not bowl the last over (a wicketkeeper only if there is no one else); only if there is
+        // truly nobody, the last bowler again.
+        val anyoneElse = team.players.filter { oversBowledBy(state, it.id) < maxOvers && it.id != state.currentBowler.id }
+        return anyoneElse.filter { it.role != PlayerRole.WICKETKEEPER }.ifEmpty { anyoneElse }.ifEmpty { underCap }
     }
 
     /**

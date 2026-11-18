@@ -212,6 +212,26 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onSelect = { services.update { it.copy(manualRunning = false) } }
             )
         }
+        if (settings.manualRunning) {
+            Text(
+                "How you answer a running decision. Only the way you choose is on the screen.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Column(modifier = Modifier.selectableGroup()) {
+                RadioRow(
+                    label = "Swipe with two fingers",
+                    description = "Up to run, down to stay. No buttons on the screen.",
+                    selected = !settings.runByButtons,
+                    onSelect = { services.update { it.copy(runByButtons = false) } }
+                )
+                RadioRow(
+                    label = "Buttons on the screen",
+                    description = "A Run button and a Stay button. No swiping.",
+                    selected = settings.runByButtons,
+                    onSelect = { services.update { it.copy(runByButtons = true) } }
+                )
+            }
+        }
 
         SectionHeading("Voice commentary")
         Text(

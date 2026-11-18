@@ -475,7 +475,11 @@ object MatchStats {
             extras = extras.copy(noBalls = extras.noBalls + 1, total = extras.total + outcome.extraRuns)
         }
         if (outcome.byes > 0 || outcome.legByes > 0) {
-            extras = extras.copy(byes = extras.byes + outcome.byes, legByes = extras.legByes + outcome.legByes, total = extras.total + outcome.byes + outcome.legByes)
+            // On a no-ball the byes are already inside extraRuns, which the no-ball branch above added to the total.
+            extras = extras.copy(
+                byes = extras.byes + outcome.byes, legByes = extras.legByes + outcome.legByes,
+                total = extras.total + (if (outcome.isNoBall) 0 else outcome.byes + outcome.legByes)
+            )
         }
 
         return updated.copy(
