@@ -151,6 +151,8 @@ object MatchLines {
                 val split = if (outcome.runs > 0) " (${outcome.runs} off the bat, 1 extra)" else ""
                 "No ball, ${countOf(total, "run")}$split. ${outcome.commentary} Free hit next ball."
             }
+            outcome.byes > 0 -> "${countOf(outcome.byes, "bye")}. ${outcome.commentary}"
+            outcome.legByes > 0 -> "${countOf(outcome.legByes, "leg bye")}. ${outcome.commentary}"
             else -> "${countOf(outcome.runs, "run")}. ${outcome.commentary}"
         }
         val quality = outcome.bowlingQualityTier?.let { " Ball quality: ${BowlingSystem.qualityTierLabel(it)}." } ?: ""
@@ -211,7 +213,9 @@ object ScorecardLines {
                 "strike rate ${formatDecimal(stats.strikeRate, 1)}."
         }
         val extras = innings.extras
-        val extrasRow = "Extras: ${extras.total}, ${countOf(extras.wides, "wide")}, ${countOf(extras.noBalls, "no ball")}."
+        val extrasRow = "Extras: ${extras.total}, ${countOf(extras.wides, "wide")}, ${countOf(extras.noBalls, "no ball")}" +
+            (if (extras.byes > 0) ", ${countOf(extras.byes, "bye")}" else "") +
+            (if (extras.legByes > 0) ", ${countOf(extras.legByes, "leg bye")}" else "") + "."
         val totalRow = "Total: ${innings.totalRuns} for ${innings.totalWickets} in ${innings.totalOvers}.${innings.totalBalls} overs."
         return batters + extrasRow + totalRow
     }

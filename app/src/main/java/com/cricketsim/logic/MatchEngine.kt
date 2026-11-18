@@ -95,6 +95,11 @@ object MatchEngine {
 
     /** MORE CATCHES (all difficulties): the dismissal mix is caught 4 : bowled 2 : lbw 1 instead of 1 : 1 : 1. */
     const val MORE_CATCHES = true
+    // Byes and leg byes (patch 128): runs off a legal ball that the batter did not hit. BYES_PER_MATCH is how many a match has on average, in any format;
+    // they are made out of balls that would have been dots (BYE_DOT_SHARE is about what share of the balls those are). BYES_ENABLED false switches them off.
+    const val BYES_ENABLED = true
+    const val BYES_PER_MATCH = 1.5
+    const val BYE_DOT_SHARE = 0.4
 
     /** How strongly a well-placed deep fielder turns an aerial shot into a wicket (it was 1.6). */
     private const val CATCH_BOOST = 2.2
@@ -675,6 +680,28 @@ object MatchEngine {
             }
         }
 
+        // BYES AND LEG BYES (patch 128): a ball the batter did not score off (a leave, a miss, a block that went astray) that the keeper does not stop, or that
+        // hits his body, and they run: 1 run most often, 2 often, 3 very rarely. About BYES_PER_MATCH of them in a match, whatever the format. Not off the bat, so
+        // not the batter's runs and not charged to the bowler; extraRuns carries them, so the team's score and the partnership count them.
+        var byes = 0
+        var legByes = 0
+        if (BYES_ENABLED && outcomeType == "dot" && !isWicket && !isWide && !isNoBall && !noBallCalled && matchState.superOverRound == 0) {
+            val ballsInMatch = if (matchState.format == MatchFormat.TEST) 1500.0 else 2.0 * 6.0 * minOf(matchState.oversLimit, 90)
+            val perBall = (BYES_PER_MATCH / ballsInMatch).coerceIn(0.0008, 0.02)
+            if (Random.nextDouble() < perBall / BYE_DOT_SHARE) {
+                val roll = Random.nextDouble()
+                val taken = when {
+                    roll < 0.03 -> 3
+                    roll < 0.33 -> 2
+                    else -> 1
+                }
+                val legSide = bowlingDecision.line == BowlingLine.LEG_STUMP || bowlingDecision.line == BowlingLine.OUTSIDE_LEG
+                val legBye = !leftAlone && Random.nextDouble() < (if (legSide) 0.65 else 0.4)
+                if (legBye) legByes = taken else byes = taken
+                extraRuns = taken
+            }
+        }
+
         // Who took the catch, worked out from where the ball went (not at random). Caught and bowled
         // is the bowler himself. (Run-outs name their fielder above.)
         if (isWicket && dismissalType == DismissalType.CAUGHT_AND_BOWLED) {
@@ -690,9 +717,10 @@ object MatchEngine {
             batsmanId = batsman.id, bowlerId = bowler.id, commentary = "",
             dismissalType = dismissalType, isEdge = isEdge,
             bowlingQualityTier = bowlingDecision.qualityTier, bowlingActualLength = bowlingDecision.actualLength,
-            outBatsmanId = outBatterId, fielderName = outFielderName, fielderPosition = outFielderPosition, leftAlone = leftAlone
+            outBatsmanId = outBatterId, fielderName = outFielderName, fielderPosition = outFielderPosition, leftAlone = leftAlone,
+            byes = byes, legByes = legByes
         )
-        val playText = if (leftAlone && !isWicket && !isWide) {
+        val playText = if (leftAlone && !isWicket && !isWide && byes + legByes == 0) {
             leaveText(batsman.name)
         } else {
             generateCommentary(result, outBatterName ?: batsman.name, bowler.name)
@@ -912,6 +940,26 @@ object MatchEngine {
                 "Skied it! Well taken by the fielder, $batsmanName has to go."
             )
             return phrases[randomIndex(phrases.size)] + caughtSuffix
+        }
+
+        // Byes and leg byes (patch 128): runs that did not come off the bat.
+        if (outcome.byes > 0) {
+            val w = when (outcome.byes) { 1 -> "a bye"; 2 -> "two byes"; else -> "three byes" }
+            val phrases = listOf(
+                "The ball beats the bat and the keeper, and they run $w.",
+                "Missed by $batsmanName and the keeper cannot gather it cleanly: $w.",
+                "Gets past everyone! That is $w to the total."
+            )
+            return phrases[randomIndex(phrases.size)]
+        }
+        if (outcome.legByes > 0) {
+            val w = when (outcome.legByes) { 1 -> "a leg bye"; 2 -> "two leg byes"; else -> "three leg byes" }
+            val phrases = listOf(
+                "Off the pads and away! They run $w.",
+                "It strikes $batsmanName on the body and runs away: $w.",
+                "No bat on that one, it deflects off the pad and they take $w."
+            )
+            return phrases[randomIndex(phrases.size)]
         }
 
         if (outcome.runs == 6) {

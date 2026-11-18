@@ -49,5 +49,9 @@ data class BallOutcome(
     /** A catch was put down (by a computer fielder, or by the user's own attempt): the batter is NOT out. */
     val droppedCatch: Boolean = false,
     /** A fielding event other than a dropped catch: "missedStumping", "missedRunOut" or "stopped" (a run saved). Null otherwise. */
-    val fieldingEvent: String? = null
+    val fieldingEvent: String? = null,
+    /** Byes (patch 128): runs run off a legal ball that the batter did not hit and the keeper did not stop. Not off the bat and not charged to the bowler; [extraRuns] carries the same runs, so the team score and the partnership count them. */
+    val byes: Int = 0,
+    /** Leg byes: runs run off a legal ball that hit the batter's body. Counted like byes. */
+    val legByes: Int = 0
 )

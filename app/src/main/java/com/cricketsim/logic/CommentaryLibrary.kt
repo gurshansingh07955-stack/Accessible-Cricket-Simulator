@@ -93,7 +93,9 @@ enum class CommentaryCategory {
     TEST_SESSION_END, TEST_DAY_END, TEST_SESSION_START, TEST_DAY_START, TEST_NEW_BALL,
     TEST_DECLARATION, TEST_INNINGS_END, TEST_FOLLOW_ON, TEST_DRAW,
     // Manual fielding: a dropped catch, a missed stumping, a missed run out, a run saved by a good stop.
-    DROPPED_CATCH, STUMPING_MISSED, RUN_OUT_MISSED, GOOD_STOP
+    DROPPED_CATCH, STUMPING_MISSED, RUN_OUT_MISSED, GOOD_STOP,
+    // Byes and leg byes: runs that did not come off the bat (patch 128).
+    BYE, LEG_BYE
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -942,6 +944,51 @@ object CommentaryLibrary {
                 CommentaryLine("goodstop_4_excited", "What a save! The ball is stopped dead, and the runs dry up!", "/_cdn/commentary/goodstop_4_excited.mp3"),
                 CommentaryLine("goodstop_4_calm", "Sharp fielding, and the bowler will appreciate that effort.", "/_cdn/commentary/goodstop_4_calm.mp3")
             )
+        ),
+        // Byes and leg byes (patch 128).
+        CommentaryCategory.BYE to listOf(
+            CommentaryPair(
+                CommentaryLine("bye_1_excited", "Beats the bat and the keeper, and they sneak through for byes!", "/_cdn/commentary/bye_1_excited.mp3"),
+                CommentaryLine("bye_1_calm", "Not a pretty one for the wicketkeeper, but those runs all count.", "/_cdn/commentary/bye_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("bye_2_excited", "Byes! The ball slips past everyone and they take the runs!", "/_cdn/commentary/bye_2_excited.mp3"),
+                CommentaryLine("bye_2_calm", "A moment's lapse behind the stumps, and the extras column grows.", "/_cdn/commentary/bye_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("bye_3_excited", "Missed by the batter and missed by the keeper, they scamper through for byes!", "/_cdn/commentary/bye_3_excited.mp3"),
+                CommentaryLine("bye_3_calm", "Sometimes the best ball of the over earns the batting side some free runs.", "/_cdn/commentary/bye_3_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("bye_4_excited", "The keeper cannot hold on to it, and the batters are off for byes!", "/_cdn/commentary/bye_4_excited.mp3"),
+                CommentaryLine("bye_4_calm", "Good awareness from the batters, they spotted the chance straight away.", "/_cdn/commentary/bye_4_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("bye_5_excited", "Extras! Not off the bat, but they all go on the scoreboard!", "/_cdn/commentary/bye_5_excited.mp3"),
+                CommentaryLine("bye_5_calm", "Every run matters in the end, whether it comes off the bat or not.", "/_cdn/commentary/bye_5_calm.mp3")
+            )
+        ),
+        CommentaryCategory.LEG_BYE to listOf(
+            CommentaryPair(
+                CommentaryLine("legbye_1_excited", "Off the pads and away! They scamper through for leg byes!", "/_cdn/commentary/legbye_1_excited.mp3"),
+                CommentaryLine("legbye_1_calm", "No bat on that one, but the runs still go on the board.", "/_cdn/commentary/legbye_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("legbye_2_excited", "It clips the batter's body and trickles away, leg byes!", "/_cdn/commentary/legbye_2_excited.mp3"),
+                CommentaryLine("legbye_2_calm", "A bit of luck for the batting side. They will happily take the runs.", "/_cdn/commentary/legbye_2_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("legbye_3_excited", "Struck on the pad, and the ball rolls into the gap! They run leg byes!", "/_cdn/commentary/legbye_3_excited.mp3"),
+                CommentaryLine("legbye_3_calm", "Smart running, they were up and going the moment it hit the pad.", "/_cdn/commentary/legbye_3_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("legbye_4_excited", "Leg byes! It deflects off the thigh pad and dribbles away!", "/_cdn/commentary/legbye_4_excited.mp3"),
+                CommentaryLine("legbye_4_calm", "Free runs. The bowler will feel that was well bowled and unrewarded.", "/_cdn/commentary/legbye_4_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("legbye_5_excited", "Off the body and away, they take the leg byes!", "/_cdn/commentary/legbye_5_excited.mp3"),
+                CommentaryLine("legbye_5_calm", "Awkward for the batter, but it all adds to the total.", "/_cdn/commentary/legbye_5_calm.mp3")
+            )
         )
     )
 
@@ -971,6 +1018,8 @@ object CommentaryLibrary {
         }
         if (outcome.isWide) return CommentaryCategory.WIDE
         if (outcome.isNoBall) return CommentaryCategory.NO_BALL
+        if (outcome.byes > 0) return CommentaryCategory.BYE
+        if (outcome.legByes > 0) return CommentaryCategory.LEG_BYE
         if (outcome.runs == 6) return if (outcome.isEdge == true) CommentaryCategory.SIX_EDGE else CommentaryCategory.SIX_CLEAN
         if (outcome.runs == 4) return if (outcome.isEdge == true) CommentaryCategory.FOUR_EDGE else CommentaryCategory.FOUR_CLEAN
         if (outcome.runs == 5) return CommentaryCategory.FIVE

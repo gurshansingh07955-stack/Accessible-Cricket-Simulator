@@ -240,6 +240,26 @@ object AiBallModel {
             }
         }
 
+        // Byes and leg byes (patch 128): about MatchEngine.BYES_PER_MATCH a match, made out of balls that would have been dots.
+        if (MatchEngine.BYES_ENABLED && index == 0 && !noBall && state.superOverRound == 0) {
+            val matchBalls = if (test) 1500.0 else 2.0 * 6.0 * minOf(state.oversLimit, 90)
+            val perDot = (MatchEngine.BYES_PER_MATCH / matchBalls).coerceIn(0.0008, 0.02) / MatchEngine.BYE_DOT_SHARE
+            if (random.nextDouble() < perDot) {
+                val r = random.nextDouble()
+                val taken = when {
+                    r < 0.03 -> 3
+                    r < 0.33 -> 2
+                    else -> 1
+                }
+                val leg = random.nextDouble() < 0.5
+                return BallOutcome(
+                    runs = 0, isWicket = false, isWide = false, isNoBall = false, extraRuns = taken,
+                    batsmanId = striker.id, bowlerId = bowler.id, commentary = "",
+                    byes = if (leg) 0 else taken, legByes = if (leg) taken else 0
+                )
+            }
+        }
+
         return BallOutcome(
             runs = runs, isWicket = false, isWide = false, isNoBall = noBall, extraRuns = if (noBall) 1 else 0,
             batsmanId = striker.id, bowlerId = bowler.id, commentary = "", isEdge = isEdge

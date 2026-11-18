@@ -187,7 +187,9 @@ object ScorecardText {
                 .append(", strike rate ").append(one(b.strikeRate)).append("\n")
         }
         sb.append("Extras: ").append(inn.extras.total).append(" (")
-            .append(countOf(inn.extras.wides, "wide")).append(", ").append(countOf(inn.extras.noBalls, "no ball")).append(")\n")
+            .append(countOf(inn.extras.wides, "wide")).append(", ").append(countOf(inn.extras.noBalls, "no ball"))
+                .append(if (inn.extras.byes > 0) ", " + countOf(inn.extras.byes, "bye") else "")
+                .append(if (inn.extras.legByes > 0) ", " + countOf(inn.extras.legByes, "leg bye") else "").append(")\n")
         sb.append("Total: ").append(inn.totalRuns).append(" for ").append(inn.totalWickets)
             .append(" in ").append(inn.totalOvers).append(".").append(inn.totalBalls).append(" overs\n\n")
 

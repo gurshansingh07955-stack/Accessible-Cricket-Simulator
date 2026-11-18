@@ -409,7 +409,7 @@ object MatchSimulation {
                     }
                 }
             }
-        } else if (!outcome.isWide && outcome.runs % 2 == 1) {
+        } else if (!outcome.isWide && (outcome.runs + outcome.byes + outcome.legByes) % 2 == 1) {
             newState = MatchStateMachine.rotateStrike(newState)
         }
 

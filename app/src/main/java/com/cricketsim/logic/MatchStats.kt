@@ -93,7 +93,7 @@ data class Partnership(
     val extras: Int = 0
 )
 
-data class Extras(val wides: Int, val noBalls: Int, val total: Int)
+data class Extras(val wides: Int, val noBalls: Int, val total: Int, val byes: Int = 0, val legByes: Int = 0)
 
 /**
  * One wicket, as it fell. Not in the web source — see the file header.
@@ -430,7 +430,8 @@ object MatchStats {
         // 6th legal ball (inningsData.totalBalls is still the PRE-ball
         // count here, so 5 means this ball makes six), and it's a maiden
         // when nothing at all was conceded in that over.
-        val runsConcededThisBall = outcome.runs + outcome.extraRuns
+        // Byes and leg byes are not the bowler's runs (nor do they spoil a maiden).
+        val runsConcededThisBall = outcome.runs + outcome.extraRuns - outcome.byes - outcome.legByes
         val overRunsSoFar = inningsData.currentOverRuns + runsConcededThisBall
         val completesOver = isLegalDelivery && inningsData.totalBalls == 5
         val isMaiden = completesOver && overRunsSoFar == 0
@@ -472,6 +473,9 @@ object MatchStats {
         }
         if (outcome.isNoBall) {
             extras = extras.copy(noBalls = extras.noBalls + 1, total = extras.total + outcome.extraRuns)
+        }
+        if (outcome.byes > 0 || outcome.legByes > 0) {
+            extras = extras.copy(byes = extras.byes + outcome.byes, legByes = extras.legByes + outcome.legByes, total = extras.total + outcome.byes + outcome.legByes)
         }
 
         return updated.copy(

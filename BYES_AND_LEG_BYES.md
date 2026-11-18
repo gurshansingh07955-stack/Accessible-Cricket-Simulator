@@ -1,0 +1,9 @@
+# Byes and leg byes (patch 128)
+
+Runs that do not come off the bat: **byes** (a ball the batter missed and the keeper did not stop) and **leg byes** (a ball that hit the batter's body). One run most often, two often, **three very rarely** (3% of them). About **1.5 a match** (`MatchEngine.BYES_PER_MATCH`), in any format and in every match, played or simulated: each is made out of a ball that would have been a dot (`BYE_DOT_SHARE`), never on a wide, a no-ball, a wicket or a Super Over. `MatchEngine.BYES_ENABLED` false switches them off. A leave can only be a bye; a ball on the leg side is more often a leg bye.
+
+**How they are counted.** `BallOutcome.byes` / `legByes` (and `extraRuns`, so the team score and the partnership count them): the team total, the **partnership** ("including N extras"), the extras line of the scorecard ("Extras: 4, 1 wide, 0 no balls, 2 byes, 1 leg bye"), the shared scorecard text. The batter faces the ball and scores nothing; the bowler bowls a legal ball and is **not** charged the runs (a maiden stays a maiden). An odd number of byes changes the strike. Computer against computer matches (`AiBallModel`) have them too.
+
+**Commentary:** two new categories, `BYE` and `LEG_BYE`, five pairs each (an excited line then a calm one, like every other category), generated with the two commentary voices through the web app's `commentary_tts_generate` endpoint (`bye_1_excited` ... `legbye_5_calm`, 20 clips) and fetched by the usual "Fetch audio into the app" step. The on-screen text and the screen-reader announcement say "2 byes. ..." / "1 leg bye. ...".
+
+**Not done:** running byes by choice (the running decisions of patch 126 are for runs off the bat), a bye on a no-ball, byes on a Super Over ball. The 1.5 a match is the rate you asked for, not measured against real averages.
