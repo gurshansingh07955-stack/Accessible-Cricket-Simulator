@@ -1,0 +1,118 @@
+{
+  "name": "Byes and leg byes: 1 or 2 runs, 3 very rarely, about one or two a match, counted in the team, partnership and extras, with commentary",
+  "message": "Byes and leg byes: runs not off the bat, about 1.5 a match in every format (1 or 2 runs, 3 very rarely), counted in the score, the partnership and the extras, not charged to the bowler, with new BYE and LEG_BYE commentary (20 recorded clips). Needs the audio step.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/BallOutcome.kt",
+    "contains": "val legByes"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallOutcome.kt",
+      "find": "    val fieldingEvent: String? = null\n)",
+      "replace": "    val fieldingEvent: String? = null,\n    /** Byes (patch 128): runs run off a legal ball that the batter did not hit and the keeper did not stop. Not off the bat and not charged to the bowler; [extraRuns] carries the same runs, so the team score and the partnership count them. */\n    val byes: Int = 0,\n    /** Leg byes: runs run off a legal ball that hit the batter's body. Counted like byes. */\n    val legByes: Int = 0\n)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "    const val MORE_CATCHES = true",
+      "replace": "    const val MORE_CATCHES = true\n    // Byes and leg byes (patch 128): runs off a legal ball that the batter did not hit. BYES_PER_MATCH is how many a match has on average, in any format;\n    // they are made out of balls that would have been dots (BYE_DOT_SHARE is about what share of the balls those are). BYES_ENABLED false switches them off.\n    const val BYES_ENABLED = true\n    const val BYES_PER_MATCH = 1.5\n    const val BYE_DOT_SHARE = 0.4"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        // Who took the catch, worked out from where the ball went (not at random). Caught and bowled",
+      "replace": "        // BYES AND LEG BYES (patch 128): a ball the batter did not score off (a leave, a miss, a block that went astray) that the keeper does not stop, or that\n        // hits his body, and they run: 1 run most often, 2 often, 3 very rarely. About BYES_PER_MATCH of them in a match, whatever the format. Not off the bat, so\n        // not the batter's runs and not charged to the bowler; extraRuns carries them, so the team's score and the partnership count them.\n        var byes = 0\n        var legByes = 0\n        if (BYES_ENABLED && outcomeType == \"dot\" && !isWicket && !isWide && !isNoBall && !noBallCalled && matchState.superOverRound == 0) {\n            val ballsInMatch = if (matchState.format == MatchFormat.TEST) 1500.0 else 2.0 * 6.0 * minOf(matchState.oversLimit, 90)\n            val perBall = (BYES_PER_MATCH / ballsInMatch).coerceIn(0.0008, 0.02)\n            if (Random.nextDouble() < perBall / BYE_DOT_SHARE) {\n                val roll = Random.nextDouble()\n                val taken = when {\n                    roll < 0.03 -> 3\n                    roll < 0.33 -> 2\n                    else -> 1\n                }\n                val legSide = bowlingDecision.line == BowlingLine.LEG_STUMP || bowlingDecision.line == BowlingLine.OUTSIDE_LEG\n                val legBye = !leftAlone && Random.nextDouble() < (if (legSide) 0.65 else 0.4)\n                if (legBye) legByes = taken else byes = taken\n                extraRuns = taken\n            }\n        }\n\n        // Who took the catch, worked out from where the ball went (not at random). Caught and bowled"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "            outBatsmanId = outBatterId, fielderName = outFielderName, fielderPosition = outFielderPosition, leftAlone = leftAlone\n        )",
+      "replace": "            outBatsmanId = outBatterId, fielderName = outFielderName, fielderPosition = outFielderPosition, leftAlone = leftAlone,\n            byes = byes, legByes = legByes\n        )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        val playText = if (leftAlone && !isWicket && !isWide) {",
+      "replace": "        val playText = if (leftAlone && !isWicket && !isWide && byes + legByes == 0) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "        if (outcome.runs == 6) {\n            if (outcome.isEdge == true) {\n                val phrases = listOf(\n                    \"Top edge!",
+      "replace": "        // Byes and leg byes (patch 128): runs that did not come off the bat.\n        if (outcome.byes > 0) {\n            val w = when (outcome.byes) { 1 -> \"a bye\"; 2 -> \"two byes\"; else -> \"three byes\" }\n            val phrases = listOf(\n                \"The ball beats the bat and the keeper, and they run $w.\",\n                \"Missed by $batsmanName and the keeper cannot gather it cleanly: $w.\",\n                \"Gets past everyone! That is $w to the total.\"\n            )\n            return phrases[randomIndex(phrases.size)]\n        }\n        if (outcome.legByes > 0) {\n            val w = when (outcome.legByes) { 1 -> \"a leg bye\"; 2 -> \"two leg byes\"; else -> \"three leg byes\" }\n            val phrases = listOf(\n                \"Off the pads and away! They run $w.\",\n                \"It strikes $batsmanName on the body and runs away: $w.\",\n                \"No bat on that one, it deflects off the pad and they take $w.\"\n            )\n            return phrases[randomIndex(phrases.size)]\n        }\n\n        if (outcome.runs == 6) {\n            if (outcome.isEdge == true) {\n                val phrases = listOf(\n                    \"Top edge!"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt",
+      "find": "    DROPPED_CATCH, STUMPING_MISSED, RUN_OUT_MISSED, GOOD_STOP\n}",
+      "replace": "    DROPPED_CATCH, STUMPING_MISSED, RUN_OUT_MISSED, GOOD_STOP,\n    // Byes and leg byes: runs that did not come off the bat (patch 128).\n    BYE, LEG_BYE\n}"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt",
+      "find": "                CommentaryLine(\"goodstop_4_calm\", \"Sharp fielding, and the bowler will appreciate that effort.\", \"/_cdn/commentary/goodstop_4_calm.mp3\")\n            )\n        )\n    )",
+      "replace": "                CommentaryLine(\"goodstop_4_calm\", \"Sharp fielding, and the bowler will appreciate that effort.\", \"/_cdn/commentary/goodstop_4_calm.mp3\")\n            )\n        ),\n        // Byes and leg byes (patch 128).\n        CommentaryCategory.BYE to listOf(\n            CommentaryPair(\n                CommentaryLine(\"bye_1_excited\", \"Beats the bat and the keeper, and they sneak through for byes!\", \"/_cdn/commentary/bye_1_excited.mp3\"),\n                CommentaryLine(\"bye_1_calm\", \"Not a pretty one for the wicketkeeper, but those runs all count.\", \"/_cdn/commentary/bye_1_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"bye_2_excited\", \"Byes! The ball slips past everyone and they take the runs!\", \"/_cdn/commentary/bye_2_excited.mp3\"),\n                CommentaryLine(\"bye_2_calm\", \"A moment's lapse behind the stumps, and the extras column grows.\", \"/_cdn/commentary/bye_2_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"bye_3_excited\", \"Missed by the batter and missed by the keeper, they scamper through for byes!\", \"/_cdn/commentary/bye_3_excited.mp3\"),\n                CommentaryLine(\"bye_3_calm\", \"Sometimes the best ball of the over earns the batting side some free runs.\", \"/_cdn/commentary/bye_3_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"bye_4_excited\", \"The keeper cannot hold on to it, and the batters are off for byes!\", \"/_cdn/commentary/bye_4_excited.mp3\"),\n                CommentaryLine(\"bye_4_calm\", \"Good awareness from the batters, they spotted the chance straight away.\", \"/_cdn/commentary/bye_4_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"bye_5_excited\", \"Extras! Not off the bat, but they all go on the scoreboard!\", \"/_cdn/commentary/bye_5_excited.mp3\"),\n                CommentaryLine(\"bye_5_calm\", \"Every run matters in the end, whether it comes off the bat or not.\", \"/_cdn/commentary/bye_5_calm.mp3\")\n            )\n        ),\n        CommentaryCategory.LEG_BYE to listOf(\n            CommentaryPair(\n                CommentaryLine(\"legbye_1_excited\", \"Off the pads and away! They scamper through for leg byes!\", \"/_cdn/commentary/legbye_1_excited.mp3\"),\n                CommentaryLine(\"legbye_1_calm\", \"No bat on that one, but the runs still go on the board.\", \"/_cdn/commentary/legbye_1_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"legbye_2_excited\", \"It clips the batter's body and trickles away, leg byes!\", \"/_cdn/commentary/legbye_2_excited.mp3\"),\n                CommentaryLine(\"legbye_2_calm\", \"A bit of luck for the batting side. They will happily take the runs.\", \"/_cdn/commentary/legbye_2_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"legbye_3_excited\", \"Struck on the pad, and the ball rolls into the gap! They run leg byes!\", \"/_cdn/commentary/legbye_3_excited.mp3\"),\n                CommentaryLine(\"legbye_3_calm\", \"Smart running, they were up and going the moment it hit the pad.\", \"/_cdn/commentary/legbye_3_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"legbye_4_excited\", \"Leg byes! It deflects off the thigh pad and dribbles away!\", \"/_cdn/commentary/legbye_4_excited.mp3\"),\n                CommentaryLine(\"legbye_4_calm\", \"Free runs. The bowler will feel that was well bowled and unrewarded.\", \"/_cdn/commentary/legbye_4_calm.mp3\")\n            ),\n            CommentaryPair(\n                CommentaryLine(\"legbye_5_excited\", \"Off the body and away, they take the leg byes!\", \"/_cdn/commentary/legbye_5_excited.mp3\"),\n                CommentaryLine(\"legbye_5_calm\", \"Awkward for the batter, but it all adds to the total.\", \"/_cdn/commentary/legbye_5_calm.mp3\")\n            )\n        )\n    )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt",
+      "find": "        if (outcome.isNoBall) return CommentaryCategory.NO_BALL\n",
+      "replace": "        if (outcome.isNoBall) return CommentaryCategory.NO_BALL\n        if (outcome.byes > 0) return CommentaryCategory.BYE\n        if (outcome.legByes > 0) return CommentaryCategory.LEG_BYE\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "data class Extras(val wides: Int, val noBalls: Int, val total: Int)",
+      "replace": "data class Extras(val wides: Int, val noBalls: Int, val total: Int, val byes: Int = 0, val legByes: Int = 0)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "        val runsConcededThisBall = outcome.runs + outcome.extraRuns",
+      "replace": "        // Byes and leg byes are not the bowler's runs (nor do they spoil a maiden).\n        val runsConcededThisBall = outcome.runs + outcome.extraRuns - outcome.byes - outcome.legByes"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchStats.kt",
+      "find": "        if (outcome.isNoBall) {\n            extras = extras.copy(noBalls = extras.noBalls + 1, total = extras.total + outcome.extraRuns)\n        }",
+      "replace": "        if (outcome.isNoBall) {\n            extras = extras.copy(noBalls = extras.noBalls + 1, total = extras.total + outcome.extraRuns)\n        }\n        if (outcome.byes > 0 || outcome.legByes > 0) {\n            extras = extras.copy(byes = extras.byes + outcome.byes, legByes = extras.legByes + outcome.legByes, total = extras.total + outcome.byes + outcome.legByes)\n        }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchSimulation.kt",
+      "find": "        } else if (!outcome.isWide && outcome.runs % 2 == 1) {",
+      "replace": "        } else if (!outcome.isWide && (outcome.runs + outcome.byes + outcome.legByes) % 2 == 1) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "            else -> \"${countOf(outcome.runs, \"run\")}. ${outcome.commentary}\"",
+      "replace": "            outcome.byes > 0 -> \"${countOf(outcome.byes, \"bye\")}. ${outcome.commentary}\"\n            outcome.legByes > 0 -> \"${countOf(outcome.legByes, \"leg bye\")}. ${outcome.commentary}\"\n            else -> \"${countOf(outcome.runs, \"run\")}. ${outcome.commentary}\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "        val extrasRow = \"Extras: ${extras.total}, ${countOf(extras.wides, \"wide\")}, ${countOf(extras.noBalls, \"no ball\")}.\"",
+      "replace": "        val extrasRow = \"Extras: ${extras.total}, ${countOf(extras.wides, \"wide\")}, ${countOf(extras.noBalls, \"no ball\")}\" +\n            (if (extras.byes > 0) \", ${countOf(extras.byes, \"bye\")}\" else \"\") +\n            (if (extras.legByes > 0) \", ${countOf(extras.legByes, \"leg bye\")}\" else \"\") + \".\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ScorecardText.kt",
+      "find": ".append(countOf(inn.extras.wides, \"wide\")).append(\", \").append(countOf(inn.extras.noBalls, \"no ball\")).append(\")\\n\")",
+      "replace": ".append(countOf(inn.extras.wides, \"wide\")).append(\", \").append(countOf(inn.extras.noBalls, \"no ball\"))\n                .append(if (inn.extras.byes > 0) \", \" + countOf(inn.extras.byes, \"bye\") else \"\")\n                .append(if (inn.extras.legByes > 0) \", \" + countOf(inn.extras.legByes, \"leg bye\") else \"\").append(\")\\n\")"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AiBallModel.kt",
+      "find": "        return BallOutcome(\n            runs = runs, isWicket = false, isWide = false, isNoBall = noBall, extraRuns = if (noBall) 1 else 0,",
+      "replace": "        // Byes and leg byes (patch 128): about MatchEngine.BYES_PER_MATCH a match, made out of balls that would have been dots.\n        if (MatchEngine.BYES_ENABLED && index == 0 && !noBall && state.superOverRound == 0) {\n            val matchBalls = if (test) 1500.0 else 2.0 * 6.0 * minOf(state.oversLimit, 90)\n            val perDot = (MatchEngine.BYES_PER_MATCH / matchBalls).coerceIn(0.0008, 0.02) / MatchEngine.BYE_DOT_SHARE\n            if (random.nextDouble() < perDot) {\n                val r = random.nextDouble()\n                val taken = when {\n                    r < 0.03 -> 3\n                    r < 0.33 -> 2\n                    else -> 1\n                }\n                val leg = random.nextDouble() < 0.5\n                return BallOutcome(\n                    runs = 0, isWicket = false, isWide = false, isNoBall = false, extraRuns = taken,\n                    batsmanId = striker.id, bowlerId = bowler.id, commentary = \"\",\n                    byes = if (leg) 0 else taken, legByes = if (leg) taken else 0\n                )\n            }\n        }\n\n        return BallOutcome(\n            runs = runs, isWicket = false, isWide = false, isNoBall = noBall, extraRuns = if (noBall) 1 else 0,"
+    },
+    {
+      "op": "write",
+      "file": "BYES_AND_LEG_BYES.md",
+      "content": "# Byes and leg byes (patch 128)\n\nRuns that do not come off the bat: **byes** (a ball the batter missed and the keeper did not stop) and **leg byes** (a ball that hit the batter's body). One run most often, two often, **three very rarely** (3% of them). About **1.5 a match** (`MatchEngine.BYES_PER_MATCH`), in any format and in every match, played or simulated: each is made out of a ball that would have been a dot (`BYE_DOT_SHARE`), never on a wide, a no-ball, a wicket or a Super Over. `MatchEngine.BYES_ENABLED` false switches them off. A leave can only be a bye; a ball on the leg side is more often a leg bye.\n\n**How they are counted.** `BallOutcome.byes` / `legByes` (and `extraRuns`, so the team score and the partnership count them): the team total, the **partnership** (\"including N extras\"), the extras line of the scorecard (\"Extras: 4, 1 wide, 0 no balls, 2 byes, 1 leg bye\"), the shared scorecard text. The batter faces the ball and scores nothing; the bowler bowls a legal ball and is **not** charged the runs (a maiden stays a maiden). An odd number of byes changes the strike. Computer against computer matches (`AiBallModel`) have them too.\n\n**Commentary:** two new categories, `BYE` and `LEG_BYE`, five pairs each (an excited line then a calm one, like every other category), generated with the two commentary voices through the web app's `commentary_tts_generate` endpoint (`bye_1_excited` ... `legbye_5_calm`, 20 clips) and fetched by the usual \"Fetch audio into the app\" step. The on-screen text and the screen-reader announcement say \"2 byes. ...\" / \"1 leg bye. ...\".\n\n**Not done:** running byes by choice (the running decisions of patch 126 are for runs off the bat), a bye on a no-ball, byes on a Super Over ball. The 1.5 a match is the rate you asked for, not measured against real averages.\n",
+      "mustNotExist": true
+    }
+  ]
+}
