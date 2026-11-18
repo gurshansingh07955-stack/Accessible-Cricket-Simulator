@@ -77,6 +77,18 @@ fun RunDecisionScreen(chance: RunChance, onDone: (RunVerdict) -> Unit) {
         }
     }
 
+    // The recorded "Yes!" / "No!" (run_yes and run_no in the audio pack, the player's voice); the phone's own voice says [fallback] if the clip is missing
+    // or sound effects are off. Waits until the clip has finished, so the next line does not cut it off.
+    suspend fun call(clip: String, fallback: String) {
+        if (sound != null && sound.playPress(clip)) {
+            val until = System.currentTimeMillis() + 4000L
+            delay(150L)
+            while (sound.isPressSpeaking() && System.currentTimeMillis() < until) delay(50L)
+        } else {
+            say(fallback)
+        }
+    }
+
     fun conclude(runs: Int, out: Boolean) {
         if (finished) return
         finished = true
@@ -91,13 +103,13 @@ fun RunDecisionScreen(chance: RunChance, onDone: (RunVerdict) -> Unit) {
                 val line = if (timedOut) "Time is up. No run." else "No!"
                 sound?.vibrate(350)
                 shown = line
-                say(line)
+                if (timedOut) say(line) else call("run_no", line)
                 conclude(completed, false)
                 return@launch
             }
             sound?.vibrate(60, 40, 160)
             shown = "Yes!"
-            say("Yes!")
+            call("run_yes", "Yes!")
             if (RunDecisions.attemptIsOut(chance, completed, random)) {
                 val line = RunDecisions.runOutLine(chance)
                 shown = line

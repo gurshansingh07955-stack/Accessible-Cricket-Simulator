@@ -50,7 +50,7 @@ data class GameSettings(
     // Manual fielding: who takes the catches (and, later, stops the ball and stumps).
     val fieldingMode: FieldingMode = FieldingMode.AUTOMATIC,
     // Running between the wickets: on = the user decides each run when he bats (swipe up / down, five seconds); off = the computer decides, as before.
-    val manualRunning: Boolean = true
+    val manualRunning: Boolean = false
 )
 
 class SettingsStore(context: Context) {

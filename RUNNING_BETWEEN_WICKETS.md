@@ -1,6 +1,6 @@
 # Running between the wickets (patch 126)
 
-**Settings > Running between the wickets:** "You decide the runs" (the default) or "The computer decides the runs" (as before). Part one of the feature: the user's own batting decisions and the partner's calls; the voices are the phone's own.
+**Settings > Running between the wickets:** "The computer decides the runs" (the default, as before) or "You decide the runs". Part one of the feature: the user's own batting decisions and the partner's calls. **"Yes!" and "No!" are recorded** (patch 127: one clip each, `run_yes` and `run_no`, in the press conference's player voice, generated through `press_tts_generate`, fetched by `tools/fetch_audio.sh`, played by `SoundEngine.playPress`); the phone's voice says everything else, and says "Yes!" / "No!" itself if a clip is missing. A time-out ("Time is up. No run.") is spoken by the phone. The voice was chosen by description and not heard by the assistant.
 
 ## When the user bats (a normal match, or career mode with his player on strike)
 A ball that the simulation scores 1, 2 or 3 runs off (not a boundary, a dot, a wide or a no-ball, a wicket that is not a run out) opens a full-screen page (`ui/match/RunScreens.kt`, rules in `logic/RunDecisions.kt`):
