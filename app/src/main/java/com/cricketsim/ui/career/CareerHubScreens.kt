@@ -264,6 +264,7 @@ fun CareerHub(
                             // What each league pays, kept league by league so one can be left later (part twenty-eight).
                             leagueDeals = (if (sameSeason) CareerFinance.signedThisSeason(career).associateWith { CareerFinance.dealOf(career, it) } else emptyMap()) + (offer.leagueId to deal),
                             leftLeagues = if (sameSeason) career.leftLeagues else null,
+                            leagueCaptainLeft = if (sameSeason) career.leagueCaptainLeft else null,
                             leagueCaptainTeamIds = (if (sameSeason) career.leagueCaptainTeamIds.orEmpty() + listOfNotNull(career.leagueCaptainTeamId) else emptyList()) +
                                 (if (offer.captain) listOf(offer.teamId) else emptyList()),
                             leagueCaptainTeamId = null,
@@ -463,7 +464,7 @@ fun CareerHub(
                         powerSurge = state.tournamentId == BigBashLeague.TOURNAMENT_ID,
                         impact = CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, CareerSeason.captainIn(career, state)),
                         stadium = stadium,
-                        userTeam = flow.userXI,
+                        userTeam = CareerSeason.withLeaders(flow.userXI, career, state),
                         opponentTeam = flow.oppXI,
                         toss = flow.toss,
                         onBack = back,

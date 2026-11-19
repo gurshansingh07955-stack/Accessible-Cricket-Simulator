@@ -90,7 +90,7 @@ internal fun CareerRecordTab(
         "rankings" -> CareerPage("Rankings", back) {
             if (rankLines.isEmpty()) BodyLine("Working out your rankings.") else rankLines.forEach { BodyLine(it) }
         }
-        "captaincy" -> CareerPage("Captaincy", back) { CaptaincyPage(career) }
+        "captaincy" -> CareerPage("Captaincy", back) { CaptaincyPage(career, seasons, onCareer) }
         "earnings" -> CareerPage("Earnings", back) { EarningsPage(career, onCareer) }
         "leagues" -> CareerPage("League contracts", back) { LeagueContractsPage(career, seasons, onLeaveLeague, onCareer) }
         "news" -> CareerPage("In the news", back) { NewsPage(career) }
@@ -324,9 +324,88 @@ private fun TrainingPage(career: CareerProfile, onFocus: (String?) -> Unit, onSp
 }
 
 @Composable
-private fun CaptaincyPage(career: CareerProfile) {
+private fun CaptaincyPage(career: CareerProfile, seasons: List<TournamentState>?, onCareer: (CareerProfile) -> Unit) {
+    var confirm by remember { mutableStateOf<String?>(null) }
+    var result by remember { mutableStateOf("") }
+    if (result.isNotEmpty()) {
+        Text(result, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Spacer(modifier = Modifier.height(8.dp))
+    }
     // Every captaincy he can hold: school, college or club; the state squad; the nation; a franchise (CareerLeadership).
     CareerLeadership.lines(career).forEach { BodyLine(it) }
+
+    // The nation: give the role up, or ask the selectors for it back (part twenty-nine).
+    val role = career.nationalRole
+    val savedNational = career.nationalRoleLeft
+    if (career.isInternational && role != null) {
+        GroupHeading("National captaincy")
+        val word = role.lowercase()
+        if (confirm == "national") {
+            BodyLine("Are you sure? You give up the $word of ${career.nation}, and the selectors will not name you again until you ask them.")
+            OptionButton("Yes, give up the $word", "You stay in the national squad as a player.", true, true) {
+                val c = CareerInternational.stepDown(career)
+                // The side needs a captain: its best-rated player takes over.
+                val intl = seasons.orEmpty().firstOrNull { CareerInternational.isInternational(it) }
+                val next = intl?.let { CareerSeason.nextCaptainName(it, career, it.userTeamId) }
+                result = c.text + (if (next != null) " $next, the best-rated player in the squad, is the new $word of ${career.nation}." else "")
+                confirm = null
+                onCareer(c.career)
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            OptionButton("No, keep the $word", "Nothing changes.", true, false) { confirm = null }
+        } else {
+            OptionButton("Give up the $word of ${career.nation}", "Step down. You can ask for it back here.", true, false) { confirm = "national" }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    } else if (career.isInternational && savedNational != null && savedNational.substringAfter("|") == career.nation) {
+        GroupHeading("National captaincy")
+        val saved = savedNational.substringBefore("|").lowercase()
+        BodyLine("You gave up the $saved of ${career.nation}.")
+        OptionButton("Take the $saved of ${career.nation} back", "Ask the selectors for the role you gave up.", true, true) {
+            val c = CareerInternational.takeBack(career)
+            result = c.text
+            onCareer(c.career)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    // The franchises, one league at a time: giving one up leaves the captaincy of the others as it is.
+    val captained = CareerLeagues.captainedTeams(career)
+    val gaveUp = if (career.leagueDecidedSeason == career.season) career.leagueCaptainLeft.orEmpty() else emptyList()
+    val relevant = seasons.orEmpty().filter { CareerLeagues.leagueIdOf(it) != null && it.userTeamId.isNotEmpty() && (it.userTeamId in captained || it.userTeamId in gaveUp) }
+    if (relevant.isNotEmpty()) {
+        GroupHeading("Franchise captaincy, league by league")
+        relevant.forEach { s ->
+            val tid = s.userTeamId
+            val league = CareerLeagues.nameOfId(CareerLeagues.leagueIdOf(s) ?: "")
+            val team = CareerSeason.nameOf(s, tid)
+            if (tid in captained) {
+                if (confirm == tid) {
+                    BodyLine("Are you sure? You give up the captaincy of $team in the $league. You stay captain in your other leagues.")
+                    OptionButton("Yes, give up the captaincy of $team", "You stay in the squad as a player.", true, true) {
+                        onCareer(CareerLeagues.stepDownFrom(career, tid))
+                        // The side needs a captain: its best-rated player takes over.
+                        val next = CareerSeason.nextCaptainName(s, career, tid)
+                        result = "You have given up the captaincy of $team in the $league." +
+                            (if (next != null) " $next, the best-rated player of $team, is the new captain." else "") + " You can take it back here."
+                        confirm = null
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OptionButton("No, stay captain of $team", "Nothing changes.", true, false) { confirm = null }
+                } else {
+                    BodyLine("$league: you are the captain of $team.")
+                    OptionButton("Give up the captaincy of $team in the $league", "Only this league. Your other captaincies stay.", true, false) { confirm = tid }
+                }
+            } else {
+                BodyLine("$league: you gave up the captaincy of $team.")
+                OptionButton("Take the captaincy of $team back", "Be the captain of $team in the $league again.", true, true) {
+                    onCareer(CareerLeagues.takeBackCaptaincy(career, tid))
+                    result = "You are the captain of $team in the $league again. The player who was captain in your place steps aside."
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
 }
 
 /**

@@ -339,6 +339,26 @@ object CareerLeagues {
         return Leave(left, after, text)
     }
 
+    // ------------------------------------------------------------ giving up and taking back a franchise captaincy (part twenty-nine)
+
+    /** The franchises he captains this season (the one saved the old way included). */
+    fun captainedTeams(career: CareerProfile): List<String> =
+        if (career.leagueDecidedSeason == career.season) (career.leagueCaptainTeamIds.orEmpty() + listOfNotNull(career.leagueCaptainTeamId)).distinct() else emptyList()
+
+    /** He gives up the captaincy of ONE franchise: he stays captain of the others, and may take this one back. */
+    fun stepDownFrom(career: CareerProfile, teamId: String): CareerProfile = career.copy(
+        leagueCaptainTeamIds = captainedTeams(career).filter { it != teamId },
+        leagueCaptainTeamId = null,
+        leagueCaptainLeft = (career.leagueCaptainLeft.orEmpty() + teamId).distinct()
+    )
+
+    /** He takes the captaincy of a franchise back (only one he gave up this season). */
+    fun takeBackCaptaincy(career: CareerProfile, teamId: String): CareerProfile = career.copy(
+        leagueCaptainTeamIds = (captainedTeams(career) + teamId).distinct(),
+        leagueCaptainTeamId = null,
+        leagueCaptainLeft = career.leagueCaptainLeft.orEmpty().filter { it != teamId }
+    )
+
     // ------------------------------------------------------------ selection for a match
 
     /**

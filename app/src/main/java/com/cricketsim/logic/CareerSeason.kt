@@ -273,6 +273,34 @@ object CareerSeason {
         else if (CareerInternational.isSeries(state)) CareerInternational.seriesWinner(state)
         else CplSimulator.champion(state)
 
+    /** The best-rated player of a team other than the career player: the one who becomes captain when he steps down. */
+    fun nextCaptainName(state: TournamentState, career: CareerProfile, teamId: String): String? {
+        val team = state.teams.find { it.id == teamId } ?: return null
+        val pid = CareerDomestic.playerId(career.id)
+        return team.players.filter { it.id != pid }.maxByOrNull { maxOf(it.battingRating, it.bowlingRating) + it.fieldingRating * 0.1 }?.name
+    }
+
+    /**
+     * Names the captain and vice-captain of the player's XI for a career match (part twenty-nine). He is the captain only where he really is one (the club, the state
+     * squad, the nation or that franchise); otherwise (a vice-captain, a player, or a captain who stepped down) the best-rated other player is captain, and the next best
+     * vice-captain (the career player himself when he is the vice-captain here), so the side always has a captain and the scorecards and Match info name him.
+     */
+    fun withLeaders(xi: Team, career: CareerProfile, state: TournamentState): Team {
+        val pid = playerIdIn(state, career)
+        val me = xi.players.find { it.id == pid }
+        val others = xi.players.filter { it.id != pid }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) + it.fieldingRating * 0.1 }
+        val iLead = me != null && captainIn(career, state)
+        val iVice = me != null && !iLead && when {
+            isClub(state) -> career.leadership == CareerLeadership.VICE && !career.isState && !career.isInternational
+            CareerInternational.isInternational(state) -> career.nationalRole == "Vice-captain"
+            CareerLeagues.isLeague(state) -> false
+            else -> career.stateRole == CareerLeadership.VICE
+        }
+        val captain = if (iLead) me else others.firstOrNull()
+        val vice = if (iVice) me else others.firstOrNull { it.id != captain?.id }
+        return xi.copy(captainId = captain?.id, viceCaptainId = vice?.id)
+    }
+
     fun nameOf(state: TournamentState, teamId: String?): String = state.teams.find { it.id == teamId }?.name ?: "?"
 
     /** A saved result line with any team id in it replaced by the team's name (older saves hold ids; the longest id first, so c1 never eats c10). */

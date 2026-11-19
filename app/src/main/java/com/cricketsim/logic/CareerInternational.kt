@@ -278,6 +278,8 @@ object CareerInternational {
      */
     fun captaincy(career: CareerProfile): Captaincy {
         if (!career.isInternational) return Captaincy(career, "")
+        // He gave the role up: the selectors wait until he asks for it back (Career > Captaincy).
+        if (career.nationalRoleLeft != null && career.nationalRole == null) return Captaincy(career, "")
         val score = leadershipScore(career)
         val current = career.nationalRole
         val matches = career.internationalMatches
@@ -294,6 +296,29 @@ object CareerInternational {
         }
         val honours = if (next != null && next != current) career.honours.orEmpty() + "Season ${career.season}: appointed ${next.lowercase()} of ${career.nation}." else career.honours
         return Captaincy(career.copy(nationalRole = next, honours = honours?.takeLast(60)), text)
+    }
+
+    /**
+     * He gives up the national captaincy (or vice-captaincy). The selectors do not name him again until he asks them to (Career > Captaincy), so
+     * [captaincy] leaves him alone while [CareerProfile.nationalRoleLeft] is set. What he gave up and for which country is kept ("Captain|India").
+     */
+    fun stepDown(career: CareerProfile): Captaincy {
+        val role = career.nationalRole ?: return Captaincy(career, "")
+        return Captaincy(
+            career.copy(nationalRole = null, nationalRoleLeft = "$role|${career.nation}"),
+            "You have given up the ${role.lowercase()} of ${career.nation}. You can ask the selectors for it back on the Captaincy page."
+        )
+    }
+
+    /** He asks for the role back: given if he is still in the squad of the same country and the selectors still rate his leadership (the score that keeps a captain). */
+    fun takeBack(career: CareerProfile): Captaincy {
+        val saved = career.nationalRoleLeft ?: return Captaincy(career, "")
+        val role = saved.substringBefore("|")
+        if (!career.isInternational || saved.substringAfter("|") != career.nation) return Captaincy(career, "You are not in that national squad any more.")
+        if (leadershipScore(career) < 3.0) {
+            return Captaincy(career, "The selectors do not want you as ${role.lowercase()} again yet: they want more matches and better form.")
+        }
+        return Captaincy(career.copy(nationalRole = role, nationalRoleLeft = null), "The selectors give you back the ${role.lowercase()} of ${career.nation}.")
     }
 
     /** A sentence for the Career tab and the pathway about the national captaincy. */

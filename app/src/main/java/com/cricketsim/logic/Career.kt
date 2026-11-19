@@ -165,7 +165,10 @@ data class CareerProfile(
     val leagueDeals: Map<String, Int>? = null,
     val leftLeagues: List<String>? = null,
     // Patch 130: true for a career made after the school pace limit existed (school bowling stays at or under 135 km/h); an older career has no value and keeps the old speeds.
-    val schoolPaceCap: Boolean? = null
+    val schoolPaceCap: Boolean? = null,
+    // Part twenty-nine: captaincies he gave up. The national role and country he stepped down from ("Captain|India"), and the franchises (team ids) he stepped down from this season.
+    val nationalRoleLeft: String? = null,
+    val leagueCaptainLeft: List<String>? = null
 ) {
     /** "" (district club and above, as always), "School" or "College". Never null, whatever the save held. */
     val stage: String get() = stageSaved ?: ""
