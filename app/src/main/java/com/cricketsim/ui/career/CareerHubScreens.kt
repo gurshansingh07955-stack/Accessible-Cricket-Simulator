@@ -423,6 +423,8 @@ fun CareerHub(
                 val state = current[flow.comp]
                 val fixture = state.fixtures.find { it.id == flow.fixtureId }
                 val userHome = fixture?.homeId == state.userTeamId
+                // The toss presentation (a presenter, the match referee, both captains speaking) only in international and franchise league matches.
+                val tossReferee = if (CareerInternational.isInternational(state) || CareerLeagues.isLeague(state)) com.cricketsim.logic.MatchReferees.forMatch("${state.tournamentId}:${flow.fixtureId}") else null
                 if (CareerSeason.captainIn(career, state)) {
                     // The captain does the toss himself: he calls or flips, and chooses to bat or bowl.
                     TossScreen(
@@ -430,7 +432,8 @@ fun CareerHub(
                         opponentTeam = flow.oppXI,
                         userCalls = if (TossRoles.CAREER_HOME_CALLS) TossRoles.userCalls(userHome, !userHome) else null,
                         onTossComplete = { toss -> play = CPlay.Match(flow.comp, flow.fixtureId, flow.userXI, flow.oppXI, toss) },
-                        onBack = back
+                        onBack = back,
+                        referee = tossReferee
                     )
                 } else {
                     // The captains do it: the screen only says who flipped, who called and who chose.
@@ -439,7 +442,8 @@ fun CareerHub(
                         oppXI = flow.oppXI,
                         userIsHome = userHome,
                         onDone = { toss -> play = CPlay.Match(flow.comp, flow.fixtureId, flow.userXI, flow.oppXI, toss) },
-                        onBack = back
+                        onBack = back,
+                        referee = tossReferee
                     )
                 }
             }
@@ -461,6 +465,7 @@ fun CareerHub(
                         careerPlayerId = CareerSeason.playerIdIn(state, career),
                         careerCaptain = CareerSeason.captainIn(career, state),
                         maxPaceKmh = if (career.stage == "School" && career.schoolPaceCap == true) 135 else null,
+                        referee = com.cricketsim.logic.MatchReferees.forMatch("${state.tournamentId}:${flow.fixtureId}"),
                         powerSurge = state.tournamentId == BigBashLeague.TOURNAMENT_ID,
                         impact = CareerLeagues.impactFor(state, flow.userXI, flow.oppXI, CareerSeason.captainIn(career, state)),
                         stadium = stadium,

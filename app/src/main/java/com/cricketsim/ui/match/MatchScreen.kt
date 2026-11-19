@@ -211,7 +211,9 @@ fun MatchScreen(
     /** Career mode: the player is the captain, so he also makes the team decisions (XI, toss, bowlers, field, batting order). */
     careerCaptain: Boolean = false,
     /** School cricket on a new career: no pace ball faster than this (km/h), for the user's bowling and the computer's. Null = no limit. */
-    maxPaceKmh: Int? = null
+    maxPaceKmh: Int? = null,
+    /** The match referee (a career match always passes the same one for the same fixture); null = one is picked at random. Shown on Match info. */
+    referee: String? = null
 ) {
     // Set for this match and cleared when the screen goes (BowlingSystem.paceCapKmh).
     remember(maxPaceKmh) { com.cricketsim.logic.BowlingSystem.paceCapKmh = maxPaceKmh }
@@ -245,6 +247,8 @@ fun MatchScreen(
                 rules = rules
             )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }
                 .let { if (!tournamentName.isNullOrBlank() && it.tournamentName == null) it.copy(tournamentName = tournamentName) else it }
+                // Every match has a match referee (a match saved before referees existed gets one now).
+                .let { if (it.referee == null) it.copy(referee = referee ?: com.cricketsim.logic.MatchReferees.pick()) else it }
                 .let { s ->
                     if (careerPlayerId == null || s.careerPlayerId != null) {
                         s

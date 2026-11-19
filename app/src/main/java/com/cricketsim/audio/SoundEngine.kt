@@ -431,6 +431,18 @@ class SoundEngine(context: Context) {
 
     fun isPressSpeaking(): Boolean = pressVoice.isSpeaking
 
+    /** The toss presentation (patch 132): the presenter's and the captains' clips one after the other, cutting off whatever was playing. False if one is missing or sound effects are off. */
+    fun playToss(ids: List<String>): Boolean {
+        if (!settings.soundEffects) return false
+        return pressVoice.play(ids, interrupt = true)
+    }
+
+    /** The same, after whatever is already playing. */
+    fun queueToss(ids: List<String>): Boolean {
+        if (!settings.soundEffects) return false
+        return pressVoice.play(ids, interrupt = false)
+    }
+
     /** Stops the voices only; a room sound that is playing finishes (the applause as the page closes). */
     fun stopPressVoice() {
         pressVoice.stop()

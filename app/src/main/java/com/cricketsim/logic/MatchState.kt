@@ -186,6 +186,8 @@ data class MatchState(
     val surge: SurgeState? = null,
     // A custom tournament's rules (overs, fielding restriction, DRS, rain); null = the format's own rules.
     val rules: MatchRules? = null,
+    // The match referee (patch 132, logic/MatchReferees.kt); null in a match saved before referees existed (it is given one when the match screen opens).
+    val referee: String? = null,
     // A five-day Test's innings, sessions and rules (logic/TestMatch.kt); null = not a five-day Test.
     val test: TestState? = null,
     // The tournament (and stage, for example "Big Bash League 2026-27, Final") this match belongs to; null = a normal match.
