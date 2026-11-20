@@ -315,6 +315,8 @@ fun MatchScreen(
     var pendingCatch by remember { mutableStateOf<PendingCatch?>(null) }
     // A ball the user is batting that is worth runs, waiting for his decision to run or stay (RunScreens.kt, running between the wickets).
     var pendingRun by remember { mutableStateOf<PendingRun?>(null) }
+    // The Simulate page (Match info > Simulate match) is open.
+    var showSimulate by remember { mutableStateOf(false) }
     // Career mode: "Skip to my turn" is on (the game plays the balls that are not the player's by itself). It is declared here, before the ball logic that reads it.
     var skipping by remember { mutableStateOf(false) }
     var showImpactUse by remember { mutableStateOf(false) }
@@ -471,6 +473,38 @@ fun MatchScreen(
         moveToNextTestInnings(recorded, lastLine)
     }
 
+    // SIMULATE (Match info > Simulate match, logic/MatchFastForward.kt): the computer plays both sides from here without the screens, for the overs (and balls) or the
+    // sessions asked for. It stops early when the innings ends, a team declares, or the match is over, and what follows is exactly what follows a ball that ends them.
+    fun runFastForward(request: com.cricketsim.logic.FastForwardRequest) {
+        val result = com.cricketsim.logic.MatchFastForward.run(matchState, stadium, request)
+        val now = result.state
+        val line = com.cricketsim.logic.MatchFastForward.summary(request, result)
+        matchState = now
+        recentCommentary = (recentCommentary + line).takeLast(6)
+        services?.announceSpoken(line)
+        when {
+            MatchSimulation.isTargetReached(now) -> concludeMatchOrSuperOver(now)
+            result.stop == "declared" -> finishTestInnings(now, declared = true, lastLine = line)
+            now.test != null && (MatchSimulation.isInningsOver(now) || TestMatch.timeUp(now)) ->
+                finishTestInnings(now, declared = false, lastLine = line)
+            MatchSimulation.isInningsOver(now) -> {
+                if (now.currentInnings == 1) {
+                    breakLastBall = line
+                    val switched = MatchStateMachine.switchInnings(now)
+                    matchState = switched
+                    recentCommentary = emptyList()
+                    showInningsBreak = true
+                    director?.onInningsBreak(switched)
+                    val targetWord = if (switched.dlsRevised) "DLS-revised target" else "Target"
+                    services?.announceSpoken("Innings break. $targetWord is ${switched.target}.")
+                } else {
+                    concludeMatchOrSuperOver(now)
+                }
+            }
+            else -> Unit
+        }
+    }
+
     // Lunch, tea and stumps come by themselves when a session's 30 overs are done and nobody is being replaced.
     LaunchedEffect(matchState.score, matchState.currentInnings, matchState.pendingDismissal, matchState.drinksBreak, showInningsBreak, matchOver, matchState.test?.followOnPending) {
         if (matchOver || showInningsBreak || !TestMatch.breakDue(matchState)) return@LaunchedEffect
@@ -623,6 +657,18 @@ fun MatchScreen(
         )
     }
 
+    // CAREER MODE, the computer sets the field of the user's side (he is not the captain): it must never be an illegal one. A powerplay or a Power Surge that has
+    // just started makes the old field illegal, and he cannot move a fielder himself, so every ball would be a no-ball (illegal field). A new legal field is made.
+    fun ensureLegalField(s: MatchState): MatchState {
+        if (s.careerPlayerId == null || s.careerCaptain || s.bowlingTeam.id != s.userTeam.id) return s
+        val restricted = FieldingSystem.isRestrictedBall(s, s.score.overs * 6 + s.score.balls)
+        if (FieldingSystem.isFieldLegal(s.fieldPlacements, restricted)) return s
+        return MatchStateMachine.setFieldPlacements(
+            s,
+            FieldingSystem.generateAiFieldPlacements(FieldingSystem.getFieldingPlayers(s.bowlingTeam, s.currentBowler.id), restricted)
+        )
+    }
+
     fun advanceOneBall(
         presetBowlingDecision: ResolvedBowlingDecision? = null,
         presetBattingDecision: BattingDecision? = null,
@@ -635,7 +681,7 @@ fun MatchScreen(
         fieldMessage = ""
         playNotice = ""
         // After an LBW appeal the ball has already been bowled and simulated: carry on with that ball.
-        val before = resumed?.before ?: matchState
+        val before = resumed?.before ?: ensureLegalField(matchState).also { matchState = it }
         if (resumed == null && preResult == null) director?.onDelivery()
         val simulated = preResult ?: resumed?.result ?: MatchSimulation.simulateOneBall(
             before,
@@ -710,12 +756,12 @@ fun MatchScreen(
     // for his team by itself, a pause between balls so each one can be heard; "Skip to my turn" shortens the pause until his turn comes.
     LaunchedEffect(
         matchState, matchOver, pendingAppeal, pendingCatch, pendingRun, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
-        confirmingDeclare, showImpactUse, surgeNotice, showPitchingScreen, showBattingScreen, showFieldScreen, showChangeBowler, skipping
+        confirmingDeclare, showImpactUse, showSimulate, surgeNotice, showPitchingScreen, showBattingScreen, showFieldScreen, showChangeBowler, skipping
     ) {
         val pid = matchState.careerPlayerId ?: return@LaunchedEffect
         val s = matchState
         if (matchOver || pendingAppeal != null || pendingCatch != null || pendingRun != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
-            confirmingLeave || confirmingDeclare || showImpactUse || surgeNotice != null || showPitchingScreen || showBattingScreen ||
+            confirmingLeave || confirmingDeclare || showImpactUse || showSimulate || surgeNotice != null || showPitchingScreen || showBattingScreen ||
             showFieldScreen || showChangeBowler
         ) return@LaunchedEffect
         if (s.matchStatus != MatchStatus.IN_PROGRESS || s.needsBowlerSelection || s.needsOpenerSelection || s.pendingDismissal != null ||
@@ -754,6 +800,20 @@ fun MatchScreen(
         return
     }
 
+    // Simulate (Match info > Simulate match): the page where he chooses sessions or overs and balls.
+    if (showSimulate) {
+        BackHandler(onBack = { showSimulate = false })
+        SimulateMatchScreen(
+            state = matchState,
+            onBack = { showSimulate = false },
+            onSimulate = { request ->
+                showSimulate = false
+                runFastForward(request)
+            }
+        )
+        return
+    }
+
     if (showMatchInfo) {
         BackHandler(onBack = { showMatchInfo = false })
         MatchInfoScreen(
@@ -783,6 +843,10 @@ fun MatchScreen(
             onDeclare = {
                 showMatchInfo = false
                 confirmingDeclare = true
+            },
+            onSimulate = {
+                showMatchInfo = false
+                showSimulate = true
             },
             onBack = { showMatchInfo = false }
         )

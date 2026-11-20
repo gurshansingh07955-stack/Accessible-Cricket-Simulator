@@ -69,7 +69,8 @@ object PowerSurge {
      */
     fun take(s: MatchState): MatchState {
         val next = s.copy(surge = SurgeState(s.currentInnings, ballsBowled(s)))
-        if (s.bowlingTeam.id == s.userTeam.id) return next
+        // The user sets his own field, except in career mode when he is not the captain: then the computer does, and it must be legal at once (patch 133).
+        if (s.bowlingTeam.id == s.userTeam.id && (s.careerPlayerId == null || s.careerCaptain)) return next
         val field = FieldingSystem.generateAiFieldPlacements(
             FieldingSystem.getFieldingPlayers(s.bowlingTeam, s.currentBowler.id),
             true

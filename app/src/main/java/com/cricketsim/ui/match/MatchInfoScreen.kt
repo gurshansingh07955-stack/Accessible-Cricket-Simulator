@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.cricketsim.logic.ImpactPlayer
 import com.cricketsim.logic.PowerSurge
+import com.cricketsim.logic.MatchFastForward
 import com.cricketsim.logic.MatchFormat
 import com.cricketsim.logic.MatchState
 import com.cricketsim.logic.Stadium
@@ -38,6 +39,8 @@ fun MatchInfoScreen(
     onUsePowerSurge: () -> Unit = {},
     onDeclare: () -> Unit = {},
     onTakeNewBall: () -> Unit = {},
+    // Simulate match (patch 133): null = not offered.
+    onSimulate: (() -> Unit)? = null,
     onBack: () -> Unit
 ) {
     val user = state.userTeam
@@ -69,6 +72,10 @@ fun MatchInfoScreen(
         if (TestMatch.canDeclare(state)) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onDeclare, modifier = Modifier.fillMaxWidth()) { Text("Declare innings") }
+        }
+        if (onSimulate != null && MatchFastForward.canSimulate(state)) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onSimulate, modifier = Modifier.fillMaxWidth()) { Text("Simulate match") }
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
