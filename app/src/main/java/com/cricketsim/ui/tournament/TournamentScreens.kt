@@ -1021,7 +1021,8 @@ fun TournamentFlow(onExit: () -> Unit) {
                     opponentTeam = opponentSquad,
                     userCalls = tossCaller(kind, userSquad, opponentSquad, fixture?.stadiumId),
                     onTossComplete = { toss -> page = TPage.PickXI(current.fixtureId, toss = toss) },
-                    onBack = back
+                    onBack = back,
+                    stadium = fixture?.stadiumId?.let { CplData.stadium(it) }
                 )
             } else back()
         }
@@ -1108,6 +1109,7 @@ fun TournamentFlow(onExit: () -> Unit) {
                 userTeam = current.userXI,
                 opponentTeam = current.opponentXI,
                 userCalls = tossCaller(kind, current.userXI, current.opponentXI, saved?.fixtures?.find { it.id == current.fixtureId }?.stadiumId),
+                stadium = saved?.fixtures?.find { it.id == current.fixtureId }?.stadiumId?.let { CplData.stadium(it) },
                 onTossComplete = { toss ->
                     // The international tournaments play the national anthems after the toss, as a normal match does.
                     val international = kind == "wc2026" || kind == "ct2025" || kind == "asia2025" || kind == "ag2026"

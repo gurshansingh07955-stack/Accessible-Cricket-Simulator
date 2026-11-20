@@ -1,6 +1,6 @@
-Patch run: 44651965441
-Timestamp (UTC): 2026-11-20T01:13:23Z
+Patch run: 44721568378
+Timestamp (UTC): 2026-11-20T10:43:13Z
 Result: OK
 -----
-Patch 2026-11-19-133-simulate-match-and-power-surge-field.json
-  applied 15 operation(s) to 6 file(s)
+Patch 2026-11-20-134-pitch-report-before-the-toss.json
+  applied 20 operation(s) to 12 file(s)

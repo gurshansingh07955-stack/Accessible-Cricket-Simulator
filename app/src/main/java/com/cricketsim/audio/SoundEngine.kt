@@ -1205,6 +1205,24 @@ class SoundEngine(context: Context) {
         if (!commentaryPlaying) playNextCommentary() else prefetchNextCommentary()
     }
 
+    /**
+     * One line of a category's pair (patch 134): the lead commentator's (excited) or the co-commentator's (calm), queued after what is playing. In a single-voice
+     * commentary mode that voice speaks it; with the commentary off nothing is queued.
+     */
+    fun enqueueCommentaryLine(category: CommentaryCategory, excited: Boolean) {
+        val mode = settings.aiCommentaryMode
+        if (mode == AiCommentaryMode.OFF) return
+        val pair = CommentaryLibrary.getRandomCommentaryPair(category)
+        val useExcited = when (mode) {
+            AiCommentaryMode.EXCITED -> true
+            AiCommentaryMode.CALM -> false
+            else -> excited
+        }
+        val path = (if (useExcited) pair.excited else pair.calm).audioUrl ?: return
+        commentaryQueue.add(path)
+        if (!commentaryPlaying) playNextCommentary() else prefetchNextCommentary()
+    }
+
     // --- Commentary look-ahead ---
     // WHY: each clip used to be loaded only once the previous one had ended, so there was a
     // small, uneven silence between the two commentators (longer for a clip streamed over

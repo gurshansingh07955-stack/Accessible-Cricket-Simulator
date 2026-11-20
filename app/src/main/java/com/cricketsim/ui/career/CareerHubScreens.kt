@@ -433,7 +433,8 @@ fun CareerHub(
                         userCalls = if (TossRoles.CAREER_HOME_CALLS) TossRoles.userCalls(userHome, !userHome) else null,
                         onTossComplete = { toss -> play = CPlay.Match(flow.comp, flow.fixtureId, flow.userXI, flow.oppXI, toss) },
                         onBack = back,
-                        referee = tossReferee
+                        referee = tossReferee,
+                        stadium = fixture?.let { CplData.stadium(it.stadiumId) }
                     )
                 } else {
                     // The captains do it: the screen only says who flipped, who called and who chose.
@@ -443,7 +444,8 @@ fun CareerHub(
                         userIsHome = userHome,
                         onDone = { toss -> play = CPlay.Match(flow.comp, flow.fixtureId, flow.userXI, flow.oppXI, toss) },
                         onBack = back,
-                        referee = tossReferee
+                        referee = tossReferee,
+                        stadium = fixture?.let { CplData.stadium(it.stadiumId) }
                     )
                 }
             }

@@ -95,7 +95,13 @@ enum class CommentaryCategory {
     // Manual fielding: a dropped catch, a missed stumping, a missed run out, a run saved by a good stop.
     DROPPED_CATCH, STUMPING_MISSED, RUN_OUT_MISSED, GOOD_STOP,
     // Byes and leg byes: runs that did not come off the bat (patch 128).
-    BYE, LEG_BYE
+    BYE, LEG_BYE,
+    // The pitch report before the toss (patch 134): the commentators on the pitch, the ground, the dew, the weather and what to do at the toss.
+    PITCH_INTRO, PITCH_BATTING, PITCH_BOWLING, PITCH_BALANCED,
+    PITCH_DUSTY, PITCH_GREEN, BOUNDARY_SMALL, BOUNDARY_MEDIUM,
+    BOUNDARY_LARGE, DEW_HEAVY, DEW_LIGHT, WEATHER_CLEAR,
+    WEATHER_PARTLY_CLOUDY, WEATHER_OVERCAST, WEATHER_HUMID, WEATHER_LIGHT_RAIN,
+    ADVICE_BAT, ADVICE_BOWL, ADVICE_EITHER
 }
 
 data class CommentaryLine(val id: String, val text: String, val audioUrl: String? = null)
@@ -988,6 +994,141 @@ object CommentaryLibrary {
             CommentaryPair(
                 CommentaryLine("legbye_5_excited", "Off the body and away, they take the leg byes!", "/_cdn/commentary/legbye_5_excited.mp3"),
                 CommentaryLine("legbye_5_calm", "Awkward for the batter, but it all adds to the total.", "/_cdn/commentary/legbye_5_calm.mp3")
+            )
+        ),
+        // The pitch report (patch 134).
+        CommentaryCategory.PITCH_INTRO to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_intro_1_excited", "Hello and welcome to the pitch report, everyone! Let us have a look at the conditions before the toss!", "/_cdn/commentary/pr_intro_1_excited.mp3"),
+                CommentaryLine("pr_intro_1_calm", "Good to be here. The surface and the sky will both play a part today, so let us see what they have in store.", "/_cdn/commentary/pr_intro_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.PITCH_BATTING to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_bat_1_excited", "This one looks a belter of a batting track! Hard, flat and true, with plenty of runs in it!", "/_cdn/commentary/pr_bat_1_excited.mp3"),
+                CommentaryLine("pr_bat_1_calm", "A good, even bounce here, and the ball should come nicely onto the bat. Bowlers will have to be very accurate.", "/_cdn/commentary/pr_bat_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("pr_bat_2_excited", "Runs, runs and more runs! This surface is made for stroke makers!", "/_cdn/commentary/pr_bat_2_excited.mp3"),
+                CommentaryLine("pr_bat_2_calm", "Very little for the bowlers to work with, unless the conditions help them. Expect a high scoring game.", "/_cdn/commentary/pr_bat_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.PITCH_BOWLING to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_bowl_1_excited", "There is something in this pitch for the bowlers! Pace, bounce and carry, and the batters will need to work hard!", "/_cdn/commentary/pr_bowl_1_excited.mp3"),
+                CommentaryLine("pr_bowl_1_calm", "A tricky surface to start on. Runs will be hard to come by, and wickets will come in clusters.", "/_cdn/commentary/pr_bowl_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("pr_bowl_2_excited", "This one has some life in it! The quicker bowlers will be licking their lips!", "/_cdn/commentary/pr_bowl_2_excited.mp3"),
+                CommentaryLine("pr_bowl_2_calm", "Batters need to be patient and respect the new ball. Once they get set, there are still runs to be had.", "/_cdn/commentary/pr_bowl_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.PITCH_BALANCED to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_bal_1_excited", "A fair pitch for both bat and ball. That makes for a proper contest!", "/_cdn/commentary/pr_bal_1_excited.mp3"),
+                CommentaryLine("pr_bal_1_calm", "Bowlers will get something early, and batters will enjoy it once they are in. Good cricket will be rewarded.", "/_cdn/commentary/pr_bal_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("pr_bal_2_excited", "Nothing too extreme about this one. It should be a real test of skill!", "/_cdn/commentary/pr_bal_2_excited.mp3"),
+                CommentaryLine("pr_bal_2_calm", "An even surface like this rewards the side that adapts quickest.", "/_cdn/commentary/pr_bal_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.PITCH_DUSTY to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_dust_1_excited", "Dry, dusty and cracking in places! The spinners are going to love this one!", "/_cdn/commentary/pr_dust_1_excited.mp3"),
+                CommentaryLine("pr_dust_1_calm", "The pitch will slow down and turn more as the game goes on, so batting last could be hard work.", "/_cdn/commentary/pr_dust_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("pr_dust_2_excited", "Look at that surface! It is a dust bowl, and the turners will be right in the game!", "/_cdn/commentary/pr_dust_2_excited.mp3"),
+                CommentaryLine("pr_dust_2_calm", "Strokeplay will not be easy once the ball starts gripping. Spin and patience will decide this match.", "/_cdn/commentary/pr_dust_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.PITCH_GREEN to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_green_1_excited", "There is a lovely covering of grass on this pitch! The seamers will be rubbing their hands!", "/_cdn/commentary/pr_green_1_excited.mp3"),
+                CommentaryLine("pr_green_1_calm", "Early movement off the seam is likely, so the first hour or so will be tricky. It should ease up later.", "/_cdn/commentary/pr_green_1_calm.mp3")
+            ),
+            CommentaryPair(
+                CommentaryLine("pr_green_2_excited", "Green and juicy! The new ball could do plenty here!", "/_cdn/commentary/pr_green_2_excited.mp3"),
+                CommentaryLine("pr_green_2_calm", "Batters will need to see off the new ball. Those who survive will find the pitch gets better to bat on.", "/_cdn/commentary/pr_green_2_calm.mp3")
+            )
+        ),
+        CommentaryCategory.BOUNDARY_SMALL to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_bsmall_1_excited", "And the boundaries here are short! Mishits could still clear the rope!", "/_cdn/commentary/pr_bsmall_1_excited.mp3"),
+                CommentaryLine("pr_bsmall_1_calm", "Bowlers will need to be extra careful with their lengths on a ground this size.", "/_cdn/commentary/pr_bsmall_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.BOUNDARY_MEDIUM to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_bmed_1_excited", "The boundaries are of a decent, standard size, so fours and sixes will have to be earned!", "/_cdn/commentary/pr_bmed_1_excited.mp3"),
+                CommentaryLine("pr_bmed_1_calm", "A fair ground. Good hitting will be rewarded, and good bowling will be too.", "/_cdn/commentary/pr_bmed_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.BOUNDARY_LARGE to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_blarge_1_excited", "A big ground out here! There is plenty of room in the outfield!", "/_cdn/commentary/pr_blarge_1_excited.mp3"),
+                CommentaryLine("pr_blarge_1_calm", "Running between the wickets will be important, and the twos will come easily.", "/_cdn/commentary/pr_blarge_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.DEW_HEAVY to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_dewh_1_excited", "Dew is expected here later in the day! That could make the ball slippery for the bowlers!", "/_cdn/commentary/pr_dewh_1_excited.mp3"),
+                CommentaryLine("pr_dewh_1_calm", "That is a big factor for the toss. Chasing under the dew is usually easier.", "/_cdn/commentary/pr_dewh_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.DEW_LIGHT to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_dewl_1_excited", "There is little dew expected here, so the ball should stay dry!", "/_cdn/commentary/pr_dewl_1_excited.mp3"),
+                CommentaryLine("pr_dewl_1_calm", "Both teams will be able to grip the ball, so the toss will not be a big issue.", "/_cdn/commentary/pr_dewl_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.WEATHER_CLEAR to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_clear_1_excited", "And what a day for cricket! Clear skies and plenty of sun!", "/_cdn/commentary/pr_clear_1_excited.mp3"),
+                CommentaryLine("pr_clear_1_calm", "No cloud cover to help the swing, and no rain to worry about.", "/_cdn/commentary/pr_clear_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.WEATHER_PARTLY_CLOUDY to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_pcloud_1_excited", "A few clouds around, but nothing to worry about!", "/_cdn/commentary/pr_pcloud_1_excited.mp3"),
+                CommentaryLine("pr_pcloud_1_calm", "They could help the bowlers a little with swing early on.", "/_cdn/commentary/pr_pcloud_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.WEATHER_OVERCAST to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_over_1_excited", "Overcast skies above us! The swing bowlers will love this!", "/_cdn/commentary/pr_over_1_excited.mp3"),
+                CommentaryLine("pr_over_1_calm", "The ball is likely to move around in the air, so the new ball could be a handful.", "/_cdn/commentary/pr_over_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.WEATHER_HUMID to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_humid_1_excited", "It is hot and sticky out here! Players will need plenty of water!", "/_cdn/commentary/pr_humid_1_excited.mp3"),
+                CommentaryLine("pr_humid_1_calm", "Humid air helps the ball swing, and the fielders will tire quickly.", "/_cdn/commentary/pr_humid_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.WEATHER_LIGHT_RAIN to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_rain_1_excited", "There is a threat of rain in the air today! We might see some interruptions!", "/_cdn/commentary/pr_rain_1_excited.mp3"),
+                CommentaryLine("pr_rain_1_calm", "If the weather does close in, a revised target could decide this game.", "/_cdn/commentary/pr_rain_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.ADVICE_BAT to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_advbat_1_excited", "So, what would I do at the toss? I would bat first and put runs on the board!", "/_cdn/commentary/pr_advbat_1_excited.mp3"),
+                CommentaryLine("pr_advbat_1_calm", "I agree. The conditions favor setting a total and putting pressure on the chasing side.", "/_cdn/commentary/pr_advbat_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.ADVICE_BOWL to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_advbowl_1_excited", "My advice at the toss: bowl first and make the most of these conditions!", "/_cdn/commentary/pr_advbowl_1_excited.mp3"),
+                CommentaryLine("pr_advbowl_1_calm", "Yes, the early conditions favor the bowlers, and the chase should get easier later.", "/_cdn/commentary/pr_advbowl_1_calm.mp3")
+            )
+        ),
+        CommentaryCategory.ADVICE_EITHER to listOf(
+            CommentaryPair(
+                CommentaryLine("pr_adveither_1_excited", "It is a tough call at the toss today! Either decision could work!", "/_cdn/commentary/pr_adveither_1_excited.mp3"),
+                CommentaryLine("pr_adveither_1_calm", "Nothing in the conditions clearly favors one side. It all comes down to the captain's instinct.", "/_cdn/commentary/pr_adveither_1_calm.mp3")
             )
         )
     )

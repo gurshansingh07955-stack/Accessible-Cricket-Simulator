@@ -242,7 +242,8 @@ fun MatchScreen(
                 tossWinnerId = toss.winnerId,
                 tossDecision = toss.decision,
                 stadiumId = stadium.id,
-                weather = WeatherSystem.generateWeatherForStadium(stadium),
+                // The weather the pitch report before the toss spoke about (a new roll if there was no report).
+                weather = com.cricketsim.logic.MatchWeatherCache.take(stadium),
                 impact = impact?.let { ImpactState(userSubs = it.userSubs, opponentSubs = it.opponentSubs, overseasIds = it.overseasIds) },
                 rules = rules
             )).let { if (powerSurge && it.surge == null) it.copy(surge = SurgeState()) else it }

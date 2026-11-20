@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CoinSide
 import com.cricketsim.logic.CommentaryCategory
+import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossDecision
 import com.cricketsim.logic.TossResult
@@ -63,7 +64,8 @@ fun TossScreen(
     onTossComplete: (TossResult) -> Unit,
     onBack: () -> Unit,
     userCalls: Boolean? = null,
-    referee: String? = null
+    referee: String? = null,
+    stadium: Stadium? = null
 ) {
     val services = LocalGameServices.current
     val show = remember(referee) { TossShow.create(services?.sound, referee) }
@@ -73,6 +75,13 @@ fun TossScreen(
     // With the presentation: the user's own bat or bowl choice, kept here so the answers can be played before he goes on.
     var userDecision by remember { mutableStateOf<TossDecision?>(null) }
     val result = tossResult
+
+    // The pitch report comes first (patch 134): the ground, the pitch and the weather, with the commentators. Without a ground there is none.
+    var reportDone by remember { mutableStateOf(stadium == null) }
+    if (!reportDone && stadium != null) {
+        PitchReportScreen(stadium = stadium, onContinue = { reportDone = true }, onBack = onBack)
+        return
+    }
 
     // The presenter welcomes everyone, names the match referee and invites the captain to call (or the user to flip) the coin.
     LaunchedEffect(show) { show?.play(show.opening(userFlips = !userCallsCoin)) }

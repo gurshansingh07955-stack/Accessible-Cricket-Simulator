@@ -13,7 +13,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -23,11 +26,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.CoinSide
+import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TossDecision
 import com.cricketsim.logic.TossResult
 import com.cricketsim.logic.TossRoles
 import com.cricketsim.ui.match.TossShow
+import com.cricketsim.ui.setup.PitchReportScreen
 import kotlin.random.Random
 
 /** What the captains did at the toss of a career match when the player is not the captain. */
@@ -49,9 +54,15 @@ private class CareerTossOutcome(
  * phone then says the result as before. "Start the match" cuts the voices off.
  */
 @Composable
-fun CareerTossScreen(userXI: Team, oppXI: Team, userIsHome: Boolean, onDone: (TossResult) -> Unit, onBack: () -> Unit, referee: String? = null) {
+fun CareerTossScreen(userXI: Team, oppXI: Team, userIsHome: Boolean, onDone: (TossResult) -> Unit, onBack: () -> Unit, referee: String? = null, stadium: Stadium? = null) {
     val services = LocalGameServices.current
     val show = remember(referee) { TossShow.create(services?.sound, referee) }
+    // The pitch report comes first (patch 134): the ground, the pitch and the weather, with the commentators. Without a ground there is none.
+    var reportDone by remember { mutableStateOf(stadium == null) }
+    if (!reportDone && stadium != null) {
+        PitchReportScreen(stadium = stadium, onContinue = { reportDone = true }, onBack = onBack)
+        return
+    }
     val toss = remember {
         val home = if (userIsHome) userXI else oppXI
         val away = if (userIsHome) oppXI else userXI
