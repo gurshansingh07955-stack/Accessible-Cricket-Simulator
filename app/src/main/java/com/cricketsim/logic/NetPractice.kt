@@ -209,6 +209,155 @@ object NetPractice {
         return lines
     }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // BOWLING PRACTICE (part 2)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /** What the bowler has done in a practice session. */
+    data class BowlTally(
+        val balls: Int = 0,
+        val runs: Int = 0,
+        val wickets: Int = 0,
+        val dots: Int = 0,
+        val boundaries: Int = 0,
+        val wides: Int = 0,
+        val noBalls: Int = 0,
+        val perfect: Int = 0,
+        val ideal: Int = 0,
+        val good: Int = 0,
+        val bad: Int = 0,
+        val veryBad: Int = 0,
+        val delivered: Int = 0,
+        val precisionLoss: Double = 0.0,
+        val smoothLoss: Double = 0.0,
+        val speedLoss: Double = 0.0
+    )
+
+    /** The bowler's own national side: the field the bowling practice sets and the fielders it names. */
+    fun bowlingSide(bowler: Player): Team = bowlingSideFor(bowler).first
+
+    /** Two different batsmen from the 90-and-over list; the first is never the one who has just faced. */
+    fun randomBatters(previous: Player?): Pair<Player, Player> {
+        val pool = batters()
+        val firstChoices = pool.filter { it.id != previous?.id }.ifEmpty { pool }
+        val first = firstChoices[Random.nextInt(firstChoices.size)]
+        val secondChoices = pool.filter { it.id != first.id }.ifEmpty { pool }
+        return Pair(first, secondChoices[Random.nextInt(secondChoices.size)])
+    }
+
+    /**
+     * The state each bowling-practice ball is resolved in: the user's side (the bowler's own national side) bowling, the net batters
+     * batting. The field is set by the user; it is put into the state ball by ball by the session.
+     */
+    fun buildBowlingState(bowler: Player, striker: Player, partner: Player): MatchState {
+        val stadium = netStadium()
+        val sides = bowlingSideFor(bowler)
+        val battingSide = Team(
+            id = "net_batters",
+            name = "Net batters",
+            countryCode = "NET",
+            battingRating = 90,
+            bowlingRating = 40,
+            fieldingRating = 70,
+            players = listOf(striker, partner)
+        )
+        val weather = WeatherSnapshot(WeatherCondition.CLEAR, 28, 45, 8, 0, false)
+        var state = MatchStateMachine.createNewMatch(
+            format = MatchFormat.T20,
+            pitchType = PitchType.BALANCED,
+            userTeam = sides.first,
+            opponentTeam = battingSide,
+            tossWinnerId = battingSide.id,
+            tossDecision = TossDecision.BAT,
+            stadiumId = stadium.id,
+            weather = weather
+        )
+        state = MatchStateMachine.changeBowlerBeforeFirstBall(state, sides.second)
+        return MatchStateMachine.setOpeners(state, striker, partner)
+    }
+
+    /** The computer batter's answer to the user's ball: exactly what the computer batter does in a T20 match (he never leaves). */
+    fun batterDecision(batter: Player, delivery: ResolvedBowlingDecision): BattingDecision =
+        BattingSystem.generateAiBattingDecision(
+            batsman = batter,
+            actualLength = delivery.actualLength,
+            bowlingStyle = delivery.bowlingStyle,
+            bowlingQualityTier = delivery.qualityTier,
+            situationalAggressionBias = 0.0,
+            bowlingLine = delivery.line,
+            allowLeave = false
+        )
+
+    /**
+     * What the coach says after a ball the user bowled, beyond the match's own ball summary: what the ball was, what cost it quality
+     * (the three losses the game scores: where the drag ended, a drag that overshot and was pulled back, and a speed too high to
+     * control), and the field if it was illegal.
+     */
+    fun bowlFeedback(delivery: ResolvedBowlingDecision, illegalFieldReason: String?): List<String> {
+        val lines = ArrayList<String>()
+        val quality = delivery.quality
+        val tierLabel = BowlingSystem.qualityTierLabel(delivery.qualityTier)
+        val intended = BowlingSystem.lengthLabel(delivery.intendedLength)
+        val actual = BowlingSystem.lengthLabel(delivery.actualLength)
+        if (delivery.qualityTier == BowlingQualityTier.PERFECT) {
+            lines.add("Coach: $tierLabel. Exactly the $intended you aimed for.")
+        } else {
+            val aim = if (intended == actual) "You aimed for a $intended and bowled a $actual." else "You aimed for a $intended but bowled a $actual."
+            val tips = ArrayList<Pair<Double, String>>()
+            val precisionLoss = 100.0 - quality.lengthPrecision
+            if (precisionLoss >= 8.0) {
+                tips.add(Pair(precisionLoss, "Length: your drag ended away from the middle of the $intended band, losing ${precisionLoss.toInt()} points. Stop your finger in the middle of the band."))
+            }
+            if (quality.smoothnessPenalty >= 8.0) {
+                tips.add(Pair(quality.smoothnessPenalty, "Smoothness: you overshot and pulled back, losing ${quality.smoothnessPenalty.toInt()} points. Drag down in one smooth movement and stop where you want."))
+            }
+            if (quality.speedRiskPenalty >= 8.0) {
+                tips.add(Pair(quality.speedRiskPenalty, "Speed: ${delivery.speedKmh} kilometres an hour was hard to control, losing ${quality.speedRiskPenalty.toInt()} points. Bowl a little slower."))
+            }
+            lines.add("Coach: $tierLabel. $aim")
+            tips.sortedByDescending { it.first }.take(2).forEach { lines.add("Coach, ${it.second.replaceFirstChar { c -> c.lowercase() }}") }
+        }
+        if (delivery.forcedNoBall) {
+            lines.add("Coach: that was a beamer, a very bad ball, too full and too high. A beamer is an automatic no ball.")
+        } else if (delivery.calledNoBall) {
+            lines.add("Coach: you overstepped, so it is a no ball and the next ball is a free hit. Better balls overstep less often.")
+        }
+        if (illegalFieldReason != null) {
+            lines.add("Coach, field: your field is illegal, so that ball was a no ball. $illegalFieldReason Fix it with Set field.")
+        }
+        return lines
+    }
+
+    /** The end-of-practice summary for the bowler, spoken and shown. */
+    fun bowlSummaryLines(t: BowlTally, bowlerName: String): List<String> {
+        if (t.delivered == 0) return listOf("You did not bowl a ball.")
+        val lines = ArrayList<String>()
+        val overs = "${t.balls / BALLS_PER_OVER}.${t.balls % BALLS_PER_OVER}"
+        lines.add("Practice finished. $bowlerName bowled $overs overs, conceded ${plural(t.runs, "run", "runs")} and took ${plural(t.wickets, "wicket", "wickets")}.")
+        if (t.balls > 0) {
+            val economy = t.runs * BALLS_PER_OVER.toDouble() / t.balls
+            lines.add("Economy ${"%.1f".format(economy)} runs an over, ${plural(t.dots, "dot ball", "dot balls")}, ${plural(t.boundaries, "boundary", "boundaries")} conceded.")
+        }
+        lines.add("Ball quality: ${t.perfect} perfect, ${t.ideal} ideal, ${t.good} good, ${t.bad} bad and ${t.veryBad} very bad.")
+        if (t.wides + t.noBalls > 0) {
+            lines.add("Extras: ${plural(t.wides, "wide", "wides")} and ${plural(t.noBalls, "no ball", "no balls")}.")
+        }
+        val n = t.delivered.toDouble()
+        val precision = t.precisionLoss / n
+        val smooth = t.smoothLoss / n
+        val speed = t.speedLoss / n
+        val worst = maxOf(precision, smooth, speed)
+        lines.add(
+            when {
+                worst < 6.0 -> "Your execution was very clean. Try a faster speed or a tougher length."
+                worst == precision -> "Your biggest loss was length: finish your drag in the middle of the band."
+                worst == smooth -> "Your biggest loss was smoothness: drag in one movement without overshooting."
+                else -> "Your biggest loss was speed: a slightly slower ball is more accurate."
+            }
+        )
+        return lines
+    }
+
     private fun plural(n: Int, one: String, many: String): String = if (n == 1) "$n $one" else "$n $many"
 
     /** The end-of-practice summary, spoken and shown. */

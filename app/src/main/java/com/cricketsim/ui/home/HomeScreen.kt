@@ -163,7 +163,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(
                 title = "Net practice",
-                description = "Practise batting against the best bowlers, with a coach who explains every ball.",
+                description = "Practise batting or bowling against the best, with a coach who explains every ball.",
                 emphasised = false,
                 enabled = com.cricketsim.logic.NetPractice.NET_PRACTICE_ENABLED,
                 onClick = onNetPractice

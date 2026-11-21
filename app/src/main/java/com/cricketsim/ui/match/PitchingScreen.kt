@@ -300,7 +300,9 @@ fun PitchingScreen(
     // BALLS". Both default so any other call site keeps compiling as a
     // single-ball setup with no memory.
     initialSetup: BowlingSetupMemory? = null,
-    onSetupChanged: (BowlingSetupMemory) -> Unit = {}
+    onSetupChanged: (BowlingSetupMemory) -> Unit = {},
+    // Net practice: speak the ball quality as the length drag nears the middle of its band, and when the length is set. False in a match.
+    coach: Boolean = false
 ) {
     var step by remember { mutableStateOf(PitchStep.AIM) }
     var angle by remember { mutableStateOf(initialSetup?.angle ?: BowlingSystem.ANGLE_OPTIONS.first().value) }
@@ -332,6 +334,7 @@ fun PitchingScreen(
             variation = variation,
             committedLengthFraction = finalLengthFraction,
             initialSpeedKmh = initialSetup?.speedKmh,
+            coach = coach,
             onAngleChanged = { angle = it },
             onLineChanged = { line = it },
             onVariationChanged = { variation = it },
@@ -609,6 +612,7 @@ private fun AimStep(
     // same over — see the class doc comment's "WHY THE BOWLING SETUP
     // CARRIES BETWEEN BALLS". Null for the first ball of an over.
     initialSpeedKmh: Int?,
+    coach: Boolean,
     onAngleChanged: (BowlingAngle) -> Unit,
     onLineChanged: (BowlingLine) -> Unit,
     onVariationChanged: (BowlingVariation) -> Unit,
@@ -675,6 +679,11 @@ private fun AimStep(
         mutableStateOf(seeded ?: (speedRange.min + speedRange.max) / 2)
     }
 
+    // Net practice coaching: read inside the gesture callbacks, which are captured once, so through updated handles.
+    val currentSpeed by rememberUpdatedState(speedKmh)
+    val currentSpeedRange by rememberUpdatedState(speedRange)
+    var lastAnnouncedTier by remember { mutableStateOf<com.cricketsim.logic.BowlingQualityTier?>(null) }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
             text = "Aim your delivery",
@@ -729,26 +738,51 @@ private fun AimStep(
                             }
                         },
                         onLengthDragStart = { currentServices?.sound?.startAimTone() },
-                        onLengthDrag = { fraction, _ ->
+                        onLengthDrag = { fraction, maxFraction ->
                             currentServices?.sound?.updateAimTone(fraction)
                             liveLengthFraction = fraction
                             val band = BowlingSystem.classifyLength(fraction.toDouble())
                             if (band != lastAnnouncedLength) {
                                 lastAnnouncedLength = band
                                 currentServices?.announceSpoken(BowlingSystem.lengthLabel(band))
+                            } else if (coach) {
+                                // Net practice: say how good the ball would be as the finger nears the middle of the band.
+                                val tier = BowlingSystem.computeBowlingQuality(
+                                    verticalFraction = fraction.toDouble(),
+                                    maxVerticalFractionReached = maxFraction.toDouble(),
+                                    speedKmh = currentSpeed,
+                                    speedRange = currentSpeedRange,
+                                    bowlingRating = bowler.bowlingRating
+                                ).tier
+                                if (tier != lastAnnouncedTier) {
+                                    lastAnnouncedTier = tier
+                                    currentServices?.announceSpoken(BowlingSystem.qualityTierLabel(tier))
+                                }
                             }
                         },
                         onLengthDragEnd = { fraction, maxFraction, swing ->
                             currentServices?.sound?.stopAimTone()
                             liveLengthFraction = fraction
                             onLengthDragCommitted(fraction, maxFraction, swing)
+                            lastAnnouncedTier = null
                             val swingSuffix = when (swing) {
                                 SwingType.IN_SWING -> ", inswing"
                                 SwingType.OUT_SWING -> ", outswing"
                                 SwingType.NONE -> ""
                             }
                             currentServices?.announceSpoken(
-                                "Length set: ${BowlingSystem.lengthLabel(BowlingSystem.classifyLength(fraction.toDouble()))}$swingSuffix"
+                                "Length set: ${BowlingSystem.lengthLabel(BowlingSystem.classifyLength(fraction.toDouble()))}$swingSuffix" +
+                                    (if (coach) {
+                                        ". " + BowlingSystem.qualityTierLabel(
+                                            BowlingSystem.computeBowlingQuality(
+                                                verticalFraction = fraction.toDouble(),
+                                                maxVerticalFractionReached = maxFraction.toDouble(),
+                                                speedKmh = currentSpeed,
+                                                speedRange = currentSpeedRange,
+                                                bowlingRating = bowler.bowlingRating
+                                            ).tier
+                                        ) + " at this speed."
+                                    } else "")
                             )
                         },
                         onBoundsChanged = { outside ->
