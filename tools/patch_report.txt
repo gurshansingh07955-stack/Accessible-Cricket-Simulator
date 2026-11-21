@@ -1,6 +1,6 @@
-Patch run: 44893931399
-Timestamp (UTC): 2026-11-21T10:21:20Z
+Patch run: 44917356960
+Timestamp (UTC): 2026-11-21T15:06:12Z
 Result: OK
 -----
-Patch 2026-11-21-137-credits.json
-  applied 9 operation(s) to 5 file(s)
+Patch 2026-11-21-138-career-years-and-delta-credit.json
+  applied 18 operation(s) to 10 file(s)

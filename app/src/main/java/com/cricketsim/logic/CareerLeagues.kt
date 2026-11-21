@@ -257,7 +257,7 @@ object CareerLeagues {
                 val aged = CareerInternational.evolved(t, career.season, null)
                 if (t.id == team.id) CareerDomestic.withPlayer(aged, me) else aged
             }
-            state0.copy(name = "${league.name}, season ${career.season}", teams = teams, tags = state0.tags + (me.id to tag), createdAt = startAt)
+            state0.copy(name = CareerSeason.nameWithYear(career, league.name, career.season), teams = teams, tags = state0.tags + (me.id to tag), createdAt = startAt)
         } catch (e: Exception) {
             null
         }

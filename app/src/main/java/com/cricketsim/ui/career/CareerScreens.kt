@@ -184,7 +184,8 @@ fun CareerFlow(onExit: () -> Unit) {
             startRatings = listOf(me.batting, me.bowling, me.fielding),
             stageSaved = stage,
             homeClubSaved = if (stage.isEmpty()) "" else clubName ?: "",
-            schoolPaceCap = true
+            schoolPaceCap = true,
+            startYear = com.cricketsim.logic.CareerSeason.FIRST_SEASON_YEAR
         )
         val updated = (list + profile).take(CareerWorld.MAX_CAREERS)
         careers = updated

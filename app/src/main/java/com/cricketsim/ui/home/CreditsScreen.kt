@@ -112,6 +112,17 @@ fun CreditsScreen(onBack: () -> Unit) {
             )
             CreditLink("Open ElevenLabs") { open(ELEVENLABS_URL) }
 
+            // 2b. More sound effects: Delta Productions.
+            CreditHeading("More sound effects")
+            CreditBody(
+                "Delta Productions helped with some of the sound effects in this game, such as the sound of the stumps going down " +
+                    "when a batter is bowled out, and others. Thank you, Delta Productions."
+            )
+            CreditBody("You can find their game on the Google Play Store, and visit their website.")
+            CreditLink("Open the Delta Productions game on Google Play") { open(DELTA_PRODUCTIONS_PLAY_STORE_URL) }
+            Spacer(modifier = Modifier.height(4.dp))
+            CreditLink("Open the Delta Productions website") { open(DELTA_PRODUCTIONS_WEBSITE_URL) }
+
             // 3. Hindi commentary: IAS Production Studios.
             CreditHeading("Hindi commentary")
             CreditBody(
@@ -190,3 +201,5 @@ private fun CreditLink(label: String, onClick: () -> Unit) {
 private const val TECHNICAL_ACCESSIBILITY_WORLD_URL = "https://youtube.com/@technicalaccessibilityworl"
 private const val ELEVENLABS_URL = "https://elevenlabs.io"
 private const val IAS_PRODUCTION_STUDIOS_URL = "https://youtube.com/@anoopsinghspecialtv"
+private const val DELTA_PRODUCTIONS_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.fantacycricket.game"
+private const val DELTA_PRODUCTIONS_WEBSITE_URL = "https://deltaproduction.me/"

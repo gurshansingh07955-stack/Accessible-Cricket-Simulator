@@ -114,6 +114,35 @@ object CareerSeason {
         return out
     }
 
+    /** The year of the first season of a career made from patch 138 on (older careers have no start year and keep the calendar's year). */
+    const val FIRST_SEASON_YEAR = 2026
+
+    /** The game year of a career's current season: 2026 in the first season, 2027 in the next, and so on. Null for a career made before patch 138. */
+    fun seasonYear(career: CareerProfile): Int? = career.startYear?.let { it + maxOf(1, career.season) - 1 }
+
+    /** A tournament's name with its year ("Ranji Trophy 2028"); an older career keeps the old "Ranji Trophy, season 3". */
+    fun nameWithYear(career: CareerProfile, label: String, season: Int): String =
+        seasonYear(career)?.let { "$label $it" } ?: "$label, season $season"
+
+    /** The year to put after a name ("World Test Championship final 2027"), or "" for an older career. */
+    fun yearTag(career: CareerProfile): String = seasonYear(career)?.let { " $it" } ?: ""
+
+    /** " in 2027" to end a series name, or "" for an older career. */
+    fun inYear(career: CareerProfile): String = seasonYear(career)?.let { " in $it" } ?: ""
+
+    /** A sentence for the start of a new season's text ("The year is 2027. "), or "" for an older career. */
+    fun yearSentence(career: CareerProfile): String = seasonYear(career)?.let { "The year is $it. " } ?: ""
+
+    /** The first Saturday of the career's season: the calendar's, moved into the career's own year for a new career (an older career is unchanged). */
+    internal fun firstSaturday(career: CareerProfile): Calendar {
+        val c = firstSaturday()
+        val year = seasonYear(career) ?: return c
+        c.set(Calendar.YEAR, year)
+        // Moving to another year changes the weekday: go on to the next Saturday.
+        c.add(Calendar.DAY_OF_YEAR, (Calendar.SATURDAY - c.get(Calendar.DAY_OF_WEEK) + 7) % 7)
+        return c
+    }
+
     /** The first Saturday at least a week away, at nine in the morning. */
     internal fun firstSaturday(): Calendar {
         val c = Calendar.getInstance()
@@ -135,7 +164,7 @@ object CareerSeason {
         val grounds = all.filter { it.country == career.country }.ifEmpty { all }
         val offset = abs(career.state.hashCode()) % grounds.size
         val groundOf = teams.indices.associate { teams[it].id to grounds[(offset + it * 3) % grounds.size].id }
-        val start = firstSaturday()
+        val start = firstSaturday(career)
         val year = start.get(Calendar.YEAR)
         return COMPETITIONS.map { comp ->
             val fixtures = ArrayList<TournamentFixture>()
@@ -426,7 +455,7 @@ object CareerSeason {
         val older = career.copy(age = career.age + 1, season = maxOf(1, career.season) + 1, workload = 0, injuredMatches = maxOf(0, career.injuredMatches - 6), seasonEarnings = 0L, leagueContract = 0)
         // A student stays at school or college until he is old enough, then moves on; the state selectors and the franchises do not look at him (part twenty-six).
         if (career.stage.isNotEmpty()) return CareerStudent.next(career, older)
-        var text = "A new season begins. You are ${older.age}. "
+        var text = "A new season begins. You are ${older.age}. " + yearSentence(older)
         // The national selectors look first (state and international players only): called up or kept, he plays a season of international series.
         if (career.atOrAboveState) {
             val call = CareerInternational.decision(career)

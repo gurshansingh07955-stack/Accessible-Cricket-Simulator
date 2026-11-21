@@ -81,7 +81,7 @@ object CareerStudent {
     /** The next season of a student ([older] is the career a year older): school, college or the district club. */
     fun next(career: CareerProfile, older: CareerProfile): CareerSeason.NextSeason {
         val random = Random(career.id.hashCode().toLong() * 31L + older.season)
-        var text = "A new season begins. You are ${older.age}. "
+        var text = "A new season begins. You are ${older.age}. " + CareerSeason.yearSentence(older)
         var c = older.copy(level = "District")
         if (career.stage == "School" && older.age > SCHOOL_MAX_AGE) {
             // He finishes school. He is put in the first college until he chooses (the hub asks at once and rebuilds the season).

@@ -98,7 +98,8 @@ object CareerDomestic {
     fun newSeason(career: CareerProfile): List<TournamentState>? {
         val name = career.domesticTeams.firstOrNull() ?: return null
         val pid = playerId(career.id)
-        val start = CareerSeason.firstSaturday()
+        val start = CareerSeason.firstSaturday(career)
+        val yr = CareerSeason.seasonYear(career)
         var offsetWeeks = 0
         val out = ArrayList<TournamentState>()
         for (def in defsFor(career.country)) {
@@ -113,7 +114,7 @@ object CareerDomestic {
             }
             val mine = state0.fixtures.count { it.homeId == team.id || it.awayId == team.id }
             val startAt = Calendar.getInstance().apply { timeInMillis = start.timeInMillis; add(Calendar.DAY_OF_YEAR, 7 * offsetWeeks) }.timeInMillis
-            out.add(state0.copy(teams = teams, tags = state0.tags + (pid to SquadTag.DOMESTIC), createdAt = startAt))
+            out.add(state0.copy(name = if (yr != null) "${def.label} $yr" else state0.name, teams = teams, tags = state0.tags + (pid to SquadTag.DOMESTIC), createdAt = startAt))
             offsetWeeks += mine
         }
         return out.ifEmpty { null }

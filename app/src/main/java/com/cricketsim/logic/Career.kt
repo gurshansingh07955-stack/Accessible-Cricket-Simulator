@@ -168,7 +168,10 @@ data class CareerProfile(
     val schoolPaceCap: Boolean? = null,
     // Part twenty-nine: captaincies he gave up. The national role and country he stepped down from ("Captain|India"), and the franchises (team ids) he stepped down from this season.
     val nationalRoleLeft: String? = null,
-    val leagueCaptainLeft: List<String>? = null
+    val leagueCaptainLeft: List<String>? = null,
+    // Patch 138: the year of the career's first season (2026). A career made from this patch on has it and plays each season in its own year (2026, 2027, ...),
+    // with the year in every tournament's name; an older career has no value and is unchanged.
+    val startYear: Int? = null
 ) {
     /** "" (district club and above, as always), "School" or "College". Never null, whatever the save held. */
     val stage: String get() = stageSaved ?: ""

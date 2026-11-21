@@ -358,7 +358,7 @@ object CareerInternational {
         val me = CareerDomestic.asPlayer(career, mine.id)
         val myTeam = CareerDomestic.withPlayer(mine, me)
         val all = AllStadiums.list()
-        val start = CareerSeason.firstSaturday()
+        val start = CareerSeason.firstSaturday(career)
         var offsetWeeks = 0
         val out = ArrayList<TournamentState>()
         plan.forEachIndexed { i, p ->
@@ -382,7 +382,7 @@ object CareerInternational {
                 TournamentState(
                     version = CplData.SAVE_VERSION,
                     tournamentId = "$PREFIX${career.id}_s${season}_${i}_${p.format}",
-                    name = "${myTeam.name} ${p.matches}-match $label series v ${opp.name}",
+                    name = "${myTeam.name} ${p.matches}-match $label series v ${opp.name}${CareerSeason.inYear(career)}",
                     userTeamId = myTeam.id,
                     teams = listOf(myTeam, opp),
                     tags = tags,
@@ -492,7 +492,7 @@ object CareerInternational {
             TournamentState(
                 version = CplData.SAVE_VERSION,
                 tournamentId = "$WC_PREFIX${career.id}_s${season}_odi",
-                name = "ODI World Cup, season $season",
+                name = CareerSeason.nameWithYear(career, "ODI World Cup", season),
                 userTeamId = mineTeam.id,
                 teams = teams,
                 tags = tags,
@@ -545,7 +545,7 @@ object CareerInternational {
             TournamentState(
                 version = CplData.SAVE_VERSION,
                 tournamentId = "$WC_PREFIX${career.id}_s${season}_odi",
-                name = "ODI World Cup, season $season",
+                name = CareerSeason.nameWithYear(career, "ODI World Cup", season),
                 userTeamId = mineTeam.id,
                 teams = teams,
                 tags = tags,
@@ -636,7 +636,7 @@ object CareerInternational {
         return TournamentState(
             version = CplData.SAVE_VERSION,
             tournamentId = "$PREFIX${career.id}_s${season}_wtc_test",
-            name = "World Test Championship final: ${myTeam.name} v ${opp.name}",
+            name = "World Test Championship final${CareerSeason.yearTag(career)}: ${myTeam.name} v ${opp.name}",
             userTeamId = myTeam.id,
             teams = listOf(myTeam, opp),
             tags = tags,
@@ -672,7 +672,7 @@ object CareerInternational {
                 val aged = evolved(t, season, null)
                 if (t.id == team.id) CareerDomestic.withPlayer(aged, mine) else aged
             }
-            state0.copy(name = "${def.label}, season $season", teams = teams, tags = state0.tags + (mine.id to SquadTag.DOMESTIC), createdAt = startAt)
+            state0.copy(name = CareerSeason.nameWithYear(career, def.label, season), teams = teams, tags = state0.tags + (mine.id to SquadTag.DOMESTIC), createdAt = startAt)
         } catch (e: Exception) {
             null
         }
