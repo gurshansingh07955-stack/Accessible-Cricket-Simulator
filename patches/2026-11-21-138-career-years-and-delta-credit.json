@@ -1,0 +1,117 @@
+{
+  "name": "Career seasons have years for new careers (2026, 2027, ...; names like Vijay Hazare Trophy 2027), and the Delta Productions credit",
+  "message": "A career made from this patch on starts in 2026 and each new season is the next year. Every tournament, league and series carries its year, and match dates fall in that year (on the right weekday). Older careers are untouched. Credits gains Delta Productions (sound effects such as the bowled-out sound) with buttons for their Google Play game and their website.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+    "contains": "const val FIRST_SEASON_YEAR"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val leagueCaptainLeft: List<String>? = null\n) {",
+      "replace": "    val leagueCaptainLeft: List<String>? = null,\n    // Patch 138: the year of the career's first season (2026). A career made from this patch on has it and plays each season in its own year (2026, 2027, ...),\n    // with the year in every tournament's name; an older career has no value and is unchanged.\n    val startYear: Int? = null\n) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerScreens.kt",
+      "find": "            schoolPaceCap = true\n        )",
+      "replace": "            schoolPaceCap = true,\n            startYear = com.cricketsim.logic.CareerSeason.FIRST_SEASON_YEAR\n        )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "    /** The first Saturday at least a week away, at nine in the morning. */\n",
+      "replace": "    /** The year of the first season of a career made from patch 138 on (older careers have no start year and keep the calendar's year). */\n    const val FIRST_SEASON_YEAR = 2026\n\n    /** The game year of a career's current season: 2026 in the first season, 2027 in the next, and so on. Null for a career made before patch 138. */\n    fun seasonYear(career: CareerProfile): Int? = career.startYear?.let { it + maxOf(1, career.season) - 1 }\n\n    /** A tournament's name with its year (\"Ranji Trophy 2028\"); an older career keeps the old \"Ranji Trophy, season 3\". */\n    fun nameWithYear(career: CareerProfile, label: String, season: Int): String =\n        seasonYear(career)?.let { \"$label $it\" } ?: \"$label, season $season\"\n\n    /** The year to put after a name (\"World Test Championship final 2027\"), or \"\" for an older career. */\n    fun yearTag(career: CareerProfile): String = seasonYear(career)?.let { \" $it\" } ?: \"\"\n\n    /** \" in 2027\" to end a series name, or \"\" for an older career. */\n    fun inYear(career: CareerProfile): String = seasonYear(career)?.let { \" in $it\" } ?: \"\"\n\n    /** A sentence for the start of a new season's text (\"The year is 2027. \"), or \"\" for an older career. */\n    fun yearSentence(career: CareerProfile): String = seasonYear(career)?.let { \"The year is $it. \" } ?: \"\"\n\n    /** The first Saturday of the career's season: the calendar's, moved into the career's own year for a new career (an older career is unchanged). */\n    internal fun firstSaturday(career: CareerProfile): Calendar {\n        val c = firstSaturday()\n        val year = seasonYear(career) ?: return c\n        c.set(Calendar.YEAR, year)\n        // Moving to another year changes the weekday: go on to the next Saturday.\n        c.add(Calendar.DAY_OF_YEAR, (Calendar.SATURDAY - c.get(Calendar.DAY_OF_WEEK) + 7) % 7)\n        return c\n    }\n\n    /** The first Saturday at least a week away, at nine in the morning. */\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        val start = firstSaturday()\n",
+      "replace": "        val start = firstSaturday(career)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        var text = \"A new season begins. You are ${older.age}. \"\n",
+      "replace": "        var text = \"A new season begins. You are ${older.age}. \" + yearSentence(older)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerStudent.kt",
+      "find": "        var text = \"A new season begins. You are ${older.age}. \"\n",
+      "replace": "        var text = \"A new season begins. You are ${older.age}. \" + CareerSeason.yearSentence(older)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerDomestic.kt",
+      "find": "        val start = CareerSeason.firstSaturday()\n",
+      "replace": "        val start = CareerSeason.firstSaturday(career)\n        val yr = CareerSeason.seasonYear(career)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerDomestic.kt",
+      "find": "            out.add(state0.copy(teams = teams, tags = state0.tags + (pid to SquadTag.DOMESTIC), createdAt = startAt))\n",
+      "replace": "            out.add(state0.copy(name = if (yr != null) \"${def.label} $yr\" else state0.name, teams = teams, tags = state0.tags + (pid to SquadTag.DOMESTIC), createdAt = startAt))\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "        val start = CareerSeason.firstSaturday()\n",
+      "replace": "        val start = CareerSeason.firstSaturday(career)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "                    name = \"${myTeam.name} ${p.matches}-match $label series v ${opp.name}\",\n",
+      "replace": "                    name = \"${myTeam.name} ${p.matches}-match $label series v ${opp.name}${CareerSeason.inYear(career)}\",\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "            name = \"World Test Championship final: ${myTeam.name} v ${opp.name}\",\n",
+      "replace": "            name = \"World Test Championship final${CareerSeason.yearTag(career)}: ${myTeam.name} v ${opp.name}\",\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "                name = \"ODI World Cup, season $season\",\n",
+      "replace": "                name = CareerSeason.nameWithYear(career, \"ODI World Cup\", season),\n",
+      "count": 2
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerInternational.kt",
+      "find": "            state0.copy(name = \"${def.label}, season $season\", teams = teams,",
+      "replace": "            state0.copy(name = CareerSeason.nameWithYear(career, def.label, season), teams = teams,"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerLeagues.kt",
+      "find": "            state0.copy(name = \"${league.name}, season ${career.season}\", teams = teams,",
+      "replace": "            state0.copy(name = CareerSeason.nameWithYear(career, league.name, career.season), teams = teams,"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/home/CreditsScreen.kt",
+      "find": "            // 3. Hindi commentary: IAS Production Studios.\n",
+      "replace": "            // 2b. More sound effects: Delta Productions.\n            CreditHeading(\"More sound effects\")\n            CreditBody(\n                \"Delta Productions helped with some of the sound effects in this game, such as the sound of the stumps going down \" +\n                    \"when a batter is bowled out, and others. Thank you, Delta Productions.\"\n            )\n            CreditBody(\"You can find their game on the Google Play Store, and visit their website.\")\n            CreditLink(\"Open the Delta Productions game on Google Play\") { open(DELTA_PRODUCTIONS_PLAY_STORE_URL) }\n            Spacer(modifier = Modifier.height(4.dp))\n            CreditLink(\"Open the Delta Productions website\") { open(DELTA_PRODUCTIONS_WEBSITE_URL) }\n\n            // 3. Hindi commentary: IAS Production Studios.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/home/CreditsScreen.kt",
+      "find": "private const val IAS_PRODUCTION_STUDIOS_URL = \"https://youtube.com/@anoopsinghspecialtv\"\n",
+      "replace": "private const val IAS_PRODUCTION_STUDIOS_URL = \"https://youtube.com/@anoopsinghspecialtv\"\nprivate const val DELTA_PRODUCTIONS_PLAY_STORE_URL = \"https://play.google.com/store/apps/details?id=com.fantacycricket.game\"\nprivate const val DELTA_PRODUCTIONS_WEBSITE_URL = \"https://deltaproduction.me/\"\n"
+    },
+    {
+      "op": "write",
+      "file": "CAREER_SEASON_YEAR.md",
+      "content": "# Career seasons have years (patch 138)\n\nA career made from patch 138 on starts in **2026** and each new season is the next year: 2026, 2027, 2028 ... Every tournament and series carries its year, and the match dates fall in that year.\n\n- **Only new careers.** `CareerProfile.startYear` (nullable, like every field added to a saved class) is set when a career is created (`CareerSeason.FIRST_SEASON_YEAR`, 2026). A career without it (every earlier one) behaves exactly as before: calendar dates, and the old names (\"Ranji Trophy, season 3\").\n- **The year of a season** is `startYear + season - 1` (`CareerSeason.seasonYear`).\n- **Names:** \"Vijay Hazare Trophy 2027\", \"Ranji Trophy 2028\", \"Indian Premier League 2027\", \"T20 World Cup 2028\" (`CareerSeason.nameWithYear`); a series ends \"in 2027\" (\"India 3-match T20I series v Australia in 2027\"); \"World Test Championship final 2027: India v Australia\". The club leagues already had a year in their names and now show the career's year.\n- **Dates:** the season starts on the first Saturday on or after the calendar's date moved into the career's year (`CareerSeason.firstSaturday(career)`), so every date shown (\"Saturday 27 November 2027\") is in the right year and on the right weekday. Leagues start from the season's first match plus their usual offset, so they follow.\n- **A new season's text** now says \"The year is 2027.\" for a new career.\n- To change the first year, change `CareerSeason.FIRST_SEASON_YEAR` (it only affects careers made afterwards).\n"
+    },
+    {
+      "op": "write",
+      "file": "CREDITS.md",
+      "content": "# Credits (patches 137 and 138)\n\nHome > Credits, after Settings and before About. `ui/home/CreditsScreen.kt`. Five credits, in this order:\n1. Developed by Technical Accessibility World, with a button to their YouTube channel (youtube.com/@technicalaccessibilityworl).\n2. English commentary, umpires, toss presenter, appeal sounds and some other sound effects: made with ElevenLabs. A paragraph says why (generated voices, nothing copied from a real commentator), and a button opens elevenlabs.io.\n3. More sound effects (patch 138): Delta Productions helped with some sound effects, such as the bowled-out sound. Buttons open their game on the Google Play Store (com.fantacycricket.game) and their website (deltaproduction.me).\n4. Hindi commentary: original, recorded professionally by IAS Production Studios, all copyright reserved by them, with a button to their YouTube channel (youtube.com/@anoopsinghspecialtv) for anyone who wants to work with or contact them.\n5. Special game supporters: the 17 beta testers, thanked. (No names are listed; add them in `CreditsScreen.kt` if wanted.)\n\nLinks are opened with `LocalUriHandler`; a link that cannot be opened (no browser) is announced in a live region. The YouTube links are the channels' plain addresses (the \"?si=\" share-tracking part was left off).\n"
+    }
+  ]
+}
