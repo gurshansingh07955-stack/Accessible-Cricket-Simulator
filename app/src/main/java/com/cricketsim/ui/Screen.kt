@@ -27,6 +27,9 @@ sealed interface Screen {
     /** My Player: the career mode (ui/career). */
     object Career : Screen
 
+    /** Net practice: batting and bowling practice with a coach (ui/practice). */
+    object NetPractice : Screen
+
     /** Advanced Customisation: custom match formats now; custom teams and tournaments to come (ui/custom). */
     object AdvancedCustomisation : Screen
 

@@ -81,6 +81,7 @@ fun HomeScreen(
     onTournament: () -> Unit,
     onAdvanced: () -> Unit,
     onCareer: () -> Unit,
+    onNetPractice: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit
 ) {
@@ -158,6 +159,14 @@ fun HomeScreen(
                 emphasised = false,
                 enabled = true,
                 onClick = onCareer
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            MenuButton(
+                title = "Net practice",
+                description = "Practise batting against the best bowlers, with a coach who explains every ball.",
+                emphasised = false,
+                enabled = com.cricketsim.logic.NetPractice.NET_PRACTICE_ENABLED,
+                onClick = onNetPractice
             )
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(
