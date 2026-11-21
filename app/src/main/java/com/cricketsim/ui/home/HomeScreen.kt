@@ -83,6 +83,7 @@ fun HomeScreen(
     onCareer: () -> Unit,
     onNetPractice: () -> Unit,
     onSettings: () -> Unit,
+    onCredits: () -> Unit,
     onAbout: () -> Unit
 ) {
     Column(
@@ -175,6 +176,14 @@ fun HomeScreen(
                 emphasised = false,
                 enabled = true,
                 onClick = onSettings
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            MenuButton(
+                title = "Credits",
+                description = "Who made this game, and who made its voices.",
+                emphasised = false,
+                enabled = true,
+                onClick = onCredits
             )
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(

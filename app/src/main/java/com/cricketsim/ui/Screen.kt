@@ -27,6 +27,9 @@ sealed interface Screen {
     /** My Player: the career mode (ui/career). */
     object Career : Screen
 
+    /** Credits: who made the game and its voices (ui/home). */
+    object Credits : Screen
+
     /** Net practice: batting and bowling practice with a coach (ui/practice). */
     object NetPractice : Screen
 
