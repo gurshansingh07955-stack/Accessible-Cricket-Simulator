@@ -127,4 +127,39 @@ object Milestones {
             Milestone(haulTitle(wickets), listOf("$name has taken ${plural(wickets, "wicket", "wickets")}.") + figures)
         }
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // THE FASTEST 50, 100, 150 AND 200 (patch 141)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    val FASTEST_STEPS = listOf(50, 100, 150, 200)
+
+    /**
+     * The batters who, on the ball that took [before] to [after], reached 50, 100, 150 or 200, with the balls they had faced by then. A match keeps them
+     * (`MatchState.fastestMarks`) while it is played, because a scorecard does not say on which ball a score was reached. In a career match only the career
+     * player's; in every other match every batter's. A ball the computer plays for the user ("Simulate") is never seen, so it is never counted.
+     */
+    fun fastestMarks(before: MatchState, after: MatchState): List<FastestMark> {
+        val pid = after.careerPlayerId
+        val batters = if (pid != null) after.currentInningsData.batsmanStats.filter { it.playerId == pid } else after.currentInningsData.batsmanStats
+        val marks = ArrayList<FastestMark>()
+        for (now in batters) {
+            val was = before.currentInningsData.batsmanStats.firstOrNull { it.playerId == now.playerId }?.runs ?: 0
+            for (step in FASTEST_STEPS) {
+                if (was < step && now.runs >= step) {
+                    marks.add(FastestMark(step, now.ballsFaced, now.playerName, after.battingTeam.name, after.bowlingTeam.name))
+                }
+            }
+        }
+        return marks
+    }
 }
+
+/** The balls a batter took to reach 50, 100, 150 or 200 in a match (patch 141). */
+data class FastestMark(
+    val step: Int,
+    val balls: Int,
+    val playerName: String,
+    val teamName: String,
+    val against: String
+)

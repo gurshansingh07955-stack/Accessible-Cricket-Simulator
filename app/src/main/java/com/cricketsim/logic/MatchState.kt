@@ -196,7 +196,11 @@ data class MatchState(
     // choice of the next batter and bowler, the field, is played by the game, as it is for the opposition. Null in every other match.
     val careerPlayerId: String? = null,
     /** Career mode: the player is his club's captain, so he makes the team decisions (see userSelects). */
-    val careerCaptain: Boolean = false
+    val careerCaptain: Boolean = false,
+    // Patch 141: the balls batters took to reach 50, 100, 150 and 200 in this match, as they were played (Milestones.fastestMarks); null = none yet.
+    val fastestMarks: List<FastestMark>? = null,
+    // Patch 141: the player handed part of this match to "Simulate", so it is not counted in Full statistics.
+    val userSimulated: Boolean = false
 )
 
 object MatchStateMachine {

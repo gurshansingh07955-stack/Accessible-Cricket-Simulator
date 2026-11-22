@@ -504,11 +504,13 @@ fun CareerHub(
                                 CareerLeagues.isLeague(latest)
                             )
                             // The full career record (part nineteen) reads the scorecard of the match.
-                            val detailed = CareerStatistics.record(
+                            val recordedDetail = CareerStatistics.record(
                                 progress.career, recorded, flow.fixtureId,
                                 if (pid != null) latest.playerStats[pid] else null,
                                 if (pid != null) recorded.playerStats[pid] else null
                             )
+                            // The fastest 50, 100, 150 and 200 of the match, from the balls as they were played (patch 141).
+                            val detailed = CareerStatistics.withFastest(recordedDetail, recorded, finished)
                             // The news after the match: about him, and about the rest of cricket (part twenty-four).
                             val afterMyMatch = CareerNews.afterMyMatch(
                                 detailed, recorded, flow.fixtureId,

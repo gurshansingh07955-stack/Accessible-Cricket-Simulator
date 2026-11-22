@@ -1,0 +1,13 @@
+# Full statistics (patch 141)
+
+**Home > Full statistics** (after Trophies, before Settings): the game's records, from every match the player has **played himself**, in every mode **except Career mode**.
+
+- **What counts:** a finished match the player played ball by ball: a friendly, any tournament match he plays, the IPL, custom tournaments, Super Overs. **Not counted:** a Career match, a match (or the rest of a match) he handed to Match info > Simulate match (the match is flagged `MatchState.userSimulated`), and the matches the computer plays by itself in a tournament.
+- **Tabs:** All, Test, ODI, T20, T10, chosen from a short list of buttons like the Career record's. A Five-over or One-over match, or a custom format, counts in All only (its `MatchState.format` is the nearest game format, so a custom 20-over format counts as T20).
+- **Each tab:** Overview (matches, won, lost, other results, innings, runs, wickets, fours, sixes, hundreds, double hundreds, fifties, ducks, five-wicket hauls); Records (highest team total, lowest all-out total, highest score, best bowling); **Fastest innings** (the fastest fifty, hundred, 150 and 200, in balls, with the batter, his team and the opposition); Leaders (most runs, most wickets, most hundreds, most sixes, top five).
+- **Where it comes from:** `GameStatistics.record` reads the finished match's scorecard once (the id is kept so a match is never counted twice): the totals and players from the innings, and the fastest 50, 100, 150 and 200 from `MatchState.fastestMarks`, which `MatchScreen.commitBall` builds ball by ball (`Milestones.fastestMarks`), because a scorecard does not say on which ball a score was reached. The match is added when it is over (`MatchScreen`, an effect on `matchOver`) into `game_stats.json` (`persistence/GameStatsStore.kt`). A century in a match that is left unfinished is therefore not counted.
+- Code: `logic/GameStats.kt`, `persistence/GameStatsStore.kt`, `ui/statistics/FullStatisticsScreen.kt`.
+
+# Career record: the fastest 50, 100, 150 and 200 (patch 141)
+
+The Career record (Career tab > Career record, every kind of cricket and every tab) now has four more lines under Batting: **Fastest fifty, Fastest hundred, Fastest 150 and Fastest 200**, in balls ("-" if never). They come from the balls as they were played in the career's own matches (the career player's only): `CareerStatistics.withFastest` is called when a career match finishes (`CareerHubScreens`), and `DetailedRecord` adds with the fewest. They start counting from this patch: an earlier innings cannot be recovered, because a scorecard does not say on which ball a score was reached. A match the career player's team has Simulated (Skip) adds nothing, as it is not played ball by ball.

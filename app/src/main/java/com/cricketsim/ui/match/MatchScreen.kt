@@ -318,6 +318,11 @@ fun MatchScreen(
     var pendingRun by remember { mutableStateOf<PendingRun?>(null) }
     // Milestones waiting to be shown (a 50, a hat-trick...), one pop-up at a time, each ended by OK (MilestoneScreens.kt).
     var milestoneQueue by remember { mutableStateOf<List<com.cricketsim.logic.Milestones.Milestone>>(emptyList()) }
+    // Full statistics (patch 141): when the match is over it is added to Home > Full statistics (a Career match or a simulated one is left out there; a match is added once).
+    val statsContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(matchOver) {
+        if (matchOver) com.cricketsim.persistence.GameStatsStore(statsContext).record(matchState)
+    }
     // The Simulate page (Match info > Simulate match) is open.
     var showSimulate by remember { mutableStateOf(false) }
     // Career mode: "Skip to my turn" is on (the game plays the balls that are not the player's by itself). It is declared here, before the ball logic that reads it.
@@ -480,7 +485,8 @@ fun MatchScreen(
     // sessions asked for. It stops early when the innings ends, a team declares, or the match is over, and what follows is exactly what follows a ball that ends them.
     fun runFastForward(request: com.cricketsim.logic.FastForwardRequest) {
         val result = com.cricketsim.logic.MatchFastForward.run(matchState, stadium, request)
-        val now = result.state
+        // A match the player handed to Simulate is not one he played: it is not counted in Full statistics (patch 141).
+        val now = result.state.copy(userSimulated = true)
         val line = com.cricketsim.logic.MatchFastForward.summary(request, result)
         matchState = now
         recentCommentary = (recentCommentary + line).takeLast(6)
@@ -563,7 +569,9 @@ fun MatchScreen(
     }
 
     fun commitBall(before: MatchState, result: BallResult) {
-        val nextState = result.state
+        // The fastest 50, 100, 150 and 200 (patch 141): the balls a batter took to reach each, kept with the match as it is played.
+        val fastestNow = com.cricketsim.logic.Milestones.fastestMarks(before, result.state)
+        val nextState = if (fastestNow.isEmpty()) result.state else result.state.copy(fastestMarks = result.state.fastestMarks.orEmpty() + fastestNow)
         // The user's early/late swing note (if any) belongs to exactly this
         // ball, so it is taken here and cleared — it can never leak onto a
         // later ball, including one the AI bats.

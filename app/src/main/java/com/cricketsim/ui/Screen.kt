@@ -27,6 +27,9 @@ sealed interface Screen {
     /** My Player: the career mode (ui/career). */
     object Career : Screen
 
+    /** Full statistics: the records of every match the player has played, except Career mode (ui/statistics). */
+    object FullStatistics : Screen
+
     /** Trophies: every tournament the player has won, with the final's scorecard (ui/trophies). */
     object Trophies : Screen
 

@@ -83,6 +83,7 @@ fun HomeScreen(
     onCareer: () -> Unit,
     onNetPractice: () -> Unit,
     onTrophies: () -> Unit,
+    onStatistics: () -> Unit,
     onSettings: () -> Unit,
     onCredits: () -> Unit,
     onAbout: () -> Unit
@@ -177,6 +178,14 @@ fun HomeScreen(
                 emphasised = false,
                 enabled = true,
                 onClick = onTrophies
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            MenuButton(
+                title = "Full statistics",
+                description = "The records of every match you have played: all, Test, ODI, T20 and T10, with the fastest fifties and hundreds.",
+                emphasised = false,
+                enabled = true,
+                onClick = onStatistics
             )
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(

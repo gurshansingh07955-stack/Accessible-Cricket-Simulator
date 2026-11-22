@@ -67,8 +67,15 @@ data class DetailedRecord(
     val captainTied: Int = 0,
     val captainDrawn: Int = 0,
     val captainNoResult: Int = 0,
-    val captainTossesWon: Int = 0
+    val captainTossesWon: Int = 0,
+    // Patch 141: the fewest balls taken to reach 50, 100, 150 and 200 (0 = never), from the balls as they were played.
+    val fastestFifty: Int = 0,
+    val fastestHundred: Int = 0,
+    val fastest150: Int = 0,
+    val fastest200: Int = 0
 ) {
+    private fun fewest(a: Int, b: Int): Int = if (a == 0) b else if (b == 0) a else minOf(a, b)
+
     operator fun plus(o: DetailedRecord): DetailedRecord {
         val higher = o.highScore > highScore || (o.highScore == highScore && o.highScoreNotOut && !highScoreNotOut)
         val betterInnings = o.bestWickets > bestWickets || (o.bestWickets == bestWickets && o.bestWickets > 0 && (bestWickets == 0 || o.bestRuns < bestRuns))
@@ -87,7 +94,9 @@ data class DetailedRecord(
             playerOfMatch + o.playerOfMatch, playerOfSeries + o.playerOfSeries,
             won + o.won, lost + o.lost, tied + o.tied, drawn + o.drawn, noResult + o.noResult,
             captainMatches + o.captainMatches, captainWon + o.captainWon, captainLost + o.captainLost, captainTied + o.captainTied,
-            captainDrawn + o.captainDrawn, captainNoResult + o.captainNoResult, captainTossesWon + o.captainTossesWon
+            captainDrawn + o.captainDrawn, captainNoResult + o.captainNoResult, captainTossesWon + o.captainTossesWon,
+            fastestFifty = fewest(fastestFifty, o.fastestFifty), fastestHundred = fewest(fastestHundred, o.fastestHundred),
+            fastest150 = fewest(fastest150, o.fastest150), fastest200 = fewest(fastest200, o.fastest200)
         )
     }
 }
@@ -300,6 +309,27 @@ object CareerStatistics {
         return career.copy(detail = map)
     }
 
+    /**
+     * Adds the fastest 50, 100, 150 and 200 of a finished match to the record of its kind (patch 141). The match kept the balls as they were played
+     * (`MatchState.fastestMarks`, the career player's only in a career match); a scorecard does not say on which ball a score was reached.
+     */
+    fun withFastest(career: CareerProfile, state: TournamentState, finished: MatchState): CareerProfile {
+        val marks = finished.fastestMarks.orEmpty()
+        if (marks.isEmpty()) return career
+        val key = keyOf(career, state)
+        val old = career.detail.orEmpty()
+        val r = old[key] ?: DetailedRecord()
+        fun best(current: Int, step: Int): Int {
+            val fewest = marks.filter { it.step == step }.minOfOrNull { it.balls } ?: return current
+            return if (current == 0 || fewest < current) fewest else current
+        }
+        val updated = r.copy(
+            fastestFifty = best(r.fastestFifty, 50), fastestHundred = best(r.fastestHundred, 100),
+            fastest150 = best(r.fastest150, 150), fastest200 = best(r.fastest200, 200)
+        )
+        return career.copy(detail = old + (key to updated))
+    }
+
     // ------------------------------------------------------------ reading the record
 
     private fun legacy(r: CareerRecord): DetailedRecord = DetailedRecord(
@@ -390,7 +420,11 @@ object CareerStatistics {
             "Sixes: ${r.sixes}",
             "Runs from boundaries: ${r.fours * 4 + r.sixes * 6}",
             "Ducks: ${r.ducks}",
-            "Golden ducks: ${r.goldenDucks}"
+            "Golden ducks: ${r.goldenDucks}",
+            "Fastest fifty: ${if (r.fastestFifty > 0) "${r.fastestFifty} balls" else "-"}",
+            "Fastest hundred: ${if (r.fastestHundred > 0) "${r.fastestHundred} balls" else "-"}",
+            "Fastest 150: ${if (r.fastest150 > 0) "${r.fastest150} balls" else "-"}",
+            "Fastest 200: ${if (r.fastest200 > 0) "${r.fastest200} balls" else "-"}"
         )
         val bowling = listOf(
             "Overs bowled: ${overs(r.ballsBowled)}",
