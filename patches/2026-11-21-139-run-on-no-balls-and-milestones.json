@@ -1,0 +1,117 @@
+{
+  "name": "Run on a no ball in manual running, and milestone pop-ups in every match (50, 100, 3+ wickets, hat-tricks) with a Settings switch (default on)",
+  "message": "Manual running now asks about a no ball that was hit for runs, so the player can run on it (a run out is the only way out, as on a free hit). Every match gets milestone pop-ups (career: your own player; other matches: both sides): a 50 or 100 with balls, fours, sixes and strike rate; three or more wickets, a hat-trick, a double hat-trick with overs, runs, wickets and economy; the crowd applauds and only OK carries on. Settings > Milestone pop-ups turns them off (on by default).",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/Milestones.kt",
+    "contains": "object Milestones"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/Milestones.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * MILESTONES (patch 139). After a ball in a match the user plays, was it a milestone? If so, the match screen shows a pop-up (MilestoneScreen)\n * with the figures, the crowd applauds, and he presses OK to carry on.\n *\n * Batting: a 50, a 100, then every 50 to 400, with the balls it took, the fours and sixes and the strike rate at that moment.\n * Bowling: the third wicket of an innings and every wicket after it up to the tenth, with his figures (overs, runs, wickets, economy),\n * and a hat-trick (three wickets in three of his balls), a double hat-trick (four in four) and a triple hat-trick (five in five). A wide or a\n * no ball is not one of his balls, so it does not break the run; a run out is not his wicket. A wicket that is also a hat-trick is one pop-up.\n *\n * WHO: in a career match (`MatchState.careerPlayerId`) only the player's own player; in every other match the user plays (a friendly, a tournament,\n * the IPL, a custom tournament, a net-free match of any kind) every batter and bowler of both sides, the opposition's too, as the crowd would\n * applaud them. Matches the computer plays by itself (a simulated tournament match, Simulate match) show nothing. Settings > Milestone pop-ups switches\n * the pop-ups off; [MILESTONES_ENABLED] switches the whole feature off.\n */\nobject Milestones {\n    const val MILESTONES_ENABLED = true\n\n    class Milestone(val title: String, val lines: List<String>) {\n        /** The words spoken as the pop-up appears. */\n        val spoken: String get() = title + \" \" + lines.joinToString(\" \")\n    }\n\n    private val BAT_STEPS = listOf(50, 100, 150, 200, 250, 300, 350, 400)\n    private const val FIRST_HAUL = 3\n    private const val LAST_HAUL = 10\n\n    /** The milestones of the ball that took [before] to [after] (the same innings), in the order they should be shown. */\n    fun detect(before: MatchState, after: MatchState): List<Milestone> {\n        if (!MILESTONES_ENABLED) return emptyList()\n        val found = ArrayList<Milestone>()\n        val pid = after.careerPlayerId\n        if (pid != null) {\n            // A career match: only his own player.\n            batting(before, after, pid)?.let { found.add(it) }\n            bowling(before, after, pid)?.let { found.add(it) }\n            return found\n        }\n        // Every other match: any batter whose score crossed a step, and the bowler of the ball if it was a wicket that earns one.\n        after.currentInningsData.batsmanStats.forEach { stats -> batting(before, after, stats.playerId)?.let { found.add(it) } }\n        val bowlerId = after.ballByBall.lastOrNull()?.bowlerId\n        if (bowlerId != null) bowling(before, after, bowlerId)?.let { found.add(it) }\n        return found\n    }\n\n    private fun plural(n: Int, one: String, many: String): String = if (n == 1) \"$n $one\" else \"$n $many\"\n\n    private fun batting(before: MatchState, after: MatchState, pid: String): Milestone? {\n        val now = after.currentInningsData.batsmanStats.firstOrNull { it.playerId == pid } ?: return null\n        val was = before.currentInningsData.batsmanStats.firstOrNull { it.playerId == pid }?.runs ?: 0\n        val step = BAT_STEPS.lastOrNull { was < it && now.runs >= it } ?: return null\n        val title = when (step) {\n            50 -> \"Fifty!\"\n            100 -> \"Century!\"\n            150 -> \"One hundred and fifty!\"\n            200 -> \"Double century!\"\n            250 -> \"Two hundred and fifty!\"\n            300 -> \"Triple century!\"\n            350 -> \"Three hundred and fifty!\"\n            else -> \"Four hundred!\"\n        }\n        val strikeRate = if (now.ballsFaced > 0) now.runs * 100.0 / now.ballsFaced else 0.0\n        return Milestone(\n            title,\n            listOf(\n                \"${now.playerName} reaches $step in ${plural(now.ballsFaced, \"ball\", \"balls\")}.\",\n                \"${plural(now.fours, \"four\", \"fours\")} and ${plural(now.sixes, \"six\", \"sixes\")}.\",\n                \"Strike rate ${\"%.1f\".format(strikeRate)}.\"\n            )\n        )\n    }\n\n    /** A wicket the bowler is credited with (a run out is not). */\n    private fun credited(o: BallOutcome): Boolean = o.isWicket && o.dismissalType != null && o.dismissalType != DismissalType.RUN_OUT\n\n    private fun oversText(overs: Int, balls: Int): String =\n        if (balls == 0) (if (overs == 1) \"1 over\" else \"$overs overs\") else \"$overs.$balls overs\"\n\n    private fun haulTitle(n: Int): String = when (n) {\n        3 -> \"Three wickets!\"\n        4 -> \"Four wickets!\"\n        5 -> \"Five wickets! A five-wicket haul!\"\n        6 -> \"Six wickets!\"\n        7 -> \"Seven wickets!\"\n        8 -> \"Eight wickets!\"\n        9 -> \"Nine wickets!\"\n        else -> \"All ten wickets!\"\n    }\n\n    private fun bowling(before: MatchState, after: MatchState, pid: String): Milestone? {\n        if (after.ballByBall.size <= before.ballByBall.size) return null\n        val last = after.ballByBall.last()\n        if (last.bowlerId != pid || !credited(last)) return null\n        val wickets = after.ballByBall.count { it.bowlerId == pid && credited(it) }\n\n        // His own balls, wides and no balls left out: how many of the latest are wickets?\n        val mine = after.ballByBall.filter { it.bowlerId == pid && !it.isWide && !it.isNoBall }\n        var streak = 0\n        for (i in mine.indices.reversed()) {\n            if (credited(mine[i])) streak++ else break\n        }\n        val hatTitle = when (streak) {\n            3 -> \"Hat-trick!\"\n            4 -> \"Double hat-trick!\"\n            5 -> \"Triple hat-trick!\"\n            else -> null\n        }\n        val haul = wickets in FIRST_HAUL..LAST_HAUL\n        if (hatTitle == null && !haul) return null\n\n        val stats = after.currentInningsData.bowlerStats.firstOrNull { it.playerId == pid }\n        val name = stats?.playerName ?: after.currentBowler.name\n        val figures = if (stats != null) {\n            val legal = stats.overs * 6 + stats.balls\n            val economy = if (legal > 0) stats.runsConceded * 6.0 / legal else 0.0\n            listOf(\n                \"${oversText(stats.overs, stats.balls)}, ${plural(stats.runsConceded, \"run\", \"runs\")}, ${plural(wickets, \"wicket\", \"wickets\")}.\",\n                \"Economy ${\"%.2f\".format(economy)}.\"\n            )\n        } else {\n            listOf(\"${plural(wickets, \"wicket\", \"wickets\")}.\")\n        }\n        return if (hatTitle != null) {\n            Milestone(hatTitle, listOf(\"$name takes ${streak} wickets in ${streak} balls.\") + figures)\n        } else {\n            Milestone(haulTitle(wickets), listOf(\"$name has taken ${plural(wickets, \"wicket\", \"wickets\")}.\") + figures)\n        }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MilestoneScreens.kt",
+      "content": "package com.cricketsim.ui.match\n\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.heightIn\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.LaunchedEffect\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.semantics.heading\nimport androidx.compose.ui.semantics.semantics\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.audio.LocalGameServices\nimport com.cricketsim.logic.Milestones\nimport kotlinx.coroutines.delay\n\n/**\n * The pop-up for a career milestone (patch 139; logic/Milestones.kt): the heading (\"Fifty!\", \"Hat-trick!\"), the figures, and one OK button.\n * As it appears the crowd applauds (the press conference's applause) and, a moment after the ball's own announcement so it does not cut it off,\n * the same words are spoken. Pressing OK (or Back) carries on with the match.\n */\n@Composable\nfun MilestoneScreen(milestone: Milestones.Milestone, onOk: () -> Unit) {\n    val services = LocalGameServices.current\n    LaunchedEffect(milestone) {\n        services?.sound?.playPressRoom(\"press_applause\")\n        delay(1300L)\n        services?.announceSpoken(milestone.spoken)\n    }\n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .verticalScroll(rememberScrollState())\n            .padding(24.dp)\n    ) {\n        Text(\n            text = milestone.title,\n            style = MaterialTheme.typography.headlineMedium,\n            modifier = Modifier.semantics { heading() }\n        )\n        Spacer(modifier = Modifier.height(12.dp))\n        milestone.lines.forEach { line ->\n            Text(text = line, style = MaterialTheme.typography.bodyLarge)\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n        Spacer(modifier = Modifier.height(16.dp))\n        Button(onClick = onOk, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)) { Text(\"OK\") }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    val kind: Int = 0\n)",
+      "replace": "    val kind: Int = 0,\n    /** The ball is a no ball (patch 139): he may run on it, and on a no ball only a run out can get him out. */\n    val noBall: Boolean = false\n)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "        if (byeTotal == 0 && (o.isNoBall || o.leftAlone)) return null\n",
+      "replace": "        // A ball left alone is not run on. A no ball that was played is (patch 139): the runs are his, and only a run out can get him out.\n        if (byeTotal == 0 && o.leftAlone) return null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "                if (legBye) 2 else 1\n            )",
+      "replace": "                if (legBye) 2 else 1, o.isNoBall\n            )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "            fielder.name, position, pick?.depth ?: FieldingDepth.SHORT, fielder.fieldingRating, phrase\n        )",
+      "replace": "            fielder.name, position, pick?.depth ?: FieldingDepth.SHORT, fielder.fieldingRating, phrase, noBall = o.isNoBall\n        )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "        val ball = \"The ball went ${c.wherePhrase}.\"\n",
+      "replace": "        val ball = (if (c.noBall) \"It is a no ball, so only a run out can get you out. \" else \"\") + \"The ball went ${c.wherePhrase}.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "    val runByButtons: Boolean = false\n)",
+      "replace": "    val runByButtons: Boolean = false,\n    // Milestone pop-ups (patch 139): a pop-up with the figures when a batter reaches a 50 or a 100, or a bowler three wickets, a hat-trick... On by default.\n    val milestonePopups: Boolean = true\n)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "            runByButtons = prefs.getBoolean(KEY_RUN_BY_BUTTONS, defaults.runByButtons)\n        )",
+      "replace": "            runByButtons = prefs.getBoolean(KEY_RUN_BY_BUTTONS, defaults.runByButtons),\n            milestonePopups = prefs.getBoolean(KEY_MILESTONE_POPUPS, defaults.milestonePopups)\n        )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "            .putBoolean(KEY_RUN_BY_BUTTONS, settings.runByButtons)\n            .apply()",
+      "replace": "            .putBoolean(KEY_RUN_BY_BUTTONS, settings.runByButtons)\n            .putBoolean(KEY_MILESTONE_POPUPS, settings.milestonePopups)\n            .apply()"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameSettings.kt",
+      "find": "        const val KEY_RUN_BY_BUTTONS = \"run_by_buttons\"\n",
+      "replace": "        const val KEY_RUN_BY_BUTTONS = \"run_by_buttons\"\n        const val KEY_MILESTONE_POPUPS = \"milestone_popups\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/settings/SettingsScreen.kt",
+      "find": "        SectionHeading(\"Voice commentary\")\n",
+      "replace": "        SectionHeading(\"Milestone pop-ups\")\n        Text(\n            \"A pop-up when a player reaches a milestone: a 50 or a 100, three or more wickets in an innings, a hat-trick or a double hat-trick. It shows how he did it, with the balls, fours, sixes and strike rate for a batter or the overs, runs, wickets and economy for a bowler. The crowd applauds, and you press OK to carry on. In career mode it is for your own player; in every other match it is for both sides.\",\n            style = MaterialTheme.typography.bodySmall\n        )\n        Column(modifier = Modifier.selectableGroup()) {\n            RadioRow(\n                label = \"Show milestone pop-ups\",\n                description = \"A pop-up with the crowd's applause after each milestone.\",\n                selected = settings.milestonePopups,\n                onSelect = { services.update { it.copy(milestonePopups = true) } }\n            )\n            RadioRow(\n                label = \"Do not show milestone pop-ups\",\n                description = \"The match carries on without stopping for milestones.\",\n                selected = !settings.milestonePopups,\n                onSelect = { services.update { it.copy(milestonePopups = false) } }\n            )\n        }\n\n        SectionHeading(\"Voice commentary\")\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    var pendingRun by remember { mutableStateOf<PendingRun?>(null) }\n",
+      "replace": "    var pendingRun by remember { mutableStateOf<PendingRun?>(null) }\n    // Milestones waiting to be shown (a 50, a hat-trick...), one pop-up at a time, each ended by OK (MilestoneScreens.kt).\n    var milestoneQueue by remember { mutableStateOf<List<com.cricketsim.logic.Milestones.Milestone>>(emptyList()) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        matchState = nextState\n        recentCommentary = (recentCommentary + summary).takeLast(6)\n",
+      "replace": "        matchState = nextState\n        recentCommentary = (recentCommentary + summary).takeLast(6)\n        // Milestones (patch 139): a 50, a 100, three wickets, a hat-trick... a pop-up after this ball, in every match (Settings > Milestone pop-ups turns it off).\n        if (settings.milestonePopups) {\n            val milestones = com.cricketsim.logic.Milestones.detect(before, nextState)\n            if (milestones.isNotEmpty()) milestoneQueue = milestoneQueue + milestones\n        }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        matchState, matchOver, pendingAppeal, pendingCatch, pendingRun, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,\n",
+      "replace": "        milestoneQueue, matchState, matchOver, pendingAppeal, pendingCatch, pendingRun, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        if (matchOver || pendingAppeal != null || pendingCatch != null || pendingRun != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||\n",
+      "replace": "        if (matchOver || milestoneQueue.isNotEmpty() || pendingAppeal != null || pendingCatch != null || pendingRun != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "    if (showSettings) {\n",
+      "replace": "    // A milestone (a 50, a 100, three wickets, a hat-trick...): the pop-up comes first, with the applause; OK shows what was next.\n    val milestoneNow = milestoneQueue.firstOrNull()\n    if (milestoneNow != null) {\n        // No Back button on the pop-up, and the phone's Back does nothing here: only OK carries on, so Back can neither skip it nor leave the match.\n        BackHandler { }\n        MilestoneScreen(milestone = milestoneNow, onOk = { milestoneQueue = milestoneQueue.drop(1) })\n        return\n    }\n\n    if (showSettings) {\n"
+    },
+    {
+      "op": "write",
+      "file": "MILESTONES.md",
+      "content": "# Milestone pop-ups (patch 139)\n\nIn every match the user plays, when a batter or a bowler reaches a milestone a pop-up appears straight after the ball, the crowd applauds (the press conference's applause sound) and the same words are spoken a moment after the ball's own announcement. There is one **OK** button and no Back button; the phone's Back does nothing while it is up (it can neither skip the pop-up nor leave the match), so only OK carries on.\n\n- **Batting:** a 50, a 100, then every 50 up to 400: \"Fifty! Name reaches 50 in 18 balls. 4 fours and 2 sixes. Strike rate 277.8.\"\n- **Bowling:** the third wicket of an innings and every wicket after it up to the tenth: \"Three wickets! Name has taken 3 wickets. 4.5 overs, 29 runs, 3 wickets. Economy 6.00.\"\n- **Hat-trick, double hat-trick, triple hat-trick:** three, four or five of his own balls in a row that are wickets. A wide or no ball is not one of his balls so it does not break the run; a run out is not his wicket. A wicket that is also a hat-trick is one pop-up.\n- **Who:** in a career match only the player's own player (`MatchState.careerPlayerId`). In every other match the user plays (a friendly, any tournament, the IPL, a custom tournament, a Super Over) every batter and bowler of both sides, the opposition's too. Matches the computer plays alone (a simulated tournament match, Match info > Simulate match) show nothing.\n- **Settings > Milestone pop-ups:** Show (the default, also for people who already have the app) or Do not show.\n- Code: `logic/Milestones.kt` (detection and the words), `ui/match/MilestoneScreens.kt` (the pop-up), `MatchScreen.commitBall` (detects, queues); the pop-up is shown before every other match page. While one is waiting the computer's own balls do not auto-advance. `Milestones.MILESTONES_ENABLED` switches the feature off.\n- Not built: maiden overs, fielding milestones (catches), a partnership milestone, a match total of wickets across two innings.\n\n# Running on a no ball (patch 139)\n\nWith Settings > Running between the wickets on, a no ball that the player hit for 1, 2 or 3 runs is now run on like any other ball (before, it was skipped). The page opens with \"It is a no ball, so only a run out can get you out.\" The no ball's extra run stays in the score; a failed extra run is a run out, which is allowed on a no ball and on a free hit. A no ball he left alone, or hit for nothing or a boundary, still asks nothing, as with every other ball.\n"
+    }
+  ]
+}
