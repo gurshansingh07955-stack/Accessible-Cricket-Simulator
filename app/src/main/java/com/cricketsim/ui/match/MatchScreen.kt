@@ -316,6 +316,8 @@ fun MatchScreen(
     var pendingCatch by remember { mutableStateOf<PendingCatch?>(null) }
     // A ball the user is batting that is worth runs, waiting for his decision to run or stay (RunScreens.kt, running between the wickets).
     var pendingRun by remember { mutableStateOf<PendingRun?>(null) }
+    // Milestones waiting to be shown (a 50, a hat-trick...), one pop-up at a time, each ended by OK (MilestoneScreens.kt).
+    var milestoneQueue by remember { mutableStateOf<List<com.cricketsim.logic.Milestones.Milestone>>(emptyList()) }
     // The Simulate page (Match info > Simulate match) is open.
     var showSimulate by remember { mutableStateOf(false) }
     // Career mode: "Skip to my turn" is on (the game plays the balls that are not the player's by itself). It is declared here, before the ball logic that reads it.
@@ -576,6 +578,11 @@ fun MatchScreen(
         val summary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres)
         matchState = nextState
         recentCommentary = (recentCommentary + summary).takeLast(6)
+        // Milestones (patch 139): a 50, a 100, three wickets, a hat-trick... a pop-up after this ball, in every match (Settings > Milestone pop-ups turns it off).
+        if (settings.milestonePopups) {
+            val milestones = com.cricketsim.logic.Milestones.detect(before, nextState)
+            if (milestones.isNotEmpty()) milestoneQueue = milestoneQueue + milestones
+        }
 
         director?.onBallResolved(before, nextState, result.outcome)
         // A wicket for the user's side is announced by the new-batsman
@@ -756,12 +763,12 @@ fun MatchScreen(
     // CAREER MODE: when it is not the player's turn to bat (he is not on strike) or to bowl (he is not the bowler), the game plays the ball
     // for his team by itself, a pause between balls so each one can be heard; "Skip to my turn" shortens the pause until his turn comes.
     LaunchedEffect(
-        matchState, matchOver, pendingAppeal, pendingCatch, pendingRun, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
+        milestoneQueue, matchState, matchOver, pendingAppeal, pendingCatch, pendingRun, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
         confirmingDeclare, showImpactUse, showSimulate, surgeNotice, showPitchingScreen, showBattingScreen, showFieldScreen, showChangeBowler, skipping
     ) {
         val pid = matchState.careerPlayerId ?: return@LaunchedEffect
         val s = matchState
-        if (matchOver || pendingAppeal != null || pendingCatch != null || pendingRun != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
+        if (matchOver || milestoneQueue.isNotEmpty() || pendingAppeal != null || pendingCatch != null || pendingRun != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
             confirmingLeave || confirmingDeclare || showImpactUse || showSimulate || surgeNotice != null || showPitchingScreen || showBattingScreen ||
             showFieldScreen || showChangeBowler
         ) return@LaunchedEffect
@@ -785,6 +792,15 @@ fun MatchScreen(
         // discards a live match.
         BackHandler(onBack = { confirmingLeave = false })
         ConfirmLeaveScreen(onStay = { confirmingLeave = false }, onLeave = onBack, saved = autosave, inTournament = saveStore != null)
+        return
+    }
+
+    // A milestone (a 50, a 100, three wickets, a hat-trick...): the pop-up comes first, with the applause; OK shows what was next.
+    val milestoneNow = milestoneQueue.firstOrNull()
+    if (milestoneNow != null) {
+        // No Back button on the pop-up, and the phone's Back does nothing here: only OK carries on, so Back can neither skip it nor leave the match.
+        BackHandler { }
+        MilestoneScreen(milestone = milestoneNow, onOk = { milestoneQueue = milestoneQueue.drop(1) })
         return
     }
 

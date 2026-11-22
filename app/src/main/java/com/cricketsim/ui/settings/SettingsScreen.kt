@@ -233,6 +233,26 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
 
+        SectionHeading("Milestone pop-ups")
+        Text(
+            "A pop-up when a player reaches a milestone: a 50 or a 100, three or more wickets in an innings, a hat-trick or a double hat-trick. It shows how he did it, with the balls, fours, sixes and strike rate for a batter or the overs, runs, wickets and economy for a bowler. The crowd applauds, and you press OK to carry on. In career mode it is for your own player; in every other match it is for both sides.",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Column(modifier = Modifier.selectableGroup()) {
+            RadioRow(
+                label = "Show milestone pop-ups",
+                description = "A pop-up with the crowd's applause after each milestone.",
+                selected = settings.milestonePopups,
+                onSelect = { services.update { it.copy(milestonePopups = true) } }
+            )
+            RadioRow(
+                label = "Do not show milestone pop-ups",
+                description = "The match carries on without stopping for milestones.",
+                selected = !settings.milestonePopups,
+                onSelect = { services.update { it.copy(milestonePopups = false) } }
+            )
+        }
+
         SectionHeading("Voice commentary")
         Text(
             "Pre-recorded commentators react to what happens in the match.",

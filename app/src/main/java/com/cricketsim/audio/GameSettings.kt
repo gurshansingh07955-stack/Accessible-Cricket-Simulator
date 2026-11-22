@@ -52,7 +52,9 @@ data class GameSettings(
     // Running between the wickets: on = the user decides each run when he bats (swipe up / down, five seconds); off = the computer decides, as before.
     val manualRunning: Boolean = false,
     // How the user answers a running decision: false = two-finger swipes, true = Run / Stay buttons (only the chosen way is on the screen).
-    val runByButtons: Boolean = false
+    val runByButtons: Boolean = false,
+    // Milestone pop-ups (patch 139): a pop-up with the figures when a batter reaches a 50 or a 100, or a bowler three wickets, a hat-trick... On by default.
+    val milestonePopups: Boolean = true
 )
 
 class SettingsStore(context: Context) {
@@ -73,7 +75,8 @@ class SettingsStore(context: Context) {
             autoBowlSeconds = prefs.getInt(KEY_AUTO_BOWL_SECONDS, defaults.autoBowlSeconds).coerceIn(5, 30),
             fieldingMode = readEnum(KEY_FIELDING_MODE, defaults.fieldingMode),
             manualRunning = prefs.getBoolean(KEY_MANUAL_RUNNING, defaults.manualRunning),
-            runByButtons = prefs.getBoolean(KEY_RUN_BY_BUTTONS, defaults.runByButtons)
+            runByButtons = prefs.getBoolean(KEY_RUN_BY_BUTTONS, defaults.runByButtons),
+            milestonePopups = prefs.getBoolean(KEY_MILESTONE_POPUPS, defaults.milestonePopups)
         )
     }
 
@@ -92,6 +95,7 @@ class SettingsStore(context: Context) {
             .putString(KEY_FIELDING_MODE, settings.fieldingMode.name)
             .putBoolean(KEY_MANUAL_RUNNING, settings.manualRunning)
             .putBoolean(KEY_RUN_BY_BUTTONS, settings.runByButtons)
+            .putBoolean(KEY_MILESTONE_POPUPS, settings.milestonePopups)
             .apply()
     }
 
@@ -117,5 +121,6 @@ class SettingsStore(context: Context) {
         const val KEY_FIELDING_MODE = "fielding_mode"
         const val KEY_MANUAL_RUNNING = "manual_running"
         const val KEY_RUN_BY_BUTTONS = "run_by_buttons"
+        const val KEY_MILESTONE_POPUPS = "milestone_popups"
     }
 }

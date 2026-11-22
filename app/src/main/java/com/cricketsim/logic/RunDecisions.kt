@@ -20,7 +20,9 @@ class RunChance(
     /** Where the ball went: "along the ground through the covers". */
     val wherePhrase: String,
     /** 0 = runs off the bat, 1 = byes, 2 = leg byes (patch 129: he may run those too). */
-    val kind: Int = 0
+    val kind: Int = 0,
+    /** The ball is a no ball (patch 139): he may run on it, and on a no ball only a run out can get him out. */
+    val noBall: Boolean = false
 )
 
 /** What he did: the runs he completed, and whether the next run he went for was a run out. */
@@ -69,7 +71,8 @@ object RunDecisions {
         val o = result.outcome
         val byeTotal = o.byes + o.legByes
         if (o.isWide || o.droppedCatch) return null
-        if (byeTotal == 0 && (o.isNoBall || o.leftAlone)) return null
+        // A ball left alone is not run on. A no ball that was played is (patch 139): the runs are his, and only a run out can get him out.
+        if (byeTotal == 0 && o.leftAlone) return null
         val runOutBall = byeTotal == 0 && o.isWicket && o.dismissalType == DismissalType.RUN_OUT
         if (o.isWicket && !runOutBall) return null
         val potential = if (byeTotal > 0) byeTotal else o.runs + (if (runOutBall) 1 else 0)
@@ -92,7 +95,7 @@ object RunDecisions {
             return RunChance(
                 potential, false, partnerCall, before.currentBatsmen.first.name,
                 fielder.name, position, if (legBye) (pick?.depth ?: FieldingDepth.DEEP) else FieldingDepth.SHORT, fielder.fieldingRating, phrase,
-                if (legBye) 2 else 1
+                if (legBye) 2 else 1, o.isNoBall
             )
         }
 
@@ -120,7 +123,7 @@ object RunDecisions {
         else "${if (aerial) "in the air" else "along the ground"} ${sectorWords(sector)}"
         return RunChance(
             potential, runOutBall, partnerCall, before.currentBatsmen.first.name,
-            fielder.name, position, pick?.depth ?: FieldingDepth.SHORT, fielder.fieldingRating, phrase
+            fielder.name, position, pick?.depth ?: FieldingDepth.SHORT, fielder.fieldingRating, phrase, noBall = o.isNoBall
         )
     }
 
@@ -188,7 +191,7 @@ object RunDecisions {
 
     /** What the phone says after the shot: where the ball went, who is closing in, what to do. */
     fun opening(c: RunChance, byButtons: Boolean = false): String {
-        val ball = "The ball went ${c.wherePhrase}."
+        val ball = (if (c.noBall) "It is a no ball, so only a run out can get you out. " else "") + "The ball went ${c.wherePhrase}."
         return if (c.partnerCall) {
             "$ball ${c.strikerName} calls: Yes! Run! ${fielderLine(c)} ${hint(c, 0)} ${how(c, byButtons)} You have five seconds."
         } else {
