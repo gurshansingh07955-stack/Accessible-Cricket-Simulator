@@ -1,0 +1,135 @@
+{
+  "name": "Trophies: Home > Trophies (every tournament won, with the final's scorecard) and Career mode's own Trophies page",
+  "message": "Home gets Trophies before Settings: each competition the player's team has won, with how many times; one win opens the final's scorecard directly, several wins open a list. Tournaments already saved with a champion are added too. Career mode gets its own Trophies page in the Career tab, with only the trophies won in the career (from this update on) and each final's scorecard.",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/Trophies.kt",
+    "contains": "object Trophies"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/Trophies.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * One trophy the player won (patch 140): a tournament his team won, with the Final's scorecard so he can open it later. Game trophies are kept in\n * trophies.json (persistence/TrophyStore); a career's trophies live in the career itself (`CareerProfile.trophies`) so Career mode keeps its own.\n */\ndata class TrophyRecord(\n    /** One trophy: the tournament's id and when it was created, so winning it is never recorded twice. */\n    val key: String,\n    /** The tournament's id (one edition, such as \"ranji2027\"); a trophy of the same id is the same competition won again. */\n    val tournamentId: String,\n    val name: String,\n    val teamName: String,\n    /** When it was won (the real time); 0 for a career trophy, which has [note] (\"Season 3, 2028\") instead. */\n    val wonAt: Long = 0L,\n    val note: String = \"\",\n    /** \"Final: India v Australia\", or \"Last match: ...\" for a competition with no Final (the County Championship). */\n    val finalLabel: String = \"\",\n    val finalSummary: String = \"\",\n    /** The Final's scorecard (the slim one the tournament keeps: no ball-by-ball); null if the match was only simulated without one. */\n    val scorecard: MatchState? = null\n)\n\n/** The wins of one competition. */\nclass TrophyGroup(val tournamentId: String, val trophies: List<TrophyRecord>) {\n    /** The newest win's name (\"Ranji Trophy 2027\"). */\n    val name: String get() = trophies.first().name\n}\n\nobject Trophies {\n    /**\n     * The trophy for a finished tournament, or null if the player's team did not win it. [champion] is the winner ([CplSimulator.champion], or the career's own\n     * [CareerSeason.champion]); [readable] turns the result's text into names (a career's team ids); [note] is the season for a career trophy.\n     */\n    fun fromState(\n        state: TournamentState,\n        champion: Team?,\n        note: String = \"\",\n        readable: (String) -> String = { it }\n    ): TrophyRecord? {\n        if (champion == null || champion.id != state.userTeamId) return null\n        val finalFixture = state.fixtures.firstOrNull { it.stage == \"Final\" }\n        val lastMatch = if (finalFixture != null) null else\n            state.fixtures.lastOrNull { it.result != null && (it.homeId == champion.id || it.awayId == champion.id) }\n        val fixture = finalFixture ?: lastMatch\n        fun nameOf(id: String?): String = state.teams.firstOrNull { it.id == id }?.name.orEmpty()\n        val label = fixture?.let { (if (finalFixture != null) \"Final\" else \"Last match\") + \": ${nameOf(it.homeId)} v ${nameOf(it.awayId)}\" }.orEmpty()\n        return TrophyRecord(\n            key = \"${state.tournamentId}|${state.createdAt}\",\n            tournamentId = state.tournamentId,\n            name = state.name,\n            teamName = champion.name,\n            wonAt = if (note.isEmpty()) System.currentTimeMillis() else 0L,\n            note = note,\n            finalLabel = label,\n            finalSummary = readable(fixture?.result?.summary.orEmpty()),\n            scorecard = fixture?.scorecard\n        )\n    }\n\n    /** The trophies grouped by competition, the most recently won first; inside a group the newest first. */\n    fun groups(trophies: List<TrophyRecord>): List<TrophyGroup> {\n        val ordered = trophies.reversed()\n        return ordered.groupBy { it.tournamentId }.map { TrophyGroup(it.key, it.value) }\n    }\n\n    fun countText(n: Int): String = if (n == 1) \"1 trophy\" else \"$n trophies\"\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/persistence/TrophyStore.kt",
+      "content": "package com.cricketsim.persistence\n\nimport android.content.Context\nimport com.cricketsim.logic.CplSimulator\nimport com.cricketsim.logic.TrophyRecord\nimport com.cricketsim.logic.Trophies\nimport com.google.gson.Gson\nimport kotlinx.coroutines.Dispatchers\nimport kotlinx.coroutines.sync.Mutex\nimport kotlinx.coroutines.sync.withLock\nimport kotlinx.coroutines.withContext\nimport java.io.File\n\n/**\n * The trophies the player has won in the game's tournaments (patch 140; career trophies are kept in the career itself): one JSON file in the app's private\n * storage, written to a temp file and renamed over the real one, like the other stores. A missing or unreadable file counts as \"no trophies yet\".\n *\n * [add] records a trophy once (by its key). [backfill] looks through the tournaments saved on the phone for champions that were crowned before this update and\n * adds their trophies, so earlier wins are not lost; it only ever adds.\n */\nclass TrophyStore(context: Context) {\n\n    private val appContext = context.applicationContext\n    private val file = File(appContext.filesDir, \"trophies.json\")\n    private val lock = Mutex()\n    private val gson = Gson()\n\n    private fun read(): List<TrophyRecord> = try {\n        if (!file.exists()) emptyList()\n        else gson.fromJson(file.readText(), Array<TrophyRecord>::class.java)?.filter { it.key.isNotBlank() } ?: emptyList()\n    } catch (e: Exception) {\n        emptyList()\n    }\n\n    private fun write(all: List<TrophyRecord>) {\n        try {\n            val temp = File(file.parentFile, file.name + \".tmp\")\n            temp.writeText(gson.toJson(all.takeLast(MAX_TROPHIES).toTypedArray()))\n            if (!temp.renameTo(file)) {\n                file.delete()\n                temp.renameTo(file)\n            }\n        } catch (e: Exception) {\n            // A failed save must never crash the game; the next save tries again.\n        }\n    }\n\n    suspend fun load(): List<TrophyRecord> = withContext(Dispatchers.IO) { lock.withLock { read() } }\n\n    /** Records a trophy; one already recorded (same key) is left as it is. */\n    suspend fun add(trophy: TrophyRecord) {\n        withContext(Dispatchers.IO) {\n            lock.withLock {\n                val all = read()\n                if (all.none { it.key == trophy.key }) write(all + trophy)\n            }\n        }\n    }\n\n    /** Adds the trophies of tournaments already saved on the phone whose champion is the player's team (crowned before trophies were recorded). */\n    suspend fun backfill() {\n        withContext(Dispatchers.IO) {\n            lock.withLock {\n                try {\n                    val all = read()\n                    val known = all.map { it.key }.toHashSet()\n                    val found = ArrayList<TrophyRecord>()\n                    val files = appContext.filesDir.listFiles { f -> f.name.startsWith(\"saved_tournament_\") && f.name.endsWith(\".json\") } ?: emptyArray()\n                    for (f in files) {\n                        // Only a real tournament file loads (a saved part-played match has the same prefix and loads as null).\n                        val state = TournamentSaveStore(appContext, f.name).load() ?: continue\n                        if (!state.celebrated) continue\n                        val trophy = Trophies.fromState(state, CplSimulator.champion(state))?.copy(wonAt = f.lastModified()) ?: continue\n                        if (known.add(trophy.key)) found.add(trophy)\n                    }\n                    if (found.isNotEmpty()) write(all + found)\n                } catch (e: Exception) {\n                    // A tournament that cannot be read is skipped.\n                }\n            }\n        }\n    }\n\n    companion object {\n        const val MAX_TROPHIES = 300\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/ui/trophies/TrophyScreens.kt",
+      "content": "package com.cricketsim.ui.trophies\n\nimport androidx.activity.compose.BackHandler\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.LaunchedEffect\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.platform.LocalContext\nimport androidx.compose.ui.unit.dp\nimport com.cricketsim.logic.MatchState\nimport com.cricketsim.logic.TrophyGroup\nimport com.cricketsim.logic.TrophyRecord\nimport com.cricketsim.logic.Trophies\nimport com.cricketsim.persistence.TrophyStore\nimport com.cricketsim.ui.custom.BackButton\nimport com.cricketsim.ui.custom.OptionButton\nimport com.cricketsim.ui.custom.PageColumn\nimport com.cricketsim.ui.custom.PageHeading\nimport com.cricketsim.ui.match.ScorecardScreen\nimport java.text.SimpleDateFormat\nimport java.util.Date\nimport java.util.Locale\n\n/**\n * Home > Trophies (patch 140): every tournament the player has won in the game, excluding Career mode (which keeps its own trophies in its Career tab).\n *\n * The list has one button for each competition won, with how many times (\"1 trophy\"). A competition won once opens its Final's scorecard straight away; one\n * won several times opens the list of its wins, and each win opens its own Final's scorecard. The scorecard is the normal scorecard screen.\n * On opening, tournaments already saved on the phone whose champion was the player's team are added first ([TrophyStore.backfill]), so earlier wins show.\n */\n@Composable\nfun TrophiesScreen(onBack: () -> Unit) {\n    val context = LocalContext.current\n    var trophies by remember { mutableStateOf<List<TrophyRecord>?>(null) }\n    var card by remember { mutableStateOf<MatchState?>(null) }\n\n    LaunchedEffect(Unit) {\n        val store = TrophyStore(context)\n        store.backfill()\n        trophies = store.load()\n    }\n\n    val shown = card\n    if (shown != null) {\n        BackHandler { card = null }\n        ScorecardScreen(state = shown, onBack = { card = null })\n        return\n    }\n\n    BackHandler(onBack = onBack)\n    PageColumn {\n        BackButton(onBack)\n        Spacer(modifier = Modifier.height(16.dp))\n        PageHeading(\"Trophies\")\n        Spacer(modifier = Modifier.height(8.dp))\n        val list = trophies\n        if (list == null) {\n            Text(\"Loading your trophies.\", style = MaterialTheme.typography.bodyLarge)\n        } else {\n            TrophyList(\n                trophies = list,\n                emptyText = \"You have not won a trophy yet. Win a tournament with your team and it will be kept here, with the scorecard of the final. Trophies won in Career mode are in the Career tab of your career.\",\n                onViewScorecard = { card = it }\n            )\n        }\n    }\n}\n\nprivate fun dateText(millis: Long): String =\n    SimpleDateFormat(\"d MMMM yyyy\", Locale.getDefault()).format(Date(millis))\n\nprivate fun describe(t: TrophyRecord): String {\n    val parts = ArrayList<String>()\n    parts.add(\"Won with ${t.teamName}.\")\n    if (t.note.isNotEmpty()) parts.add(\"${t.note}.\")\n    else if (t.wonAt > 0L) parts.add(\"${dateText(t.wonAt)}.\")\n    if (t.finalLabel.isNotEmpty()) parts.add(\"${t.finalLabel}.\")\n    if (t.finalSummary.isNotEmpty()) parts.add(t.finalSummary.trimEnd('.') + \".\")\n    parts.add(if (t.scorecard != null) \"Tap to view the scorecard.\" else \"No scorecard was kept for this one.\")\n    return parts.joinToString(\" \")\n}\n\n/**\n * The trophies as a list of buttons, to be placed in a page of its own: used by Home > Trophies and by the Career tab's Trophies page. It does not draw a\n * Back button of its own for the list; when a competition with several wins is open it puts \"Back to trophies\" first.\n */\n@Composable\nfun TrophyList(trophies: List<TrophyRecord>, emptyText: String, onViewScorecard: (MatchState) -> Unit) {\n    var openId by remember { mutableStateOf<String?>(null) }\n    val groups = remember(trophies) { Trophies.groups(trophies) }\n    val open: TrophyGroup? = groups.firstOrNull { it.tournamentId == openId }\n\n    if (open != null) {\n        OptionButton(title = \"Back to trophies\", description = \"Return to the list of trophies.\", enabled = true, emphasised = false, onClick = { openId = null })\n        Spacer(modifier = Modifier.height(12.dp))\n        PageHeading(open.name)\n        Spacer(modifier = Modifier.height(4.dp))\n        Text(\"Won ${open.trophies.size} times. Choose one to see the scorecard of its final.\", style = MaterialTheme.typography.bodyMedium)\n        Spacer(modifier = Modifier.height(8.dp))\n        open.trophies.forEach { t ->\n            val scorecard = t.scorecard\n            OptionButton(\n                title = t.name,\n                description = describe(t),\n                enabled = scorecard != null,\n                emphasised = false,\n                onClick = { if (scorecard != null) onViewScorecard(scorecard) }\n            )\n            Spacer(modifier = Modifier.height(10.dp))\n        }\n        return\n    }\n\n    if (trophies.isEmpty()) {\n        Text(emptyText, style = MaterialTheme.typography.bodyLarge)\n        return\n    }\n    Text(\"You have won ${Trophies.countText(trophies.size)}.\", style = MaterialTheme.typography.bodyLarge)\n    Spacer(modifier = Modifier.height(12.dp))\n    groups.forEach { g ->\n        val only = g.trophies.singleOrNull()\n        val onlyCard = only?.scorecard\n        OptionButton(\n            title = g.name,\n            description = if (only != null) describe(only) else \"${Trophies.countText(g.trophies.size)}. Tap to see each one.\",\n            enabled = only == null || onlyCard != null,\n            emphasised = false,\n            onClick = {\n                if (only == null) openId = g.tournamentId\n                else if (onlyCard != null) onViewScorecard(onlyCard)\n            }\n        )\n        Spacer(modifier = Modifier.height(10.dp))\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/Screen.kt",
+      "find": "    /** Credits: who made the game and its voices (ui/home). */\n",
+      "replace": "    /** Trophies: every tournament the player has won, with the final's scorecard (ui/trophies). */\n    object Trophies : Screen\n\n    /** Credits: who made the game and its voices (ui/home). */\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/home/HomeScreen.kt",
+      "find": "    onNetPractice: () -> Unit,\n    onSettings: () -> Unit,\n",
+      "replace": "    onNetPractice: () -> Unit,\n    onTrophies: () -> Unit,\n    onSettings: () -> Unit,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/home/HomeScreen.kt",
+      "find": "            MenuButton(\n                title = \"Settings\",\n",
+      "replace": "            MenuButton(\n                title = \"Trophies\",\n                description = \"Every tournament you have won, with the scorecard of the final.\",\n                emphasised = false,\n                enabled = true,\n                onClick = onTrophies\n            )\n            Spacer(modifier = Modifier.height(14.dp))\n            MenuButton(\n                title = \"Settings\",\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "import com.cricketsim.ui.practice.NetPracticeFlow\n",
+      "replace": "import com.cricketsim.ui.practice.NetPracticeFlow\nimport com.cricketsim.ui.trophies.TrophiesScreen\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "            onNetPractice = { screen = Screen.NetPractice },\n",
+      "replace": "            onNetPractice = { screen = Screen.NetPractice },\n            onTrophies = { screen = Screen.Trophies },\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "        is Screen.NetPractice -> NetPracticeFlow(onExit = { screen = Screen.Home })\n",
+      "replace": "        is Screen.NetPractice -> NetPracticeFlow(onExit = { screen = Screen.Home })\n        is Screen.Trophies -> TrophiesScreen(onBack = { screen = Screen.Home })\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "opened is Screen.NetPractice || opened is Screen.Credits\n",
+      "replace": "opened is Screen.NetPractice || opened is Screen.Credits || opened is Screen.Trophies\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    val updated = latest.copy(celebrated = true)\n                    saved = updated\n                    scope.launch { store.save(updated) }\n",
+      "replace": "                    val updated = latest.copy(celebrated = true)\n                    saved = updated\n                    scope.launch {\n                        store.save(updated)\n                        // Trophies (patch 140): if the player's team won, keep the trophy and the Final's scorecard.\n                        com.cricketsim.logic.Trophies.fromState(updated, CplSimulator.champion(updated))\n                            ?.let { com.cricketsim.persistence.TrophyStore(context).add(it) }\n                    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Career.kt",
+      "find": "    val startYear: Int? = null\n) {",
+      "replace": "    val startYear: Int? = null,\n    // Patch 140: the trophies won in this career, each with the Final's scorecard (Career tab > Trophies). Only wins from patch 140 on are kept.\n    val trophies: List<TrophyRecord>? = null\n) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerRecords.kt",
+      "find": "        val objectives = newObjectives(career)\n        var bat = career.batting\n",
+      "replace": "        // The trophies (patch 140): each competition this season that his team won, with the Final's scorecard.\n        val haveTrophies = career.trophies.orEmpty().map { it.key }.toSet()\n        val freshTrophies = states.mapNotNull { s ->\n            if (!CareerSeason.isComplete(s)) return@mapNotNull null\n            val champion = CareerSeason.champion(s) ?: return@mapNotNull null\n            val note = \"Season $season\" + (CareerSeason.seasonYear(career)?.let { \", $it\" } ?: \"\")\n            Trophies.fromState(s, champion, note) { text -> CareerSeason.readable(s, text) }?.takeIf { it.key !in haveTrophies }\n        }\n        val objectives = newObjectives(career)\n        var bat = career.batting\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerRecords.kt",
+      "find": "            batting = bat, bowling = bowl, fielding = field, clubTeams = clubs,\n            honours = (career.honours.orEmpty() + honours).takeLast(60)\n        )",
+      "replace": "            batting = bat, bowling = bowl, fielding = field, clubTeams = clubs,\n            honours = (career.honours.orEmpty() + honours).takeLast(60),\n            trophies = (career.trophies.orEmpty() + freshTrophies).takeLast(80)\n        )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "    onLeaveLeague: (String) -> String\n) {",
+      "replace": "    onLeaveLeague: (String) -> String,\n    onViewScorecard: (com.cricketsim.logic.MatchState) -> Unit\n) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "        \"honours\" -> CareerPage(\"Honours\", back) {\n",
+      "replace": "        \"trophies\" -> CareerPage(\"Trophies\", back) {\n            com.cricketsim.ui.trophies.TrophyList(\n                trophies = career.trophies.orEmpty(),\n                emptyText = \"None yet. Win a competition with your team and it will be kept here, with the scorecard of the final.\",\n                onViewScorecard = onViewScorecard\n            )\n        }\n        \"honours\" -> CareerPage(\"Honours\", back) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerRecordScreens.kt",
+      "find": "    MenuItem(\"Rankings\", rankLines.firstOrNull() ?: \"Working out your rankings.\", \"rankings\", onOpen)\n",
+      "replace": "    val trophies = career.trophies.orEmpty()\n    MenuItem(\"Trophies\", if (trophies.isEmpty()) \"None yet. Win a competition.\" else \"${trophies.size} ${if (trophies.size == 1) \"trophy\" else \"trophies\"}. Open one to see the scorecard of its final.\", \"trophies\", onOpen)\n    MenuItem(\"Rankings\", rankLines.firstOrNull() ?: \"Working out your rankings.\", \"rankings\", onOpen)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    var viewCard by remember { mutableStateOf<Pair<Int, Int>?>(null) }\n",
+      "replace": "    var viewCard by remember { mutableStateOf<Pair<Int, Int>?>(null) }\n    // The scorecard of a trophy's final, opened from Career > Trophies.\n    var trophyCard by remember { mutableStateOf<com.cricketsim.logic.MatchState?>(null) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "    // ---------------------------------------------------------------- playing a match (full screen)\n",
+      "replace": "    // ---------------------------------------------------------------- the scorecard of a trophy's final, from Career > Trophies (full screen)\n    val trophyCardNow = trophyCard\n    if (trophyCardNow != null) {\n        BackHandler { trophyCard = null }\n        ScorecardScreen(state = trophyCardNow, onBack = { trophyCard = null })\n        return\n    }\n\n    // ---------------------------------------------------------------- playing a match (full screen)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "{ bought -> onCareerChanged(bought) }, leaveLeague)",
+      "replace": "{ bought -> onCareerChanged(bought) }, leaveLeague, { card -> trophyCard = card })"
+    },
+    {
+      "op": "write",
+      "file": "TROPHIES.md",
+      "content": "# Trophies (patch 140)\n\n**Home > Trophies** (before Settings): every tournament the player has won in the game, excluding Career mode.\n\n- One button for each competition won, with how many times (\"1 trophy\"). A competition won once opens the **scorecard of its final** straight away. One won several times opens the list of its wins (the tournament, the team, the date, the final and its result); each win opens its own final's scorecard (the normal scorecard screen).\n- A trophy is recorded when the champion is celebrated at the end of any tournament of the game (CPL, IPL, every league, the international tournaments, the domestic tournaments, custom tournaments) and the player's team won: `TournamentScreens`, the Celebration page's Continue, `Trophies.fromState`, `TrophyStore.add`. The scorecard kept is the slim one the tournament keeps for each match (no ball-by-ball). A competition with no final (the County Championship, the Plunket Shield) keeps its team's last match and says \"Last match\".\n- **Earlier wins:** when the Trophies page opens, tournaments already saved on the phone whose champion was the player's team are added (`TrophyStore.backfill`), so trophies won before this update show if the finished tournament is still saved.\n- Stored in `trophies.json` (`persistence/TrophyStore.kt`), at most 300.\n\n**Career mode** has its own Trophies page (Career tab, after Honours). It shows only trophies won in the career, each with the final's scorecard. They are recorded when the season is settled (`CareerRecords.settleSeason`) into `CareerProfile.trophies` (nullable, so older careers load unchanged). Only wins from this patch on are kept; earlier wins stay in Honours as text.\n\nCode: `logic/Trophies.kt` (the record, the grouping), `persistence/TrophyStore.kt`, `ui/trophies/TrophyScreens.kt` (`TrophiesScreen` for Home and `TrophyList`, shared with the Career page).\n"
+    }
+  ]
+}
