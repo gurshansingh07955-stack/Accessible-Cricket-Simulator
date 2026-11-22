@@ -269,6 +269,14 @@ object CareerRecords {
             if (pid != null && s.playerStats[pid] != null && isPlayerOfSeries(s, pid)) honours.add("Season $season: Player of the Series in the $label.")
         }
         val t = tally(career, states)
+        // The trophies (patch 140): each competition this season that his team won, with the Final's scorecard.
+        val haveTrophies = career.trophies.orEmpty().map { it.key }.toSet()
+        val freshTrophies = states.mapNotNull { s ->
+            if (!CareerSeason.isComplete(s)) return@mapNotNull null
+            val champion = CareerSeason.champion(s) ?: return@mapNotNull null
+            val note = "Season $season" + (CareerSeason.seasonYear(career)?.let { ", $it" } ?: "")
+            Trophies.fromState(s, champion, note) { text -> CareerSeason.readable(s, text) }?.takeIf { it.key !in haveTrophies }
+        }
         val objectives = newObjectives(career)
         var bat = career.batting
         var bowl = career.bowling
@@ -297,7 +305,8 @@ object CareerRecords {
         }
         val updated = career.copy(
             batting = bat, bowling = bowl, fielding = field, clubTeams = clubs,
-            honours = (career.honours.orEmpty() + honours).takeLast(60)
+            honours = (career.honours.orEmpty() + honours).takeLast(60),
+            trophies = (career.trophies.orEmpty() + freshTrophies).takeLast(80)
         )
         val objectiveText = if (t.matches == 0) "" else "You reached $done of ${objectives.size} season objectives" + (if (changes.isEmpty()) "." else " and your ratings grew: ${changes.joinToString(", ")}.")
         val honourText = if (honours.isEmpty()) "" else " Honours: ${honours.joinToString(" ") { it.substringAfter(": ") }}"

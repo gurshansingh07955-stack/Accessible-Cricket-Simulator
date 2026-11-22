@@ -171,7 +171,9 @@ data class CareerProfile(
     val leagueCaptainLeft: List<String>? = null,
     // Patch 138: the year of the career's first season (2026). A career made from this patch on has it and plays each season in its own year (2026, 2027, ...),
     // with the year in every tournament's name; an older career has no value and is unchanged.
-    val startYear: Int? = null
+    val startYear: Int? = null,
+    // Patch 140: the trophies won in this career, each with the Final's scorecard (Career tab > Trophies). Only wins from patch 140 on are kept.
+    val trophies: List<TrophyRecord>? = null
 ) {
     /** "" (district club and above, as always), "School" or "College". Never null, whatever the save held. */
     val stage: String get() = stageSaved ?: ""

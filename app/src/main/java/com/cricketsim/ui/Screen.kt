@@ -27,6 +27,9 @@ sealed interface Screen {
     /** My Player: the career mode (ui/career). */
     object Career : Screen
 
+    /** Trophies: every tournament the player has won, with the final's scorecard (ui/trophies). */
+    object Trophies : Screen
+
     /** Credits: who made the game and its voices (ui/home). */
     object Credits : Screen
 

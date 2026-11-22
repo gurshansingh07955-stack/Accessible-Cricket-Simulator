@@ -82,6 +82,7 @@ fun HomeScreen(
     onAdvanced: () -> Unit,
     onCareer: () -> Unit,
     onNetPractice: () -> Unit,
+    onTrophies: () -> Unit,
     onSettings: () -> Unit,
     onCredits: () -> Unit,
     onAbout: () -> Unit
@@ -168,6 +169,14 @@ fun HomeScreen(
                 emphasised = false,
                 enabled = com.cricketsim.logic.NetPractice.NET_PRACTICE_ENABLED,
                 onClick = onNetPractice
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            MenuButton(
+                title = "Trophies",
+                description = "Every tournament you have won, with the scorecard of the final.",
+                emphasised = false,
+                enabled = true,
+                onClick = onTrophies
             )
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(

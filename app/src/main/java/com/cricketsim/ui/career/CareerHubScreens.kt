@@ -133,6 +133,8 @@ fun CareerHub(
     var xiProblem by remember { mutableStateOf<String?>(null) }
     // The scorecard open from the Calendar: (competition index, fixture id).
     var viewCard by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    // The scorecard of a trophy's final, opened from Career > Trophies.
+    var trophyCard by remember { mutableStateOf<com.cricketsim.logic.MatchState?>(null) }
     // The selectors' decision for the player's next match (his rank in his role at the club, the difficulty and his form).
     // At the club: his rank among his club-mates. Once called up: his rank in the state squad. Read for the match that comes next.
     val sList = seasons
@@ -365,6 +367,14 @@ fun CareerHub(
             ScorecardScreen(state = card, onBack = { viewCard = null })
             return
         }
+    }
+
+    // ---------------------------------------------------------------- the scorecard of a trophy's final, from Career > Trophies (full screen)
+    val trophyCardNow = trophyCard
+    if (trophyCardNow != null) {
+        BackHandler { trophyCard = null }
+        ScorecardScreen(state = trophyCardNow, onBack = { trophyCard = null })
+        return
     }
 
     // ---------------------------------------------------------------- playing a match (full screen)
@@ -661,7 +671,7 @@ fun CareerHub(
                 )
                 HubTab.Calendar -> CalendarTab(current, loaded) { comp, id -> viewCard = Pair(comp, id) }
                 HubTab.Table -> TableTab(current, loaded, compTab, { compTab = it }, tableTab, { tableTab = it }, statsTab, { statsTab = it })
-                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, { move -> onCareerChanged(career.copy(pendingMove = move)) }, retireNow, { bought -> onCareerChanged(bought) }, leaveLeague)
+                HubTab.Career -> CareerRecordTab(career, current, rankLines, { focus -> onCareerChanged(career.copy(trainingFocus = focus)) }, { spec -> onCareerChanged(career.copy(specialism = spec)) }, { move -> onCareerChanged(career.copy(pendingMove = move)) }, retireNow, { bought -> onCareerChanged(bought) }, leaveLeague, { card -> trophyCard = card })
             }
         }
     }

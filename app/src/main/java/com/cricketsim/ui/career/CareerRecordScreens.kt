@@ -57,7 +57,8 @@ internal fun CareerRecordTab(
     onMove: (MoveRequest?) -> Unit,
     onRetire: () -> Unit,
     onCareer: (CareerProfile) -> Unit,
-    onLeaveLeague: (String) -> String
+    onLeaveLeague: (String) -> String,
+    onViewScorecard: (com.cricketsim.logic.MatchState) -> Unit
 ) {
     var page by remember { mutableStateOf<String?>(null) }
     val open = page
@@ -83,6 +84,13 @@ internal fun CareerRecordTab(
         }
         "training" -> CareerPage("Training and specialism", back) { TrainingPage(career, onFocus, onSpecialism) }
         "record" -> CareerPage("Career record", back) { RecordPage(career) }
+        "trophies" -> CareerPage("Trophies", back) {
+            com.cricketsim.ui.trophies.TrophyList(
+                trophies = career.trophies.orEmpty(),
+                emptyText = "None yet. Win a competition with your team and it will be kept here, with the scorecard of the final.",
+                onViewScorecard = onViewScorecard
+            )
+        }
         "honours" -> CareerPage("Honours", back) {
             val honours = career.honours.orEmpty()
             if (honours.isEmpty()) BodyLine("None yet. Win a competition or be Player of the Series.") else honours.reversed().forEach { BodyLine(it) }
@@ -139,6 +147,8 @@ private fun CareerMenu(career: CareerProfile, seasons: List<TournamentState>?, r
     MenuItem("Career record", CareerStatistics.headline(career), "record", onOpen)
     val honours = career.honours.orEmpty()
     MenuItem("Honours", if (honours.isEmpty()) "None yet." else "${honours.size} ${if (honours.size == 1) "honour" else "honours"}. Latest: ${honours.last()}", "honours", onOpen)
+    val trophies = career.trophies.orEmpty()
+    MenuItem("Trophies", if (trophies.isEmpty()) "None yet. Win a competition." else "${trophies.size} ${if (trophies.size == 1) "trophy" else "trophies"}. Open one to see the scorecard of its final.", "trophies", onOpen)
     MenuItem("Rankings", rankLines.firstOrNull() ?: "Working out your rankings.", "rankings", onOpen)
     if (!career.retired) MenuItem("Captaincy", captaincyStatus(career), "captaincy", onOpen)
     GroupHeading("Money and the papers")

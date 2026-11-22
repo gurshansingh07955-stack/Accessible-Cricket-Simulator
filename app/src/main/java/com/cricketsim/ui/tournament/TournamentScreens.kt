@@ -1185,7 +1185,12 @@ fun TournamentFlow(onExit: () -> Unit) {
                 if (latest != null) {
                     val updated = latest.copy(celebrated = true)
                     saved = updated
-                    scope.launch { store.save(updated) }
+                    scope.launch {
+                        store.save(updated)
+                        // Trophies (patch 140): if the player's team won, keep the trophy and the Final's scorecard.
+                        com.cricketsim.logic.Trophies.fromState(updated, CplSimulator.champion(updated))
+                            ?.let { com.cricketsim.persistence.TrophyStore(context).add(it) }
+                    }
                 }
                 page = TPage.Hub
             }
