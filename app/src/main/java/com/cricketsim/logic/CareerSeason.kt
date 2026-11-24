@@ -354,6 +354,9 @@ object CareerSeason {
             if (t.players.none { it.id == pid }) t
             else t.copy(players = t.players.map { p ->
                 if (p.id == pid) p.copy(
+                    // Edit career (patch 143): a new role or bowling style reaches a competition already under way.
+                    role = roleOf(career.role),
+                    bowlingStyle = styleOf(career.bowlingStyle),
                     battingRating = career.batting.coerceIn(1, 95),
                     bowlingRating = career.bowling.coerceIn(1, 95),
                     fieldingRating = career.fielding.coerceIn(1, 95)

@@ -1,6 +1,8 @@
-Patch run: 45299729084
-Timestamp (UTC): 2026-11-24T00:45:31Z
+Patch run: 45376032226
+Timestamp (UTC): 2026-11-24T10:34:27Z
 Result: OK
 -----
-Patch 2026-11-22-142-umpire-decisions-and-reviews.json
-  applied 37 operation(s) to 12 file(s)
+Patch 2026-11-24-143-edit-career.json
+  applied 13 operation(s) to 6 file(s)
+Patch 2026-11-24-144-talkback-smoothness.json
+  applied 42 operation(s) to 5 file(s)

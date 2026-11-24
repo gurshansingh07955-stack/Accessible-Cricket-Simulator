@@ -30,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -254,14 +255,14 @@ fun TournamentFlow(onExit: () -> Unit) {
     val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; "ilt" -> iltStore; "bbl" -> bblStore; "mlc" -> mlcStore; "sa20" -> saStore; "ranji2027" -> ranjiStore; "duleep2026" -> duleepStore; "irani2026" -> iraniStore; "smat2026" -> smatStore; "vht2026" -> vhtStore; "odc2027" -> odcStore; "blast2027" -> blastStore; "cc2027" -> ccStore; "shield2026" -> shieldStore; "audc2026" -> audcStore; "sa4d2026" -> sa4dStore; "sa50c2026" -> sa50Store; "pro20c2026" -> pro20Store; "plunket2026" -> plunketStore; "ford2026" -> fordStore; "smash2026" -> smashStore; "wi4d2027" -> wi4dStore; "wi50c2026" -> wi50Store; "qeag2026" -> qeagStore; "qeas2026" -> qeasStore; "ncl2026" -> nclStore; "wc2026" -> wcStore; "ct2025" -> ctStore; "asia2025" -> acStore; "ag2026" -> agStore; else -> if (isCustomKind) customStore else cplStore }
     val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; "ilt" -> iltMatchStore; "bbl" -> bblMatchStore; "mlc" -> mlcMatchStore; "sa20" -> saMatchStore; "ranji2027" -> ranjiMatchStore; "duleep2026" -> duleepMatchStore; "irani2026" -> iraniMatchStore; "smat2026" -> smatMatchStore; "vht2026" -> vhtMatchStore; "odc2027" -> odcMatchStore; "blast2027" -> blastMatchStore; "cc2027" -> ccMatchStore; "shield2026" -> shieldMatchStore; "audc2026" -> audcMatchStore; "sa4d2026" -> sa4dMatchStore; "sa50c2026" -> sa50MatchStore; "pro20c2026" -> pro20MatchStore; "plunket2026" -> plunketMatchStore; "ford2026" -> fordMatchStore; "smash2026" -> smashMatchStore; "wi4d2027" -> wi4dMatchStore; "wi50c2026" -> wi50MatchStore; "qeag2026" -> qeagMatchStore; "qeas2026" -> qeasMatchStore; "ncl2026" -> nclMatchStore; "wc2026" -> wcMatchStore; "ct2025" -> ctMatchStore; "asia2025" -> acMatchStore; "ag2026" -> agMatchStore; else -> if (isCustomKind) customMatchStore else cplMatchStore }
     val scope = rememberCoroutineScope()
-    val cplBuilt = remember { CplData.buildTeams() }
-    val adtBuilt = remember { AbuDhabiT10.buildTeams() }
-    val lplBuilt = remember { LankaPremierLeague.buildTeams() }
+    val cplBuilt = remember { lazy { CplData.buildTeams() } }
+    val adtBuilt = remember { lazy { AbuDhabiT10.buildTeams() } }
+    val lplBuilt = remember { lazy { LankaPremierLeague.buildTeams() } }
     // The squads of the tournament in hand (team choice, squads, tags).
-    val iltBuilt = remember { InternationalLeagueT20.buildTeams() }
-    val bblBuilt = remember { BigBashLeague.buildTeams() }
-    val mlcBuilt = remember { MajorLeagueCricket.buildTeams() }
-    val saBuilt = remember { Sa20.buildTeams() }
+    val iltBuilt = remember { lazy { InternationalLeagueT20.buildTeams() } }
+    val bblBuilt = remember { lazy { BigBashLeague.buildTeams() } }
+    val mlcBuilt = remember { lazy { MajorLeagueCricket.buildTeams() } }
+    val saBuilt = remember { lazy { Sa20.buildTeams() } }
     // The Ranji squads are only built when the Ranji Trophy is opened (they are the biggest).
     val ranjiBuilt = remember { lazy { Ranji.buildTeams() } }
     val duleepBuilt = remember { lazy { DomesticFc.buildDuleep() } }
@@ -282,12 +283,20 @@ fun TournamentFlow(onExit: () -> Unit) {
     val pakDomBuilt = remember { lazy { PakDomestic.buildTeams() } }
     // The Bangladeshi National Cricket League (built only when it is opened).
     val bdDomBuilt = remember { lazy { BdDomestic.buildTeams() } }
-    val wcBuilt = remember { T20WorldCup.buildTeams() }
-    val ctBuilt = remember { ChampionsTrophy.buildTeams() }
-    val acBuilt = remember { AsiaCup.buildTeams() }
-    val agBuilt = remember { AsianGames.buildTeams() }
-    val customBuilt = remember(customId) { if (isCustomKind) CustomTournaments.buildTeams(customId) else cplBuilt }
-    val built = when (kind) { "adt10" -> adtBuilt; "lpl" -> lplBuilt; "ilt" -> iltBuilt; "bbl" -> bblBuilt; "mlc" -> mlcBuilt; "sa20" -> saBuilt; "ranji2027" -> ranjiBuilt.value; "duleep2026" -> duleepBuilt.value; "irani2026" -> iraniBuilt.value; "smat2026", "vht2026" -> whiteBallBuilt.value; "odc2027", "blast2027", "cc2027" -> countyBuilt.value; "shield2026", "audc2026" -> ausBuilt.value; "sa4d2026", "sa50c2026", "pro20c2026" -> saDomBuilt.value; "plunket2026", "ford2026", "smash2026" -> nzBuilt.value; "wi4d2027", "wi50c2026" -> wiDomBuilt.value; "qeag2026" -> PakDomestic.teamsFor(PakDomestic.GOLD_ID, pakDomBuilt.value); "qeas2026" -> PakDomestic.teamsFor(PakDomestic.SILVER_ID, pakDomBuilt.value); "ncl2026" -> bdDomBuilt.value; "wc2026" -> wcBuilt; "ct2025" -> ctBuilt; "asia2025" -> acBuilt; "ag2026" -> agBuilt; else -> if (isCustomKind) customBuilt else cplBuilt }
+    val wcBuilt = remember { lazy { T20WorldCup.buildTeams() } }
+    val ctBuilt = remember { lazy { ChampionsTrophy.buildTeams() } }
+    val acBuilt = remember { lazy { AsiaCup.buildTeams() } }
+    val agBuilt = remember { lazy { AsianGames.buildTeams() } }
+    val customBuilt = remember(customId) { lazy { if (isCustomKind) CustomTournaments.buildTeams(customId) else cplBuilt.value } }
+    // The squads of the tournament in hand are built OFF the main thread (patch 144): building them on it froze the screen, and TalkBack with it, every time
+    // the Tournament menu or a tournament was opened. The menus and lists need no squads; every other page waits behind a short "Loading" page.
+    val builtHolder by produceState<Pair<String, Pair<List<Team>, Map<String, SquadTag>>>?>(null, kind, customId) {
+        val k = kind
+        value = k to withContext(Dispatchers.Default) { try { when (k) { "adt10" -> adtBuilt.value; "lpl" -> lplBuilt.value; "ilt" -> iltBuilt.value; "bbl" -> bblBuilt.value; "mlc" -> mlcBuilt.value; "sa20" -> saBuilt.value; "ranji2027" -> ranjiBuilt.value; "duleep2026" -> duleepBuilt.value; "irani2026" -> iraniBuilt.value; "smat2026", "vht2026" -> whiteBallBuilt.value; "odc2027", "blast2027", "cc2027" -> countyBuilt.value; "shield2026", "audc2026" -> ausBuilt.value; "sa4d2026", "sa50c2026", "pro20c2026" -> saDomBuilt.value; "plunket2026", "ford2026", "smash2026" -> nzBuilt.value; "wi4d2027", "wi50c2026" -> wiDomBuilt.value; "qeag2026" -> PakDomestic.teamsFor(PakDomestic.GOLD_ID, pakDomBuilt.value); "qeas2026" -> PakDomestic.teamsFor(PakDomestic.SILVER_ID, pakDomBuilt.value); "ncl2026" -> bdDomBuilt.value; "wc2026" -> wcBuilt.value; "ct2025" -> ctBuilt.value; "asia2025" -> acBuilt.value; "ag2026" -> agBuilt.value; else -> if (isCustomKind) customBuilt.value else cplBuilt.value } } catch (e: Exception) { Pair(emptyList<Team>(), emptyMap<String, SquadTag>()) } }
+    }
+    val builtNow = builtHolder
+    val builtReady = builtNow != null && builtNow.first == kind
+    val built: Pair<List<Team>, Map<String, SquadTag>> = if (builtNow != null && builtNow.first == kind) builtNow.second else Pair(emptyList(), emptyMap())
 
     var page by remember { mutableStateOf<TPage>(TPage.Menu) }
     // The "menu open" sound for each menu-type page (not the toss, the match, the celebration or the IPL
@@ -373,6 +382,19 @@ fun TournamentFlow(onExit: () -> Unit) {
         loaded = true
     }
 
+    // Patch 144: a page that needs the squads waits for them behind a plain "Loading" page (the menus and lists do not need them).
+    val menuLikePage = page is TPage.Menu || page is TPage.Leagues || page is TPage.International || page is TPage.Domestic || page is TPage.DomesticIn || page is TPage.CustomList
+    if (!builtReady && !menuLikePage) {
+        BackHandler(onBack = { page = TPage.Menu })
+        com.cricketsim.ui.custom.PageColumn {
+            com.cricketsim.ui.custom.BackButton { page = TPage.Menu }
+            Spacer(modifier = Modifier.height(16.dp))
+            com.cricketsim.ui.custom.PageHeading("Loading")
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Loading the teams. Please wait.", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
+        return
+    }
     // The Tournament menu and its lists of tournaments show names only, no explanations.
     simpleRows = page is TPage.Menu || page is TPage.Leagues || page is TPage.International || page is TPage.Domestic || page is TPage.DomesticIn || page is TPage.CustomList
     when (val current = page) {

@@ -20,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +38,8 @@ import com.cricketsim.logic.Player
 import com.cricketsim.logic.PlayerProfiles
 import com.cricketsim.logic.Team
 import com.cricketsim.logic.TeamGroups
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Edit teams > Delete custom teams, Reset game teams to default, and (from a team's page) Add players from other
@@ -194,7 +197,12 @@ internal fun ResetTeamsMenuPage(version: Int, onBack: () -> Unit, onChoose: () -
 
 @Composable
 internal fun ResetTeamsPickPage(version: Int, onBack: () -> Unit, onDone: (String) -> Unit) {
-    val changed = remember(version) { changedGameTeams() }
+    // Patch 144: worked out off the main thread (it needs the league and domestic squads, which are slow to build).
+    val changedNow by produceState<List<Pair<String, Team>>?>(null, version) {
+        value = withContext(Dispatchers.Default) { try { changedGameTeams() } catch (e: Exception) { emptyList() } }
+    }
+    val changed = changedNow.orEmpty()
+    val changedLoading = changedNow == null
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirm by remember { mutableStateOf(false) }
     BackHandler(onBack = onBack)
@@ -214,6 +222,10 @@ internal fun ResetTeamsPickPage(version: Int, onBack: () -> Unit, onDone: (Strin
             enabled = picked.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
         ) { Text("Reset the ${picked.size} chosen") }
+        if (changedLoading) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Loading the teams. Please wait.", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
         changed.groupBy { it.first }.forEach { (group, list) ->
             Spacer(modifier = Modifier.height(12.dp))
             Text(group, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
@@ -248,15 +260,18 @@ internal fun AddPlayersPage(dest: Team, onBack: () -> Unit, onDone: (String) -> 
     var sourceId by remember { mutableStateOf<String?>(null) }
     var picked by remember { mutableStateOf<List<Player>>(emptyList()) }
     val international = remember { internationalTeams().filter { it.id != dest.id } }
-    val leagues = remember(kind) {
-        if (kind == TeamKind.League) leagueGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
+    // Patch 144: the squads of a kind come from rememberTeamGroups (built off the main thread; null while they are being built).
+    val groupsNow = rememberTeamGroups(kind, 0)
+    val teamsLoading = groupsNow == null
+    val leagues = remember(kind, groupsNow) {
+        if (kind == TeamKind.League) groupsNow.orEmpty().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
     }
     val custom = remember { Customisation.customTeamsAsTeams().filter { it.id != dest.id } }
-    val tournaments = remember(kind) {
-        if (kind == TeamKind.Tournament) TeamGroups.tournamentGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
+    val tournaments = remember(kind, groupsNow) {
+        if (kind == TeamKind.Tournament) groupsNow.orEmpty().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
     }
-    val domestic = remember(kind) {
-        if (kind == TeamKind.Domestic) TeamGroups.domesticGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
+    val domestic = remember(kind, groupsNow) {
+        if (kind == TeamKind.Domestic) groupsNow.orEmpty().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()
     }
     val sourceTeam: Team? = sourceId?.let { id ->
         when (kind) {
@@ -311,6 +326,9 @@ internal fun AddPlayersPage(dest: Team, onBack: () -> Unit, onDone: (String) -> 
                 TeamKind.League -> leagues
                 TeamKind.Domestic -> domestic
                 TeamKind.Custom -> listOf("Custom teams" to custom)
+            }
+            if (teamsLoading) {
+                Text("Loading the teams. Please wait.", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
             if (kind == TeamKind.Custom && custom.isEmpty()) {
                 Text("You have no other custom teams.", style = MaterialTheme.typography.bodyLarge)

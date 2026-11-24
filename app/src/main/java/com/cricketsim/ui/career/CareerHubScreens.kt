@@ -170,7 +170,7 @@ fun CareerHub(
 
     // Where the player stands on the road to the next level (worked out off the main thread: it builds the squads he is compared with).
     var pathway by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(career.id, career.season, career.level, career.matchesPlayed) {
+    LaunchedEffect(career.id, career.season, career.level, career.matchesPlayed, career.role, career.difficulty, career.batting, career.bowling, career.fielding) {
         pathway = withContext(Dispatchers.Default) { try { CareerInternational.pathway(career) } catch (e: Exception) { emptyList() } }
     }
 
@@ -219,7 +219,7 @@ fun CareerHub(
 
     // Part eleven: his place among the players of the game, worked out off the main thread (it builds the national teams).
     var rankLines by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(career.id, career.season, career.matchesPlayed) {
+    LaunchedEffect(career.id, career.season, career.matchesPlayed, career.role, career.difficulty, career.batting, career.bowling, career.fielding) {
         rankLines = withContext(Dispatchers.Default) { try { CareerRecords.rankings(career) } catch (e: Exception) { emptyList() } }
     }
 
@@ -752,7 +752,7 @@ private fun HomeTab(
         OptionButton("Clubs of ${career.state}", "${career.clubs.size} district clubs and their squads.", true, false) { onOpenClubs() }
         Spacer(modifier = Modifier.height(12.dp))
     }
-    OptionButton("Player profile", "Your details, ratings and choices. Delete this career here.", true, false) { onOpenProfile() }
+    OptionButton("Player profile", "Your details, ratings and choices. Edit or delete this career here.", true, false) { onOpenProfile() }
 }
 
 private fun ordinal(n: Int): String = when {

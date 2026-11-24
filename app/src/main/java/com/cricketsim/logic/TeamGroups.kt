@@ -12,6 +12,12 @@ object TeamGroups {
     @Volatile private var tournament: Kept? = null
     @Volatile private var domestic: Kept? = null
 
+    /** True when the international tournaments' squads are already built for the player's present edits (patch 144). */
+    fun tournamentWarm(): Boolean = tournament?.revision == Customisation.revision
+
+    /** True when the domestic squads are already built for the player's present edits (patch 144). */
+    fun domesticWarm(): Boolean = domestic?.revision == Customisation.revision
+
     /** Each international tournament's name and its squads (the national team's id, the tournament's players). */
     fun tournamentGroups(): List<Pair<String, List<Team>>> {
         val rev = Customisation.revision

@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -111,6 +112,19 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
     var version by remember { mutableStateOf(0) }
     var message by remember { mutableStateOf<String?>(null) }
     var renaming by remember { mutableStateOf<Pair<TeamKind, Team>?>(null) }
+
+    // Patch 144: the league, domestic and tournament squads are built in the background (they are slow), now and again after every edit, so a tab opens at once.
+    LaunchedEffect(version) {
+        withContext(Dispatchers.Default) {
+            try {
+                leagueGroups()
+                TeamGroups.domesticGroups()
+                TeamGroups.tournamentGroups()
+            } catch (e: Exception) {
+                // The pages build them again, with a loading note.
+            }
+        }
+    }
 
     when (val p = page) {
         is CtPage.Hub -> {
@@ -190,8 +204,11 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
         )
 
         is CtPage.AddPlayers -> {
-            val team = remember(version, p.teamId) { findTeam(p.kind, p.teamId) }
-            if (team == null) {
+            val lookup = rememberTeamLookup(p.kind, p.teamId, version)
+            val team = lookup.second
+            if (!lookup.first) {
+                LoadingTeamPage { page = CtPage.EditList }
+            } else if (team == null) {
                 LaunchedEffect(Unit) { page = CtPage.EditList }
             } else {
                 AddPlayersPage(
@@ -207,8 +224,11 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
         }
 
         is CtPage.TeamView -> {
-            val team = remember(version, p.teamId) { findTeam(p.kind, p.teamId) }
-            if (team == null) {
+            val lookup = rememberTeamLookup(p.kind, p.teamId, version)
+            val team = lookup.second
+            if (!lookup.first) {
+                LoadingTeamPage { page = CtPage.EditList }
+            } else if (team == null) {
                 LaunchedEffect(Unit) { page = CtPage.EditList }
             } else {
                 BackHandler(onBack = { page = CtPage.EditList })
@@ -232,9 +252,12 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
         }
 
         is CtPage.PlayerEdit -> {
-            val team = remember(version, p.teamId) { findTeam(p.kind, p.teamId) }
+            val lookup = rememberTeamLookup(p.kind, p.teamId, version)
+            val team = lookup.second
             val player = team?.players?.find { it.name == p.playerName }
-            if (team == null || (p.playerName != null && player == null)) {
+            if (!lookup.first) {
+                LoadingTeamPage { page = CtPage.TeamView(p.kind, p.teamId) }
+            } else if (team == null || (p.playerName != null && player == null)) {
                 LaunchedEffect(Unit) { page = CtPage.EditList }
             } else {
                 BackHandler(onBack = { page = CtPage.TeamView(p.kind, p.teamId) })
@@ -279,16 +302,31 @@ fun CustomTeamsFlow(onExit: () -> Unit) {
 
 internal fun internationalTeams(): List<Team> = CricketData.getAllTeams().sortedBy { it.name }
 
+/** The league squads, kept until the player changes something ([Customisation.revision] moves on): building the seven leagues takes a while (patch 144). */
+private object LeagueGroupsCache {
+    class Kept(val revision: Int, val groups: List<Pair<String, List<Team>>>)
+
+    @Volatile var kept: Kept? = null
+
+    fun warm(): Boolean = kept?.revision == Customisation.revision
+}
+
 /** Every league the game has, with its teams as they are built (the IPL is made by its auction, so it is not here). */
-internal fun leagueGroups(): List<Pair<String, List<Team>>> = listOf(
-    "Caribbean Premier League" to CplData.buildTeams().first,
-    "Abu Dhabi T10" to AbuDhabiT10.buildTeams().first,
-    "Lanka Premier League" to LankaPremierLeague.buildTeams().first,
-    "International League T20" to InternationalLeagueT20.buildTeams().first,
-    "Big Bash League" to BigBashLeague.buildTeams().first,
-    "Major League Cricket" to MajorLeagueCricket.buildTeams().first,
-    "SA20" to Sa20.buildTeams().first
-)
+internal fun leagueGroups(): List<Pair<String, List<Team>>> {
+    val rev = Customisation.revision
+    LeagueGroupsCache.kept?.takeIf { it.revision == rev }?.let { return it.groups }
+    val built = listOf(
+        "Caribbean Premier League" to CplData.buildTeams().first,
+        "Abu Dhabi T10" to AbuDhabiT10.buildTeams().first,
+        "Lanka Premier League" to LankaPremierLeague.buildTeams().first,
+        "International League T20" to InternationalLeagueT20.buildTeams().first,
+        "Big Bash League" to BigBashLeague.buildTeams().first,
+        "Major League Cricket" to MajorLeagueCricket.buildTeams().first,
+        "SA20" to Sa20.buildTeams().first
+    )
+    LeagueGroupsCache.kept = LeagueGroupsCache.Kept(rev, built)
+    return built
+}
 
 /**
  * The id a page uses for a team that is listed in a tournament's group: an international tournament's squad has the same id as the
@@ -300,6 +338,61 @@ internal fun findInGroups(groups: List<Pair<String, List<Team>>>, key: String): 
     val group = key.substringBefore("::")
     val id = key.substringAfter("::")
     return groups.find { it.first == group }?.second?.find { it.id == id }
+}
+
+/** True when the squads of this kind are already built for the player's present edits (so looking one up costs nothing). */
+private fun isWarm(kind: TeamKind): Boolean = when (kind) {
+    TeamKind.International, TeamKind.Custom -> true
+    TeamKind.League -> LeagueGroupsCache.warm()
+    TeamKind.Tournament -> TeamGroups.tournamentWarm()
+    TeamKind.Domestic -> TeamGroups.domesticWarm()
+}
+
+private fun groupsFor(kind: TeamKind): List<Pair<String, List<Team>>> = when (kind) {
+    TeamKind.League -> leagueGroups()
+    TeamKind.Tournament -> TeamGroups.tournamentGroups()
+    TeamKind.Domestic -> TeamGroups.domesticGroups()
+    else -> emptyList()
+}
+
+/**
+ * The league, tournament or domestic squads of one kind, built OFF the main thread (patch 144). Null while they are being built; at once when they are
+ * already built. They used to be built on the main thread the first time a tab was opened and again after every edit, which froze TalkBack.
+ */
+@Composable
+internal fun rememberTeamGroups(kind: TeamKind, version: Int): List<Pair<String, List<Team>>>? {
+    val key = "$version/${kind.name}"
+    val first = remember(key) { if (isWarm(kind)) groupsFor(kind) else null }
+    val holder by produceState<Pair<String, List<Pair<String, List<Team>>>>?>(null, key) {
+        value = key to withContext(Dispatchers.Default) { try { groupsFor(kind) } catch (e: Exception) { emptyList() } }
+    }
+    val h = holder
+    return first ?: if (h != null && h.first == key) h.second else null
+}
+
+/** One team looked up OFF the main thread: (false, null) while it is being found, then (true, the team or null if it is gone). Patch 144. */
+@Composable
+private fun rememberTeamLookup(kind: TeamKind, id: String, version: Int): Pair<Boolean, Team?> {
+    val key = "$version/${kind.name}/$id"
+    val first = remember(key) { if (isWarm(kind)) key to findTeam(kind, id) else null }
+    val holder by produceState<Pair<String, Team?>?>(null, key) {
+        value = key to withContext(Dispatchers.Default) { try { findTeam(kind, id) } catch (e: Exception) { null } }
+    }
+    val h = holder?.takeIf { it.first == key } ?: first
+    return if (h != null) true to h.second else false to null
+}
+
+/** A plain page shown while a team is being found. */
+@Composable
+private fun LoadingTeamPage(onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    PageColumn {
+        BackButton(onBack)
+        Spacer(modifier = Modifier.height(16.dp))
+        PageHeading("Loading")
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Loading the team. Please wait.", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    }
 }
 
 private fun findTeam(kind: TeamKind, id: String): Team? = when (kind) {
@@ -450,9 +543,12 @@ private fun EditTeamsPage(
     onResetTeams: () -> Unit
 ) {
     val international = remember(version) { internationalTeams() }
-    val leagues = remember(version, tab) { if (tab == TeamKind.League) leagueGroups() else emptyList() }
-    val tournaments = remember(version, tab) { if (tab == TeamKind.Tournament) TeamGroups.tournamentGroups() else emptyList() }
-    val domestic = remember(version, tab) { if (tab == TeamKind.Domestic) TeamGroups.domesticGroups() else emptyList() }
+    // Patch 144: built off the main thread (null while they are being built), so opening a tab no longer freezes the screen.
+    val groupsNow = rememberTeamGroups(tab, version)
+    val groupsLoading = groupsNow == null
+    val leagues = if (tab == TeamKind.League) groupsNow.orEmpty() else emptyList()
+    val tournaments = if (tab == TeamKind.Tournament) groupsNow.orEmpty() else emptyList()
+    val domestic = if (tab == TeamKind.Domestic) groupsNow.orEmpty() else emptyList()
     val custom = remember(version) { Customisation.customTeamsAsTeams() }
     PageColumn {
         BackButton(onBack)
@@ -484,6 +580,10 @@ private fun EditTeamsPage(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
+        if (groupsLoading) {
+            Text("Loading the teams. Please wait.", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         when (tab) {
             TeamKind.International -> international.forEach { t ->
                 TeamRow(t.name, "${t.players.size} players", { onOpen(tab, t.id) }, { onRename(tab, t) })

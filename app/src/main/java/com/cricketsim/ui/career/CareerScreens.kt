@@ -59,7 +59,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
-private enum class CStep { Menu, Resume, Details, Name, Age, Gender, Jersey, Country, State, Club, School, College, Role, BatHand, BowlHand, BowlStyle, BatPosition, BowlPhase, BatNumber, Fielding, Difficulty, Summary, Home, MySquad, StateClubs, ClubSquad }
+private enum class CStep { Menu, Resume, Details, Name, Age, Gender, Jersey, Country, State, Club, School, College, Role, BatHand, BowlHand, BowlStyle, BatPosition, BowlPhase, BatNumber, Fielding, Difficulty, Summary, Home, MySquad, StateClubs, ClubSquad, EditCareer }
 
 /**
  * Home > My Player: the career mode. PART ONE: the menu (Start new career, Resume career), up to five saved careers, and the
@@ -283,6 +283,10 @@ fun CareerFlow(onExit: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(24.dp))
+                    if (com.cricketsim.logic.CareerEdit.ENABLED) {
+                        OptionButton("Edit career", "Change your role, playing style, ratings, jersey number, photo and difficulty. Your name, age, country, state, club, school and college stay as they are.", true, true) { step = CStep.EditCareer }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                     OutlinedButton(
                         onClick = { askDelete = true },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -308,6 +312,26 @@ fun CareerFlow(onExit: () -> Unit) {
                         }) { Text("Delete") }
                     },
                     dismissButton = { TextButton(onClick = { askDelete = false }) { Text("Keep it") } }
+                )
+            }
+        }
+
+        CStep.EditCareer -> {
+            val career = selected
+            if (career == null) {
+                BackHandler(onBack = { step = CStep.Menu })
+                PageColumn { BackButton { step = CStep.Menu } }
+            } else {
+                // Edit career (patch 143): the choices and ratings can change; the name, age, country, state, club, school and college cannot.
+                CareerEditFlow(
+                    career = career,
+                    onSave = { updated ->
+                        val updatedList = list.map { if (it.id == updated.id) updated else it }
+                        careers = updatedList
+                        selected = updated
+                        scope.launch { store.save(updatedList) }
+                    },
+                    onBack = { step = CStep.Details }
                 )
             }
         }
@@ -961,10 +985,10 @@ internal fun CareerPhoto(career: CareerProfile) {
     }
 }
 
-private fun photoFile(context: Context, id: String): File = File(File(context.applicationContext.filesDir, "career_photos"), "$id.png")
+internal fun photoFile(context: Context, id: String): File = File(File(context.applicationContext.filesDir, "career_photos"), "$id.png")
 
 /** Reads the picked picture and shrinks it (longest side 384 pixels): a profile photo needs no more. */
-private fun loadPhoto(context: Context, uri: Uri): Bitmap? = try {
+internal fun loadPhoto(context: Context, uri: Uri): Bitmap? = try {
     val resolver = context.contentResolver
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -984,7 +1008,7 @@ private fun loadPhoto(context: Context, uri: Uri): Bitmap? = try {
     null
 }
 
-private fun savePhoto(context: Context, id: String, bitmap: Bitmap) {
+internal fun savePhoto(context: Context, id: String, bitmap: Bitmap) {
     try {
         val f = photoFile(context, id)
         f.parentFile?.mkdirs()
