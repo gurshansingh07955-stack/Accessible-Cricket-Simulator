@@ -53,5 +53,7 @@ data class BallOutcome(
     /** Byes (patch 128): runs run off a legal ball that the batter did not hit and the keeper did not stop. Not off the bat and not charged to the bowler; [extraRuns] carries the same runs, so the team score and the partnership count them. */
     val byes: Int = 0,
     /** Leg byes: runs run off a legal ball that hit the batter's body. Counted like byes. */
-    val legByes: Int = 0
+    val legByes: Int = 0,
+    /** Patch 142: the ball hit the batter's pad or body (an LBW the game decided, leg byes, or now and then a dot ball on the stumps), so the fielding side may appeal. */
+    val padHit: Boolean = false
 )

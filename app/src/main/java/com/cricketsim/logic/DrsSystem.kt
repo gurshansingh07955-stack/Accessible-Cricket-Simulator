@@ -72,7 +72,13 @@ data class DrsCase(
     // The delivery, for the tracking details. Null only if unknown.
     val delivery: ResolvedBowlingDecision?,
     // The BATTER's timing tier on that shot — this alone drives survival.
-    val timingTier: BowlingQualityTier
+    val timingTier: BowlingQualityTier,
+    // Patch 142: how keen the computer is to review depends on the batter's score and rating and on the state of the match (UmpireDecisions).
+    val batterRuns: Int = 0,
+    val batterRating: Int = 50,
+    val situation: Double = 0.0,
+    // Patch 142: the dismissal is a catch behind the stumps (an edge to the keeper), reviewed by UltraEdge.
+    val caughtBehind: Boolean = false
 )
 
 /** The full, already-decided result of a review, and the steps that reveal it. */
@@ -149,6 +155,10 @@ object DrsSystem {
     fun reviewsRemaining(state: MatchState): Int =
         ((state.rules?.drsReviews ?: reviewsPerInnings(state.format)) - state.drsReviewsUsed).coerceAtLeast(0)
 
+    /** How many reviews the side currently FIELDING has left this innings (of a not out decision), patch 142: the same allowance as the batting side. */
+    fun fieldingReviewsRemaining(state: MatchState): Int =
+        ((state.rules?.drsReviews ?: reviewsPerInnings(state.format)) - state.drsFieldingReviewsUsed).coerceAtLeast(0)
+
     /** "2 reviews", or "unlimited reviews" when a custom tournament allows as many as the team likes. */
     fun reviewsText(n: Int): String =
         if (n >= CustomTournamentDef.UNLIMITED_REVIEWS / 2) "unlimited reviews" else if (n == 1) "1 review" else "$n reviews"
@@ -179,6 +189,9 @@ object DrsSystem {
         BowlingQualityTier.VERY_BAD -> "very bad"
     }
 
+    /** The spoken name of the dismissal under review (patch 142): a catch behind the stumps is "caught behind", not just "caught". */
+    fun labelFor(drsCase: DrsCase): String = if (drsCase.caughtBehind) "caught behind" else dismissalLabel(drsCase.dismissalType)
+
     /** A short spoken name for a dismissal: "LBW", "run out", "stumped". */
     fun dismissalLabel(type: DismissalType): String = when (kindOf(type)) {
         Kind.LBW -> "LBW"
@@ -188,8 +201,8 @@ object DrsSystem {
     }
 
     /** The commentary for a ball whose dismissal was reversed on review. */
-    fun overturnedCommentary(type: DismissalType, batterName: String): String =
-        "Not out! The ${dismissalLabel(type)} decision against $batterName is overturned on review."
+    fun overturnedCommentary(type: DismissalType, batterName: String, caughtBehind: Boolean = false): String =
+        "Not out! The ${if (caughtBehind) "caught behind" else dismissalLabel(type)} decision against $batterName is overturned on review."
 
     // --- The AI ---
 
@@ -228,6 +241,10 @@ object DrsSystem {
      * verdict is decided first, then the evidence is generated to match.
      */
     fun resolve(drsCase: DrsCase, rng: Random = Random.Default): DrsReport {
+        // A catch behind the stumps (patch 142): UltraEdge decides, there is no umpire's call.
+        if (drsCase.caughtBehind) {
+            return buildCaughtBehind(drsCase, rollCaughtBehindVerdict(drsCase.timingTier, rng))
+        }
         val verdict = rollVerdict(drsCase.dismissalType, drsCase.timingTier, rng)
         return when (kindOf(drsCase.dismissalType)) {
             Kind.LBW -> buildLbw(drsCase, verdict, rng)
@@ -264,7 +281,7 @@ object DrsSystem {
     }
 
     private fun requestLine(drsCase: DrsCase): Line {
-        val label = dismissalLabel(drsCase.dismissalType)
+        val label = labelFor(drsCase)
         return Line(
             "Review requested",
             "${drsCase.reviewingTeamName} have asked for a review of the $label decision against " +
@@ -446,6 +463,31 @@ object DrsSystem {
             footBehind -> "The batter's foot was grounded behind the line."
             else -> "The batter's foot was out of the crease."
         }
+        return DrsReport(verdict, steps, headline(verdict), explanation)
+    }
+
+    /**
+     * The batter's review of an OUT given for a catch behind the stumps (patch 142). The game decided it was an edge, so the review is rarely won: 8%, plus up
+     * to 20% for a batter who timed the ball well (the keeper's catch was less clean). There is no Umpire's Call: the spike is there, or it is not.
+     */
+    private fun rollCaughtBehindVerdict(timingTier: BowlingQualityTier, rng: Random): DrsVerdict =
+        if (rng.nextDouble() < 0.08 + survivalChance(timingTier) * 0.20) DrsVerdict.OVERTURNED else DrsVerdict.STANDS
+
+    /** The steps of a caught-behind review: the no ball, UltraEdge, then the replay or the catch. Every spoken text is one of UmpireLines.THIRD. */
+    private fun buildCaughtBehind(drsCase: DrsCase, verdict: DrsVerdict): DrsReport {
+        val overturned = verdict == DrsVerdict.OVERTURNED
+        val edge = if (overturned) {
+            Line("UltraEdge", "No spike. The ball passed the bat without touching it.", "Checking for an edge. No spike. No bat involved.")
+        } else {
+            Line("UltraEdge", "There is a spike as the ball passes the bat. The bat is involved.", "Checking for an edge. There is a spike. The bat is involved.")
+        }
+        val last = if (overturned) {
+            Line("Slow motion", "The slow-motion replay.", "Slow motion replay.")
+        } else {
+            Line("The catch", "The ball carried cleanly to the keeper.", "Checking the catch. The ball has carried cleanly to the keeper.")
+        }
+        val steps = timeline(listOf(requestLine(drsCase), noBallLine(), edge, last, finalLine()))
+        val explanation = if (overturned) "There was no edge: the ball missed the bat." else "The ball was shown to touch the bat, and the keeper held the catch."
         return DrsReport(verdict, steps, headline(verdict), explanation)
     }
 

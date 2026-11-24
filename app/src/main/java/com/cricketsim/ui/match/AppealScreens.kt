@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
 const val APPEAL_WINDOW_MS = 15_000L
 
 private fun describe(kind: DismissalType, batter: String, bowler: String): String = when (kind) {
-    DismissalType.LBW -> "The ball has hit $batter on the pad, in front of the stumps."
+    DismissalType.LBW -> "The ball has hit $batter on the pad."
     DismissalType.CAUGHT -> "$batter has hit it in the air and the fielders have taken a catch."
     DismissalType.CAUGHT_AND_BOWLED -> "$batter has hit it straight back and $bowler has taken the catch."
     DismissalType.STUMPED -> "$batter has missed it, stepped out of the crease, and the keeper has whipped off the bails."
@@ -66,7 +66,11 @@ fun AppealScreen(
     kind: DismissalType,
     bowlerName: String,
     batterName: String,
-    onDecided: (appealed: Boolean) -> Unit
+    onDecided: (appealed: Boolean) -> Unit,
+    // Patch 142: the umpire's answer to an appeal, decided before the screen opens (UmpireDecisions): out, or not out.
+    umpireOut: Boolean = true,
+    // Patch 142: the catch is the keeper's, behind the stumps: an appeal for caught behind.
+    caughtBehind: Boolean = false
 ) {
     BackHandler(onBack = {})
     val services = LocalGameServices.current
@@ -78,7 +82,7 @@ fun AppealScreen(
     var secondsLeft by remember { mutableStateOf((APPEAL_WINDOW_MS / 1000L).toInt()) }
     // The user chooses only when he is bowling and the dismissal is open to doubt.
     val userChooses = userIsBowling && kind != DismissalType.BOWLED
-    val what = describe(kind, batterName, bowlerName)
+    val what = if (caughtBehind) "The ball has passed the bat and the keeper has taken it. Was there an edge?" else describe(kind, batterName, bowlerName)
 
     fun decide(appealed: Boolean) {
         if (decided) return
@@ -89,7 +93,11 @@ fun AppealScreen(
                 status = "Howzat! The fielders appeal."
                 s?.sound?.playAppeal()
                 delay(1700L)
-                s?.umpireSay(listOf(listOf("um_out", "um_out2").random()), "Out!")
+                if (umpireOut) {
+                    s?.umpireSay(listOf(listOf("um_out", "um_out2").random()), "Out!")
+                } else {
+                    s?.umpireSay(listOf(listOf("um_not_out", "um_not_out2").random()), "Not out. The appeal is turned down.")
+                }
                 s?.awaitUmpire()
             } else {
                 status = "No appeal."
@@ -120,7 +128,7 @@ fun AppealScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Text(
-            text = titleFor(kind, userChooses),
+            text = if (caughtBehind) "Appeal for caught behind" else titleFor(kind, userChooses),
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )

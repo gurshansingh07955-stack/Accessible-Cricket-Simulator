@@ -312,6 +312,9 @@ fun MatchScreen(
     // --- The IPL's Impact Player rule (logic/ImpactPlayer.kt) ---
     // An LBW waiting for the appeal and the umpire's decision (AppealScreens.kt).
     var pendingAppeal by remember { mutableStateOf<PendingAppeal?>(null) }
+    // The fielding side's review of a not out decision, and the umpire's decision to show on the last-ball summary (patch 142).
+    var pendingFieldReview by remember { mutableStateOf<PendingFieldReview?>(null) }
+    var ballNote by remember { mutableStateOf("") }
     // A catch on its way to one of the user's fielders, waiting for his swipe (ManualFieldingScreens.kt, manual fielding).
     var pendingCatch by remember { mutableStateOf<PendingCatch?>(null) }
     // A ball the user is batting that is worth runs, waiting for his decision to run or stay (RunScreens.kt, running between the wickets).
@@ -583,7 +586,10 @@ fun MatchScreen(
             com.cricketsim.logic.StadiumData.getStadiumById(before.stadiumId) ?: com.cricketsim.logic.CplData.stadium(before.stadiumId),
             before.currentBatsmen.first.battingRating
         )
-        val summary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres)
+        val baseSummary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres)
+        // The umpire's decision on an appeal or a review, so the last-ball summary says whether it was out or not out (patch 142).
+        val summary = if (ballNote.isEmpty()) baseSummary else "$baseSummary $ballNote"
+        ballNote = ""
         matchState = nextState
         recentCommentary = (recentCommentary + summary).takeLast(6)
         // Milestones (patch 139): a 50, a 100, three wickets, a hat-trick... a pop-up after this ball, in every match (Settings > Milestone pop-ups turns it off).
@@ -728,7 +734,22 @@ fun MatchScreen(
             (before.bowlingTeam.id == before.userTeam.id && before.currentBowler.id == careerPid) ||
             result.outcome.outBatsmanId == careerPid
         if (resumed == null && careerInvolved && result.outcome.isWicket && result.outcome.dismissalType != null) {
-            pendingAppeal = PendingAppeal(before, result, userBowling = before.bowlingTeam.id == before.userTeam.id)
+            // The umpire may now say not out as well as out (patch 142; UmpireDecisions).
+            pendingAppeal = PendingAppeal(
+                before, result, userBowling = before.bowlingTeam.id == before.userTeam.id,
+                umpireOut = com.cricketsim.logic.UmpireDecisions.umpireGivesOut(result.outcome)
+            )
+            return
+        }
+        // A ball that hit the batter's pad or body and was not a wicket (patch 142): the fielding side may still appeal, and the umpire decides. The user, bowling, is always
+        // asked; the computer side appeals now and then. Not on a wide or a no ball. In career mode only when the career player is the batter or the bowler.
+        val padOutcome = result.outcome
+        val userIsBowlingNow = before.bowlingTeam.id == before.userTeam.id
+        if (resumed == null && padOutcome.padHit && !padOutcome.isWicket && !padOutcome.isWide && !padOutcome.isNoBall &&
+            (careerPid == null || padOutcome.batsmanId == careerPid || (userIsBowlingNow && before.currentBowler.id == careerPid)) &&
+            (userIsBowlingNow || com.cricketsim.logic.UmpireDecisions.aiAppealsPadHit())
+        ) {
+            pendingAppeal = PendingAppeal(before, result, userIsBowlingNow, com.cricketsim.logic.UmpireDecisions.umpireGivesOut(padOutcome))
             return
         }
 
@@ -738,7 +759,9 @@ fun MatchScreen(
         // committed until it does, so an overturned ball never has to be
         // undone. With no reviews left the dismissal simply goes ahead.
         val dismissal = result.outcome.dismissalType
-        if (result.outcome.isWicket && dismissal != null && DrsSystem.isReviewable(dismissal)) {
+        if (result.outcome.isWicket && dismissal != null &&
+            (DrsSystem.isReviewable(dismissal) || com.cricketsim.logic.UmpireDecisions.isCaughtBehind(result.outcome))
+        ) {
             val reviewsLeft = DrsSystem.reviewsRemaining(before)
             val userBatting = before.battingTeam.id == before.userTeam.id
             if (reviewsLeft > 0) {
@@ -755,7 +778,12 @@ fun MatchScreen(
                         delivery = result.bowlingDecision,
                         // The BATTER's timing on the shot — the only thing
                         // that decides the odds (see DrsSystem.survivalChance).
-                        timingTier = result.battingDecision.timingTier
+                        timingTier = result.battingDecision.timingTier,
+                        // The batter's score, his rating and the state of the match decide how keen the computer is to review (patch 142).
+                        batterRuns = before.currentInningsData.batsmanStats.firstOrNull { it.playerId == before.currentBatsmen.first.id }?.runs ?: 0,
+                        batterRating = before.currentBatsmen.first.battingRating,
+                        situation = com.cricketsim.logic.UmpireDecisions.situationPressure(before),
+                        caughtBehind = com.cricketsim.logic.UmpireDecisions.isCaughtBehind(result.outcome)
                     ),
                     userReviewing = userBatting,
                     reviewsRemaining = reviewsLeft,
@@ -771,12 +799,12 @@ fun MatchScreen(
     // CAREER MODE: when it is not the player's turn to bat (he is not on strike) or to bowl (he is not the bowler), the game plays the ball
     // for his team by itself, a pause between balls so each one can be heard; "Skip to my turn" shortens the pause until his turn comes.
     LaunchedEffect(
-        milestoneQueue, matchState, matchOver, pendingAppeal, pendingCatch, pendingRun, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
+        milestoneQueue, matchState, matchOver, pendingAppeal, pendingFieldReview, pendingCatch, pendingRun, pendingReview, showInningsBreak, showSettings, showMatchInfo, showScorecard, confirmingLeave,
         confirmingDeclare, showImpactUse, showSimulate, surgeNotice, showPitchingScreen, showBattingScreen, showFieldScreen, showChangeBowler, skipping
     ) {
         val pid = matchState.careerPlayerId ?: return@LaunchedEffect
         val s = matchState
-        if (matchOver || milestoneQueue.isNotEmpty() || pendingAppeal != null || pendingCatch != null || pendingRun != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
+        if (matchOver || milestoneQueue.isNotEmpty() || pendingAppeal != null || pendingFieldReview != null || pendingCatch != null || pendingRun != null || pendingReview != null || showInningsBreak || showSettings || showMatchInfo || showScorecard ||
             confirmingLeave || confirmingDeclare || showImpactUse || showSimulate || surgeNotice != null || showPitchingScreen || showBattingScreen ||
             showFieldScreen || showChangeBowler
         ) return@LaunchedEffect
@@ -970,21 +998,106 @@ fun MatchScreen(
             kind = appeal.result.outcome.dismissalType ?: DismissalType.LBW,
             batterName = appeal.before.currentBatsmen.toList().firstOrNull { it.id == appeal.result.outcome.batsmanId }?.name
                 ?: appeal.before.currentBatsmen.first.name,
+            umpireOut = appeal.umpireOut,
+            caughtBehind = com.cricketsim.logic.UmpireDecisions.isCaughtBehind(appeal.result.outcome),
             onDecided = { appealed ->
                 pendingAppeal = null
-                if (appealed) {
-                    // Given out: the batter may now review, as for any other dismissal.
-                    advanceOneBall(resumed = appeal)
+                val gameSaysOut = appeal.result.outcome.isWicket
+                if (!appealed) {
+                    if (gameSaysOut) {
+                        // No appeal: not out, play goes on (the same ball, without the wicket).
+                        val notOut = MatchSimulation.overturnDismissal(
+                            appeal.before,
+                            appeal.result,
+                            stadium,
+                            settings.difficulty,
+                            "Not out. There was no appeal, so play goes on."
+                        )
+                        commitBall(appeal.before, notOut)
+                    } else {
+                        // A pad hit that was not appealed: play goes on as it was.
+                        commitBall(appeal.before, appeal.result)
+                    }
+                } else if (appeal.umpireOut) {
+                    if (gameSaysOut) {
+                        // Given out: the batter may now review, as for any other dismissal.
+                        advanceOneBall(resumed = appeal)
+                    } else {
+                        // The umpire gave it out although it was not a wicket (patch 142): a wicket after all, which the batter may review.
+                        val batter = appeal.before.currentBatsmen.toList().firstOrNull { it.id == appeal.result.outcome.batsmanId }
+                            ?: appeal.before.currentBatsmen.first
+                        val forced = MatchSimulation.forceLbw(appeal.before, appeal.result, stadium, settings.difficulty, batter.name)
+                        advanceOneBall(resumed = PendingAppeal(appeal.before, forced, appeal.userBowling))
+                    }
                 } else {
-                    // No appeal: not out, play goes on (the same ball, without the wicket).
-                    val notOut = MatchSimulation.overturnDismissal(
-                        appeal.before,
-                        appeal.result,
-                        stadium,
-                        settings.difficulty,
-                        "Not out. There was no appeal, so play goes on."
-                    )
-                    commitBall(appeal.before, notOut)
+                    // The umpire turned the appeal down: not out (patch 142). The fielding side may review it, if it has a review left.
+                    val notOut = if (gameSaysOut) {
+                        MatchSimulation.overturnDismissal(
+                            appeal.before, appeal.result, stadium, settings.difficulty,
+                            "Not out. The umpire turned down the appeal."
+                        )
+                    } else {
+                        appeal.result
+                    }
+                    val left = DrsSystem.fieldingReviewsRemaining(appeal.before)
+                    if (left > 0) {
+                        pendingFieldReview = PendingFieldReview(appeal.before, appeal.result, notOut, gameSaysOut, appeal.userBowling, left)
+                    } else {
+                        ballNote = "Appeal turned down: not out."
+                        commitBall(appeal.before, notOut)
+                    }
+                }
+            }
+        )
+        return
+    }
+
+    // The fielding side's review of a not out decision (patch 142).
+    val fieldReview = pendingFieldReview
+    if (fieldReview != null) {
+        val reviewBatter = fieldReview.before.currentBatsmen.toList().firstOrNull { it.id == fieldReview.original.outcome.batsmanId }
+            ?: fieldReview.before.currentBatsmen.first
+        FieldingReviewScreen(
+            userReviewing = fieldReview.userReviewing,
+            kind = com.cricketsim.logic.UmpireDecisions.reviewKindOf(fieldReview.original.outcome) ?: com.cricketsim.logic.UmpireDecisions.ReviewKind.LBW,
+            teamName = fieldReview.before.bowlingTeam.name,
+            batterName = reviewBatter.name,
+            bowlerName = fieldReview.before.currentBowler.name,
+            reviewsRemaining = fieldReview.left,
+            truthOut = fieldReview.truthOut,
+            qualityTier = fieldReview.original.outcome.bowlingQualityTier,
+            aiChance = com.cricketsim.logic.UmpireDecisions.aiFieldingReviewChance(
+                fieldReview.truthOut,
+                fieldReview.before.currentInningsData.batsmanStats.firstOrNull { it.playerId == reviewBatter.id }?.runs ?: 0,
+                reviewBatter.battingRating,
+                fieldReview.before,
+                fieldReview.left
+            ),
+            onFinished = { requested, verdict ->
+                pendingFieldReview = null
+                val notOut = fieldReview.notOut
+                if (!requested) {
+                    ballNote = "Not out. The appeal was turned down."
+                    commitBall(fieldReview.before, notOut)
+                } else {
+                    when (verdict) {
+                        // Overturned: the wicket the game had decided stands after all. The batter cannot review it again.
+                        DrsVerdict.OVERTURNED -> {
+                            ballNote = "Review: overturned, given out."
+                            commitBall(fieldReview.before, fieldReview.original)
+                        }
+                        DrsVerdict.UMPIRES_CALL -> {
+                            ballNote = "Review: umpire's call, so not out stands."
+                            commitBall(fieldReview.before, notOut)
+                        }
+                        DrsVerdict.STANDS -> {
+                            ballNote = "Review: not out stands, and the review is lost."
+                            commitBall(
+                                fieldReview.before,
+                                notOut.copy(state = notOut.state.copy(drsFieldingReviewsUsed = notOut.state.drsFieldingReviewsUsed + 1))
+                            )
+                        }
+                    }
                 }
             }
         )
@@ -1013,7 +1126,8 @@ fun MatchScreen(
                             difficulty = settings.difficulty,
                             commentary = DrsSystem.overturnedCommentary(
                                 review.drsCase.dismissalType,
-                                review.drsCase.batterName
+                                review.drsCase.batterName,
+                                review.drsCase.caughtBehind
                             )
                         )
                         // Out stays, but only because it was marginal: the
@@ -1578,7 +1692,17 @@ private class PendingReview(
 )
 
 /** An LBW that has been bowled and simulated, waiting for the appeal and the umpire's decision. */
-private class PendingAppeal(val before: MatchState, val result: BallResult, val userBowling: Boolean)
+private class PendingAppeal(val before: MatchState, val result: BallResult, val userBowling: Boolean, val umpireOut: Boolean = true)
+
+// The umpire turned an appeal down (patch 142): the fielding side may review. [original] is the ball as the game decided it, [notOut] the ball with the appeal turned down.
+private class PendingFieldReview(
+    val before: MatchState,
+    val original: BallResult,
+    val notOut: BallResult,
+    val truthOut: Boolean,
+    val userReviewing: Boolean,
+    val left: Int
+)
 
 /** A catch waiting for the user's swipe: the state before the ball, the ball as simulated (a wicket), and the chance he is given. */
 private class PendingCatch(val before: MatchState, val result: BallResult, val chance: com.cricketsim.logic.CatchChance)

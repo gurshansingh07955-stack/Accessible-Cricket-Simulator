@@ -23,7 +23,8 @@ object UmpireLines {
         "um_no_ball" to "No ball!",
         "um_wide" to "Wide ball!",
         "um_free_hit" to "Free hit!",
-        "um_review" to "The batting side has asked for a review. I am referring the decision to the third umpire."
+        "um_review" to "The batting side has asked for a review. I am referring the decision to the third umpire.",
+        "um_review_field" to "The fielding side has asked for a review. I am referring the decision to the third umpire."
     )
 
     val THIRD: List<Pair<String, String>> = listOf(
@@ -61,7 +62,13 @@ object UmpireLines {
         "tu_gen4" to "Checking the evidence.",
         "tu_overturned" to "Not out. The decision is overturned.",
         "tu_umpires_call" to "Umpire's call. The on-field decision stands. Out.",
-        "tu_stands" to "Out. The on-field decision stands."
+        "tu_stands" to "Out. The on-field decision stands.",
+        // Patch 142: the fielding side's review of a not out, and a catch behind.
+        "tu_f_overturned" to "Out. The decision is overturned.",
+        "tu_f_call" to "Umpire's call. The on-field decision stands. Not out.",
+        "tu_f_stands" to "Not out. The on-field decision stands.",
+        "tu_cb_carry" to "Checking the catch. The ball has carried cleanly to the keeper.",
+        "tu_edge_unclear" to "Checking for an edge. The spike is not clear. There is no conclusive evidence."
     )
 
     private val thirdByText: Map<String, String> = THIRD.associate { it.second to it.first }

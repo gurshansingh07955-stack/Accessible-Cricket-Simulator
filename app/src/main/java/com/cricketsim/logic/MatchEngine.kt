@@ -713,13 +713,21 @@ object MatchEngine {
             outFielderPosition = taken?.position
         }
 
+        // PAD HIT (patch 142): the ball hit the batter's pad or body, so the fielding side may appeal: an LBW the game decided, leg byes, and now and then a dot ball
+        // on the stumps' line. It changes nothing about the ball; it only lets the appeal screen come up (UmpireDecisions).
+        val padHit = !isNoBall && !isWide && (
+            (isWicket && dismissalType == DismissalType.LBW) || legByes > 0 ||
+                (outcomeType == "dot" && !isWicket && byes == 0 && !leftAlone &&
+                    bowlingDecision.line != BowlingLine.OUTSIDE_OFF && bowlingDecision.line != BowlingLine.OUTSIDE_LEG &&
+                    Random.nextDouble() < UmpireDecisions.PAD_HIT_DOT_CHANCE)
+            )
         val result = BallOutcome(
             runs = runs, isWicket = isWicket, isWide = isWide, isNoBall = isNoBall, extraRuns = extraRuns,
             batsmanId = batsman.id, bowlerId = bowler.id, commentary = "",
             dismissalType = dismissalType, isEdge = isEdge,
             bowlingQualityTier = bowlingDecision.qualityTier, bowlingActualLength = bowlingDecision.actualLength,
             outBatsmanId = outBatterId, fielderName = outFielderName, fielderPosition = outFielderPosition, leftAlone = leftAlone,
-            byes = byes, legByes = legByes
+            byes = byes, legByes = legByes, padHit = padHit
         )
         val playText = if (leftAlone && !isWicket && !isWide && byes + legByes == 0) {
             leaveText(batsman.name)

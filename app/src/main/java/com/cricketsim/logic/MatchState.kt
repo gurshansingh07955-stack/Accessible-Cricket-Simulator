@@ -149,6 +149,8 @@ data class MatchState(
     // is exactly "nothing used yet" — so older saves stay valid and
     // MatchSaveStore.CURRENT_VERSION did not need to change.
     val drsReviewsUsed: Int = 0,
+    // Patch 142: the reviews the FIELDING side has used this innings (of a not out decision); the same allowance as the batting side's, reset with it.
+    val drsFieldingReviewsUsed: Int = 0,
 
     // True when the NEXT delivery is a free hit: the previous delivery was a no-ball. On a
     // free hit the batter cannot be dismissed. A wide leaves it standing (a wide is not a
@@ -770,6 +772,7 @@ object MatchStateMachine {
             // A fresh innings, a fresh allowance of reviews for the new
             // batting side (see drsReviewsUsed above).
             drsReviewsUsed = 0,
+            drsFieldingReviewsUsed = 0,
             // A free hit never carries into a new innings.
             freeHit = false,
             lastAiFieldChangeBall = 0,
@@ -867,6 +870,7 @@ object MatchStateMachine {
             deferredOverEnd = false,
             fieldPlacements = fieldPlacements,
             drsReviewsUsed = 0,
+            drsFieldingReviewsUsed = 0,
             freeHit = false,
             lastAiFieldChangeBall = 0,
             lastDrinksBreakOver = 0,

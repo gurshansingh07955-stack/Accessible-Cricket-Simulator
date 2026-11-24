@@ -461,6 +461,34 @@ object MatchSimulation {
         )
     }
 
+    /**
+     * The opposite of [overturnDismissal] (patch 142): the umpire gave OUT a pad hit that the game had as not out. The same ball is replayed as an LBW wicket
+     * (any runs or leg byes it had are lost with it), so the wicket, the new batter and the over all follow as for any other dismissal.
+     */
+    fun forceLbw(
+        before: MatchState,
+        original: BallResult,
+        stadium: Stadium,
+        difficulty: Difficulty,
+        batterName: String
+    ): BallResult {
+        val o = original.outcome
+        val out = o.copy(
+            isWicket = true, dismissalType = DismissalType.LBW, runs = 0,
+            extraRuns = (o.extraRuns - o.byes - o.legByes).coerceAtLeast(0), byes = 0, legByes = 0,
+            outBatsmanId = null, fielderName = null,
+            commentary = "OUT! The umpire raises the finger: $batterName is given out LBW."
+        )
+        return simulateOneBall(
+            state = before,
+            stadium = stadium,
+            difficulty = difficulty,
+            presetBowlingDecision = original.bowlingDecision,
+            presetBattingDecision = original.battingDecision,
+            outcomeOverride = out
+        )
+    }
+
     /** True once the current innings should end: all out, or the overs limit is used up. */
     fun isInningsOver(state: MatchState): Boolean {
         // All out = every batter but one is out: 10 for a full XI, 2 for a Super Over's three batters.

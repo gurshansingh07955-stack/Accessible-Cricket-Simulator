@@ -174,7 +174,7 @@ private fun DrsOfferStage(
     val currentOnMoveOn by rememberUpdatedState(onMoveOn)
     val windowSeconds = (DrsSystem.USER_DECISION_WINDOW_MS / 1000L).toInt()
     var secondsLeft by remember { mutableStateOf(windowSeconds) }
-    val label = DrsSystem.dismissalLabel(drsCase.dismissalType)
+    val label = DrsSystem.labelFor(drsCase)
     val moveOnText = if (nextBatsmanNeeded) "Choose next batsman" else "Accept decision"
 
     LaunchedEffect(Unit) {
@@ -243,9 +243,9 @@ private fun DrsAiDecidingStage(
     val currentServices by rememberUpdatedState(services)
     val currentOnDecided by rememberUpdatedState(onDecided)
     // Both settled up front, so what happens is fixed the moment the wait begins.
-    val wantsReview = remember { DrsSystem.aiWantsReview(drsCase.timingTier, reviewsRemaining) }
+    val wantsReview = remember { com.cricketsim.logic.UmpireDecisions.aiBatterWantsReview(drsCase, reviewsRemaining) }
     val delayMs = remember { DrsSystem.aiDecisionDelayMs() }
-    val label = DrsSystem.dismissalLabel(drsCase.dismissalType)
+    val label = DrsSystem.labelFor(drsCase)
 
     LaunchedEffect(Unit) {
         currentServices?.announceSpoken(
@@ -292,7 +292,7 @@ private fun DrsProcessStage(
     val currentServices by rememberUpdatedState(services)
     val currentOnComplete by rememberUpdatedState(onComplete)
     var elapsedMs by remember { mutableStateOf(0L) }
-    val label = DrsSystem.dismissalLabel(drsCase.dismissalType)
+    val label = DrsSystem.labelFor(drsCase)
 
     LaunchedEffect(Unit) {
         // The moment a review actually begins: the third umpire's checking
