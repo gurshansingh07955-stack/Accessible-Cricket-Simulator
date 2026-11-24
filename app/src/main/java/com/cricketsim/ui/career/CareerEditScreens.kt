@@ -43,10 +43,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class CareerEditStep { List, Jersey, Photo, Role, BatHand, BowlHand, BowlStyle, BatPosition, BatNumber, BowlPhase, FieldPos, Difficulty, RateBat, RateBowl, RateField }
+private enum class CareerEditStep { List, Jersey, Photo, Role, BatHand, BowlHand, BowlStyle, BatPosition, BatNumber, BowlPhase, FieldPos, Difficulty }
 
 /**
- * My Player > Player profile > Edit career (patch 143). A list of everything the player may change, each row reading its present value;
+ * My Player > Player profile > Edit career (patch 143; ratings removed in 145). A list of everything the player may change, each row reading its present value;
  * a row opens a page of plain choices (or a number box), and the choice brings him back to the list. Nothing is kept until he taps
  * "Save changes" (just under the heading, above the long list, so a screen reader reaches it first); leaving with unsaved changes asks first.
  * His name, age, country, state, club, school and college are not here: they cannot be changed. The photo is saved as soon as it is chosen.
@@ -117,7 +117,7 @@ internal fun CareerEditFlow(career: CareerProfile, onSave: (CareerProfile) -> Un
                 PageHeading("Edit career")
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Change your playing choices and ratings. Your name, age, country, state, club, school and college cannot be changed. A new role, rating or batting number changes how the selectors judge you from your next match.",
+                    text = "Change your playing choices. Your name, age, country, state, club, school and college cannot be changed, and neither can your ratings: you earn those by playing. A new role or batting number changes how the selectors judge you from your next match.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 message?.let {
@@ -153,9 +153,6 @@ internal fun CareerEditFlow(career: CareerProfile, onSave: (CareerProfile) -> Un
                     EditRow("Fielding position", "${draft.fieldingPosition.ifEmpty { "Not chosen" }}. Tap to change.") { go(CareerEditStep.FieldPos) }
                 }
                 EditRow("Career difficulty", "${draft.difficulty.ifEmpty { "Not chosen" }}. Tap to change.") { go(CareerEditStep.Difficulty) }
-                EditRow("Batting rating", "${draft.batting}. Ratings run from 1 to 95. Tap to change.") { text = draft.batting.toString(); go(CareerEditStep.RateBat) }
-                EditRow("Bowling rating", "${draft.bowling}. Ratings run from 1 to 95. Tap to change.") { text = draft.bowling.toString(); go(CareerEditStep.RateBowl) }
-                EditRow("Fielding rating", "${draft.fielding}. Ratings run from 1 to 95. Tap to change.") { text = draft.fielding.toString(); go(CareerEditStep.RateField) }
             }
         }
 
@@ -287,9 +284,6 @@ internal fun CareerEditFlow(career: CareerProfile, onSave: (CareerProfile) -> Un
             CareerWorld.DIFFICULTIES, draft.difficulty, toList
         ) { _, level -> draft = draft.copy(difficulty = level); next() }
 
-        CareerEditStep.RateBat -> RatingInput("Batting rating", text, { text = it }, { n -> draft = draft.copy(batting = n); next() }, toList)
-        CareerEditStep.RateBowl -> RatingInput("Bowling rating", text, { text = it }, { n -> draft = draft.copy(bowling = n); next() }, toList)
-        CareerEditStep.RateField -> RatingInput("Fielding rating", text, { text = it }, { n -> draft = draft.copy(fielding = n); next() }, toList)
     }
 
     if (askDiscard) {
@@ -334,23 +328,4 @@ private fun ChoicePage(
             Spacer(modifier = Modifier.height(8.dp))
         }
     }
-}
-
-/** A rating from 1 to 95 typed into a number box (focused as the page opens, a mistake read out). */
-@Composable
-private fun RatingInput(title: String, value: String, onValue: (String) -> Unit, onDone: (Int) -> Unit, onBack: () -> Unit) {
-    TextInputPage(
-        title = title,
-        hint = "Type your ${title.lowercase()}, from 1 to 95. It grows as you play, and your selectors and your matches use it.",
-        label = title,
-        value = value,
-        onValueChange = { onValue(it.filter(Char::isDigit).take(2)) },
-        numeric = true,
-        validate = { v ->
-            val n = v.toIntOrNull()
-            if (n == null || n < 1 || n > 95) "Please type a number from 1 to 95." else null
-        },
-        onContinue = { onDone((value.toIntOrNull() ?: 1).coerceIn(1, 95)) },
-        onBack = onBack
-    )
 }

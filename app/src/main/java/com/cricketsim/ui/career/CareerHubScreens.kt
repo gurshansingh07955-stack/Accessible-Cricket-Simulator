@@ -801,11 +801,11 @@ private fun PlayTab(
         val allDone = seasons.all { CareerSeason.isComplete(it) }
         if (!allDone) {
             Text(
-                text = "You have played all your matches so far. Some matches of the other teams are still to be played: simulate them to see whether your team goes through to a knockout match.",
+                text = "You have played all your matches so far. Some matches of the other teams are still to be played. Play on to finish them and see whether your team goes through to a knockout match, which you then play yourself.",
                 style = MaterialTheme.typography.bodyLarge
             )
             Spacer(modifier = Modifier.height(12.dp))
-            OptionButton("Simulate the rest of the season", "The other teams' matches, and any knockout match your team reaches.", !busy, true) { onSimulateAll() }
+            OptionButton("Play on", "The other teams' matches are played until your team has a knockout match. Then you play it. If your team is out, the season ends.", !busy, true) { onPlay() }
         } else {
             Text("Your season is complete.", style = MaterialTheme.typography.bodyLarge)
             seasons.forEach { s ->

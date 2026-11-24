@@ -284,7 +284,7 @@ fun CareerFlow(onExit: () -> Unit) {
                     )
                     Spacer(modifier = Modifier.height(24.dp))
                     if (com.cricketsim.logic.CareerEdit.ENABLED) {
-                        OptionButton("Edit career", "Change your role, playing style, ratings, jersey number, photo and difficulty. Your name, age, country, state, club, school and college stay as they are.", true, true) { step = CStep.EditCareer }
+                        OptionButton("Edit career", "Change your role, playing style, jersey number, photo and difficulty. Your ratings, name, age, country, state, club, school and college cannot be changed.", true, true) { step = CStep.EditCareer }
                         Spacer(modifier = Modifier.height(12.dp))
                     }
                     OutlinedButton(

@@ -408,9 +408,10 @@ object CareerSeason {
         while (guard < 300) {
             guard++
             var next = nextMine(list)
-            if (next == null && whole) {
-                // Nothing left for the player: finish the other matches, which may open a knockout match for his team.
-                list = list.map { CplSimulator.run(it, SimMode.ALL, random) }
+            if (next == null) {
+                // Nothing left for the player yet: finish the other teams' matches, which may open a knockout match for his team (a quarter-final, semi-final, play-off or the Final).
+                // They are played only UP TO his match (UNTIL_MINE), so he plays it himself; it used to be simulated for him (patch 145).
+                list = list.map { CplSimulator.run(it, SimMode.UNTIL_MINE, random) }
                 next = nextMine(list)
             }
             if (next == null) break

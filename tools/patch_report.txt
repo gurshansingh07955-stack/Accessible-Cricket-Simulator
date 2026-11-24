@@ -1,8 +1,6 @@
-Patch run: 45376032226
-Timestamp (UTC): 2026-11-24T10:34:27Z
+Patch run: 45396319804
+Timestamp (UTC): 2026-11-24T12:43:56Z
 Result: OK
 -----
-Patch 2026-11-24-143-edit-career.json
-  applied 13 operation(s) to 6 file(s)
-Patch 2026-11-24-144-talkback-smoothness.json
-  applied 42 operation(s) to 5 file(s)
+Patch 2026-11-24-145-no-rating-edit-play-knockouts.json
+  applied 7 operation(s) to 6 file(s)

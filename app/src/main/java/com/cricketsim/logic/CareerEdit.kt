@@ -3,7 +3,8 @@ package com.cricketsim.logic
 /**
  * My Player > Player profile > Edit career (patch 143). The player can change everything he chose when he made his player EXCEPT his
  * name, age, country, state, club, school and college (those stay as they are): his jersey number, his role, his batting hand, his
- * bowling arm, style and phase, his batting position and number, his fielding position, the career difficulty and his three ratings.
+ * bowling arm, style and phase, his batting position and number, his fielding position and the career difficulty. His RATINGS cannot be edited: they
+ * are earned by playing (patch 145).
  *
  * A [Draft] holds the choices while they are being edited; [fix] makes them agree with each other (a batsman does not bowl, a
  * wicketkeeper-batsman keeps wicket, a batting number belongs to its position, a bowling style to its arm); [apply] writes them into the
@@ -25,10 +26,7 @@ object CareerEdit {
         val battingNumber: Int,
         val bowlingPhase: String,
         val fieldingPosition: String,
-        val difficulty: String,
-        val batting: Int,
-        val bowling: Int,
-        val fielding: Int
+        val difficulty: String
     )
 
     /** The choices the career holds now. */
@@ -42,10 +40,7 @@ object CareerEdit {
         battingNumber = c.battingNumber,
         bowlingPhase = c.bowlingPhase,
         fieldingPosition = c.fieldingPosition,
-        difficulty = c.difficulty,
-        batting = c.batting,
-        bowling = c.bowling,
-        fielding = c.fielding
+        difficulty = c.difficulty
     )
 
     /** The choices made to agree with each other; anything missing or impossible gets a sensible value. */
@@ -76,34 +71,23 @@ object CareerEdit {
             battingNumber = number,
             bowlingPhase = phase,
             fieldingPosition = field,
-            difficulty = difficulty,
-            batting = d.batting.coerceIn(1, 95),
-            bowling = d.bowling.coerceIn(1, 95),
-            fielding = d.fielding.coerceIn(1, 95)
+            difficulty = difficulty
         )
     }
 
     /**
      * The career with the edited choices. His own entry in his club's squad follows (same place in the list, so his player id in the
-     * competitions does not move). The ratings he started with move by the same amount as the ratings, so "growth since the start" keeps
-     * counting only what he gains by playing.
+     * competitions does not move). His ratings are left exactly as they are.
      */
     fun apply(c: CareerProfile, draft: Draft): CareerProfile {
         val d = fix(draft)
-        fun shifted(start: Int, delta: Int): Int = (start + delta).coerceIn(1, 95)
-        val start = c.startRatings?.takeIf { it.size >= 3 }?.let { s ->
-            listOf(shifted(s[0], d.batting - c.batting), shifted(s[1], d.bowling - c.bowling), shifted(s[2], d.fielding - c.fielding))
-        } ?: c.startRatings
         val clubs = c.clubTeams?.map { club ->
             club.copy(players = club.players.map { p ->
                 if (p.isUser) p.copy(
                     role = d.role,
                     battingHand = d.battingHand,
                     bowlingHand = d.bowlingHand,
-                    bowlingStyle = d.bowlingStyle,
-                    batting = d.batting,
-                    bowling = d.bowling,
-                    fielding = d.fielding
+                    bowlingStyle = d.bowlingStyle
                 ) else p
             })
         }
@@ -118,11 +102,7 @@ object CareerEdit {
             bowlingPhase = d.bowlingPhase,
             fieldingPosition = d.fieldingPosition,
             difficulty = d.difficulty,
-            batting = d.batting,
-            bowling = d.bowling,
-            fielding = d.fielding,
-            clubTeams = clubs,
-            startRatings = start
+            clubTeams = clubs
         )
     }
 }
