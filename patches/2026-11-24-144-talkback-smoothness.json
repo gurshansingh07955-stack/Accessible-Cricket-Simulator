@@ -1,0 +1,261 @@
+{
+  "name": "TalkBack smoothness: squads built off the main thread (Edit teams tabs, Tournament menu)",
+  "message": "TalkBack: build slow squads off the main thread, loading notes (patch 144)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/TeamGroups.kt",
+    "contains": "fun domesticWarm()"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import androidx.compose.runtime.getValue",
+      "replace": "import androidx.compose.runtime.getValue\nimport androidx.compose.runtime.produceState"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val cplBuilt = remember { CplData.buildTeams() }",
+      "replace": "    val cplBuilt = remember { lazy { CplData.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val adtBuilt = remember { AbuDhabiT10.buildTeams() }",
+      "replace": "    val adtBuilt = remember { lazy { AbuDhabiT10.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val lplBuilt = remember { LankaPremierLeague.buildTeams() }",
+      "replace": "    val lplBuilt = remember { lazy { LankaPremierLeague.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val iltBuilt = remember { InternationalLeagueT20.buildTeams() }",
+      "replace": "    val iltBuilt = remember { lazy { InternationalLeagueT20.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val bblBuilt = remember { BigBashLeague.buildTeams() }",
+      "replace": "    val bblBuilt = remember { lazy { BigBashLeague.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val mlcBuilt = remember { MajorLeagueCricket.buildTeams() }",
+      "replace": "    val mlcBuilt = remember { lazy { MajorLeagueCricket.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val saBuilt = remember { Sa20.buildTeams() }",
+      "replace": "    val saBuilt = remember { lazy { Sa20.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val wcBuilt = remember { T20WorldCup.buildTeams() }",
+      "replace": "    val wcBuilt = remember { lazy { T20WorldCup.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val ctBuilt = remember { ChampionsTrophy.buildTeams() }",
+      "replace": "    val ctBuilt = remember { lazy { ChampionsTrophy.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val acBuilt = remember { AsiaCup.buildTeams() }",
+      "replace": "    val acBuilt = remember { lazy { AsiaCup.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val agBuilt = remember { AsianGames.buildTeams() }",
+      "replace": "    val agBuilt = remember { lazy { AsianGames.buildTeams() } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val customBuilt = remember(customId) { if (isCustomKind) CustomTournaments.buildTeams(customId) else cplBuilt }",
+      "replace": "    val customBuilt = remember(customId) { lazy { if (isCustomKind) CustomTournaments.buildTeams(customId) else cplBuilt.value } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val built = when (kind) { \"adt10\" -> adtBuilt;",
+      "replace": "    // The squads of the tournament in hand are built OFF the main thread (patch 144): building them on it froze the screen, and TalkBack with it, every time\n    // the Tournament menu or a tournament was opened. The menus and lists need no squads; every other page waits behind a short \"Loading\" page.\n    val builtHolder by produceState<Pair<String, Pair<List<Team>, Map<String, SquadTag>>>?>(null, kind, customId) {\n        val k = kind\n        value = k to withContext(Dispatchers.Default) { try { when (k) { \"adt10\" -> adtBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"lpl\" -> lplBuilt;",
+      "replace": "\"lpl\" -> lplBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ilt\" -> iltBuilt;",
+      "replace": "\"ilt\" -> iltBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"bbl\" -> bblBuilt;",
+      "replace": "\"bbl\" -> bblBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"mlc\" -> mlcBuilt;",
+      "replace": "\"mlc\" -> mlcBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa20\" -> saBuilt;",
+      "replace": "\"sa20\" -> saBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"wc2026\" -> wcBuilt;",
+      "replace": "\"wc2026\" -> wcBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ct2025\" -> ctBuilt;",
+      "replace": "\"ct2025\" -> ctBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"asia2025\" -> acBuilt;",
+      "replace": "\"asia2025\" -> acBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"ag2026\" -> agBuilt; else -> if (isCustomKind) customBuilt else cplBuilt }",
+      "replace": "\"ag2026\" -> agBuilt.value; else -> if (isCustomKind) customBuilt.value else cplBuilt.value } } catch (e: Exception) { Pair(emptyList<Team>(), emptyMap<String, SquadTag>()) } }\n    }\n    val builtNow = builtHolder\n    val builtReady = builtNow != null && builtNow.first == kind\n    val built: Pair<List<Team>, Map<String, SquadTag>> = if (builtNow != null && builtNow.first == kind) builtNow.second else Pair(emptyList(), emptyMap())"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    // The Tournament menu and its lists of tournaments show names only, no explanations.\n",
+      "replace": "    // Patch 144: a page that needs the squads waits for them behind a plain \"Loading\" page (the menus and lists do not need them).\n    val menuLikePage = page is TPage.Menu || page is TPage.Leagues || page is TPage.International || page is TPage.Domestic || page is TPage.DomesticIn || page is TPage.CustomList\n    if (!builtReady && !menuLikePage) {\n        BackHandler(onBack = { page = TPage.Menu })\n        com.cricketsim.ui.custom.PageColumn {\n            com.cricketsim.ui.custom.BackButton { page = TPage.Menu }\n            Spacer(modifier = Modifier.height(16.dp))\n            com.cricketsim.ui.custom.PageHeading(\"Loading\")\n            Spacer(modifier = Modifier.height(8.dp))\n            Text(\"Loading the teams. Please wait.\", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })\n        }\n        return\n    }\n    // The Tournament menu and its lists of tournaments show names only, no explanations.\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "import androidx.compose.runtime.mutableStateOf",
+      "replace": "import androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.produceState"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "/** Every league the game has, with its teams as they are built (the IPL is made by its auction, so it is not here). */\ninternal fun leagueGroups(): List<Pair<String, List<Team>>> = listOf(\n    \"Caribbean Premier League\" to CplData.buildTeams().first,\n    \"Abu Dhabi T10\" to AbuDhabiT10.buildTeams().first,\n    \"Lanka Premier League\" to LankaPremierLeague.buildTeams().first,\n    \"International League T20\" to InternationalLeagueT20.buildTeams().first,\n    \"Big Bash League\" to BigBashLeague.buildTeams().first,\n    \"Major League Cricket\" to MajorLeagueCricket.buildTeams().first,\n    \"SA20\" to Sa20.buildTeams().first\n)",
+      "replace": "/** The league squads, kept until the player changes something ([Customisation.revision] moves on): building the seven leagues takes a while (patch 144). */\nprivate object LeagueGroupsCache {\n    class Kept(val revision: Int, val groups: List<Pair<String, List<Team>>>)\n\n    @Volatile var kept: Kept? = null\n\n    fun warm(): Boolean = kept?.revision == Customisation.revision\n}\n\n/** Every league the game has, with its teams as they are built (the IPL is made by its auction, so it is not here). */\ninternal fun leagueGroups(): List<Pair<String, List<Team>>> {\n    val rev = Customisation.revision\n    LeagueGroupsCache.kept?.takeIf { it.revision == rev }?.let { return it.groups }\n    val built = listOf(\n        \"Caribbean Premier League\" to CplData.buildTeams().first,\n        \"Abu Dhabi T10\" to AbuDhabiT10.buildTeams().first,\n        \"Lanka Premier League\" to LankaPremierLeague.buildTeams().first,\n        \"International League T20\" to InternationalLeagueT20.buildTeams().first,\n        \"Big Bash League\" to BigBashLeague.buildTeams().first,\n        \"Major League Cricket\" to MajorLeagueCricket.buildTeams().first,\n        \"SA20\" to Sa20.buildTeams().first\n    )\n    LeagueGroupsCache.kept = LeagueGroupsCache.Kept(rev, built)\n    return built\n}"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "private fun findTeam(kind: TeamKind, id: String): Team? = when (kind) {",
+      "replace": "/** True when the squads of this kind are already built for the player's present edits (so looking one up costs nothing). */\nprivate fun isWarm(kind: TeamKind): Boolean = when (kind) {\n    TeamKind.International, TeamKind.Custom -> true\n    TeamKind.League -> LeagueGroupsCache.warm()\n    TeamKind.Tournament -> TeamGroups.tournamentWarm()\n    TeamKind.Domestic -> TeamGroups.domesticWarm()\n}\n\nprivate fun groupsFor(kind: TeamKind): List<Pair<String, List<Team>>> = when (kind) {\n    TeamKind.League -> leagueGroups()\n    TeamKind.Tournament -> TeamGroups.tournamentGroups()\n    TeamKind.Domestic -> TeamGroups.domesticGroups()\n    else -> emptyList()\n}\n\n/**\n * The league, tournament or domestic squads of one kind, built OFF the main thread (patch 144). Null while they are being built; at once when they are\n * already built. They used to be built on the main thread the first time a tab was opened and again after every edit, which froze TalkBack.\n */\n@Composable\ninternal fun rememberTeamGroups(kind: TeamKind, version: Int): List<Pair<String, List<Team>>>? {\n    val key = \"$version/${kind.name}\"\n    val first = remember(key) { if (isWarm(kind)) groupsFor(kind) else null }\n    val holder by produceState<Pair<String, List<Pair<String, List<Team>>>>?>(null, key) {\n        value = key to withContext(Dispatchers.Default) { try { groupsFor(kind) } catch (e: Exception) { emptyList() } }\n    }\n    val h = holder\n    return first ?: if (h != null && h.first == key) h.second else null\n}\n\n/** One team looked up OFF the main thread: (false, null) while it is being found, then (true, the team or null if it is gone). Patch 144. */\n@Composable\nprivate fun rememberTeamLookup(kind: TeamKind, id: String, version: Int): Pair<Boolean, Team?> {\n    val key = \"$version/${kind.name}/$id\"\n    val first = remember(key) { if (isWarm(kind)) key to findTeam(kind, id) else null }\n    val holder by produceState<Pair<String, Team?>?>(null, key) {\n        value = key to withContext(Dispatchers.Default) { try { findTeam(kind, id) } catch (e: Exception) { null } }\n    }\n    val h = holder?.takeIf { it.first == key } ?: first\n    return if (h != null) true to h.second else false to null\n}\n\n/** A plain page shown while a team is being found. */\n@Composable\nprivate fun LoadingTeamPage(onBack: () -> Unit) {\n    BackHandler(onBack = onBack)\n    PageColumn {\n        BackButton(onBack)\n        Spacer(modifier = Modifier.height(16.dp))\n        PageHeading(\"Loading\")\n        Spacer(modifier = Modifier.height(8.dp))\n        Text(\"Loading the team. Please wait.\", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })\n    }\n}\n\nprivate fun findTeam(kind: TeamKind, id: String): Team? = when (kind) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "    var renaming by remember { mutableStateOf<Pair<TeamKind, Team>?>(null) }",
+      "replace": "    var renaming by remember { mutableStateOf<Pair<TeamKind, Team>?>(null) }\n\n    // Patch 144: the league, domestic and tournament squads are built in the background (they are slow), now and again after every edit, so a tab opens at once.\n    LaunchedEffect(version) {\n        withContext(Dispatchers.Default) {\n            try {\n                leagueGroups()\n                TeamGroups.domesticGroups()\n                TeamGroups.tournamentGroups()\n            } catch (e: Exception) {\n                // The pages build them again, with a loading note.\n            }\n        }\n    }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        is CtPage.AddPlayers -> {\n            val team = remember(version, p.teamId) { findTeam(p.kind, p.teamId) }\n            if (team == null) {\n                LaunchedEffect(Unit) { page = CtPage.EditList }\n            } else {",
+      "replace": "        is CtPage.AddPlayers -> {\n            val lookup = rememberTeamLookup(p.kind, p.teamId, version)\n            val team = lookup.second\n            if (!lookup.first) {\n                LoadingTeamPage { page = CtPage.EditList }\n            } else if (team == null) {\n                LaunchedEffect(Unit) { page = CtPage.EditList }\n            } else {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        is CtPage.TeamView -> {\n            val team = remember(version, p.teamId) { findTeam(p.kind, p.teamId) }\n            if (team == null) {\n                LaunchedEffect(Unit) { page = CtPage.EditList }\n            } else {",
+      "replace": "        is CtPage.TeamView -> {\n            val lookup = rememberTeamLookup(p.kind, p.teamId, version)\n            val team = lookup.second\n            if (!lookup.first) {\n                LoadingTeamPage { page = CtPage.EditList }\n            } else if (team == null) {\n                LaunchedEffect(Unit) { page = CtPage.EditList }\n            } else {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        is CtPage.PlayerEdit -> {\n            val team = remember(version, p.teamId) { findTeam(p.kind, p.teamId) }\n            val player = team?.players?.find { it.name == p.playerName }\n            if (team == null || (p.playerName != null && player == null)) {",
+      "replace": "        is CtPage.PlayerEdit -> {\n            val lookup = rememberTeamLookup(p.kind, p.teamId, version)\n            val team = lookup.second\n            val player = team?.players?.find { it.name == p.playerName }\n            if (!lookup.first) {\n                LoadingTeamPage { page = CtPage.TeamView(p.kind, p.teamId) }\n            } else if (team == null || (p.playerName != null && player == null)) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "    val leagues = remember(version, tab) { if (tab == TeamKind.League) leagueGroups() else emptyList() }\n    val tournaments = remember(version, tab) { if (tab == TeamKind.Tournament) TeamGroups.tournamentGroups() else emptyList() }\n    val domestic = remember(version, tab) { if (tab == TeamKind.Domestic) TeamGroups.domesticGroups() else emptyList() }",
+      "replace": "    // Patch 144: built off the main thread (null while they are being built), so opening a tab no longer freezes the screen.\n    val groupsNow = rememberTeamGroups(tab, version)\n    val groupsLoading = groupsNow == null\n    val leagues = if (tab == TeamKind.League) groupsNow.orEmpty() else emptyList()\n    val tournaments = if (tab == TeamKind.Tournament) groupsNow.orEmpty() else emptyList()\n    val domestic = if (tab == TeamKind.Domestic) groupsNow.orEmpty() else emptyList()"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        when (tab) {\n            TeamKind.International -> international.forEach { t ->",
+      "replace": "        if (groupsLoading) {\n            Text(\"Loading the teams. Please wait.\", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })\n            Spacer(modifier = Modifier.height(8.dp))\n        }\n        when (tab) {\n            TeamKind.International -> international.forEach { t ->"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "import androidx.compose.runtime.mutableStateOf",
+      "replace": "import androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.produceState"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "import com.cricketsim.logic.TeamGroups",
+      "replace": "import com.cricketsim.logic.TeamGroups\nimport kotlinx.coroutines.Dispatchers\nimport kotlinx.coroutines.withContext"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "    val changed = remember(version) { changedGameTeams() }",
+      "replace": "    // Patch 144: worked out off the main thread (it needs the league and domestic squads, which are slow to build).\n    val changedNow by produceState<List<Pair<String, Team>>?>(null, version) {\n        value = withContext(Dispatchers.Default) { try { changedGameTeams() } catch (e: Exception) { emptyList() } }\n    }\n    val changed = changedNow.orEmpty()\n    val changedLoading = changedNow == null"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "        changed.groupBy { it.first }.forEach { (group, list) ->",
+      "replace": "        if (changedLoading) {\n            Spacer(modifier = Modifier.height(12.dp))\n            Text(\"Loading the teams. Please wait.\", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })\n        }\n        changed.groupBy { it.first }.forEach { (group, list) ->"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "    val leagues = remember(kind) {\n        if (kind == TeamKind.League) leagueGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }",
+      "replace": "    // Patch 144: the squads of a kind come from rememberTeamGroups (built off the main thread; null while they are being built).\n    val groupsNow = rememberTeamGroups(kind, 0)\n    val teamsLoading = groupsNow == null\n    val leagues = remember(kind, groupsNow) {\n        if (kind == TeamKind.League) groupsNow.orEmpty().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "    val tournaments = remember(kind) {\n        if (kind == TeamKind.Tournament) TeamGroups.tournamentGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }\n    val domestic = remember(kind) {\n        if (kind == TeamKind.Domestic) TeamGroups.domesticGroups().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }",
+      "replace": "    val tournaments = remember(kind, groupsNow) {\n        if (kind == TeamKind.Tournament) groupsNow.orEmpty().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }\n    val domestic = remember(kind, groupsNow) {\n        if (kind == TeamKind.Domestic) groupsNow.orEmpty().map { (name, teams) -> name to teams.filter { it.id != dest.id } } else emptyList()\n    }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsManagePages.kt",
+      "find": "            if (kind == TeamKind.Custom && custom.isEmpty()) {",
+      "replace": "            if (teamsLoading) {\n                Text(\"Loading the teams. Please wait.\", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })\n            }\n            if (kind == TeamKind.Custom && custom.isEmpty()) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TeamGroups.kt",
+      "find": "    @Volatile private var domestic: Kept? = null",
+      "replace": "    @Volatile private var domestic: Kept? = null\n\n    /** True when the international tournaments' squads are already built for the player's present edits (patch 144). */\n    fun tournamentWarm(): Boolean = tournament?.revision == Customisation.revision\n\n    /** True when the domestic squads are already built for the player's present edits (patch 144). */\n    fun domesticWarm(): Boolean = domestic?.revision == Customisation.revision"
+    },
+    {
+      "op": "write",
+      "file": "TALKBACK_SMOOTHNESS.md",
+      "content": "# TalkBack smoothness (patch 144)\n\nCause found: slow work done on the MAIN thread while a screen opened, so the screen (and TalkBack with it) froze and answered late.\n\n1. **Edit teams > Domestic / League / International tournament teams.** The squads of every domestic competition (ten groups), the seven leagues and the four\n   international tournaments were built on the main thread the first time a tab was opened, and again after every edit (`Customisation.revision` moves on).\n   Now they are built in the background: the tab opens at once with \"Loading the teams. Please wait.\" (spoken politely) and the list appears when ready.\n   They are also built in the background as soon as Create Custom Teams and Players opens, and again after each edit, so the tab is usually ready before it is tapped.\n   League squads are now kept like the others (`LeagueGroupsCache`). The team page, the player editor, Add players from other teams and the Reset game teams list\n   look their teams up the same way (`rememberTeamGroups`, `rememberTeamLookup` in `CustomTeamsScreens.kt`).\n2. **Tournament menu.** `TournamentFlow` built the squads of eleven tournaments (CPL, Abu Dhabi T10, LPL, ILT20, BBL, MLC, SA20, World Cup, Champions Trophy, Asia Cup,\n   Asian Games) on the main thread every time Tournament was opened. Now each is built only when it is needed, in the background; the menus and lists open at once and a\n   tournament's own pages show \"Loading\" for the moment its squads take.\n3. After editing a career the Home tab recalculates its pathway and rank lines (patch 143).\n\nNot measured: nothing can be run or timed here, so how much faster each screen feels is for the player to say. If a screen still lags, name it.\nDials: none; the old behaviour is in git history (patch 144 is one self-contained change).\n"
+    }
+  ]
+}
