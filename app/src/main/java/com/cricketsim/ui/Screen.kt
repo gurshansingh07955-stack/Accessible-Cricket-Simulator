@@ -42,7 +42,13 @@ sealed interface Screen {
     /** Advanced Customisation: custom match formats now; custom teams and tournaments to come (ui/custom). */
     object AdvancedCustomisation : Screen
 
-    /** Step 1 of setting up a NEW match (reached from Home's Play match). */
+    /** Home's Play match: Quick match or Play series (ui/series). */
+    object PlayMenu : Screen
+
+    /** Play series: new series, resume series (ui/series). */
+    object Series : Screen
+
+    /** Step 1 of setting up a NEW match (reached from Play match > Quick match). */
     object FormatSelection : Screen
 
     /**

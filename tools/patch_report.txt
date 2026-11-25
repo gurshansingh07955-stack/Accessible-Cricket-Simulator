@@ -1,6 +1,6 @@
-Patch run: 45396319804
-Timestamp (UTC): 2026-11-24T12:43:56Z
+Patch run: 45527482261
+Timestamp (UTC): 2026-11-25T01:40:44Z
 Result: OK
 -----
-Patch 2026-11-24-145-no-rating-edit-play-knockouts.json
-  applied 7 operation(s) to 6 file(s)
+Patch 2026-11-24-146-series-part1-setup.json
+  applied 10 operation(s) to 6 file(s)

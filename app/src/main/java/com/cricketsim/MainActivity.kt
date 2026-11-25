@@ -32,6 +32,8 @@ import com.cricketsim.ui.home.HomeScreen
 import com.cricketsim.ui.match.AnthemScreen
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.practice.NetPracticeFlow
+import com.cricketsim.ui.series.PlayMenuScreen
+import com.cricketsim.ui.series.SeriesFlow
 import com.cricketsim.ui.statistics.FullStatisticsScreen
 import com.cricketsim.ui.trophies.TrophiesScreen
 import com.cricketsim.ui.settings.SettingsScreen
@@ -184,7 +186,7 @@ fun CricketSimApp() {
     val menuScreenKey = screen::class
     LaunchedEffect(menuScreenKey) {
         val opened = screen
-        val isMenu = opened is Screen.FormatSelection || opened is Screen.StadiumSelection ||
+        val isMenu = opened is Screen.PlayMenu || opened is Screen.Series || opened is Screen.FormatSelection || opened is Screen.StadiumSelection ||
             opened is Screen.TeamSelection || opened is Screen.PlayingXISelection ||
             opened is Screen.Settings || opened is Screen.About || opened is Screen.AdvancedCustomisation || opened is Screen.Career || opened is Screen.NetPractice || opened is Screen.Credits || opened is Screen.Trophies || opened is Screen.FullStatistics
         if (isMenu) services?.sound?.playMenuOpen()
@@ -193,7 +195,7 @@ fun CricketSimApp() {
     when (val current = screen) {
         is Screen.Home -> HomeScreen(
             savedMatchSummary = savedMatch?.summary(),
-            onPlay = { screen = Screen.FormatSelection },
+            onPlay = { screen = Screen.PlayMenu },
             onResume = {
                 savedMatch?.let { saved ->
                     screen = Screen.Match(
@@ -217,6 +219,12 @@ fun CricketSimApp() {
             onAbout = { screen = Screen.About }
         )
         is Screen.Tournament -> TournamentFlow(onExit = { screen = Screen.Home })
+        is Screen.PlayMenu -> PlayMenuScreen(
+            onQuickMatch = { screen = Screen.FormatSelection },
+            onSeries = { screen = Screen.Series },
+            onBack = { screen = Screen.Home }
+        )
+        is Screen.Series -> SeriesFlow(onExit = { screen = Screen.PlayMenu })
         is Screen.AdvancedCustomisation -> AdvancedCustomisationFlow(onExit = { screen = Screen.Home })
         is Screen.Career -> CareerFlow(onExit = { screen = Screen.Home })
         is Screen.NetPractice -> NetPracticeFlow(onExit = { screen = Screen.Home })
@@ -233,7 +241,7 @@ fun CricketSimApp() {
             CreditsScreen(onBack = onBack)
         }
         is Screen.FormatSelection -> {
-            val onBack = { screen = Screen.Home }
+            val onBack = { screen = Screen.PlayMenu }
             BackHandler(onBack = onBack)
             FormatSelectionScreen(
                 onFormatSelected = { format -> screen = Screen.StadiumSelection(format) },
