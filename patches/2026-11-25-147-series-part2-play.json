@@ -1,0 +1,195 @@
+{
+  "name": "Play series, part 2: play a saved series (Play this series), per-format rules and tables",
+  "message": "Series part 2: play, resume and delete saved series (patch 147)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/SeriesPlay.kt",
+    "contains": "object SeriesPlay"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/SeriesPlay.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * Playing a saved series (patch 147, part 2). A series is played by the tournament screens: it becomes a (hidden) custom tournament whose\n * [CustomTournamentDef.series] is set, so its squads, fixtures, tables, saving and resuming all use the machinery custom tournaments already have.\n *\n * What is different about a series:\n *  - The fixtures: for every format (\"leg\") in turn, that many matches, the pairs of teams taking turns (two teams alternate home and away),\n *    at the ticked grounds in turn. A single-format series has one stage (\"League\"); a multi-format series has one stage per format (\"Group T20\", \"Group ODI\"...).\n *  - The rules of a match come from its stage: [rulesFor] (a Test is five days; a tied limited-overs match stands, no Super Over).\n *  - The tables: one per format (a multi-format series) or one series table; the winner is the team with most wins over the whole series, or nobody if two share the most.\n *  - No knockout: nothing is filled in after a match.\n */\nobject SeriesPlay {\n    fun tournamentId(seriesId: String): String = TournamentRules.CUSTOM_PREFIX + seriesId\n\n    /** The hidden custom tournament a series is played as. */\n    fun defFor(series: SeriesDef): CustomTournamentDef = CustomTournamentDef(\n        id = tournamentId(series.id),\n        name = series.name,\n        formatKey = series.legs.firstOrNull()?.formatKey ?: \"T20\",\n        schedule = \"SINGLE_RR\",\n        teamKeys = series.teamKeys,\n        stadiumIds = series.stadiumIds,\n        series = series\n    )\n\n    private fun title(key: String): String = when {\n        key == SeriesRules.TEST_KEY -> \"Test\"\n        key == \"T20\" -> \"T20\"\n        key == \"ODI\" -> \"ODI\"\n        key == \"T10\" -> \"T10\"\n        key == \"FIVE_OVERS\" -> \"Five-over\"\n        key == \"ONE_OVER\" -> \"One-over\"\n        key.startsWith(\"custom:\") -> Customisation.customFormats().find { it.id == key.removePrefix(\"custom:\") }?.name ?: key\n        else -> key\n    }\n\n    /** The stage of the matches of one format: \"League\" when the series has one format, \"Group <format>\" when it has several (a \"Group\" stage may end tied). */\n    fun stageName(series: SeriesDef, legIndex: Int): String =\n        if (series.legs.size <= 1) CplData.LEAGUE else \"Group \" + title(series.legs[legIndex].formatKey)\n\n    private fun legIndexFor(series: SeriesDef, stage: String?): Int {\n        if (series.legs.size <= 1 || stage == null) return 0\n        return series.legs.indices.firstOrNull { stageName(series, it) == stage } ?: 0\n    }\n\n    /** The rules of the matches of a stage: the rules of its format, a tied limited-overs match stands. */\n    fun rulesFor(series: SeriesDef, stage: String?): MatchRules? {\n        val leg = series.legs.getOrNull(legIndexFor(series, stage)) ?: return null\n        val base = TournamentRules.rulesForFormat(leg.formatKey) ?: return null\n        return base.copy(noSuperOver = true)\n    }\n\n    fun introOf(series: SeriesDef): String {\n        val names = SeriesRules.teamsFor(series.teamKeys).joinToString(\", \") { it.name }\n        val legs = series.legs.joinToString(\", \") { \"${it.matches} ${title(it.formatKey)} ${if (it.matches == 1) \"match\" else \"matches\"}\" }\n        val total = SeriesRules.totalMatches(series)\n        val grounds = series.stadiumIds.size\n        return \"${SeriesRules.kindOf(series).label} series between $names: $legs ($total in all), at $grounds ground${if (grounds == 1) \"\" else \"s\"}.\"\n    }\n\n    /** Every pair once, round by round (the circle method). */\n    private fun roundRobin(ids: List<String>): List<Pair<String, String>> {\n        val rot = ids.toMutableList()\n        if (rot.size % 2 == 1) rot.add(\"\")\n        val n = rot.size\n        val out = ArrayList<Pair<String, String>>()\n        repeat(n - 1) { round ->\n            for (i in 0 until n / 2) {\n                val a = rot[i]\n                val b = rot[n - 1 - i]\n                if (a.isNotEmpty() && b.isNotEmpty()) out.add(if ((i + round) % 2 == 0) a to b else b to a)\n            }\n            rot.add(1, rot.removeAt(n - 1))\n        }\n        return out\n    }\n\n    /** The fixtures: each format in turn, its matches taking the pairs in turn (and swapping home and away on every second time round). */\n    fun schedule(series: SeriesDef, teamIds: List<String>, stadiumIds: List<String>): List<TournamentFixture> {\n        val grounds = stadiumIds.ifEmpty { listOf(\"wankhede\") }\n        val pairs = if (teamIds.size <= 2) listOf(teamIds[0] to teamIds[teamIds.size - 1]) else roundRobin(teamIds)\n        val list = ArrayList<TournamentFixture>()\n        series.legs.forEachIndexed { index, leg ->\n            val stage = stageName(series, index)\n            repeat(leg.matches) { k ->\n                val p = pairs[k % pairs.size]\n                val flip = (k / pairs.size) % 2 == 1\n                val home = if (flip) p.second else p.first\n                val away = if (flip) p.first else p.second\n                list.add(TournamentFixture(list.size, list.size + 1, stage, home, away, grounds[list.size % grounds.size]))\n            }\n        }\n        return list\n    }\n\n    private fun stageTable(state: TournamentState, stage: String): List<StandingRow> {\n        val ids = state.fixtures.filter { it.stage == stage }.flatMap { listOfNotNull(it.homeId, it.awayId) }.toSet()\n        return CplData.standings(state, stage).filter { it.team.id in ids }\n    }\n\n    /** One table for each format (or one series table). */\n    fun tables(state: TournamentState): List<Pair<String, List<StandingRow>>> {\n        val stages = state.fixtures.map { it.stage }.distinct()\n        return stages.map { (if (it == CplData.LEAGUE) \"Series table\" else it) to stageTable(state, it) }\n    }\n\n    /** The team with most wins over the whole series once every match is played; null while it is going on, or when two teams share the most wins. */\n    fun champion(state: TournamentState): Team? {\n        if (state.fixtures.isEmpty() || state.fixtures.any { it.result == null }) return null\n        val wins = HashMap<String, Int>()\n        state.fixtures.forEach { f -> f.result?.winnerId?.let { wins[it] = (wins[it] ?: 0) + 1 } }\n        val best = wins.values.maxOrNull() ?: return null\n        val top = wins.filterValues { it == best }.keys\n        if (top.size != 1) return null\n        return state.teams.find { it.id == top.first() }\n    }\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "    val noSuperOver: Boolean = false\n) {\n    companion object {",
+      "replace": "    val noSuperOver: Boolean = false,\n    /** Set for a hidden tournament that is really a series (Play match > Play series): the series it plays (logic/SeriesPlay.kt). Null for the player's own tournaments. */\n    val series: SeriesDef? = null\n) {\n    companion object {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+      "find": "        val d = def(id) ?: return \"This custom tournament could not be found.\"\n",
+      "replace": "        val d = def(id) ?: return \"This custom tournament could not be found.\"\n        d.series?.let { return SeriesPlay.introOf(it) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+      "find": "        val d = def(id) ?: return Pair(emptyList(), emptyMap())\n        val catalog = TeamCatalog.load().associateBy { it.key }",
+      "replace": "        val d = def(id) ?: return Pair(emptyList(), emptyMap())\n        // A series: its own teams (national teams and the player's custom teams), no need to build every team of the game.\n        d.series?.let { s ->\n            val seriesTeams = SeriesRules.teamsFor(s.teamKeys)\n            val seriesTags = LinkedHashMap<String, SquadTag>()\n            seriesTeams.forEach { t -> t.players.forEach { seriesTags[it.id] = SquadTag.DOMESTIC } }\n            return Pair(seriesTeams, seriesTags)\n        }\n        val catalog = TeamCatalog.load().associateBy { it.key }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+      "find": "        val ids = teamIds.shuffled(random)\n        val grounds = d.stadiumIds.ifEmpty { listOf(\"wankhede\") }",
+      "replace": "        d.series?.let { return SeriesPlay.schedule(it, teamIds, d.stadiumIds) }\n        val ids = teamIds.shuffled(random)\n        val grounds = d.stadiumIds.ifEmpty { listOf(\"wankhede\") }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+      "find": "        val d = def(state.tournamentId) ?: return emptyList()\n        return when (scheduleOf(d)) {\n            ScheduleType.KNOCKOUT -> emptyList()",
+      "replace": "        val d = def(state.tournamentId) ?: return emptyList()\n        if (d.series != null) return SeriesPlay.tables(state)\n        return when (scheduleOf(d)) {\n            ScheduleType.KNOCKOUT -> emptyList()"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+      "find": "        val d = def(state.tournamentId) ?: return null\n        val s = scheduleOf(d)\n        if (s != ScheduleType.SINGLE_RR && s != ScheduleType.DOUBLE_RR) return null",
+      "replace": "        val d = def(state.tournamentId) ?: return null\n        if (d.series != null) return SeriesPlay.champion(state)\n        val s = scheduleOf(d)\n        if (s != ScheduleType.SINGLE_RR && s != ScheduleType.DOUBLE_RR) return null"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournaments.kt",
+      "find": "        val d = def(state.tournamentId) ?: return state\n        var fx = state.fixtures",
+      "replace": "        val d = def(state.tournamentId) ?: return state\n        if (d.series != null) return state // a series has no knockout: nothing is filled in after a match\n        var fx = state.fixtures"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "        val format = builtIn(key)\n        if (format != null) {",
+      "replace": "        // A Test of a series: five days (logic/TestMatch.kt).\n        if (key == SeriesRules.TEST_KEY) return TestMatch.rulesForDays(5)\n        val format = builtIn(key)\n        if (format != null) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "            val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null\n            val base = rulesForFormat(def.formatKey) ?: return null",
+      "replace": "            val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null\n            // A series: the rules of the format of this stage (a series can play several formats).\n            def.series?.let { return SeriesPlay.rulesFor(it, stage) }\n            val base = rulesForFormat(def.formatKey) ?: return null"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "    fun baseFormatFor(tournamentId: String?): MatchFormat? = rulesFor(tournamentId)?.let {",
+      "replace": "    fun baseFormatFor(tournamentId: String?, stage: String? = null): MatchFormat? = rulesFor(tournamentId, stage)?.let {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchRules.kt",
+      "find": "    fun ballsFor(tournamentId: String?): Int? = rulesFor(tournamentId)?.let { it.overs * 6 }",
+      "replace": "    fun ballsFor(tournamentId: String?, stage: String? = null): Int? = rulesFor(tournamentId, stage)?.let { it.overs * 6 }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+      "find": "fun formatFor(tournamentId: String?): MatchFormat = if (DomesticFc.isFirstClass(tournamentId)) MatchFormat.TEST else TournamentRules.baseFormatFor(tournamentId) ?: when (tournamentId) {",
+      "replace": "fun formatFor(tournamentId: String?, stage: String? = null): MatchFormat = if (DomesticFc.isFirstClass(tournamentId)) MatchFormat.TEST else TournamentRules.baseFormatFor(tournamentId, stage) ?: when (tournamentId) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AbuDhabiT10.kt",
+      "find": "fun fullInningsBalls(tournamentId: String): Int = TournamentRules.ballsFor(tournamentId) ?: when (tournamentId) {",
+      "replace": "fun fullInningsBalls(tournamentId: String, stage: String? = null): Int = TournamentRules.ballsFor(tournamentId, stage) ?: when (tournamentId) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "            val full = AbuDhabiT10.fullInningsBalls(state.tournamentId) // 120 balls in a T20, 60 in the T10",
+      "replace": "            val full = AbuDhabiT10.fullInningsBalls(state.tournamentId, stage) // 120 balls in a T20, 60 in the T10 (the stage matters in a multi-format series)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "            simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),",
+      "replace": "            simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId, fixture.stage),"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "fun TournamentFlow(onExit: () -> Unit) {",
+      "replace": "fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    var kind by remember { mutableStateOf(\"cpl\") } // \"cpl\" or \"ipl\"",
+      "replace": "    var kind by remember { mutableStateOf(startKind ?: \"cpl\") } // \"cpl\" or \"ipl\" (a series opens straight at its own kind, \"custom:<id>\")"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    var page by remember { mutableStateOf<TPage>(TPage.Menu) }",
+      "replace": "    var page by remember { mutableStateOf<TPage>(if (startKind != null) TPage.Adt else TPage.Menu) }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                page = if (isCustomKind) TPage.CustomList else if (isDomestic) TPage.DomesticIn(backCountry) else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues",
+      "replace": "                if (startKind != null) {\n                    // Opened from Play series: back leaves the tournament screens, to the series.\n                    onExit()\n                } else {\n                    page = if (isCustomKind) TPage.CustomList else if (isDomestic) TPage.DomesticIn(backCountry) else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues\n                }\n                Unit"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                defs = remember { Customisation.customTournaments() },",
+      "replace": "                defs = remember { Customisation.customTournaments().filter { it.series == null } },"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    format = AbuDhabiT10.formatFor(saved?.tournamentId),",
+      "replace": "                    format = AbuDhabiT10.formatFor(saved?.tournamentId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTournamentScreens.kt",
+      "find": "val custom = remember(version) { Customisation.customTournaments() }",
+      "replace": "val custom = remember(version) { Customisation.customTournaments().filter { it.series == null } }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/series/SeriesScreens.kt",
+      "find": "fun SeriesFlow(onExit: () -> Unit) {",
+      "replace": "fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/series/SeriesScreens.kt",
+      "find": "import com.cricketsim.persistence.SeriesStore",
+      "replace": "import com.cricketsim.logic.SeriesPlay\nimport com.cricketsim.persistence.MatchSaveStore\nimport com.cricketsim.persistence.SeriesStore\nimport com.cricketsim.persistence.TournamentSaveStore"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/series/SeriesScreens.kt",
+      "find": "Text(\"Choose a series to read. Playing a saved series is coming in the next update; your series stay saved until then.\", style = MaterialTheme.typography.bodyMedium)",
+      "replace": "Text(\"Choose a series to play or read. Your series stay saved until you delete them.\", style = MaterialTheme.typography.bodyMedium)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/series/SeriesScreens.kt",
+      "find": "                    Text(\"Playing this series is coming in the next update. It stays saved here.\", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)\n",
+      "replace": "                    Spacer(modifier = Modifier.height(16.dp))\n                    Button(\n                        onClick = {\n                            val def = SeriesPlay.defFor(s)\n                            Customisation.saveCustomTournament(def)\n                            onPlay(\"custom:\" + def.id)\n                        },\n                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)\n                    ) { Text(\"Play this series\") }\n                    Spacer(modifier = Modifier.height(8.dp))\n                    Text(\"You choose your team, or carry on where you stopped. The series is saved after every match.\", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/series/SeriesScreens.kt",
+      "find": "                                scope.launch { store.save(updated) }\n                                message = \"Series deleted.\"",
+      "replace": "                                scope.launch {\n                                    store.save(updated)\n                                    val tid = SeriesPlay.tournamentId(s.id)\n                                    Customisation.deleteCustomTournament(tid)\n                                    TournamentSaveStore(context, \"saved_tournament_$tid.json\").delete()\n                                    MatchSaveStore(context, \"saved_${tid}_match.json\").clear()\n                                }\n                                message = \"Series deleted.\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/Screen.kt",
+      "find": "    /** Play series: new series, resume series (ui/series). */\n    object Series : Screen",
+      "replace": "    /** Play series: new series, resume series (ui/series). */\n    object Series : Screen\n\n    /** A saved series being played: the tournament screens opened straight at the series' kind (\"custom:<id>\"). */\n    data class SeriesPlay(val kind: String) : Screen"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/MainActivity.kt",
+      "find": "        is Screen.Series -> SeriesFlow(onExit = { screen = Screen.PlayMenu })",
+      "replace": "        is Screen.Series -> SeriesFlow(onExit = { screen = Screen.PlayMenu }, onPlay = { seriesKind -> screen = Screen.SeriesPlay(seriesKind) })\n        is Screen.SeriesPlay -> TournamentFlow(onExit = { screen = Screen.Series }, startKind = current.kind)"
+    },
+    {
+      "op": "write",
+      "file": "SERIES.md",
+      "content": "# Play series, part 2: playing a series (patch 147)\n\nPlay match > Play series > Resume series > open a series > **Play this series**.\n\nA series is played by the tournament screens (same pages as every tournament: start page with Start new / Resume, choose your team from the series' teams,\nhub with Matches / Table / Venues / Stats, Playing XI, toss, live match or simulate, saved after every match, one saved series each). It does this by being a hidden\ncustom tournament: `SeriesPlay.defFor(series)` makes a `CustomTournamentDef` (id `ctour_<seriesId>`) whose new field `series` is set. The player's own custom tournament lists\nfilter these out (`series == null`).\n\nWhat is specific to a series (`logic/SeriesPlay.kt`, with small branches in `CustomTournaments.kt` and `MatchRules.kt`):\n- Fixtures: for each format in turn, that many matches; the pairs take turns (two teams swap home and away each match; three or four teams go round every pair, then again with home and away swapped); the ticked grounds are used in turn.\n- Stages: a single-format series has one stage (\"League\"); a multi-format series has one per format (\"Group T20\", \"Group ODI\"...), each with its own table.\n- Rules: each match is played by the rules of its stage's format (`SeriesPlay.rulesFor`): a Test is five days (`TestMatch.rulesForDays(5)`), a custom multi-day format keeps its own days, and a tied limited-overs match stands (no Super Over).\n- `formatFor`, `fullInningsBalls`, `baseFormatFor` and `ballsFor` now take the stage, so the simulated matches and the net run rate use the format of the match.\n- Winner: the team with most wins over the whole series; nobody if two teams share the most (a drawn series).\n- Deleting a series also deletes its tournament and its saved match.\n\nNot done / to check: the live Test inside a series uses the same Test code as custom multi-day formats in custom tournaments (not tried by ear or hand here); a drawn series shows no winner on the celebration screen.\n"
+    }
+  ]
+}
