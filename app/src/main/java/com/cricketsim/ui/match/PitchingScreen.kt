@@ -302,7 +302,9 @@ fun PitchingScreen(
     initialSetup: BowlingSetupMemory? = null,
     onSetupChanged: (BowlingSetupMemory) -> Unit = {},
     // Net practice: speak the ball quality as the length drag nears the middle of its band, and when the length is set. False in a match.
-    coach: Boolean = false
+    coach: Boolean = false,
+    // False in a Test: no free hit follows a no ball (patch 149).
+    freeHitFollowsNoBall: Boolean = true
 ) {
     var step by remember { mutableStateOf(PitchStep.AIM) }
     var angle by remember { mutableStateOf(initialSetup?.angle ?: BowlingSystem.ANGLE_OPTIONS.first().value) }
@@ -390,7 +392,7 @@ fun PitchingScreen(
         PitchStep.RESULT -> {
             val finalDecision = decision
             if (finalDecision != null) {
-                ResultStep(decision = finalDecision, onContinue = { onDeliveryResolved(finalDecision) })
+                ResultStep(decision = finalDecision, freeHit = freeHitFollowsNoBall, onContinue = { onDeliveryResolved(finalDecision) })
             }
         }
     }
@@ -833,7 +835,7 @@ private fun AimStep(
 }
 
 @Composable
-private fun ResultStep(decision: ResolvedBowlingDecision, onContinue: () -> Unit) {
+private fun ResultStep(decision: ResolvedBowlingDecision, freeHit: Boolean = true, onContinue: () -> Unit) {
     val lengthName = BowlingSystem.lengthLabel(decision.actualLength)
     val tierLabel = BowlingSystem.qualityTierLabel(decision.qualityTier)
     val swingLabel = when (decision.swingType) {
@@ -862,7 +864,7 @@ private fun ResultStep(decision: ResolvedBowlingDecision, onContinue: () -> Unit
             Text("That's a beamer \u2014 automatic no ball.")
         } else if (decision.calledNoBall) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text("No ball! You overstepped the crease. The batter gets a free hit next ball.")
+            Text(if (freeHit) "No ball! You overstepped the crease. The batter gets a free hit next ball." else "No ball! You overstepped the crease.")
         }
         Spacer(modifier = Modifier.height(24.dp))
         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {

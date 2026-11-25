@@ -141,7 +141,7 @@ object MatchLines {
      * right after the timing tier it explains. Null (an AI batter, or a
      * Perfect swing) adds nothing.
      */
-    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null, sixMetres: Int? = null): String {
+    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null, sixMetres: Int? = null, freeHitNext: Boolean = true): String {
         val base = when {
             outcome.isWicket -> "WICKET. ${outcome.commentary}"
             outcome.isWide -> "Wide, 1 run. ${outcome.commentary}"
@@ -154,7 +154,7 @@ object MatchLines {
                     outcome.runs > 0 -> " (${outcome.runs} off the bat, 1 extra)"
                     else -> ""
                 }
-                "No ball, ${countOf(total, "run")}$split. ${outcome.commentary} Free hit next ball."
+                "No ball, ${countOf(total, "run")}$split. ${outcome.commentary}${if (freeHitNext) " Free hit next ball." else ""}"
             }
             outcome.byes > 0 -> "${countOf(outcome.byes, "bye")}. ${outcome.commentary}"
             outcome.legByes > 0 -> "${countOf(outcome.legByes, "leg bye")}. ${outcome.commentary}"

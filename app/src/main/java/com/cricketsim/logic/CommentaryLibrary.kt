@@ -1242,8 +1242,15 @@ object CommentaryLibrary {
         else -> null
     }
 
+    /** False in a Test, where there is no free hit: a line that talks about one is not chosen (patch 149). Set by MatchAudioDirector for every ball. */
+    @Volatile
+    var freeHitsApply: Boolean = true
+
     fun getRandomCommentaryPair(category: CommentaryCategory): CommentaryPair {
-        val variants = LIBRARY.getValue(category)
+        val every = LIBRARY.getValue(category)
+        val variants = if (freeHitsApply) every else every.filter {
+            !it.excited.text.contains("free hit", ignoreCase = true) && !it.calm.text.contains("free hit", ignoreCase = true)
+        }.ifEmpty { every }
         val index = (Random.nextDouble() * variants.size).toInt().coerceAtMost(variants.size - 1)
         return variants[index]
     }

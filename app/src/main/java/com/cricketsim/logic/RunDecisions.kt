@@ -70,13 +70,27 @@ object RunDecisions {
         if (!MANUAL_RUNNING) return null
         val o = result.outcome
         val byeTotal = o.byes + o.legByes
-        if (o.isWide || o.droppedCatch) return null
+        if (o.isWide) return null
         // A ball left alone is not run on. A no ball that was played is (patch 139): the runs are his, and only a run out can get him out.
         if (byeTotal == 0 && o.leftAlone) return null
         val runOutBall = byeTotal == 0 && o.isWicket && o.dismissalType == DismissalType.RUN_OUT
         if (o.isWicket && !runOutBall) return null
-        val potential = if (byeTotal > 0) byeTotal else o.runs + (if (runOutBall) 1 else 0)
+        // A catch put down (patch 149) is worth the runs it scored, and at least one he may go for.
+        val potential = if (byeTotal > 0) byeTotal else if (o.droppedCatch) maxOf(o.runs, 1) else o.runs + (if (runOutBall) 1 else 0)
         if (potential !in 1..MAX_RUNS) return null
+
+        // A catch the fielding side put down (patch 149): he may run on it, with the fielder who dropped it closing in.
+        if (o.droppedCatch) {
+            val dropper = before.bowlingTeam.players.find { it.name == o.fielderName }
+            if (dropper != null) {
+                val spot = before.fieldPlacements.find { it.playerId == dropper.id }
+                val where = if (spot != null) "at ${FieldingSystem.getPositionLabel(spot).lowercase()}" else "in the field"
+                return RunChance(
+                    potential, false, partnerCall, before.currentBatsmen.first.name,
+                    dropper.name, where, spot?.depth ?: FieldingDepth.SHORT, dropper.fieldingRating, "loose after the dropped catch", noBall = o.isNoBall
+                )
+            }
+        }
 
         val keeper = keeperOf(before.bowlingTeam)
         val keeperId = keeper?.id
@@ -125,6 +139,17 @@ object RunDecisions {
             potential, runOutBall, partnerCall, before.currentBatsmen.first.name,
             fielder.name, position, pick?.depth ?: FieldingDepth.SHORT, fielder.fieldingRating, phrase, noBall = o.isNoBall
         )
+    }
+
+    /** The dropped-catch line without the runs the game picked, then the runs he actually took (patch 149). */
+    private fun droppedText(original: BallOutcome, runs: Int): String {
+        val head = original.commentary.substringBefore(" They run").trim()
+        return head + when (runs) {
+            0 -> " No run."
+            1 -> " They run one."
+            2 -> " They run two."
+            else -> " They run three."
+        }
     }
 
     /** The chance that an EXTRA run (more than the ball is worth) ends in a run out; [extraIndex] is 1 for the first extra run, 2 for the next. */
@@ -263,7 +288,7 @@ object RunDecisions {
             val out = if (random.nextBoolean()) before.currentBatsmen.first else before.currentBatsmen.second
             val base = original.copy(
                 runs = verdict.runs, isWicket = true, dismissalType = DismissalType.RUN_OUT, isEdge = null,
-                outBatsmanId = out.id, fielderName = c.fielderName, fielderPosition = null
+                outBatsmanId = out.id, fielderName = c.fielderName, fielderPosition = null, droppedCatch = false
             )
             return base.copy(commentary = MatchEngine.generateCommentary(base, out.name, bowlerName))
         }
@@ -272,6 +297,7 @@ object RunDecisions {
             runs = verdict.runs, isWicket = false, dismissalType = null, outBatsmanId = null, fielderName = null, fielderPosition = null,
             isEdge = if (runOutBall) null else original.isEdge
         )
+        if (original.droppedCatch) return base.copy(commentary = droppedText(original, verdict.runs))
         val note = when {
             verdict.runs > original.runs -> " They steal the extra run."
             verdict.runs < c.potential -> if (c.partnerCall) " You turn down the call." else " The batters hold back."

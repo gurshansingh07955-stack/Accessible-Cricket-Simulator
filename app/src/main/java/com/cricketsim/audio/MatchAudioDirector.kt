@@ -108,7 +108,13 @@ class MatchAudioDirector(private val services: GameServices) {
         if (outcome.isNoBall && !sirenAlreadySounded) sound.playNoBallSiren()
         // The umpire's own calls, in his voice: wide ball, and no ball with the free hit that follows it.
         if (outcome.isWide) sound.playUmpire("um_wide")
-        if (outcome.isNoBall) sound.playUmpire("um_no_ball", "um_free_hit")
+        // A free hit follows a no ball in limited-overs cricket only: there is none in a Test (patch 149), so the umpire says "No ball" and nothing more,
+        // and the commentary leaves out the lines that talk about a free hit.
+        val freeHitsApply = before.format != com.cricketsim.logic.MatchFormat.TEST
+        CommentaryLibrary.freeHitsApply = freeHitsApply
+        if (outcome.isNoBall) {
+            if (freeHitsApply) sound.playUmpire("um_no_ball", "um_free_hit") else sound.playUmpire("um_no_ball")
+        }
         // Playing it marked it sounded; clear that again so it only ever covers this one ball.
         sound.takeSirenSounded()
 

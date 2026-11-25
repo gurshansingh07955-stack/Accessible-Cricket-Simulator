@@ -1,6 +1,6 @@
-Patch run: 45596239816
-Timestamp (UTC): 2026-11-25T10:34:24Z
+Patch run: 45598671635
+Timestamp (UTC): 2026-11-25T10:49:49Z
 Result: OK
 -----
-Patch 2026-11-25-148-series-changes.json
-  applied 5 operation(s) to 5 file(s)
+Patch 2026-11-25-149-test-free-hit-and-dropped-catch-runs.json
+  applied 18 operation(s) to 7 file(s)

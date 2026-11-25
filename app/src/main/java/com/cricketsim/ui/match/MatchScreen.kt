@@ -586,7 +586,7 @@ fun MatchScreen(
             com.cricketsim.logic.StadiumData.getStadiumById(before.stadiumId) ?: com.cricketsim.logic.CplData.stadium(before.stadiumId),
             before.currentBatsmen.first.battingRating
         )
-        val baseSummary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres)
+        val baseSummary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres, freeHitNext = before.format != com.cricketsim.logic.MatchFormat.TEST)
         // The umpire's decision on an appeal or a review, so the last-ball summary says whether it was out or not out (patch 142).
         val summary = if (ballNote.isEmpty()) baseSummary else "$baseSummary $ballNote"
         ballNote = ""
@@ -727,6 +727,14 @@ fun MatchScreen(
             }
         }
         val result = if (resumed == null && preResult == null) autoDropped(before, simulated) else simulated
+        // A catch the computer's fielder has just put down: the user, batting with Running between the wickets on, may run on it (patch 149).
+        if (resumed == null && preResult == null && result.outcome.droppedCatch && !simulated.outcome.droppedCatch) {
+            val dropRun = runChanceFor(before, result)
+            if (dropRun != null) {
+                pendingRun = PendingRun(before, result, dropRun)
+                return
+            }
+        }
         // Every dismissal: the fielding side appeals and the umpire decides before anything else (AppealScreens.kt).
         // In career mode only the player's own dismissal, or a wicket he takes, goes through the appeal: a team-mate's or an opponent's is just given.
         val careerPid = before.careerPlayerId
@@ -1381,6 +1389,7 @@ fun MatchScreen(
             bowler = matchState.currentBowler,
             initialSetup = bowlingSetupMemory,
             onSetupChanged = { bowlingSetupMemory = it },
+            freeHitFollowsNoBall = matchState.format != com.cricketsim.logic.MatchFormat.TEST,
             onDeliveryResolved = { decision ->
                 showPitchingScreen = false
                 advanceOneBall(presetBowlingDecision = decision)
