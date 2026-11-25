@@ -1,18 +1,22 @@
-# Play series, part 2: playing a series (patch 147)
+# Play series (patches 146, 147, 148)
 
-Play match > Play series > Resume series > open a series > **Play this series**.
+Home > **Play match** > **Quick match** (the old setup flow) or **Play series**.
 
-A series is played by the tournament screens (same pages as every tournament: start page with Start new / Resume, choose your team from the series' teams,
-hub with Matches / Table / Venues / Stats, Playing XI, toss, live match or simulate, saved after every match, one saved series each). It does this by being a hidden
-custom tournament: `SeriesPlay.defFor(series)` makes a `CustomTournamentDef` (id `ctour_<seriesId>`) whose new field `series` is set. The player's own custom tournament lists
-filter these out (`series == null`).
+## Setting a series up (Play series > New series)
+1. Type: **One vs one** (2 teams), **Triangular** (3), **Quadrangular** (4).
+2. **Single format** or **Multi format** (two or more formats). Formats: Test, T20, ODI, T10, Five-over, One-over and the player's custom formats.
+3. **One vs one only:** how many matches, **1 to 7** for each format (patch 148; it was 27). The formats follow one another: all the matches of the first format, then the next.
+   **Triangular and quadrangular: no number is asked** (patch 148). In each format every team plays every other team once (a round robin: 3 matches for three teams, 6 for four),
+   then the top two of that format's table play a **Final**. In a multi-format series that repeats for the next format: round robin, Final, round robin, Final...
+4. Teams: exactly 2, 3 or 4 (national teams and the player's ready custom teams).
+5. **Host country and grounds** (patch 148): the countries of the chosen teams are listed (all countries if none of them has grounds); the player picks ONE country and ticks its
+   grounds. Choosing another country clears the ticks, so every ground of a series is in one host country. The matches use the grounds in turn.
+6. Summary, Save (up to 5 series, `series.json`).
 
-What is specific to a series (`logic/SeriesPlay.kt`, with small branches in `CustomTournaments.kt` and `MatchRules.kt`):
-- Fixtures: for each format in turn, that many matches; the pairs take turns (two teams swap home and away each match; three or four teams go round every pair, then again with home and away swapped); the ticked grounds are used in turn.
-- Stages: a single-format series has one stage ("League"); a multi-format series has one per format ("Group T20", "Group ODI"...), each with its own table.
-- Rules: each match is played by the rules of its stage's format (`SeriesPlay.rulesFor`): a Test is five days (`TestMatch.rulesForDays(5)`), a custom multi-day format keeps its own days, and a tied limited-overs match stands (no Super Over).
-- `formatFor`, `fullInningsBalls`, `baseFormatFor` and `ballsFor` now take the stage, so the simulated matches and the net run rate use the format of the match.
-- Winner: the team with most wins over the whole series; nobody if two teams share the most (a drawn series).
-- Deleting a series also deletes its tournament and its saved match.
-
-Not done / to check: the live Test inside a series uses the same Test code as custom multi-day formats in custom tournaments (not tried by ear or hand here); a drawn series shows no winner on the celebration screen.
+## Playing (Resume series > a series > Play this series)
+The tournament screens play it (see `logic/SeriesPlay.kt`): the series is a hidden custom tournament (`CustomTournamentDef.series`).
+- Stages: a single-format series has "League" (and "Final"); a multi-format series has "Group T20", "T20 Final", "Group ODI", "ODI Final"... each "Group" stage has its own table; a Final has none.
+- `SeriesPlay.advance` fills in a Final with the top two of its format's table once that round robin is played (called after every match, from `CustomTournaments.advance`).
+- Rules per stage (`SeriesPlay.rulesFor`): the rules of the format; a Test is five days; a tied limited-overs match stands (no Super Over) except in a Final, which goes to a Super Over.
+- Winner: with Finals, the team that won the Final (most Finals won in a multi-format series), then most wins over the series; one vs one: most wins; nobody if still level.
+- Series saved before patch 148 keep the fixtures they were made with; their summaries use the new counting.

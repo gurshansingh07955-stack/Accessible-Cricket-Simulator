@@ -219,7 +219,7 @@ object CustomTournaments {
     /** Fills in the semi-finals, Final and knockout rounds as their teams become known. Safe after every match. */
     fun advance(state: TournamentState): TournamentState {
         val d = def(state.tournamentId) ?: return state
-        if (d.series != null) return state // a series has no knockout: nothing is filled in after a match
+        d.series?.let { return SeriesPlay.advance(state, it) } // a series fills in the Final of each format once its round robin is played
         var fx = state.fixtures
         fun complete(stage: String): Boolean {
             val l = fx.filter { it.stage == stage }

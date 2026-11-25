@@ -262,7 +262,12 @@ fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
                 Spacer(modifier = Modifier.height(16.dp))
                 OptionButton("Single format", "Every match of the series is played in the same format.", true, false) { multi = false; formatKeys = formatKeys.take(1); page = SeriesPage.Formats }
                 Spacer(modifier = Modifier.height(8.dp))
-                OptionButton("Multi format", "Choose more than one format, and how many matches to play in each.", true, false) { multi = true; page = SeriesPage.Formats }
+                OptionButton(
+                    "Multi format",
+                    if (kind == SeriesKind.ONE_VS_ONE) "Choose more than one format, and how many matches to play in each. The formats follow one another."
+                    else "Choose more than one format. Each format is played as a round robin and then a final, one format after another.",
+                    true, false
+                ) { multi = true; page = SeriesPage.Formats }
             }
         }
 
@@ -276,7 +281,7 @@ fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
                 PageHeading(if (multi) "Formats" else "Format")
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    if (multi) "Choose two or more formats. You choose the number of matches in each next."
+                    if (multi) (if (kind == SeriesKind.ONE_VS_ONE) "Choose two or more formats. You choose the number of matches in each next." else "Choose two or more formats. Each one is played as a round robin and then a final.")
                     else "Choose the format of the series.",
                     style = MaterialTheme.typography.bodyLarge
                 )
@@ -289,7 +294,15 @@ fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
-                    onClick = { matchIndex = 0; countText = counts[orderedKeys.first()]?.toString() ?: ""; page = SeriesPage.Matches },
+                    onClick = {
+                        if (kind == SeriesKind.ONE_VS_ONE) {
+                            matchIndex = 0
+                            countText = counts[orderedKeys.first()]?.toString() ?: ""
+                            page = SeriesPage.Matches
+                        } else {
+                            page = SeriesPage.Teams // no number of matches in a triangular or quadrangular series: a round robin and a final
+                        }
+                    },
                     enabled = ready,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
                 ) { Text("Continue") }
@@ -353,9 +366,13 @@ fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
 
         SeriesPage.Teams -> {
             val back: () -> Unit = {
-                matchIndex = (orderedKeys.size - 1).coerceAtLeast(0)
-                countText = counts[orderedKeys.lastOrNull()]?.toString() ?: ""
-                page = SeriesPage.Matches
+                if (kind == SeriesKind.ONE_VS_ONE) {
+                    matchIndex = (orderedKeys.size - 1).coerceAtLeast(0)
+                    countText = counts[orderedKeys.lastOrNull()]?.toString() ?: ""
+                    page = SeriesPage.Matches
+                } else {
+                    page = SeriesPage.Formats
+                }
             }
             BackHandler(onBack = back)
             val choices by produceState<List<SeriesTeamChoice>?>(null) { value = withContext(Dispatchers.Default) { SeriesRules.teamChoices() } }
@@ -404,15 +421,17 @@ fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
             BackHandler(onBack = back)
             val teams = remember(teamKeys) { SeriesRules.teamsFor(teamKeys) }
             val grounds by produceState<Pair<List<Stadium>, List<String>>?>(null, teamKeys) { value = withContext(Dispatchers.Default) { SeriesRules.groundsFor(teams) } }
-            var showAll by remember { mutableStateOf(false) }
             var country by remember { mutableStateOf<String?>(null) }
             val data = grounds
             PageColumn {
                 BackButton(back)
                 Spacer(modifier = Modifier.height(16.dp))
-                PageHeading("Grounds")
+                PageHeading("Host country and grounds")
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Choose the grounds for the series. Pick a country, then tick its grounds. The matches use the grounds you tick in turn.", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Choose the country that will host the series, then tick its grounds. All the grounds of a series are in that one country, and the matches use them in turn. Choosing another country clears the grounds you ticked.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     if (stadiumIds.isEmpty()) "No ground chosen yet." else if (stadiumIds.size == 1) "1 ground chosen." else "${stadiumIds.size} grounds chosen.",
@@ -425,24 +444,25 @@ fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
                 if (data == null) {
                     Text("Loading the grounds. Please wait.", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 } else {
+                    // The countries of the chosen teams (all countries when none of the teams has grounds of its own).
                     val allCountries = data.first.map { it.country }.distinct().sorted()
-                    val countries = if (showAll || data.second.isEmpty()) allCountries else data.second
-                    val current = country?.takeIf { it in countries } ?: countries.firstOrNull()
+                    val countries = if (data.second.isEmpty()) allCountries else data.second
+                    val host = data.first.firstOrNull { it.id in stadiumIds }?.country
+                    val current = country?.takeIf { it in countries } ?: host?.takeIf { it in countries } ?: countries.firstOrNull()
                     Text(
-                        if (showAll || data.second.isEmpty()) "Countries" else "Countries of your teams",
+                        if (data.second.isEmpty()) "Countries" else "Countries of your teams",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.semantics { heading() }
                     )
                     Column(modifier = Modifier.selectableGroup()) {
                         countries.forEach { c ->
                             val chosen = data.first.count { it.country == c && it.id in stadiumIds }
-                            RadioRow(c, if (chosen == 0) "" else "$chosen chosen", c == current) { country = c }
-                        }
-                    }
-                    if (data.second.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(onClick = { showAll = !showAll }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                            Text(if (showAll) "Show only the countries of my teams" else "Show grounds from other countries too")
+                            RadioRow(c, if (chosen == 0) "" else "$chosen chosen", c == current) {
+                                if (c != current) {
+                                    country = c
+                                    stadiumIds = emptySet()
+                                }
+                            }
                         }
                     }
                     if (current != null) {
@@ -452,7 +472,7 @@ fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
                         Spacer(modifier = Modifier.height(4.dp))
                         val allOn = here.all { it.id in stadiumIds }
                         OutlinedButton(
-                            onClick = { stadiumIds = if (allOn) stadiumIds - here.map { it.id }.toSet() else stadiumIds + here.map { it.id } },
+                            onClick = { stadiumIds = if (allOn) emptySet() else here.map { it.id }.toSet() },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
                         ) { Text(if (allOn) "Clear all grounds in $current" else "Choose all grounds in $current") }
                         here.forEach { s ->
@@ -507,7 +527,7 @@ fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
 /** One line for the list of saved series. */
 private fun seriesLine(s: SeriesDef, options: List<com.cricketsim.logic.FormatOption>): String {
     val teams = SeriesRules.teamsFor(s.teamKeys).joinToString(", ") { it.name }
-    return SeriesRules.kindOf(s).label + ". " + SeriesRules.legsText(s.legs, options) + ". " + teams + "."
+    return SeriesRules.kindOf(s).label + ". " + SeriesRules.legsText(s, options) + ". " + teams + "."
 }
 
 /** The whole series in plain sentences. */
@@ -518,7 +538,7 @@ private fun seriesDetail(s: SeriesDef, options: List<com.cricketsim.logic.Format
     return buildString {
         append("Type: ").append(SeriesRules.kindOf(s).label).append(". ")
         append(if (s.multiFormat) "Multi format. " else "Single format. ")
-        append("Matches: ").append(SeriesRules.legsText(s.legs, options)).append(". ")
+        append("Matches: ").append(SeriesRules.legsText(s, options)).append(". ")
         append(if (total == 1) "1 match in all. " else "$total matches in all. ")
         append("Teams: ").append(teams).append(". ")
         append("Grounds: ").append(grounds).append(".")
