@@ -1,0 +1,117 @@
+{
+  "name": "Test matches: no free hit talk, run on dropped catches (new ball rule checked)",
+  "message": "No free hit in Tests; run on dropped catches (patch 149)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt",
+    "contains": "var freeHitsApply"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/MatchAudioDirector.kt",
+      "find": "        if (outcome.isNoBall) sound.playUmpire(\"um_no_ball\", \"um_free_hit\")",
+      "replace": "        // A free hit follows a no ball in limited-overs cricket only: there is none in a Test (patch 149), so the umpire says \"No ball\" and nothing more,\n        // and the commentary leaves out the lines that talk about a free hit.\n        val freeHitsApply = before.format != com.cricketsim.logic.MatchFormat.TEST\n        CommentaryLibrary.freeHitsApply = freeHitsApply\n        if (outcome.isNoBall) {\n            if (freeHitsApply) sound.playUmpire(\"um_no_ball\", \"um_free_hit\") else sound.playUmpire(\"um_no_ball\")\n        }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CommentaryLibrary.kt",
+      "find": "    fun getRandomCommentaryPair(category: CommentaryCategory): CommentaryPair {\n        val variants = LIBRARY.getValue(category)\n",
+      "replace": "    /** False in a Test, where there is no free hit: a line that talks about one is not chosen (patch 149). Set by MatchAudioDirector for every ball. */\n    @Volatile\n    var freeHitsApply: Boolean = true\n\n    fun getRandomCommentaryPair(category: CommentaryCategory): CommentaryPair {\n        val every = LIBRARY.getValue(category)\n        val variants = if (freeHitsApply) every else every.filter {\n            !it.excited.text.contains(\"free hit\", ignoreCase = true) && !it.calm.text.contains(\"free hit\", ignoreCase = true)\n        }.ifEmpty { every }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null, sixMetres: Int? = null): String {",
+      "replace": "    fun ballSummary(outcome: BallOutcome, decision: BattingDecision?, swingNote: String? = null, sixMetres: Int? = null, freeHitNext: Boolean = true): String {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "                \"No ball, ${countOf(total, \"run\")}$split. ${outcome.commentary} Free hit next ball.\"",
+      "replace": "                \"No ball, ${countOf(total, \"run\")}$split. ${outcome.commentary}${if (freeHitNext) \" Free hit next ball.\" else \"\"}\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        val baseSummary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres)",
+      "replace": "        val baseSummary = MatchLines.ballSummary(result.outcome, result.battingDecision, swingNote, sixMetres, freeHitNext = before.format != com.cricketsim.logic.MatchFormat.TEST)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "            initialSetup = bowlingSetupMemory,\n            onSetupChanged = { bowlingSetupMemory = it },",
+      "replace": "            initialSetup = bowlingSetupMemory,\n            onSetupChanged = { bowlingSetupMemory = it },\n            freeHitFollowsNoBall = matchState.format != com.cricketsim.logic.MatchFormat.TEST,"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/PitchingScreen.kt",
+      "find": "    coach: Boolean = false\n) {\n    var step by remember { mutableStateOf(PitchStep.AIM) }",
+      "replace": "    coach: Boolean = false,\n    // False in a Test: no free hit follows a no ball (patch 149).\n    freeHitFollowsNoBall: Boolean = true\n) {\n    var step by remember { mutableStateOf(PitchStep.AIM) }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/PitchingScreen.kt",
+      "find": "                ResultStep(decision = finalDecision, onContinue = { onDeliveryResolved(finalDecision) })",
+      "replace": "                ResultStep(decision = finalDecision, freeHit = freeHitFollowsNoBall, onContinue = { onDeliveryResolved(finalDecision) })"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/PitchingScreen.kt",
+      "find": "private fun ResultStep(decision: ResolvedBowlingDecision, onContinue: () -> Unit) {",
+      "replace": "private fun ResultStep(decision: ResolvedBowlingDecision, freeHit: Boolean = true, onContinue: () -> Unit) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/PitchingScreen.kt",
+      "find": "            Text(\"No ball! You overstepped the crease. The batter gets a free hit next ball.\")",
+      "replace": "            Text(if (freeHit) \"No ball! You overstepped the crease. The batter gets a free hit next ball.\" else \"No ball! You overstepped the crease.\")"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "        if (o.isWide || o.droppedCatch) return null\n",
+      "replace": "        if (o.isWide) return null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "        val potential = if (byeTotal > 0) byeTotal else o.runs + (if (runOutBall) 1 else 0)\n",
+      "replace": "        // A catch put down (patch 149) is worth the runs it scored, and at least one he may go for.\n        val potential = if (byeTotal > 0) byeTotal else if (o.droppedCatch) maxOf(o.runs, 1) else o.runs + (if (runOutBall) 1 else 0)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "        if (potential !in 1..MAX_RUNS) return null\n",
+      "replace": "        if (potential !in 1..MAX_RUNS) return null\n\n        // A catch the fielding side put down (patch 149): he may run on it, with the fielder who dropped it closing in.\n        if (o.droppedCatch) {\n            val dropper = before.bowlingTeam.players.find { it.name == o.fielderName }\n            if (dropper != null) {\n                val spot = before.fieldPlacements.find { it.playerId == dropper.id }\n                val where = if (spot != null) \"at ${FieldingSystem.getPositionLabel(spot).lowercase()}\" else \"in the field\"\n                return RunChance(\n                    potential, false, partnerCall, before.currentBatsmen.first.name,\n                    dropper.name, where, spot?.depth ?: FieldingDepth.SHORT, dropper.fieldingRating, \"loose after the dropped catch\", noBall = o.isNoBall\n                )\n            }\n        }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    /** The chance that an EXTRA run (more than the ball is worth) ends in a run out; [extraIndex] is 1 for the first extra run, 2 for the next. */",
+      "replace": "    /** The dropped-catch line without the runs the game picked, then the runs he actually took (patch 149). */\n    private fun droppedText(original: BallOutcome, runs: Int): String {\n        val head = original.commentary.substringBefore(\" They run\").trim()\n        return head + when (runs) {\n            0 -> \" No run.\"\n            1 -> \" They run one.\"\n            2 -> \" They run two.\"\n            else -> \" They run three.\"\n        }\n    }\n\n    /** The chance that an EXTRA run (more than the ball is worth) ends in a run out; [extraIndex] is 1 for the first extra run, 2 for the next. */"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "                runs = verdict.runs, isWicket = true, dismissalType = DismissalType.RUN_OUT, isEdge = null,\n                outBatsmanId = out.id, fielderName = c.fielderName, fielderPosition = null\n            )",
+      "replace": "                runs = verdict.runs, isWicket = true, dismissalType = DismissalType.RUN_OUT, isEdge = null,\n                outBatsmanId = out.id, fielderName = c.fielderName, fielderPosition = null, droppedCatch = false\n            )"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "            isEdge = if (runOutBall) null else original.isEdge\n        )\n",
+      "replace": "            isEdge = if (runOutBall) null else original.isEdge\n        )\n        if (original.droppedCatch) return base.copy(commentary = droppedText(original, verdict.runs))\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        val result = if (resumed == null && preResult == null) autoDropped(before, simulated) else simulated\n",
+      "replace": "        val result = if (resumed == null && preResult == null) autoDropped(before, simulated) else simulated\n        // A catch the computer's fielder has just put down: the user, batting with Running between the wickets on, may run on it (patch 149).\n        if (resumed == null && preResult == null && result.outcome.droppedCatch && !simulated.outcome.droppedCatch) {\n            val dropRun = runChanceFor(before, result)\n            if (dropRun != null) {\n                pendingRun = PendingRun(before, result, dropRun)\n                return\n            }\n        }\n"
+    },
+    {
+      "op": "write",
+      "file": "TEST_FREE_HIT_AND_DROPPED_CATCH.md",
+      "content": "# Test matches: free hit, new ball and dropped catches (patch 149)\n\n1. **New ball (checked, not changed).** `TestMatch.newBallAvailable` needs the ball to be `newBallOvers` (80) overs old, counted in LEGAL balls bowled with it\n   (`matchBalls - ballStartBalls`, across innings). The Take the new ball button (Match info) and the computer's `aiShouldTakeNewBall` both depend on it, so the new ball\n   cannot be taken before 80 overs (a custom format may choose another number, or switch the new ball off).\n2. **No free hit in a Test.** `MatchState.nextFreeHit` was already false in a Test (and for any multi-day custom format, which plays as a Test). What still spoke of a free hit is now\n   switched off in a Test: the umpire's \"Free hit!\" (`MatchAudioDirector`), the commentary line \"...a free hit is coming up!\" (`CommentaryLibrary.freeHitsApply`), the last-ball\n   summary \"Free hit next ball.\" (`MatchLines.ballSummary(freeHitNext)`), and the bowler's notice after he oversteps (`PitchingScreen(freeHitFollowsNoBall)`).\n3. **Dropped catch: run on it yourself.** When Settings > Running between the wickets is on and the user is batting, a catch the computer's fielder puts down now asks him\n   whether to run (the same swipe or buttons as any ball): the fielder who dropped it is the one he is told about; the ball is worth the runs the drop scored, at least one;\n   taking them gives that, staying back gives fewer, going for more can be a run out. (`RunDecisions.build`, `MatchScreen.advanceOneBall`.)\n"
+    }
+  ]
+}
