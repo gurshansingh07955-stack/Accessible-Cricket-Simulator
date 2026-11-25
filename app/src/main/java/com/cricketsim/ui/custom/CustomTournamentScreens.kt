@@ -150,7 +150,7 @@ fun CustomTournamentsFlow(onExit: () -> Unit) {
 
         TStep.EditList -> {
             BackHandler(onBack = { step = TStep.Hub })
-            val custom = remember(version) { Customisation.customTournaments() }
+            val custom = remember(version) { Customisation.customTournaments().filter { it.series == null } }
             PageColumn {
                 BackButton { step = TStep.Hub }
                 Spacer(modifier = Modifier.height(16.dp))

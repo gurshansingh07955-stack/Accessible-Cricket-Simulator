@@ -224,7 +224,8 @@ fun CricketSimApp() {
             onSeries = { screen = Screen.Series },
             onBack = { screen = Screen.Home }
         )
-        is Screen.Series -> SeriesFlow(onExit = { screen = Screen.PlayMenu })
+        is Screen.Series -> SeriesFlow(onExit = { screen = Screen.PlayMenu }, onPlay = { seriesKind -> screen = Screen.SeriesPlay(seriesKind) })
+        is Screen.SeriesPlay -> TournamentFlow(onExit = { screen = Screen.Series }, startKind = current.kind)
         is Screen.AdvancedCustomisation -> AdvancedCustomisationFlow(onExit = { screen = Screen.Home })
         is Screen.Career -> CareerFlow(onExit = { screen = Screen.Home })
         is Screen.NetPractice -> NetPracticeFlow(onExit = { screen = Screen.Home })

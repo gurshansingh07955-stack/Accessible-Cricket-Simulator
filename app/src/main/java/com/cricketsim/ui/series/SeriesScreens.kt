@@ -47,7 +47,10 @@ import com.cricketsim.logic.SeriesRules
 import com.cricketsim.logic.SeriesTeamChoice
 import com.cricketsim.logic.Stadium
 import com.cricketsim.logic.Team
+import com.cricketsim.logic.SeriesPlay
+import com.cricketsim.persistence.MatchSaveStore
 import com.cricketsim.persistence.SeriesStore
+import com.cricketsim.persistence.TournamentSaveStore
 import com.cricketsim.ui.custom.BackButton
 import com.cricketsim.ui.custom.OptionButton
 import com.cricketsim.ui.custom.PageColumn
@@ -87,7 +90,7 @@ private enum class SeriesPage { Menu, Resume, Detail, Kind, Mode, Formats, Match
  * the buttons first.
  */
 @Composable
-fun SeriesFlow(onExit: () -> Unit) {
+fun SeriesFlow(onExit: () -> Unit, onPlay: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val store = remember { SeriesStore(context) }
@@ -162,7 +165,7 @@ fun SeriesFlow(onExit: () -> Unit) {
                 Spacer(modifier = Modifier.height(16.dp))
                 PageHeading("Resume series")
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Choose a series to read. Playing a saved series is coming in the next update; your series stay saved until then.", style = MaterialTheme.typography.bodyMedium)
+                Text("Choose a series to play or read. Your series stay saved until you delete them.", style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(16.dp))
                 val lines = remember(saved, options) { (saved ?: emptyList()).map { it to seriesLine(it, options) } }
                 lines.forEach { (s, line) ->
@@ -186,7 +189,17 @@ fun SeriesFlow(onExit: () -> Unit) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(remember(s, options, groundNames) { seriesDetail(s, options, groundNames) }, style = MaterialTheme.typography.bodyLarge)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Playing this series is coming in the next update. It stays saved here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            val def = SeriesPlay.defFor(s)
+                            Customisation.saveCustomTournament(def)
+                            onPlay("custom:" + def.id)
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                    ) { Text("Play this series") }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("You choose your team, or carry on where you stopped. The series is saved after every match.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(24.dp))
                     OutlinedButton(onClick = { askDelete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Delete this series") }
                 }
@@ -200,7 +213,13 @@ fun SeriesFlow(onExit: () -> Unit) {
                                 askDelete = false
                                 val updated = (saved ?: emptyList()).filter { it.id != s.id }
                                 saved = updated
-                                scope.launch { store.save(updated) }
+                                scope.launch {
+                                    store.save(updated)
+                                    val tid = SeriesPlay.tournamentId(s.id)
+                                    Customisation.deleteCustomTournament(tid)
+                                    TournamentSaveStore(context, "saved_tournament_$tid.json").delete()
+                                    MatchSaveStore(context, "saved_${tid}_match.json").clear()
+                                }
                                 message = "Series deleted."
                                 page = if (updated.isEmpty()) SeriesPage.Menu else SeriesPage.Resume
                             }) { Text("Delete") }

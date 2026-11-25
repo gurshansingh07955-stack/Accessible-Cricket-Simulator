@@ -1,17 +1,18 @@
-# Play series (patch 146 = part 1; playing a series is part 2)
+# Play series, part 2: playing a series (patch 147)
 
-Home > **Play match** now opens a page with two choices: **Quick match** (the setup flow the game has always had) and **Play series**.
+Play match > Play series > Resume series > open a series > **Play this series**.
 
-Play series > **New series** / **Resume series** (up to 5 series are kept, in `series.json`).
-New series asks, one page at a time: type (One vs one = 2 teams, Triangular = 3, Quadrangular = 4); Single or Multi format; the format(s)
-(Test, T20, ODI, T10, Five-over, One-over and the player's custom formats; a multi-format series needs at least two); the number of matches
-(1 to 27; for each format in a multi-format series); the teams (national teams and the player's ready custom teams); the grounds (the countries of the
-chosen teams first, a button shows the other countries; tick the grounds of each country); a summary; Save.
+A series is played by the tournament screens (same pages as every tournament: start page with Start new / Resume, choose your team from the series' teams,
+hub with Matches / Table / Venues / Stats, Playing XI, toss, live match or simulate, saved after every match, one saved series each). It does this by being a hidden
+custom tournament: `SeriesPlay.defFor(series)` makes a `CustomTournamentDef` (id `ctour_<seriesId>`) whose new field `series` is set. The player's own custom tournament lists
+filter these out (`series == null`).
 
-Part 1 does NOT play a series: a saved series can be read (Resume series) and deleted. Part 2 plays it.
+What is specific to a series (`logic/SeriesPlay.kt`, with small branches in `CustomTournaments.kt` and `MatchRules.kt`):
+- Fixtures: for each format in turn, that many matches; the pairs take turns (two teams swap home and away each match; three or four teams go round every pair, then again with home and away swapped); the ticked grounds are used in turn.
+- Stages: a single-format series has one stage ("League"); a multi-format series has one per format ("Group T20", "Group ODI"...), each with its own table.
+- Rules: each match is played by the rules of its stage's format (`SeriesPlay.rulesFor`): a Test is five days (`TestMatch.rulesForDays(5)`), a custom multi-day format keeps its own days, and a tied limited-overs match stands (no Super Over).
+- `formatFor`, `fullInningsBalls`, `baseFormatFor` and `ballsFor` now take the stage, so the simulated matches and the net run rate use the format of the match.
+- Winner: the team with most wins over the whole series; nobody if two teams share the most (a drawn series).
+- Deleting a series also deletes its tournament and its saved match.
 
-Files: `logic/Series.kt` (SeriesKind, SeriesLeg, SeriesDef, SeriesRules), `persistence/SeriesStore.kt`, `ui/series/SeriesScreens.kt` (PlayMenuScreen, SeriesFlow),
-`Screen.PlayMenu`, `Screen.Series` (MainActivity). The squads and the list of grounds are loaded off the main thread.
-
-Assumptions: the matches of a triangular or quadrangular series are shared between the teams in turn; the matches of a leg count for the whole series (not per team);
-a series name is made from its teams ("India v Australia series"); teams are saved as keys "int:<id>" / "custom:<id>".
+Not done / to check: the live Test inside a series uses the same Test code as custom multi-day formats in custom tournaments (not tried by ear or hand here); a drawn series shows no winner on the celebration screen.

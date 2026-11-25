@@ -48,6 +48,9 @@ sealed interface Screen {
     /** Play series: new series, resume series (ui/series). */
     object Series : Screen
 
+    /** A saved series being played: the tournament screens opened straight at the series' kind ("custom:<id>"). */
+    data class SeriesPlay(val kind: String) : Screen
+
     /** Step 1 of setting up a NEW match (reached from Play match > Quick match). */
     object FormatSelection : Screen
 

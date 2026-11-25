@@ -17,6 +17,7 @@ object CustomTournaments {
 
     fun introOf(id: String): String {
         val d = def(id) ?: return "This custom tournament could not be found."
+        d.series?.let { return SeriesPlay.introOf(it) }
         val format = TournamentFormats.find(d.formatKey, Customisation.customFormats())?.name ?: d.formatKey
         val s = scheduleOf(d)
         val n = d.teamKeys.size
@@ -39,6 +40,13 @@ object CustomTournaments {
     /** The teams of a saved tournament (every squad taken as the game has it now), with plain squad tags. */
     fun buildTeams(id: String): Pair<List<Team>, Map<String, SquadTag>> {
         val d = def(id) ?: return Pair(emptyList(), emptyMap())
+        // A series: its own teams (national teams and the player's custom teams), no need to build every team of the game.
+        d.series?.let { s ->
+            val seriesTeams = SeriesRules.teamsFor(s.teamKeys)
+            val seriesTags = LinkedHashMap<String, SquadTag>()
+            seriesTeams.forEach { t -> t.players.forEach { seriesTags[it.id] = SquadTag.DOMESTIC } }
+            return Pair(seriesTeams, seriesTags)
+        }
         val catalog = TeamCatalog.load().associateBy { it.key }
         val teams = d.teamKeys.mapNotNull { catalog[it]?.team }
         val tags = LinkedHashMap<String, SquadTag>()
@@ -76,6 +84,7 @@ object CustomTournaments {
     }
 
     fun buildSchedule(d: CustomTournamentDef, teamIds: List<String>, random: Random): List<TournamentFixture> {
+        d.series?.let { return SeriesPlay.schedule(it, teamIds, d.stadiumIds) }
         val ids = teamIds.shuffled(random)
         val grounds = d.stadiumIds.ifEmpty { listOf("wankhede") }
         val list = ArrayList<TournamentFixture>()
@@ -188,6 +197,7 @@ object CustomTournaments {
     /** The tables to show: one league table, or the two groups; a knockout has none. */
     fun tables(state: TournamentState): List<Pair<String, List<StandingRow>>> {
         val d = def(state.tournamentId) ?: return emptyList()
+        if (d.series != null) return SeriesPlay.tables(state)
         return when (scheduleOf(d)) {
             ScheduleType.KNOCKOUT -> emptyList()
             ScheduleType.GROUPS_SEMIS -> listOf("Group A", "Group B").filter { teamsOfStage(state, it).isNotEmpty() }.map { it to stageTable(state, it) }
@@ -198,6 +208,7 @@ object CustomTournaments {
     /** The winner of a tournament that has no Final: the team on top of the finished table. */
     fun leagueChampion(state: TournamentState): Team? {
         val d = def(state.tournamentId) ?: return null
+        if (d.series != null) return SeriesPlay.champion(state)
         val s = scheduleOf(d)
         if (s != ScheduleType.SINGLE_RR && s != ScheduleType.DOUBLE_RR) return null
         val league = state.fixtures.filter { it.stage == CplData.LEAGUE }
@@ -208,6 +219,7 @@ object CustomTournaments {
     /** Fills in the semi-finals, Final and knockout rounds as their teams become known. Safe after every match. */
     fun advance(state: TournamentState): TournamentState {
         val d = def(state.tournamentId) ?: return state
+        if (d.series != null) return state // a series has no knockout: nothing is filled in after a match
         var fx = state.fixtures
         fun complete(stage: String): Boolean {
             val l = fx.filter { it.stage == stage }

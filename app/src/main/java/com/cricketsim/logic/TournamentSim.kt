@@ -705,7 +705,7 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
             val customRules = TournamentRules.rulesFor(state.tournamentId, fixture.stage)
             simulateFirstClass(home, away, state.tags, stadium, random, customRules?.testDays ?: 4, !TournamentRules.isLeagueStage(fixture.stage), rules = customRules)
         } else {
-            simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId),
+            simulateMatch(home, away, state.tags, stadium, random, AbuDhabiT10.formatFor(state.tournamentId, fixture.stage),
                 state.tournamentId == BigBashLeague.TOURNAMENT_ID, TournamentRules.rulesFor(state.tournamentId, fixture.stage))
         }) ?: return state
         val fixtures = state.fixtures.map {

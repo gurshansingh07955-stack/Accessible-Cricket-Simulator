@@ -414,7 +414,7 @@ object CplData {
             val firstIsHome = r.firstBattingId == home
             val first = if (firstIsHome) a else b
             val second = if (firstIsHome) b else a
-            val full = AbuDhabiT10.fullInningsBalls(state.tournamentId) // 120 balls in a T20, 60 in the T10
+            val full = AbuDhabiT10.fullInningsBalls(state.tournamentId, stage) // 120 balls in a T20, 60 in the T10 (the stage matters in a multi-format series)
             val firstBalls = if (r.firstWickets >= 10) full else r.firstBalls
             val secondBalls = if (r.secondWickets >= 10) full else r.secondBalls
             first.runsFor += r.firstRuns

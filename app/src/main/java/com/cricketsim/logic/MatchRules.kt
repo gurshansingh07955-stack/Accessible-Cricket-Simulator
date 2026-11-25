@@ -70,6 +70,8 @@ object TournamentRules {
 
     /** The rules of a format key ("T20", "ODI"... or "custom:<id>"), with DRS on at its usual number of reviews and rain on. */
     fun rulesForFormat(key: String): MatchRules? {
+        // A Test of a series: five days (logic/TestMatch.kt).
+        if (key == SeriesRules.TEST_KEY) return TestMatch.rulesForDays(5)
         val format = builtIn(key)
         if (format != null) {
             return MatchRules(
@@ -129,6 +131,8 @@ object TournamentRules {
         WiDomestic.rulesFor(tournamentId, stage)?.let { return it }
         if (isCustom(tournamentId)) {
             val def = Customisation.customTournaments().find { it.id == tournamentId } ?: return null
+            // A series: the rules of the format of this stage (a series can play several formats).
+            def.series?.let { return SeriesPlay.rulesFor(it, stage) }
             val base = rulesForFormat(def.formatKey) ?: return null
             return base.copy(
                 drsReviews = if (def.drsEnabled) def.drsReviews else 0,
@@ -141,8 +145,8 @@ object TournamentRules {
     }
 
     /** The game format to play the tournament as (null = the tournament's own format, unchanged). */
-    fun baseFormatFor(tournamentId: String?): MatchFormat? = rulesFor(tournamentId)?.let { if (it.testDays > 0) MatchFormat.TEST else baseFormatForOvers(it.overs) }
+    fun baseFormatFor(tournamentId: String?, stage: String? = null): MatchFormat? = rulesFor(tournamentId, stage)?.let { if (it.testDays > 0) MatchFormat.TEST else baseFormatForOvers(it.overs) }
 
     /** Balls in a full innings, for net run rate (null = unchanged). */
-    fun ballsFor(tournamentId: String?): Int? = rulesFor(tournamentId)?.let { it.overs * 6 }
+    fun ballsFor(tournamentId: String?, stage: String? = null): Int? = rulesFor(tournamentId, stage)?.let { it.overs * 6 }
 }

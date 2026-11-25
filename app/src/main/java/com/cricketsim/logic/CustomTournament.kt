@@ -271,7 +271,9 @@ data class CustomTournamentDef(
     val drsReviews: Int = 2,
     val rainEnabled: Boolean = true,
     /** True = a tied league or group match is shared instead of going to a Super Over (knockout matches still play one). */
-    val noSuperOver: Boolean = false
+    val noSuperOver: Boolean = false,
+    /** Set for a hidden tournament that is really a series (Play match > Play series): the series it plays (logic/SeriesPlay.kt). Null for the player's own tournaments. */
+    val series: SeriesDef? = null
 ) {
     companion object {
         const val UNLIMITED_REVIEWS = 99

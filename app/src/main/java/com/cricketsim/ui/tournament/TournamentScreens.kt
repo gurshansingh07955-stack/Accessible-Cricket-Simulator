@@ -169,11 +169,11 @@ private sealed interface TPage {
 }
 
 @Composable
-fun TournamentFlow(onExit: () -> Unit) {
+fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
     val context = LocalContext.current
     // Two tournaments share this whole flow: the CPL and the IPL season. Each has its own saved
     // tournament and its own part-played-match slot, so neither can touch the other (or the normal Resume match).
-    var kind by remember { mutableStateOf("cpl") } // "cpl" or "ipl"
+    var kind by remember { mutableStateOf(startKind ?: "cpl") } // "cpl" or "ipl" (a series opens straight at its own kind, "custom:<id>")
     var iplSeason by remember { mutableStateOf(false) } // is there a saved IPL season?
     var adtSaved by remember { mutableStateOf(false) } // is there a saved Abu Dhabi T10 tournament?
     var lplSaved by remember { mutableStateOf(false) } // is there a saved Lanka Premier League tournament?
@@ -298,7 +298,7 @@ fun TournamentFlow(onExit: () -> Unit) {
     val builtReady = builtNow != null && builtNow.first == kind
     val built: Pair<List<Team>, Map<String, SquadTag>> = if (builtNow != null && builtNow.first == kind) builtNow.second else Pair(emptyList(), emptyMap())
 
-    var page by remember { mutableStateOf<TPage>(TPage.Menu) }
+    var page by remember { mutableStateOf<TPage>(if (startKind != null) TPage.Adt else TPage.Menu) }
     // The "menu open" sound for each menu-type page (not the toss, the match, the celebration or the IPL
     // pages, which play it themselves).
     val menuSoundServices = LocalGameServices.current
@@ -412,7 +412,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             val back = { page = TPage.Menu }
             BackHandler(onBack = back)
             CustomTournamentListPage(
-                defs = remember { Customisation.customTournaments() },
+                defs = remember { Customisation.customTournaments().filter { it.series == null } },
                 onOpen = { id ->
                     saved = null
                     pendingMatch = null
@@ -813,7 +813,13 @@ fun TournamentFlow(onExit: () -> Unit) {
                     loaded = false
                     kind = "cpl"
                 }
-                page = if (isCustomKind) TPage.CustomList else if (isDomestic) TPage.DomesticIn(backCountry) else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues
+                if (startKind != null) {
+                    // Opened from Play series: back leaves the tournament screens, to the series.
+                    onExit()
+                } else {
+                    page = if (isCustomKind) TPage.CustomList else if (isDomestic) TPage.DomesticIn(backCountry) else if (isWc || isCt || isAc || isAg) TPage.International else TPage.Leagues
+                }
+                Unit
             }
             BackHandler(onBack = back)
             CplPage(
@@ -1167,7 +1173,7 @@ fun TournamentFlow(onExit: () -> Unit) {
             if (stadium != null) {
                 MatchScreen(
                     tournamentName = tournamentNameForKind(kind, customId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),
-                    format = AbuDhabiT10.formatFor(saved?.tournamentId),
+                    format = AbuDhabiT10.formatFor(saved?.tournamentId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),
                     rules = TournamentRules.rulesFor(saved?.tournamentId, saved?.fixtures?.find { it.id == current.fixtureId }?.stage),
                     stadium = stadium,
                     userTeam = current.userXI,
