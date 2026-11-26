@@ -1,0 +1,111 @@
+{
+  "name": "Manual running: relay throws, direct throws from rating and distance, overthrows",
+  "message": "Running between the wickets: throws to keeper or fielder, direct hits, overthrows (patch 151)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+    "contains": "fun resolveAttempt"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    val noBall: Boolean = false\n)\n\n/** What he did: the runs he completed, and whether the next run he went for was a run out. */\nclass RunVerdict(val runs: Int, val runOut: Boolean)\n",
+      "replace": "    val noBall: Boolean = false\n) {\n    /** The wicketkeeper's name (patch 151): a throw from the deep goes to him or to [relayName] unless the fielder backs himself to hit the stumps. */\n    var keeperName: String = \"the keeper\"\n\n    /** The nearest fielder in the inner ring to the one chasing the ball (patch 151), or \"\" when there is none. */\n    var relayName: String = \"\"\n}\n\n/**\n * What he did: the runs he completed, and whether the next run he went for was a run out. Patch 151: [overthrows] are the extra runs from throws that went astray,\n * [fielder] is who broke the stumps in a run out, and [line] what was said about it.\n */\nclass RunVerdict(val runs: Int, val runOut: Boolean, val overthrows: Int = 0, val fielder: String? = null, val line: String? = null)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    /** The chance for the ball just simulated, or null if it is not a ball he runs on (a boundary, a dot, a wide, a wicket that is not a run out). */\n    fun build(before: MatchState, result: BallResult, partnerCall: Boolean): RunChance? {",
+      "replace": "    /** The chance for the ball just simulated, with the keeper and the nearest inner fielder a throw from the deep can go to (patch 151). */\n    fun build(before: MatchState, result: BallResult, partnerCall: Boolean): RunChance? {\n        val c = buildChance(before, result, partnerCall) ?: return null\n        c.keeperName = keeperOf(before.bowlingTeam)?.name ?: \"the keeper\"\n        c.relayName = relayOf(before, before.bowlingTeam.players.find { it.name == c.fielderName }?.id)\n        return c\n    }\n\n    /** The fielder of the inner ring nearest to the one chasing the ball: the man a throw from the deep can be relayed to. */\n    private fun relayOf(before: MatchState, chaserId: String?): String {\n        val keeperId = keeperOf(before.bowlingTeam)?.id\n        val chaser = before.fieldPlacements.find { it.playerId == chaserId }\n        val inner = before.fieldPlacements.filter {\n            it.playerId.isNotEmpty() && it.playerId != chaserId && it.playerId != keeperId && it.playerId != before.currentBowler.id && it.depth != FieldingDepth.DEEP\n        }\n        val pick = if (chaser == null) inner.firstOrNull() else inner.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, chaser.sector) }\n        return before.bowlingTeam.players.find { it.id == pick?.playerId }?.name ?: \"\"\n    }\n\n    /** The chance for the ball just simulated, or null if it is not a ball he runs on (a boundary, a dot, a wide, a wicket that is not a run out). */\n    private fun buildChance(before: MatchState, result: BallResult, partnerCall: Boolean): RunChance? {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    /** Does the run he sets off for, after [completed] runs, end in a run out? Runs the ball is worth are safe, except the last when the ball is a run out. */",
+      "replace": "    /** Switches the throw model (patch 151) off: false is the old behaviour, a run out is always the fielder hitting the stumps, and there are no overthrows. */\n    const val THROW_MODEL = true\n    private const val MAX_OVERTHROWS = 3\n\n    /** What the throw did: a run out (by [fielder], who broke the stumps), or not out with [overthrows] extra runs; [line] is what is said (\"\" when nothing is worth saying). */\n    class ThrowResult(val out: Boolean, val overthrows: Int, val line: String, val fielder: String?)\n\n    private fun ratingOf(c: RunChance): Double = c.fielderRating.coerceIn(0, 100) / 100.0\n\n    private fun chaserIsKeeper(c: RunChance): Boolean = c.fielderName == c.keeperName\n\n    /**\n     * How likely the fielder is to throw straight at the stumps instead of to the keeper or a fielder nearby. It comes from his confidence, his rating, and from where\n     * he is throwing from: a man in the deep mostly relays it (about one in ten with a poor arm, one in three with a great one), a man in the inner ring mostly throws\n     * at the stumps, and a man close in almost always does.\n     */\n    private fun directChance(c: RunChance): Double {\n        if (chaserIsKeeper(c)) return 0.90\n        val r = ratingOf(c)\n        return when (c.depth) {\n            FieldingDepth.DEEP -> 0.08 + 0.30 * r\n            FieldingDepth.SHORT -> 0.45 + 0.35 * r\n            FieldingDepth.CLOSE -> 0.75 + 0.20 * r\n        }\n    }\n\n    /** The chance that a throw that does not run the batter out goes astray and gives an overthrow: a wild direct throw from the deep most of all. */\n    private fun overthrowChance(c: RunChance, direct: Boolean): Double {\n        val bad = 1.0 - ratingOf(c)\n        return when (c.depth) {\n            FieldingDepth.DEEP -> if (direct) 0.08 + 0.14 * bad else 0.02\n            FieldingDepth.SHORT -> if (direct) 0.04 + 0.10 * bad else 0.015\n            FieldingDepth.CLOSE -> if (direct) 0.02 + 0.07 * bad else 0.01\n        }\n    }\n\n    /**\n     * The throw that comes in as he sets off for the run after [completed] runs (patch 151). A throw only comes once the runs the ball is worth are being\n     * completed (or at once when the fielder is close in). The fielder either throws straight at the stumps ([directChance]) or to the keeper or a fielder nearby.\n     *  - The last run of a ball that was a run out: the batter is out (the ball was simulated that way); only HOW changes: a direct hit or a relay.\n     *  - An extra run: out with the old chance ([extraRisk]), a little higher for a direct throw and lower for a relay.\n     *  - Otherwise safe, but a throw that goes astray can give an overthrow of one or two runs.\n     */\n    fun resolveAttempt(c: RunChance, completed: Int, random: Random): ThrowResult {\n        if (!THROW_MODEL) {\n            val out = attemptIsOut(c, completed, random)\n            return ThrowResult(out, 0, if (out) runOutLine(c) else \"\", if (out) c.fielderName else null)\n        }\n        val n = completed + 1\n        val throwComes = n >= c.potential || c.depth == FieldingDepth.CLOSE\n        if (!throwComes) return ThrowResult(false, 0, \"\", null)\n        val direct = random.nextDouble() < directChance(c)\n        val receiver = when {\n            chaserIsKeeper(c) -> c.relayName.ifEmpty { \"the bowler\" }\n            c.depth == FieldingDepth.DEEP && c.relayName.isNotEmpty() && random.nextDouble() < 0.6 -> c.relayName\n            else -> c.keeperName\n        }\n        val f = c.fielderName\n        val contestedLast = n == c.potential && c.dangerous\n        val contestedExtra = n > c.potential\n        val out = when {\n            contestedLast -> true\n            contestedExtra -> random.nextDouble() < (extraRisk(c, n - c.potential) * (if (direct) 1.35 else 0.85)).coerceIn(0.05, 0.90)\n            else -> false\n        }\n        if (out) {\n            val line = if (direct) {\n                if (c.depth == FieldingDepth.DEEP) \"A direct hit from the deep! $f hits the stumps and the batter is run out.\"\n                else \"No! $f hits the stumps and the batter is run out.\"\n            } else {\n                if (c.depth == FieldingDepth.DEEP) \"$f throws it in from the deep to $receiver, who breaks the stumps. The batter is run out.\"\n                else \"$f throws to $receiver, who whips off the bails. The batter is run out.\"\n            }\n            return ThrowResult(true, 0, line, if (direct) f else receiver)\n        }\n        val missed = if (!contestedExtra) \"\" else if (direct) \"$f throws at the stumps but misses.\" else \"$f throws to $receiver, but it is too late.\"\n        if (random.nextDouble() < overthrowChance(c, direct)) {\n            val extra = if (random.nextDouble() < 0.2) 2 else 1\n            val astray = if (direct) \"$f's throw at the stumps is wild. Overthrow!\" else \"$receiver cannot gather the throw. Overthrow!\"\n            return ThrowResult(false, extra, (missed + \" \" + astray + \" They take \" + (if (extra == 1) \"one more.\" else \"two more.\")).trim(), null)\n        }\n        return ThrowResult(false, 0, missed, null)\n    }\n\n    /** Does the run he sets off for, after [completed] runs, end in a run out? Runs the ball is worth are safe, except the last when the ball is a run out. */"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    fun afterRun(c: RunChance, completed: Int, last: Boolean, byButtons: Boolean = false): String {",
+      "replace": "    fun afterRun(c: RunChance, completed: Int, last: Boolean, byButtons: Boolean = false, note: String = \"\"): String {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "        if (last) return \"$done $status That is all the runs.\"",
+      "replace": "        val said = if (note.isEmpty()) \"\" else \"$note \"\n        if (last) return \"$done $said$status That is all the runs.\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "        return \"$done $status ${hint(c, completed)} $ask\"",
+      "replace": "        return \"$done $said$status ${hint(c, completed)} $ask\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    fun finalOutcome(before: MatchState, c: RunChance, original: BallOutcome, verdict: RunVerdict, random: Random = Random.Default): BallOutcome? {\n        val striker = before.currentBatsmen.first\n",
+      "replace": "    fun finalOutcome(before: MatchState, c: RunChance, original: BallOutcome, verdictIn: RunVerdict, random: Random = Random.Default): BallOutcome? {\n        // Overthrows (patch 151) are runs too: they join the runs he completed.\n        val verdict = RunVerdict(verdictIn.runs + verdictIn.overthrows, verdictIn.runOut, verdictIn.overthrows, verdictIn.fielder, verdictIn.line)\n        val overNote = if (verdict.overthrows > 0) \" Overthrow${if (verdict.overthrows > 1) \"s\" else \"\"}: ${verdict.overthrows} more run${if (verdict.overthrows > 1) \"s\" else \"\"}.\" else \"\"\n        val runsRun = verdict.runs - verdict.overthrows\n        val striker = before.currentBatsmen.first\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "                    fielderName = c.fielderName, fielderPosition = null,\n                    byes = byes, legByes = legByes, extraRuns = penalty + verdict.runs\n                )\n                return base.copy(commentary = MatchEngine.generateCommentary(base, out.name, bowlerName))",
+      "replace": "                    fielderName = verdict.fielder ?: c.fielderName, fielderPosition = null,\n                    byes = byes, legByes = legByes, extraRuns = penalty + verdict.runs\n                )\n                return base.copy(commentary = verdict.line ?: MatchEngine.generateCommentary(base, out.name, bowlerName))"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "            val note = when {\n                verdict.runs > byeTotal -> \" They steal the extra run.\"\n                verdict.runs == 0 -> if (c.partnerCall) \" You turn down the call.\" else \" The batters stay put.\"\n                else -> if (c.partnerCall) \" You turn down the call.\" else \" The batters hold back.\"\n            }\n            return base.copy(commentary = MatchEngine.generateCommentary(base, striker.name, bowlerName) + note)",
+      "replace": "            val note = when {\n                runsRun > byeTotal -> \" They steal the extra run.\"\n                runsRun == 0 && verdict.overthrows == 0 -> if (c.partnerCall) \" You turn down the call.\" else \" The batters stay put.\"\n                runsRun < byeTotal -> if (c.partnerCall) \" You turn down the call.\" else \" The batters hold back.\"\n                else -> \"\"\n            }\n            return base.copy(commentary = MatchEngine.generateCommentary(base, striker.name, bowlerName) + note + (verdict.line?.let { \" $it\" } ?: overNote))"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "            if (runOutBall) return original.copy(fielderName = c.fielderName)\n",
+      "replace": "            if (runOutBall) return original.copy(fielderName = verdict.fielder ?: c.fielderName, commentary = verdict.line ?: original.commentary)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "                outBatsmanId = out.id, fielderName = c.fielderName, fielderPosition = null, droppedCatch = false\n            )\n            return base.copy(commentary = MatchEngine.generateCommentary(base, out.name, bowlerName))",
+      "replace": "                outBatsmanId = out.id, fielderName = verdict.fielder ?: c.fielderName, fielderPosition = null, droppedCatch = false\n            )\n            return base.copy(commentary = verdict.line ?: MatchEngine.generateCommentary(base, out.name, bowlerName))"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "        if (original.droppedCatch) return base.copy(commentary = droppedText(original, verdict.runs))\n        val note = when {\n            verdict.runs > original.runs -> \" They steal the extra run.\"\n            verdict.runs < c.potential -> if (c.partnerCall) \" You turn down the call.\" else \" The batters hold back.\"\n            else -> \"\"\n        }\n        return base.copy(commentary = MatchEngine.generateCommentary(base, striker.name, bowlerName) + note)",
+      "replace": "        if (original.droppedCatch) return base.copy(commentary = droppedText(original, verdict.runs) + (verdict.line?.let { \" $it\" } ?: overNote))\n        val note = when {\n            runsRun > original.runs -> \" They steal the extra run.\"\n            runsRun < c.potential -> if (c.partnerCall) \" You turn down the call.\" else \" The batters hold back.\"\n            else -> \"\"\n        }\n        return base.copy(commentary = MatchEngine.generateCommentary(base, striker.name, bowlerName) + note + (verdict.line?.let { \" $it\" } ?: overNote))"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "    var secondsLeft by remember(chance) { mutableStateOf(0) }\n",
+      "replace": "    var secondsLeft by remember(chance) { mutableStateOf(0) }\n    // Overthrows so far, and what was said about the last throw (patch 151).\n    var overthrows by remember(chance) { mutableStateOf(0) }\n    var throwNote by remember(chance) { mutableStateOf(\"\") }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "    fun conclude(runs: Int, out: Boolean) {\n        if (finished) return\n        finished = true\n        currentOnDone(RunVerdict(runs, out))\n    }",
+      "replace": "    fun conclude(runs: Int, out: Boolean, fielder: String? = null, line: String? = null) {\n        if (finished) return\n        finished = true\n        currentOnDone(RunVerdict(runs, out, overthrows, fielder, line))\n    }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "            if (RunDecisions.attemptIsOut(chance, completed, random)) {\n                val line = RunDecisions.runOutLine(chance)\n                shown = line\n                say(line, 2000L)\n                conclude(completed, true)\n                return@launch\n            }\n            val n = completed + 1\n            if (n >= RunDecisions.maxRunsFor(chance)) {\n                val line = RunDecisions.afterRun(chance, n, true, byButtons)\n                shown = line\n                say(line, 2000L)\n                conclude(n, false)",
+      "replace": "            // The throw (patch 151): to the keeper or a fielder nearby, or straight at the stumps; it can run the batter out or go astray for overthrows.\n            val thrown = RunDecisions.resolveAttempt(chance, completed, random)\n            if (thrown.out) {\n                shown = thrown.line\n                say(thrown.line, 2500L)\n                conclude(completed, true, thrown.fielder, thrown.line)\n                return@launch\n            }\n            overthrows = (overthrows + thrown.overthrows).coerceAtMost(3)\n            throwNote = thrown.line\n            val n = completed + 1\n            if (n >= RunDecisions.maxRunsFor(chance)) {\n                val line = RunDecisions.afterRun(chance, n, true, byButtons, throwNote)\n                shown = line\n                say(line, 2500L)\n                conclude(n, false)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "        val text = if (completed == 0) RunDecisions.opening(chance, byButtons) else RunDecisions.afterRun(chance, completed, false, byButtons)",
+      "replace": "        val text = if (completed == 0) RunDecisions.opening(chance, byButtons) else RunDecisions.afterRun(chance, completed, false, byButtons, throwNote)"
+    },
+    {
+      "op": "write",
+      "file": "RUNNING_THROWS.md",
+      "content": "# Manual running: throws, relays and overthrows (patch 151)\n\nBefore, a run out was always \"the fielder hits the stumps\", even from the deep. Now (`RunDecisions.resolveAttempt`; `RunDecisions.THROW_MODEL = false` brings the old behaviour back):\n- A throw comes in once the runs the ball is worth are being completed (at once when the fielder is close in).\n- The fielder either throws **straight at the stumps** or **to the keeper or a fielder nearby**. His confidence comes from his rating and from where he throws from (`directChance`):\n  in the deep about 8% to 38% (a poor arm to a great one), in the inner ring 45% to 80%, close in 75% to 95%; the keeper almost always throws at the stumps.\n- A ball that was a run out is still a run out (it was simulated that way): only how changes, a direct hit (\"A direct hit from the deep!\") or a relay (\"throws it in from the deep to the keeper, who breaks the stumps\").\n  The credit goes to the one who broke the stumps.\n- An extra run is still a risk: the old chance (`extraRisk`), higher for a direct throw (x1.35), lower for a relay (x0.85).\n- **Overthrows**: a throw that does not run him out can go astray (`overthrowChance`: a wild direct throw from the deep most of all, then the inner ring, then close in; a relay rarely) for one run, sometimes two.\n  They are added to the runs he completed (byes stay byes), at most three a ball, and the commentary says \"Overthrow\".\n- `RunChance` now knows the keeper and the nearest inner-ring fielder (`relayName`); `RunVerdict` carries the overthrows, who broke the stumps and the words of the throw.\nNot measured: how often run outs and overthrows now happen (the run-out chance is kept near the old one; overthrows are new, about a few in a hundred throws).\n"
+    }
+  ]
+}
