@@ -1,0 +1,57 @@
+{
+  "name": "IPL auction: teams target different players in every auction",
+  "message": "IPL auction: per-auction taste, per-team rankings, random order inside sets (patch 152)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+    "contains": "const val VARIETY"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "    private class Plan(val state: IplAuctionState, val remaining: Map<String, List<AuctionPlayer>>) {\n        val memo = HashMap<String, Int>()\n    }",
+      "replace": "    private class Plan(val state: IplAuctionState, val remaining: Map<String, List<AuctionPlayer>>) {\n        val memo = HashMap<String, Int>()\n\n        /** Each team's own ranking of the players still to come in a kind (patch 152), by player id, best first. */\n        val ranking = HashMap<String, List<String>>()\n    }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "    private fun taste(teamId: String, g: String): Double {\n        val all = tasteCache.getOrPut(teamId) {\n            val r = Random(teamId.hashCode().toLong() * 7919L)\n            GROUPS.associateWith { 0.9 + 0.25 * r.nextDouble() }\n        }\n        return all.getValue(g)\n    }\n",
+      "replace": "    /**\n     * VARIETY (patch 152): how much the other teams' plans change from one auction to the next. Every auction has its own seed, but the teams used to rank the players still\n     * to come by rating alone and to have the same fixed taste, so each one chased the same targets in the same order and every simulated auction ended almost alike.\n     * With VARIETY above 0, each auction gives every team a taste of its own and its own view of who the best players still to come are (shaken by up to\n     * RANK_NOISE x VARIETY, about +-10% of a rating), and the players inside each set come up in a random order. 0 brings the old behaviour back.\n     * Not measured with the auction twin (the twin still mirrors the old rules): if teams end up too lopsided or the purses are not spent, lower VARIETY.\n     */\n    const val VARIETY = 1.0\n    private const val RANK_NOISE = 0.10\n    private var tasteSeed = Long.MIN_VALUE\n\n    private fun taste(state: IplAuctionState, teamId: String, g: String): Double {\n        val seedPart = if (VARIETY > 0.0) state.seed else 0L\n        if (tasteSeed != seedPart) {\n            tasteCache.clear()\n            tasteSeed = seedPart\n        }\n        val all = tasteCache.getOrPut(teamId) {\n            val r = Random(teamId.hashCode().toLong() * 7919L xor seedPart)\n            GROUPS.associateWith { 0.9 + 0.25 * r.nextDouble() }\n        }\n        return all.getValue(g)\n    }\n\n    /** A number from 0 to 1 that belongs to this team, this player and this auction. */\n    private fun fancy(state: IplAuctionState, teamId: String, p: AuctionPlayer): Double =\n        Random(state.seed * 31L xor (teamId.hashCode().toLong() * 7919L) xor (p.player.id.hashCode().toLong() shl 13)).nextDouble()\n\n    /** Where this team puts [p] among the players still to come in his kind: by rating, shaken by the team's own view of each player (see VARIETY). -1 if he is not there. */\n    private fun teamRank(state: IplAuctionState, plan: Plan, teamId: String, g: String, p: AuctionPlayer): Int {\n        if (VARIETY <= 0.0) return plan.remaining.getValue(g).indexOfFirst { it.player.id == p.player.id }\n        val order = plan.ranking.getOrPut(\"$teamId|$g\") {\n            plan.remaining.getValue(g)\n                .map { it to overall(it) * (1.0 + RANK_NOISE * VARIETY * (2.0 * fancy(state, teamId, it) - 1.0)) }\n                .sortedByDescending { it.second }\n                .map { it.first.player.id }\n        }\n        return order.indexOf(p.player.id)\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "        var value = marketValue(p) * factor * taste(teamId, g)",
+      "replace": "        var value = marketValue(p) * factor * taste(state, teamId, g)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "        val rank = plan.remaining.getValue(g).indexOfFirst { it.player.id == p.player.id }\n        val r = if (rank < 0) 99 else rank",
+      "replace": "        val rank = teamRank(state, plan, teamId, g, p)\n        val r = if (rank < 0) 99 else rank"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "    fun buildSets(pool: List<AuctionPlayer>): List<AuctionSet> {",
+      "replace": "    fun buildSets(pool: List<AuctionPlayer>, seed: Long = 0L): List<AuctionSet> {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "            sets.add(AuctionSet(name, players.map { it.id }))",
+      "replace": "            // The players of a set come up in a random order (patch 152), the same for the same auction.\n            val ids = players.map { it.id }\n            sets.add(AuctionSet(name, if (seed != 0L && VARIETY > 0.0) ids.shuffled(Random(seed xor name.hashCode().toLong())) else ids))"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/IplAuction.kt",
+      "find": "            sets = buildSets(pool),",
+      "replace": "            sets = buildSets(pool, seed),"
+    },
+    {
+      "op": "write",
+      "file": "AUCTION_VARIETY.md",
+      "content": "# IPL auction: different targets in every auction (patch 152)\n\nProblem: choosing the same team and pressing Simulate gave almost the same squads every time. The seed of each auction did change, but the other nine teams planned the same way every time:\nevery team ranked the players still to come by rating alone (so they all aimed at the same top names, in the same order) and each team's \"taste\" was fixed forever by its name.\nOnly a +-8% appetite moved with the seed.\n\nNow (`IplAuction.VARIETY`, 1.0; 0 = the old behaviour exactly):\n- **Taste changes with every auction** (`taste(state, ...)`): each team's liking for batters, all-rounders, keepers, fast bowlers and spinners is drawn again from the auction's seed.\n- **Each team has its own view of who is best** (`teamRank`): the ranking of the players still to come in a kind is shaken by up to +-10% of rating for every team and every player, so the targets differ team by team and auction by auction.\n- **The players inside each set come up in a random order** (`buildSets(pool, seed)`; the sets themselves and their order are unchanged).\nSaved auctions keep their own sets; the career-mode league auctions get the variety too (their seed comes from the career and season).\nNot measured: the auction twin (`tools/auction_twin.js`) still mirrors the old rules. If teams end up lopsided or purses unspent, lower VARIETY (or RANK_NOISE).\n"
+    }
+  ]
+}
