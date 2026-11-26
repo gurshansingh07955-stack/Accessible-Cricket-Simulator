@@ -23,10 +23,19 @@ class RunChance(
     val kind: Int = 0,
     /** The ball is a no ball (patch 139): he may run on it, and on a no ball only a run out can get him out. */
     val noBall: Boolean = false
-)
+) {
+    /** The wicketkeeper's name (patch 151): a throw from the deep goes to him or to [relayName] unless the fielder backs himself to hit the stumps. */
+    var keeperName: String = "the keeper"
 
-/** What he did: the runs he completed, and whether the next run he went for was a run out. */
-class RunVerdict(val runs: Int, val runOut: Boolean)
+    /** The nearest fielder in the inner ring to the one chasing the ball (patch 151), or "" when there is none. */
+    var relayName: String = ""
+}
+
+/**
+ * What he did: the runs he completed, and whether the next run he went for was a run out. Patch 151: [overthrows] are the extra runs from throws that went astray,
+ * [fielder] is who broke the stumps in a run out, and [line] what was said about it.
+ */
+class RunVerdict(val runs: Int, val runOut: Boolean, val overthrows: Int = 0, val fielder: String? = null, val line: String? = null)
 
 /**
  * Running between the wickets (patch 126, byes in patch 129). When the user is batting and a ball is worth 1, 2 or 3 runs, off the bat OR byes and leg byes,
@@ -65,8 +74,27 @@ object RunDecisions {
         FieldingSector.FINE_LEG -> "down to fine leg"
     }
 
-    /** The chance for the ball just simulated, or null if it is not a ball he runs on (a boundary, a dot, a wide, a wicket that is not a run out). */
+    /** The chance for the ball just simulated, with the keeper and the nearest inner fielder a throw from the deep can go to (patch 151). */
     fun build(before: MatchState, result: BallResult, partnerCall: Boolean): RunChance? {
+        val c = buildChance(before, result, partnerCall) ?: return null
+        c.keeperName = keeperOf(before.bowlingTeam)?.name ?: "the keeper"
+        c.relayName = relayOf(before, before.bowlingTeam.players.find { it.name == c.fielderName }?.id)
+        return c
+    }
+
+    /** The fielder of the inner ring nearest to the one chasing the ball: the man a throw from the deep can be relayed to. */
+    private fun relayOf(before: MatchState, chaserId: String?): String {
+        val keeperId = keeperOf(before.bowlingTeam)?.id
+        val chaser = before.fieldPlacements.find { it.playerId == chaserId }
+        val inner = before.fieldPlacements.filter {
+            it.playerId.isNotEmpty() && it.playerId != chaserId && it.playerId != keeperId && it.playerId != before.currentBowler.id && it.depth != FieldingDepth.DEEP
+        }
+        val pick = if (chaser == null) inner.firstOrNull() else inner.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, chaser.sector) }
+        return before.bowlingTeam.players.find { it.id == pick?.playerId }?.name ?: ""
+    }
+
+    /** The chance for the ball just simulated, or null if it is not a ball he runs on (a boundary, a dot, a wide, a wicket that is not a run out). */
+    private fun buildChance(before: MatchState, result: BallResult, partnerCall: Boolean): RunChance? {
         if (!MANUAL_RUNNING) return null
         val o = result.outcome
         val byeTotal = o.byes + o.legByes
@@ -162,6 +190,90 @@ object RunDecisions {
         return (base + (c.fielderRating - 60) / 300.0 + 0.10 * (extraIndex - 1)).coerceIn(0.12, 0.85)
     }
 
+    /** Switches the throw model (patch 151) off: false is the old behaviour, a run out is always the fielder hitting the stumps, and there are no overthrows. */
+    const val THROW_MODEL = true
+    private const val MAX_OVERTHROWS = 3
+
+    /** What the throw did: a run out (by [fielder], who broke the stumps), or not out with [overthrows] extra runs; [line] is what is said ("" when nothing is worth saying). */
+    class ThrowResult(val out: Boolean, val overthrows: Int, val line: String, val fielder: String?)
+
+    private fun ratingOf(c: RunChance): Double = c.fielderRating.coerceIn(0, 100) / 100.0
+
+    private fun chaserIsKeeper(c: RunChance): Boolean = c.fielderName == c.keeperName
+
+    /**
+     * How likely the fielder is to throw straight at the stumps instead of to the keeper or a fielder nearby. It comes from his confidence, his rating, and from where
+     * he is throwing from: a man in the deep mostly relays it (about one in ten with a poor arm, one in three with a great one), a man in the inner ring mostly throws
+     * at the stumps, and a man close in almost always does.
+     */
+    private fun directChance(c: RunChance): Double {
+        if (chaserIsKeeper(c)) return 0.90
+        val r = ratingOf(c)
+        return when (c.depth) {
+            FieldingDepth.DEEP -> 0.08 + 0.30 * r
+            FieldingDepth.SHORT -> 0.45 + 0.35 * r
+            FieldingDepth.CLOSE -> 0.75 + 0.20 * r
+        }
+    }
+
+    /** The chance that a throw that does not run the batter out goes astray and gives an overthrow: a wild direct throw from the deep most of all. */
+    private fun overthrowChance(c: RunChance, direct: Boolean): Double {
+        val bad = 1.0 - ratingOf(c)
+        return when (c.depth) {
+            FieldingDepth.DEEP -> if (direct) 0.08 + 0.14 * bad else 0.02
+            FieldingDepth.SHORT -> if (direct) 0.04 + 0.10 * bad else 0.015
+            FieldingDepth.CLOSE -> if (direct) 0.02 + 0.07 * bad else 0.01
+        }
+    }
+
+    /**
+     * The throw that comes in as he sets off for the run after [completed] runs (patch 151). A throw only comes once the runs the ball is worth are being
+     * completed (or at once when the fielder is close in). The fielder either throws straight at the stumps ([directChance]) or to the keeper or a fielder nearby.
+     *  - The last run of a ball that was a run out: the batter is out (the ball was simulated that way); only HOW changes: a direct hit or a relay.
+     *  - An extra run: out with the old chance ([extraRisk]), a little higher for a direct throw and lower for a relay.
+     *  - Otherwise safe, but a throw that goes astray can give an overthrow of one or two runs.
+     */
+    fun resolveAttempt(c: RunChance, completed: Int, random: Random): ThrowResult {
+        if (!THROW_MODEL) {
+            val out = attemptIsOut(c, completed, random)
+            return ThrowResult(out, 0, if (out) runOutLine(c) else "", if (out) c.fielderName else null)
+        }
+        val n = completed + 1
+        val throwComes = n >= c.potential || c.depth == FieldingDepth.CLOSE
+        if (!throwComes) return ThrowResult(false, 0, "", null)
+        val direct = random.nextDouble() < directChance(c)
+        val receiver = when {
+            chaserIsKeeper(c) -> c.relayName.ifEmpty { "the bowler" }
+            c.depth == FieldingDepth.DEEP && c.relayName.isNotEmpty() && random.nextDouble() < 0.6 -> c.relayName
+            else -> c.keeperName
+        }
+        val f = c.fielderName
+        val contestedLast = n == c.potential && c.dangerous
+        val contestedExtra = n > c.potential
+        val out = when {
+            contestedLast -> true
+            contestedExtra -> random.nextDouble() < (extraRisk(c, n - c.potential) * (if (direct) 1.35 else 0.85)).coerceIn(0.05, 0.90)
+            else -> false
+        }
+        if (out) {
+            val line = if (direct) {
+                if (c.depth == FieldingDepth.DEEP) "A direct hit from the deep! $f hits the stumps and the batter is run out."
+                else "No! $f hits the stumps and the batter is run out."
+            } else {
+                if (c.depth == FieldingDepth.DEEP) "$f throws it in from the deep to $receiver, who breaks the stumps. The batter is run out."
+                else "$f throws to $receiver, who whips off the bails. The batter is run out."
+            }
+            return ThrowResult(true, 0, line, if (direct) f else receiver)
+        }
+        val missed = if (!contestedExtra) "" else if (direct) "$f throws at the stumps but misses." else "$f throws to $receiver, but it is too late."
+        if (random.nextDouble() < overthrowChance(c, direct)) {
+            val extra = if (random.nextDouble() < 0.2) 2 else 1
+            val astray = if (direct) "$f's throw at the stumps is wild. Overthrow!" else "$receiver cannot gather the throw. Overthrow!"
+            return ThrowResult(false, extra, (missed + " " + astray + " They take " + (if (extra == 1) "one more." else "two more.")).trim(), null)
+        }
+        return ThrowResult(false, 0, missed, null)
+    }
+
     /** Does the run he sets off for, after [completed] runs, end in a run out? Runs the ball is worth are safe, except the last when the ball is a run out. */
     fun attemptIsOut(c: RunChance, completed: Int, random: Random): Boolean {
         val n = completed + 1
@@ -225,7 +337,7 @@ object RunDecisions {
     }
 
     /** What the phone says after a run: the runs completed, where the ball and the fielder are, the next decision (none after the last run he may take). */
-    fun afterRun(c: RunChance, completed: Int, last: Boolean, byButtons: Boolean = false): String {
+    fun afterRun(c: RunChance, completed: Int, last: Boolean, byButtons: Boolean = false, note: String = ""): String {
         val done = when (completed) {
             1 -> "One run completed."
             2 -> "Two runs completed."
@@ -237,13 +349,14 @@ object RunDecisions {
             FieldingDepth.SHORT -> "$f has picked it up ${c.fielderPosition} and is throwing it in."
             FieldingDepth.CLOSE -> "$f has the ball in his hand close in and is looking at the stumps."
         }
-        if (last) return "$done $status That is all the runs."
+        val said = if (note.isEmpty()) "" else "$note "
+        if (last) return "$done $said$status That is all the runs."
         val ask = if (c.partnerCall) {
             "${c.strikerName} calls for another. " + (if (byButtons) "Accept or refuse." else "Swipe up with two fingers to accept, down to refuse.") + " Five seconds."
         } else {
             (if (byButtons) "Choose Run or Stay." else "Swipe up with two fingers for another run, down to stay.") + " Five seconds."
         }
-        return "$done $status ${hint(c, completed)} $ask"
+        return "$done $said$status ${hint(c, completed)} $ask"
     }
 
     fun runOutLine(c: RunChance): String = "No! ${c.fielderName} hits the stumps and the batter is run out."
@@ -254,7 +367,11 @@ object RunDecisions {
      * was told about) or an extra run that failed (the runs completed stand, one of the two batters is out, as in the engine's run outs). A ball worth byes or
      * leg byes keeps them as byes or leg byes, however many he runs (patch 129).
      */
-    fun finalOutcome(before: MatchState, c: RunChance, original: BallOutcome, verdict: RunVerdict, random: Random = Random.Default): BallOutcome? {
+    fun finalOutcome(before: MatchState, c: RunChance, original: BallOutcome, verdictIn: RunVerdict, random: Random = Random.Default): BallOutcome? {
+        // Overthrows (patch 151) are runs too: they join the runs he completed.
+        val verdict = RunVerdict(verdictIn.runs + verdictIn.overthrows, verdictIn.runOut, verdictIn.overthrows, verdictIn.fielder, verdictIn.line)
+        val overNote = if (verdict.overthrows > 0) " Overthrow${if (verdict.overthrows > 1) "s" else ""}: ${verdict.overthrows} more run${if (verdict.overthrows > 1) "s" else ""}." else ""
+        val runsRun = verdict.runs - verdict.overthrows
         val striker = before.currentBatsmen.first
         val bowlerName = before.currentBowler.name
         val byeTotal = original.byes + original.legByes
@@ -267,42 +384,43 @@ object RunDecisions {
                 val out = if (random.nextBoolean()) before.currentBatsmen.first else before.currentBatsmen.second
                 val base = original.copy(
                     isWicket = true, dismissalType = DismissalType.RUN_OUT, isEdge = null, outBatsmanId = out.id,
-                    fielderName = c.fielderName, fielderPosition = null,
+                    fielderName = verdict.fielder ?: c.fielderName, fielderPosition = null,
                     byes = byes, legByes = legByes, extraRuns = penalty + verdict.runs
                 )
-                return base.copy(commentary = MatchEngine.generateCommentary(base, out.name, bowlerName))
+                return base.copy(commentary = verdict.line ?: MatchEngine.generateCommentary(base, out.name, bowlerName))
             }
             if (verdict.runs == byeTotal) return null
             val base = original.copy(byes = byes, legByes = legByes, extraRuns = penalty + verdict.runs)
             val note = when {
-                verdict.runs > byeTotal -> " They steal the extra run."
-                verdict.runs == 0 -> if (c.partnerCall) " You turn down the call." else " The batters stay put."
-                else -> if (c.partnerCall) " You turn down the call." else " The batters hold back."
+                runsRun > byeTotal -> " They steal the extra run."
+                runsRun == 0 && verdict.overthrows == 0 -> if (c.partnerCall) " You turn down the call." else " The batters stay put."
+                runsRun < byeTotal -> if (c.partnerCall) " You turn down the call." else " The batters hold back."
+                else -> ""
             }
-            return base.copy(commentary = MatchEngine.generateCommentary(base, striker.name, bowlerName) + note)
+            return base.copy(commentary = MatchEngine.generateCommentary(base, striker.name, bowlerName) + note + (verdict.line?.let { " $it" } ?: overNote))
         }
 
         val runOutBall = original.isWicket && original.dismissalType == DismissalType.RUN_OUT
         if (verdict.runOut) {
-            if (runOutBall) return original.copy(fielderName = c.fielderName)
+            if (runOutBall) return original.copy(fielderName = verdict.fielder ?: c.fielderName, commentary = verdict.line ?: original.commentary)
             val out = if (random.nextBoolean()) before.currentBatsmen.first else before.currentBatsmen.second
             val base = original.copy(
                 runs = verdict.runs, isWicket = true, dismissalType = DismissalType.RUN_OUT, isEdge = null,
-                outBatsmanId = out.id, fielderName = c.fielderName, fielderPosition = null, droppedCatch = false
+                outBatsmanId = out.id, fielderName = verdict.fielder ?: c.fielderName, fielderPosition = null, droppedCatch = false
             )
-            return base.copy(commentary = MatchEngine.generateCommentary(base, out.name, bowlerName))
+            return base.copy(commentary = verdict.line ?: MatchEngine.generateCommentary(base, out.name, bowlerName))
         }
         if (!runOutBall && verdict.runs == original.runs) return null
         val base = original.copy(
             runs = verdict.runs, isWicket = false, dismissalType = null, outBatsmanId = null, fielderName = null, fielderPosition = null,
             isEdge = if (runOutBall) null else original.isEdge
         )
-        if (original.droppedCatch) return base.copy(commentary = droppedText(original, verdict.runs))
+        if (original.droppedCatch) return base.copy(commentary = droppedText(original, verdict.runs) + (verdict.line?.let { " $it" } ?: overNote))
         val note = when {
-            verdict.runs > original.runs -> " They steal the extra run."
-            verdict.runs < c.potential -> if (c.partnerCall) " You turn down the call." else " The batters hold back."
+            runsRun > original.runs -> " They steal the extra run."
+            runsRun < c.potential -> if (c.partnerCall) " You turn down the call." else " The batters hold back."
             else -> ""
         }
-        return base.copy(commentary = MatchEngine.generateCommentary(base, striker.name, bowlerName) + note)
+        return base.copy(commentary = MatchEngine.generateCommentary(base, striker.name, bowlerName) + note + (verdict.line?.let { " $it" } ?: overNote))
     }
 }

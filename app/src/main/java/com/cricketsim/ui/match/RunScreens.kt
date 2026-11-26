@@ -65,6 +65,9 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
     var finished by remember(chance) { mutableStateOf(false) }
     var deciding by remember(chance) { mutableStateOf(false) }
     var secondsLeft by remember(chance) { mutableStateOf(0) }
+    // Overthrows so far, and what was said about the last throw (patch 151).
+    var overthrows by remember(chance) { mutableStateOf(0) }
+    var throwNote by remember(chance) { mutableStateOf("") }
     var shown by remember(chance) { mutableStateOf(RunDecisions.opening(chance, byButtons)) }
     val random = remember(chance) { kotlin.random.Random.Default }
 
@@ -91,10 +94,10 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
         }
     }
 
-    fun conclude(runs: Int, out: Boolean) {
+    fun conclude(runs: Int, out: Boolean, fielder: String? = null, line: String? = null) {
         if (finished) return
         finished = true
-        currentOnDone(RunVerdict(runs, out))
+        currentOnDone(RunVerdict(runs, out, overthrows, fielder, line))
     }
 
     fun decide(yes: Boolean, timedOut: Boolean) {
@@ -112,18 +115,21 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
             sound?.vibrate(60, 40, 160)
             shown = "Yes!"
             call("run_yes", "Yes!")
-            if (RunDecisions.attemptIsOut(chance, completed, random)) {
-                val line = RunDecisions.runOutLine(chance)
-                shown = line
-                say(line, 2000L)
-                conclude(completed, true)
+            // The throw (patch 151): to the keeper or a fielder nearby, or straight at the stumps; it can run the batter out or go astray for overthrows.
+            val thrown = RunDecisions.resolveAttempt(chance, completed, random)
+            if (thrown.out) {
+                shown = thrown.line
+                say(thrown.line, 2500L)
+                conclude(completed, true, thrown.fielder, thrown.line)
                 return@launch
             }
+            overthrows = (overthrows + thrown.overthrows).coerceAtMost(3)
+            throwNote = thrown.line
             val n = completed + 1
             if (n >= RunDecisions.maxRunsFor(chance)) {
-                val line = RunDecisions.afterRun(chance, n, true, byButtons)
+                val line = RunDecisions.afterRun(chance, n, true, byButtons, throwNote)
                 shown = line
-                say(line, 2000L)
+                say(line, 2500L)
                 conclude(n, false)
             } else {
                 // The next decision: the effect below announces it and starts the five seconds again.
@@ -137,7 +143,7 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
 
     LaunchedEffect(chance, completed) {
         if (finished) return@LaunchedEffect
-        val text = if (completed == 0) RunDecisions.opening(chance, byButtons) else RunDecisions.afterRun(chance, completed, false, byButtons)
+        val text = if (completed == 0) RunDecisions.opening(chance, byButtons) else RunDecisions.afterRun(chance, completed, false, byButtons, throwNote)
         shown = text
         secondsLeft = 0
         say(text)
