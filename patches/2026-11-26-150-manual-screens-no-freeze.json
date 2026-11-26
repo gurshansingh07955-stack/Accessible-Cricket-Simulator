@@ -1,0 +1,104 @@
+{
+  "name": "Manual running, stopping and catching screens: no more long waits on the phone's voice",
+  "message": "Manual fielding and running: shorter waits, skip the voice, sturdier PhoneSpeech (patch 150)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/audio/PhoneSpeech.kt",
+    "contains": "fun warmUp"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/audio/PhoneSpeech.kt",
+      "content": "package com.cricketsim.audio\n\nimport android.content.Context\nimport android.os.Handler\nimport android.os.Looper\nimport android.speech.tts.TextToSpeech\nimport android.speech.tts.UtteranceProgressListener\nimport java.util.Locale\n\n/**\n * The phone's own text-to-speech, ALWAYS on, with or without a screen reader (SpokenCommentary stays silent when TalkBack is running, so a call that must\n * be heard, such as the manual fielding call, cannot use it). One line at a time: a new one cuts off the old one, and [speak] says when it has finished\n * so the buzzes can start only after the voice is done. The engine is made on first use, or earlier by [warmUp].\n *\n * Patch 150 (the manual running, stopping and catching screens froze for several seconds): a caller waiting for \"finished\" is never left waiting for nothing.\n *  - A voice that failed to start (or never could) says \"finished\" at once, instead of leaving the caller to its long time-out.\n *  - A line still waiting for the engine to start is told it is over when a newer line replaces it.\n *  - Each line has its own id, so the end of an old, cut-off line cannot be taken for the end of the new one.\n *  - [warmUp] starts the engine early, so the first spoken call of a match does not wait for it to start.\n */\nclass PhoneSpeech(context: Context) : TextToSpeech.OnInitListener {\n    private val appContext = context.applicationContext\n    private val handler = Handler(Looper.getMainLooper())\n    private var tts: TextToSpeech? = null\n    private var ready = false\n    private var failed = false\n    private var pendingText: String? = null\n    private var pendingDone: (() -> Unit)? = null\n    private var onDone: (() -> Unit)? = null\n    private var counter = 0\n    private var currentUtterance: String? = null\n\n    private val listener = object : UtteranceProgressListener() {\n        override fun onStart(utteranceId: String?) {}\n        override fun onDone(utteranceId: String?) { if (utteranceId == currentUtterance) finished() }\n        @Deprecated(\"Deprecated in Java\")\n        override fun onError(utteranceId: String?) { if (utteranceId == currentUtterance) finished() }\n    }\n\n    /** Starts the engine without saying anything, so the first call does not have to wait for it. */\n    fun warmUp() {\n        if (tts == null && !failed) tts = TextToSpeech(appContext, this)\n    }\n\n    fun speak(text: String, whenDone: (() -> Unit)? = null) {\n        if (failed) {\n            // No voice on this phone: carry on without it.\n            if (whenDone != null) handler.post(whenDone)\n            return\n        }\n        val engine = tts\n        if (engine == null) {\n            dropPending()\n            pendingText = text\n            pendingDone = whenDone\n            tts = TextToSpeech(appContext, this)\n            return\n        }\n        if (!ready) {\n            dropPending()\n            pendingText = text\n            pendingDone = whenDone\n            return\n        }\n        say(engine, text, whenDone)\n    }\n\n    /** A line still waiting for the engine is replaced: its caller is told it is over, so it does not wait for a voice that will never say it. */\n    private fun dropPending() {\n        val old = pendingDone\n        pendingText = null\n        pendingDone = null\n        if (old != null) handler.post(old)\n    }\n\n    private fun say(engine: TextToSpeech, text: String, whenDone: (() -> Unit)?) {\n        onDone = whenDone\n        val id = \"cricket-fielding-\" + (++counter)\n        currentUtterance = id\n        engine.setOnUtteranceProgressListener(listener)\n        val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)\n        // The engine refused the line (it is not bound, or was shut down): nothing will be said and no callback will come.\n        if (result == TextToSpeech.ERROR) finished()\n    }\n\n    private fun finished() {\n        val callback = onDone\n        onDone = null\n        if (callback != null) handler.post(callback)\n    }\n\n    override fun onInit(status: Int) {\n        ready = status == TextToSpeech.SUCCESS\n        val text = pendingText\n        val done = pendingDone\n        pendingText = null\n        pendingDone = null\n        if (ready) {\n            tts?.setLanguage(Locale.getDefault())\n            if (text != null) say(tts ?: return, text, done)\n        } else {\n            failed = true\n            // No voice on this phone: carry on without it.\n            if (done != null) handler.post(done)\n        }\n    }\n\n    fun stop() {\n        onDone = null\n        currentUtterance = null\n        tts?.stop()\n    }\n\n    fun shutdown() {\n        onDone = null\n        currentUtterance = null\n        tts?.stop()\n        tts?.shutdown()\n        tts = null\n        ready = false\n    }\n}\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/audio/GameServices.kt",
+      "find": "val phoneSpeech = PhoneSpeech(context)",
+      "replace": "val phoneSpeech = PhoneSpeech(context).also { it.warmUp() } // started early so the first spoken call does not wait for the engine (patch 150)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "    suspend fun say(text: String) {\n        val phone = services?.phoneSpeech ?: return\n        withTimeoutOrNull(15_000L) {",
+      "replace": "    // [maxMs]: the lines that end the page are only waited for briefly (patch 150): the page used to sit still until the whole sentence had been spoken.\n    suspend fun say(text: String, maxMs: Long = 15_000L) {\n        val phone = services?.phoneSpeech ?: return\n        withTimeoutOrNull(maxMs) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "            val until = System.currentTimeMillis() + 4000L",
+      "replace": "            val until = System.currentTimeMillis() + 2500L"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "                if (timedOut) say(line) else call(\"run_no\", line)",
+      "replace": "                if (timedOut) say(line, 2000L) else call(\"run_no\", line)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "                val line = RunDecisions.runOutLine(chance)\n                shown = line\n                say(line)\n                conclude(completed, true)",
+      "replace": "                val line = RunDecisions.runOutLine(chance)\n                shown = line\n                say(line, 2000L)\n                conclude(completed, true)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "                val line = RunDecisions.afterRun(chance, n, true, byButtons)\n                shown = line\n                say(line)\n                conclude(n, false)",
+      "replace": "                val line = RunDecisions.afterRun(chance, n, true, byButtons)\n                shown = line\n                say(line, 2000L)\n                conclude(n, false)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "import kotlinx.coroutines.delay\n",
+      "replace": "import androidx.compose.runtime.snapshotFlow\nimport kotlinx.coroutines.coroutineScope\nimport kotlinx.coroutines.delay\nimport kotlinx.coroutines.flow.first\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "private const val RUN_OUT_SECOND_SWIPE_MS = 700L\n",
+      "replace": "private const val RUN_OUT_SECOND_SWIPE_MS = 700L\n\n// The longest the call is waited for before the buzzes start (patch 150).\nprivate const val ANNOUNCE_MAX_MS = 9_000L\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "    var pulsesFired by remember(chance) { mutableStateOf(0) }\n    var resolved by remember(chance) { mutableStateOf(false) }\n    var status by remember(chance) { mutableStateOf(\"The phone is telling you what to do.\") }",
+      "replace": "    var pulsesFired by remember(chance) { mutableStateOf(0) }\n    var resolved by remember(chance) { mutableStateOf(false) }\n    // A swipe or a tap while the voice is still talking cuts it short and starts the buzzes at once (patch 150).\n    var skipVoice by remember(chance) { mutableStateOf(false) }\n    var status by remember(chance) { mutableStateOf(\"The phone is telling you what to do. Swipe or tap to skip the voice.\") }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "            withTimeoutOrNull(15_000L) {\n                suspendCancellableCoroutine<Unit> { cont ->\n                    phone.speak(FullFielding.announcement(chance)) { if (cont.isActive) cont.resume(Unit) }\n                    cont.invokeOnCancellation { phone.stop() }\n                }\n            }",
+      "replace": "            // At most ANNOUNCE_MAX_MS, and a swipe or a tap cuts the voice short (patch 150): the page used to sit still, ignoring touches, while the voice finished.\n            withTimeoutOrNull(ANNOUNCE_MAX_MS) {\n                coroutineScope {\n                    val speech = launch {\n                        suspendCancellableCoroutine<Unit> { cont ->\n                            phone.speak(FullFielding.announcement(chance)) { if (cont.isActive) cont.resume(Unit) }\n                            cont.invokeOnCancellation { phone.stop() }\n                        }\n                    }\n                    val skipper = launch {\n                        snapshotFlow { skipVoice }.first { it }\n                        speech.cancel()\n                    }\n                    speech.join()\n                    skipper.cancel()\n                }\n            }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "        // A swipe before the buzzes have started is ignored (the voice is still talking).\n        if (startMs == 0L || resolved) return",
+      "replace": "        if (resolved) return\n        // A swipe before the buzzes have started cuts the voice short and starts them (patch 150).\n        if (startMs == 0L) {\n            skipVoice = true\n            return\n        }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "                    detectCatchSwipe(CATCH_SWIPE_THRESHOLD_DP.toPx()) { handleSwipe(it) }",
+      "replace": "                    detectCatchSwipe(CATCH_SWIPE_THRESHOLD_DP.toPx(), onTap = { if (startMs == 0L && !resolved) skipVoice = true }) { handleSwipe(it) }"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "private suspend fun PointerInputScope.detectCatchSwipe(thresholdPx: Float, onDirection: (IntentDirection) -> Unit) {",
+      "replace": "private suspend fun PointerInputScope.detectCatchSwipe(thresholdPx: Float, onTap: () -> Unit = {}, onDirection: (IntentDirection) -> Unit) {"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/ManualFieldingScreens.kt",
+      "find": "            if (!change.pressed) return@awaitEachGesture\n",
+      "replace": "            if (!change.pressed) {\n                if (!decided) onTap()\n                return@awaitEachGesture\n            }\n"
+    },
+    {
+      "op": "write",
+      "file": "MANUAL_SCREENS_FREEZE.md",
+      "content": "# Manual running, stopping and catching: the screen \"freezing\" for 5 or 6 seconds (patch 150)\n\nCause (read from the code; nothing can be timed here):\n- The catching and stopping screen (`CatchScreen`) says a long call in the phone's voice (the fielder, his rating, the direction, what to swipe) and IGNORED every touch until it had finished,\n  then waited a moment for the buzzes: five or six seconds in which the page looked dead.\n- The running screen waited for the whole after-run sentence to be spoken before it passed the result on (after the last run, a run out or a time-out).\n- If the phone's voice failed (not started yet, refused the line, no voice on the phone) no \"finished\" ever came, and the page waited for its long time-out. `PhoneSpeech` could also lose\n  the \"finished\" of a line that was replaced while the engine was still starting.\n\nChanges:\n- `PhoneSpeech`: a voice that fails says \"finished\" at once; a replaced waiting line is told it is over; each line has its own id; `warmUp()` starts the engine early (called by `GameServices`).\n- `CatchScreen`: the call is waited for at most 9 seconds, and a swipe or a tap while it talks cuts it short and starts the buzzes straight away.\n- `RunDecisionScreen`: the lines that end the page are waited for at most 2 seconds (the \"Yes!\"/\"No!\" clip at most 2.5); the questions still wait for their sentence, and a swipe during it still works.\nDials: `ANNOUNCE_MAX_MS` (ManualFieldingScreens.kt), the 2000 ms in RunScreens.kt.\n"
+    }
+  ]
+}
