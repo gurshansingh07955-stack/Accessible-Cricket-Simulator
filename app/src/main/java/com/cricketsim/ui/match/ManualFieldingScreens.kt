@@ -41,7 +41,10 @@ import com.cricketsim.logic.CatchOutcome
 import com.cricketsim.logic.FieldingKind
 import com.cricketsim.logic.FullFielding
 import com.cricketsim.logic.IntentDirection
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -52,6 +55,9 @@ private const val CATCH_LEAD_IN_MS_STANDARD = 550L
 private const val CATCH_LEAD_IN_MS_SCREEN_READER = 1400L
 private const val CATCH_NO_SWIPE_GRACE_INTERVALS = 2.0
 private const val RUN_OUT_SECOND_SWIPE_MS = 700L
+
+// The longest the call is waited for before the buzzes start (patch 150).
+private const val ANNOUNCE_MAX_MS = 9_000L
 private val CATCH_SWIPE_THRESHOLD_DP = 24.dp
 
 /**
@@ -77,7 +83,9 @@ fun CatchScreen(chance: CatchChance, onResolved: (CatchOutcome) -> Unit) {
     var startMs by remember(chance) { mutableStateOf(0L) }
     var pulsesFired by remember(chance) { mutableStateOf(0) }
     var resolved by remember(chance) { mutableStateOf(false) }
-    var status by remember(chance) { mutableStateOf("The phone is telling you what to do.") }
+    // A swipe or a tap while the voice is still talking cuts it short and starts the buzzes at once (patch 150).
+    var skipVoice by remember(chance) { mutableStateOf(false) }
+    var status by remember(chance) { mutableStateOf("The phone is telling you what to do. Swipe or tap to skip the voice.") }
     // A run out needs two swipes down: when the first came, and how well timed it was.
     var firstDownAt by remember(chance) { mutableStateOf(0L) }
     var firstDownActualMs by remember(chance) { mutableStateOf(0.0) }
@@ -100,10 +108,21 @@ fun CatchScreen(chance: CatchChance, onResolved: (CatchOutcome) -> Unit) {
         // 1. The call, in the phone's own voice; wait for it to end (a missing or silent voice does not hold things up for long).
         val phone = services?.phoneSpeech
         if (phone != null) {
-            withTimeoutOrNull(15_000L) {
-                suspendCancellableCoroutine<Unit> { cont ->
-                    phone.speak(FullFielding.announcement(chance)) { if (cont.isActive) cont.resume(Unit) }
-                    cont.invokeOnCancellation { phone.stop() }
+            // At most ANNOUNCE_MAX_MS, and a swipe or a tap cuts the voice short (patch 150): the page used to sit still, ignoring touches, while the voice finished.
+            withTimeoutOrNull(ANNOUNCE_MAX_MS) {
+                coroutineScope {
+                    val speech = launch {
+                        suspendCancellableCoroutine<Unit> { cont ->
+                            phone.speak(FullFielding.announcement(chance)) { if (cont.isActive) cont.resume(Unit) }
+                            cont.invokeOnCancellation { phone.stop() }
+                        }
+                    }
+                    val skipper = launch {
+                        snapshotFlow { skipVoice }.first { it }
+                        speech.cancel()
+                    }
+                    speech.join()
+                    skipper.cancel()
                 }
             }
         }
@@ -129,8 +148,12 @@ fun CatchScreen(chance: CatchChance, onResolved: (CatchOutcome) -> Unit) {
     }
 
     fun handleSwipe(direction: IntentDirection) {
-        // A swipe before the buzzes have started is ignored (the voice is still talking).
-        if (startMs == 0L || resolved) return
+        if (resolved) return
+        // A swipe before the buzzes have started cuts the voice short and starts them (patch 150).
+        if (startMs == 0L) {
+            skipVoice = true
+            return
+        }
         val actualMs = (SystemClock.elapsedRealtime() - startMs).toDouble()
         if (chance.kind == FieldingKind.RUN_OUT) {
             if (direction != IntentDirection.DOWN) {
@@ -162,7 +185,7 @@ fun CatchScreen(chance: CatchChance, onResolved: (CatchOutcome) -> Unit) {
                 .weight(1f)
                 .fillMaxWidth()
                 .pointerInput(chance) {
-                    detectCatchSwipe(CATCH_SWIPE_THRESHOLD_DP.toPx()) { handleSwipe(it) }
+                    detectCatchSwipe(CATCH_SWIPE_THRESHOLD_DP.toPx(), onTap = { if (startMs == 0L && !resolved) skipVoice = true }) { handleSwipe(it) }
                 }
                 .semantics {
                     contentDescription = when (chance.kind) {
@@ -206,7 +229,7 @@ fun CatchScreen(chance: CatchChance, onResolved: (CatchOutcome) -> Unit) {
 }
 
 /** One swipe per touch: decided the moment the first finger has moved far enough (the first finger is followed, a second one riding along is ignored). */
-private suspend fun PointerInputScope.detectCatchSwipe(thresholdPx: Float, onDirection: (IntentDirection) -> Unit) {
+private suspend fun PointerInputScope.detectCatchSwipe(thresholdPx: Float, onTap: () -> Unit = {}, onDirection: (IntentDirection) -> Unit) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         down.consume()
@@ -223,7 +246,10 @@ private suspend fun PointerInputScope.detectCatchSwipe(thresholdPx: Float, onDir
                 decided = true
                 onDirection(BattingSystem.classifyIntentDirection(dx, dy))
             }
-            if (!change.pressed) return@awaitEachGesture
+            if (!change.pressed) {
+                if (!decided) onTap()
+                return@awaitEachGesture
+            }
         }
     }
 }

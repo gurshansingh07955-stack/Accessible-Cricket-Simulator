@@ -68,9 +68,10 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
     var shown by remember(chance) { mutableStateOf(RunDecisions.opening(chance, byButtons)) }
     val random = remember(chance) { kotlin.random.Random.Default }
 
-    suspend fun say(text: String) {
+    // [maxMs]: the lines that end the page are only waited for briefly (patch 150): the page used to sit still until the whole sentence had been spoken.
+    suspend fun say(text: String, maxMs: Long = 15_000L) {
         val phone = services?.phoneSpeech ?: return
-        withTimeoutOrNull(15_000L) {
+        withTimeoutOrNull(maxMs) {
             suspendCancellableCoroutine<Unit> { cont ->
                 phone.speak(text) { if (cont.isActive) cont.resume(Unit) }
                 cont.invokeOnCancellation { phone.stop() }
@@ -82,7 +83,7 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
     // or sound effects are off. Waits until the clip has finished, so the next line does not cut it off.
     suspend fun call(clip: String, fallback: String) {
         if (sound != null && sound.playPress(clip)) {
-            val until = System.currentTimeMillis() + 4000L
+            val until = System.currentTimeMillis() + 2500L
             delay(150L)
             while (sound.isPressSpeaking() && System.currentTimeMillis() < until) delay(50L)
         } else {
@@ -104,7 +105,7 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
                 val line = if (timedOut) "Time is up. No run." else "No!"
                 sound?.vibrate(350)
                 shown = line
-                if (timedOut) say(line) else call("run_no", line)
+                if (timedOut) say(line, 2000L) else call("run_no", line)
                 conclude(completed, false)
                 return@launch
             }
@@ -114,7 +115,7 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
             if (RunDecisions.attemptIsOut(chance, completed, random)) {
                 val line = RunDecisions.runOutLine(chance)
                 shown = line
-                say(line)
+                say(line, 2000L)
                 conclude(completed, true)
                 return@launch
             }
@@ -122,7 +123,7 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
             if (n >= RunDecisions.maxRunsFor(chance)) {
                 val line = RunDecisions.afterRun(chance, n, true, byButtons)
                 shown = line
-                say(line)
+                say(line, 2000L)
                 conclude(n, false)
             } else {
                 // The next decision: the effect below announces it and starts the five seconds again.

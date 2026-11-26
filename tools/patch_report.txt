@@ -1,6 +1,6 @@
-Patch run: 45598671635
-Timestamp (UTC): 2026-11-25T10:49:49Z
+Patch run: 45733980062
+Timestamp (UTC): 2026-11-26T01:11:09Z
 Result: OK
 -----
-Patch 2026-11-25-149-test-free-hit-and-dropped-catch-runs.json
-  applied 18 operation(s) to 7 file(s)
+Patch 2026-11-26-150-manual-screens-no-freeze.json
+  applied 16 operation(s) to 5 file(s)

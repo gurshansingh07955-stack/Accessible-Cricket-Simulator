@@ -64,7 +64,7 @@ class GameServices(context: Context) {
     private val spoken = SpokenCommentary(context)
 
     /** The phone's own voice, always on (even with a screen reader): the manual fielding calls. */
-    val phoneSpeech = PhoneSpeech(context)
+    val phoneSpeech = PhoneSpeech(context).also { it.warmUp() } // started early so the first spoken call does not wait for the engine (patch 150)
 
     /** The match in progress, autosaved by the match screen (see MatchSaveStore). */
     val saves = MatchSaveStore(context)
