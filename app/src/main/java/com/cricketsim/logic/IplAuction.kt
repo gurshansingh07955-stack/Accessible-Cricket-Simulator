@@ -163,6 +163,9 @@ object IplAuction {
     /** The players still to come, per kind, best first; and each team's answer for each of them (the state does not change during a lot). */
     private class Plan(val state: IplAuctionState, val remaining: Map<String, List<AuctionPlayer>>) {
         val memo = HashMap<String, Int>()
+
+        /** Each team's own ranking of the players still to come in a kind (patch 152), by player id, best first. */
+        val ranking = HashMap<String, List<String>>()
     }
 
     private var plan: Plan? = null
@@ -186,12 +189,44 @@ object IplAuction {
         return fresh
     }
 
-    private fun taste(teamId: String, g: String): Double {
+    /**
+     * VARIETY (patch 152): how much the other teams' plans change from one auction to the next. Every auction has its own seed, but the teams used to rank the players still
+     * to come by rating alone and to have the same fixed taste, so each one chased the same targets in the same order and every simulated auction ended almost alike.
+     * With VARIETY above 0, each auction gives every team a taste of its own and its own view of who the best players still to come are (shaken by up to
+     * RANK_NOISE x VARIETY, about +-10% of a rating), and the players inside each set come up in a random order. 0 brings the old behaviour back.
+     * Not measured with the auction twin (the twin still mirrors the old rules): if teams end up too lopsided or the purses are not spent, lower VARIETY.
+     */
+    const val VARIETY = 1.0
+    private const val RANK_NOISE = 0.10
+    private var tasteSeed = Long.MIN_VALUE
+
+    private fun taste(state: IplAuctionState, teamId: String, g: String): Double {
+        val seedPart = if (VARIETY > 0.0) state.seed else 0L
+        if (tasteSeed != seedPart) {
+            tasteCache.clear()
+            tasteSeed = seedPart
+        }
         val all = tasteCache.getOrPut(teamId) {
-            val r = Random(teamId.hashCode().toLong() * 7919L)
+            val r = Random(teamId.hashCode().toLong() * 7919L xor seedPart)
             GROUPS.associateWith { 0.9 + 0.25 * r.nextDouble() }
         }
         return all.getValue(g)
+    }
+
+    /** A number from 0 to 1 that belongs to this team, this player and this auction. */
+    private fun fancy(state: IplAuctionState, teamId: String, p: AuctionPlayer): Double =
+        Random(state.seed * 31L xor (teamId.hashCode().toLong() * 7919L) xor (p.player.id.hashCode().toLong() shl 13)).nextDouble()
+
+    /** Where this team puts [p] among the players still to come in his kind: by rating, shaken by the team's own view of each player (see VARIETY). -1 if he is not there. */
+    private fun teamRank(state: IplAuctionState, plan: Plan, teamId: String, g: String, p: AuctionPlayer): Int {
+        if (VARIETY <= 0.0) return plan.remaining.getValue(g).indexOfFirst { it.player.id == p.player.id }
+        val order = plan.ranking.getOrPut("$teamId|$g") {
+            plan.remaining.getValue(g)
+                .map { it to overall(it) * (1.0 + RANK_NOISE * VARIETY * (2.0 * fancy(state, teamId, it) - 1.0)) }
+                .sortedByDescending { it.second }
+                .map { it.first.player.id }
+        }
+        return order.indexOf(p.player.id)
     }
 
     /** The most this team will pay; 0 if it will not bid at all. */
@@ -226,7 +261,7 @@ object IplAuction {
         // Keep a place for every core player still missing in the other kinds, and do not hoard one kind.
         if (squad.size + 1 + otherDeficit > IplData.MAX_SQUAD) return 0
         if (deficit == 0 && inGroup.size >= GROUP_MAX.getValue(g)) return 0
-        val rank = plan.remaining.getValue(g).indexOfFirst { it.player.id == p.player.id }
+        val rank = teamRank(state, plan, teamId, g, p)
         val r = if (rank < 0) 99 else rank
         val targetCount = deficit + EXTRA_TARGETS
         val worst = inGroup.minOfOrNull { overall(it) } ?: 0
@@ -237,7 +272,7 @@ object IplAuction {
             overall(p) >= worst + UPGRADE_MARGIN -> UPGRADE to 'U'
             else -> DEPTH to 'D'
         }
-        var value = marketValue(p) * factor * taste(teamId, g)
+        var value = marketValue(p) * factor * taste(state, teamId, g)
         if (g == "WK" && inGroup.isEmpty()) value *= 1.2
         if (p.overseas && overall(p) < OVERSEAS_ELITE) {
             if (overseasHave >= 6) value *= 0.55 else if (overseasHave >= 4) value *= 0.8
@@ -455,12 +490,14 @@ object IplAuction {
 
     // ---- Sets ---------------------------------------------------------------------------------
 
-    fun buildSets(pool: List<AuctionPlayer>): List<AuctionSet> {
+    fun buildSets(pool: List<AuctionPlayer>, seed: Long = 0L): List<AuctionSet> {
         val sets = ArrayList<AuctionSet>()
         val used = HashSet<String>()
         fun take(players: List<AuctionPlayer>, name: String) {
             if (players.isEmpty()) return
-            sets.add(AuctionSet(name, players.map { it.id }))
+            // The players of a set come up in a random order (patch 152), the same for the same auction.
+            val ids = players.map { it.id }
+            sets.add(AuctionSet(name, if (seed != 0L && VARIETY > 0.0) ids.shuffled(Random(seed xor name.hashCode().toLong())) else ids))
             players.forEach { used.add(it.id) }
         }
         take(pool.filter { it.setCode == "M1" }, "Marquee players 1")
@@ -497,7 +534,7 @@ object IplAuction {
             version = IplData.SAVE_VERSION,
             userTeamId = userTeamId,
             players = pool,
-            sets = buildSets(pool),
+            sets = buildSets(pool, seed),
             purse = IplData.TEAMS.associate { it.id to IplData.PURSE_LAKHS },
             squads = IplData.TEAMS.associate { it.id to emptyList<String>() },
             seed = seed,
