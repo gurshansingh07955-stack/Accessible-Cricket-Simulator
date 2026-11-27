@@ -528,6 +528,15 @@ private const val FIRST_CLASS_MAX_LOOPS = 20000
             if (qualifier?.result != null) setTeams("Final", table[0].team.id, winnerOf(qualifier))
             return state.copy(fixtures = fixtures)
         }
+        if (state.tournamentId == LegendsLeague.TOURNAMENT_ID) {
+            // Legends League Cricket: Semi-final 1 (1st v 4th), Semi-final 2 (2nd v 3rd), then the Final; all three at Haldwani.
+            setTeams("Semi-final 1", table[0].team.id, table[3].team.id)
+            setTeams("Semi-final 2", table[1].team.id, table[2].team.id)
+            val semi1 = stage("Semi-final 1")
+            val semi2 = stage("Semi-final 2")
+            if (semi1?.result != null && semi2?.result != null) setTeams("Final", winnerOf(semi1), winnerOf(semi2))
+            return state.copy(fixtures = fixtures)
+        }
         if (state.tournamentId == MajorLeagueCricket.TOURNAMENT_ID) {
             // Major League Cricket: Qualifier (1st v 2nd), Eliminator (3rd v 4th), Challenger (Qualifier loser v Eliminator
             // winner), Final (Qualifier winner v Challenger winner); all four at Oakland.

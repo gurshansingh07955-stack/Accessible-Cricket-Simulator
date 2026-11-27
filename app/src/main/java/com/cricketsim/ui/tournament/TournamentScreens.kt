@@ -56,6 +56,7 @@ import com.cricketsim.logic.InternationalLeagueT20
 import com.cricketsim.logic.IplSeason
 import com.cricketsim.logic.LankaPremierLeague
 import com.cricketsim.logic.MajorLeagueCricket
+import com.cricketsim.logic.LegendsLeague
 import com.cricketsim.logic.Anthems
 import com.cricketsim.logic.DomesticFc
 import com.cricketsim.logic.AusDomestic
@@ -181,6 +182,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
     var bblSaved by remember { mutableStateOf(false) } // is there a saved Big Bash League tournament?
     var mlcSaved by remember { mutableStateOf(false) } // is there a saved Major League Cricket tournament?
     var saSaved by remember { mutableStateOf(false) } // is there a saved SA20 tournament?
+    var llcSaved by remember { mutableStateOf(false) } // is there a saved Legends League Cricket tournament?
     val cplStore = remember { TournamentSaveStore(context) }
     val iplStore = remember { TournamentSaveStore(context, "saved_tournament_ipl2027.json") }
     val cplMatchStore = remember { MatchSaveStore(context, "saved_tournament_match.json") }
@@ -195,6 +197,8 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
     val bblMatchStore = remember { MatchSaveStore(context, "saved_bbl_match.json") }
     val saStore = remember { TournamentSaveStore(context, "saved_tournament_sa20_2027.json") }
     val saMatchStore = remember { MatchSaveStore(context, "saved_sa20_match.json") }
+    val llcStore = remember { TournamentSaveStore(context, "saved_tournament_llc2026.json") }
+    val llcMatchStore = remember { MatchSaveStore(context, "saved_llc_match.json") }
     val ranjiStore = remember { TournamentSaveStore(context, "saved_tournament_ranji_2026_27.json") }
     val ranjiMatchStore = remember { MatchSaveStore(context, "saved_ranji_match.json") }
     val duleepStore = remember { TournamentSaveStore(context, "saved_tournament_duleep_2026.json") }
@@ -252,8 +256,8 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
     val customId = GameTournaments.idForKind(kind)
     val customStore = remember(customId) { TournamentSaveStore(context, "saved_tournament_$customId.json") }
     val customMatchStore = remember(customId) { MatchSaveStore(context, "saved_${customId}_match.json") }
-    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; "ilt" -> iltStore; "bbl" -> bblStore; "mlc" -> mlcStore; "sa20" -> saStore; "ranji2027" -> ranjiStore; "duleep2026" -> duleepStore; "irani2026" -> iraniStore; "smat2026" -> smatStore; "vht2026" -> vhtStore; "odc2027" -> odcStore; "blast2027" -> blastStore; "cc2027" -> ccStore; "shield2026" -> shieldStore; "audc2026" -> audcStore; "sa4d2026" -> sa4dStore; "sa50c2026" -> sa50Store; "pro20c2026" -> pro20Store; "plunket2026" -> plunketStore; "ford2026" -> fordStore; "smash2026" -> smashStore; "wi4d2027" -> wi4dStore; "wi50c2026" -> wi50Store; "qeag2026" -> qeagStore; "qeas2026" -> qeasStore; "ncl2026" -> nclStore; "wc2026" -> wcStore; "ct2025" -> ctStore; "asia2025" -> acStore; "ag2026" -> agStore; else -> if (isCustomKind) customStore else cplStore }
-    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; "ilt" -> iltMatchStore; "bbl" -> bblMatchStore; "mlc" -> mlcMatchStore; "sa20" -> saMatchStore; "ranji2027" -> ranjiMatchStore; "duleep2026" -> duleepMatchStore; "irani2026" -> iraniMatchStore; "smat2026" -> smatMatchStore; "vht2026" -> vhtMatchStore; "odc2027" -> odcMatchStore; "blast2027" -> blastMatchStore; "cc2027" -> ccMatchStore; "shield2026" -> shieldMatchStore; "audc2026" -> audcMatchStore; "sa4d2026" -> sa4dMatchStore; "sa50c2026" -> sa50MatchStore; "pro20c2026" -> pro20MatchStore; "plunket2026" -> plunketMatchStore; "ford2026" -> fordMatchStore; "smash2026" -> smashMatchStore; "wi4d2027" -> wi4dMatchStore; "wi50c2026" -> wi50MatchStore; "qeag2026" -> qeagMatchStore; "qeas2026" -> qeasMatchStore; "ncl2026" -> nclMatchStore; "wc2026" -> wcMatchStore; "ct2025" -> ctMatchStore; "asia2025" -> acMatchStore; "ag2026" -> agMatchStore; else -> if (isCustomKind) customMatchStore else cplMatchStore }
+    val store = when (kind) { "ipl" -> iplStore; "adt10" -> adtStore; "lpl" -> lplStore; "ilt" -> iltStore; "bbl" -> bblStore; "mlc" -> mlcStore; "sa20" -> saStore; "llc" -> llcStore; "ranji2027" -> ranjiStore; "duleep2026" -> duleepStore; "irani2026" -> iraniStore; "smat2026" -> smatStore; "vht2026" -> vhtStore; "odc2027" -> odcStore; "blast2027" -> blastStore; "cc2027" -> ccStore; "shield2026" -> shieldStore; "audc2026" -> audcStore; "sa4d2026" -> sa4dStore; "sa50c2026" -> sa50Store; "pro20c2026" -> pro20Store; "plunket2026" -> plunketStore; "ford2026" -> fordStore; "smash2026" -> smashStore; "wi4d2027" -> wi4dStore; "wi50c2026" -> wi50Store; "qeag2026" -> qeagStore; "qeas2026" -> qeasStore; "ncl2026" -> nclStore; "wc2026" -> wcStore; "ct2025" -> ctStore; "asia2025" -> acStore; "ag2026" -> agStore; else -> if (isCustomKind) customStore else cplStore }
+    val matchStore = when (kind) { "ipl" -> iplMatchStore; "adt10" -> adtMatchStore; "lpl" -> lplMatchStore; "ilt" -> iltMatchStore; "bbl" -> bblMatchStore; "mlc" -> mlcMatchStore; "sa20" -> saMatchStore; "llc" -> llcMatchStore; "ranji2027" -> ranjiMatchStore; "duleep2026" -> duleepMatchStore; "irani2026" -> iraniMatchStore; "smat2026" -> smatMatchStore; "vht2026" -> vhtMatchStore; "odc2027" -> odcMatchStore; "blast2027" -> blastMatchStore; "cc2027" -> ccMatchStore; "shield2026" -> shieldMatchStore; "audc2026" -> audcMatchStore; "sa4d2026" -> sa4dMatchStore; "sa50c2026" -> sa50MatchStore; "pro20c2026" -> pro20MatchStore; "plunket2026" -> plunketMatchStore; "ford2026" -> fordMatchStore; "smash2026" -> smashMatchStore; "wi4d2027" -> wi4dMatchStore; "wi50c2026" -> wi50MatchStore; "qeag2026" -> qeagMatchStore; "qeas2026" -> qeasMatchStore; "ncl2026" -> nclMatchStore; "wc2026" -> wcMatchStore; "ct2025" -> ctMatchStore; "asia2025" -> acMatchStore; "ag2026" -> agMatchStore; else -> if (isCustomKind) customMatchStore else cplMatchStore }
     val scope = rememberCoroutineScope()
     val cplBuilt = remember { lazy { CplData.buildTeams() } }
     val adtBuilt = remember { lazy { AbuDhabiT10.buildTeams() } }
@@ -263,6 +267,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
     val bblBuilt = remember { lazy { BigBashLeague.buildTeams() } }
     val mlcBuilt = remember { lazy { MajorLeagueCricket.buildTeams() } }
     val saBuilt = remember { lazy { Sa20.buildTeams() } }
+    val llcBuilt = remember { lazy { LegendsLeague.buildTeams() } }
     // The Ranji squads are only built when the Ranji Trophy is opened (they are the biggest).
     val ranjiBuilt = remember { lazy { Ranji.buildTeams() } }
     val duleepBuilt = remember { lazy { DomesticFc.buildDuleep() } }
@@ -292,7 +297,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
     // the Tournament menu or a tournament was opened. The menus and lists need no squads; every other page waits behind a short "Loading" page.
     val builtHolder by produceState<Pair<String, Pair<List<Team>, Map<String, SquadTag>>>?>(null, kind, customId) {
         val k = kind
-        value = k to withContext(Dispatchers.Default) { try { when (k) { "adt10" -> adtBuilt.value; "lpl" -> lplBuilt.value; "ilt" -> iltBuilt.value; "bbl" -> bblBuilt.value; "mlc" -> mlcBuilt.value; "sa20" -> saBuilt.value; "ranji2027" -> ranjiBuilt.value; "duleep2026" -> duleepBuilt.value; "irani2026" -> iraniBuilt.value; "smat2026", "vht2026" -> whiteBallBuilt.value; "odc2027", "blast2027", "cc2027" -> countyBuilt.value; "shield2026", "audc2026" -> ausBuilt.value; "sa4d2026", "sa50c2026", "pro20c2026" -> saDomBuilt.value; "plunket2026", "ford2026", "smash2026" -> nzBuilt.value; "wi4d2027", "wi50c2026" -> wiDomBuilt.value; "qeag2026" -> PakDomestic.teamsFor(PakDomestic.GOLD_ID, pakDomBuilt.value); "qeas2026" -> PakDomestic.teamsFor(PakDomestic.SILVER_ID, pakDomBuilt.value); "ncl2026" -> bdDomBuilt.value; "wc2026" -> wcBuilt.value; "ct2025" -> ctBuilt.value; "asia2025" -> acBuilt.value; "ag2026" -> agBuilt.value; else -> if (isCustomKind) customBuilt.value else cplBuilt.value } } catch (e: Exception) { Pair(emptyList<Team>(), emptyMap<String, SquadTag>()) } }
+        value = k to withContext(Dispatchers.Default) { try { when (k) { "adt10" -> adtBuilt.value; "lpl" -> lplBuilt.value; "ilt" -> iltBuilt.value; "bbl" -> bblBuilt.value; "mlc" -> mlcBuilt.value; "sa20" -> saBuilt.value; "llc" -> llcBuilt.value; "ranji2027" -> ranjiBuilt.value; "duleep2026" -> duleepBuilt.value; "irani2026" -> iraniBuilt.value; "smat2026", "vht2026" -> whiteBallBuilt.value; "odc2027", "blast2027", "cc2027" -> countyBuilt.value; "shield2026", "audc2026" -> ausBuilt.value; "sa4d2026", "sa50c2026", "pro20c2026" -> saDomBuilt.value; "plunket2026", "ford2026", "smash2026" -> nzBuilt.value; "wi4d2027", "wi50c2026" -> wiDomBuilt.value; "qeag2026" -> PakDomestic.teamsFor(PakDomestic.GOLD_ID, pakDomBuilt.value); "qeas2026" -> PakDomestic.teamsFor(PakDomestic.SILVER_ID, pakDomBuilt.value); "ncl2026" -> bdDomBuilt.value; "wc2026" -> wcBuilt.value; "ct2025" -> ctBuilt.value; "asia2025" -> acBuilt.value; "ag2026" -> agBuilt.value; else -> if (isCustomKind) customBuilt.value else cplBuilt.value } } catch (e: Exception) { Pair(emptyList<Team>(), emptyMap<String, SquadTag>()) } }
     }
     val builtNow = builtHolder
     val builtReady = builtNow != null && builtNow.first == kind
@@ -368,6 +373,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
         bblSaved = bblStore.load() != null
         mlcSaved = mlcStore.load() != null
         saSaved = saStore.load() != null
+        llcSaved = llcStore.load() != null
     }
     LaunchedEffect(kind) {
         val tournament = store.load()
@@ -631,6 +637,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
                 bblSaved = bblSaved,
                 mlcSaved = mlcSaved,
                 saSaved = saSaved,
+                llcSaved = llcSaved,
                 onCpl = { page = TPage.Cpl },
                 onAdt = {
                     // The Abu Dhabi T10 has its own saved tournament and match slot: load them for this kind.
@@ -670,6 +677,14 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
                     pendingMatch = null
                     loaded = false
                     kind = "mlc"
+                    page = TPage.Adt
+                },
+                onLlc = {
+                    // Legends League Cricket has its own saved tournament and match slot too.
+                    saved = null
+                    pendingMatch = null
+                    loaded = false
+                    kind = "llc"
                     page = TPage.Adt
                 },
                 onSa20 = {
@@ -733,6 +748,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
             val isBbl = kind == "bbl"
             val isMlc = kind == "mlc"
             val isSa = kind == "sa20"
+            val isLlc = kind == "llc"
             val isWc = kind == "wc2026"
             val isCt = kind == "ct2025"
             val isAc = kind == "asia2025"
@@ -766,6 +782,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
                 isBbl -> BigBashLeague.TOURNAMENT_NAME
                 isMlc -> MajorLeagueCricket.TOURNAMENT_NAME
                 isSa -> Sa20.TOURNAMENT_NAME
+                isLlc -> LegendsLeague.TOURNAMENT_NAME
                 isWc -> T20WorldCup.TOURNAMENT_NAME
                 isCt -> ChampionsTrophy.TOURNAMENT_NAME
                 isAc -> AsiaCup.TOURNAMENT_NAME
@@ -797,7 +814,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
             val back = {
                 // Read before the kind is reset below: a domestic tournament returns to its own country's list.
                 val backCountry = domesticCountryOf(kind)
-                if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc || isCt || isAc || isAg || isDomestic || isCustomKind) {
+                if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isLlc || isWc || isCt || isAc || isAg || isDomestic || isCustomKind) {
                     // Back to the league list: the CPL is the tournament in hand again.
                     when {
                         isAdt -> adtSaved = saved != null
@@ -805,6 +822,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
                         isIlt -> iltSaved = saved != null
                         isBbl -> bblSaved = saved != null
                         isMlc -> mlcSaved = saved != null
+                        isLlc -> llcSaved = saved != null
                         isWc || isCt || isAc || isAg || isDomestic || isCustomKind -> Unit
                         else -> saSaved = saved != null
                     }
@@ -836,6 +854,8 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
                     isMlc -> "Major League Cricket: the six real teams and their 2026 squads, the real fixture list across Texas, " +
                         "California and the new Pomona ground, then the Qualifier, the Eliminator, the Challenger and the Final. " +
                         "At most six overseas players in your XI."
+                    isLlc -> "Legends League Cricket 2026: the six real teams of retired stars and their squads, the 15 league matches at Haldwani, " +
+                        "Coimbatore, Amritsar and Gwalior, then two semi-finals and the Final at Haldwani. There is no overseas rule: any of your players can play."
                     isSa -> "The SA20: the six real teams and their Season 5 squads, every team hosting every other at its own ground, " +
                         "then Qualifier 1, the Eliminator, Qualifier 2 and the Final at Newlands. At most four overseas players in your XI."
                     isWc -> "The ICC Men's T20 World Cup 2026: the 20 real teams and squads in their four groups, the real group fixtures across India and Sri Lanka, then the Super 8, the semi-finals and the Final at Ahmedabad."
@@ -931,7 +951,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
             }
         }
         is TPage.TeamSelect -> {
-            val back = { page = if (kind == "adt10" || kind == "lpl" || kind == "ilt" || kind == "bbl" || kind == "mlc" || kind == "sa20" || kind == "wc2026" || kind == "ct2025" || kind == "asia2025" || kind == "ag2026" || kind == "ranji2027" || kind == "duleep2026" || kind == "irani2026" || kind == "smat2026" || kind == "vht2026" || kind == "odc2027" || kind == "blast2027" || kind == "cc2027" || kind == "shield2026" || kind == "audc2026" || kind == "sa4d2026" || kind == "sa50c2026" || kind == "pro20c2026" || kind == "plunket2026" || kind == "ford2026" || kind == "smash2026" || kind == "wi4d2027" || kind == "wi50c2026" || kind == "qeag2026" || kind == "qeas2026" || kind == "ncl2026" || isCustomKind) TPage.Adt else TPage.Cpl }
+            val back = { page = if (kind == "adt10" || kind == "lpl" || kind == "ilt" || kind == "bbl" || kind == "mlc" || kind == "sa20" || kind == "llc" || kind == "wc2026" || kind == "ct2025" || kind == "asia2025" || kind == "ag2026" || kind == "ranji2027" || kind == "duleep2026" || kind == "irani2026" || kind == "smat2026" || kind == "vht2026" || kind == "odc2027" || kind == "blast2027" || kind == "cc2027" || kind == "shield2026" || kind == "audc2026" || kind == "sa4d2026" || kind == "sa50c2026" || kind == "pro20c2026" || kind == "plunket2026" || kind == "ford2026" || kind == "smash2026" || kind == "wi4d2027" || kind == "wi50c2026" || kind == "qeag2026" || kind == "qeas2026" || kind == "ncl2026" || isCustomKind) TPage.Adt else TPage.Cpl }
             BackHandler(onBack = back)
             TeamSelectPage(
                 teams = built.first,
@@ -944,6 +964,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
                         "bbl" -> BigBashLeague.newTournament(teamId, built)
                         "mlc" -> MajorLeagueCricket.newTournament(teamId, built)
                         "sa20" -> Sa20.newTournament(teamId, built)
+                        "llc" -> LegendsLeague.newTournament(teamId, built)
                         "wc2026" -> T20WorldCup.newTournament(teamId, built)
                         "ct2025" -> ChampionsTrophy.newTournament(teamId, built)
                         "asia2025" -> AsiaCup.newTournament(teamId, built)
@@ -984,7 +1005,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
             val team = built.first.find { it.id == current.teamId }
             if (team != null) {
                 SquadPage(
-                    team = team, tags = built.second, showOrigin = kind != "adt10" && kind != "wc2026" && kind != "ct2025" && kind != "asia2025" && kind != "ag2026" && kind != "ranji2027" && kind != "duleep2026" && kind != "irani2026" && kind != "smat2026" && kind != "vht2026" && kind != "odc2027" && kind != "blast2027" && kind != "cc2027" && kind != "shield2026" && kind != "audc2026" && kind != "sa4d2026" && kind != "sa50c2026" && kind != "pro20c2026" && kind != "plunket2026" && kind != "ford2026" && kind != "smash2026" && kind != "wi4d2027" && kind != "wi50c2026" && kind != "qeag2026" && kind != "qeas2026" && kind != "ncl2026" && !isCustomKind,
+                    team = team, tags = built.second, showOrigin = kind != "adt10" && kind != "llc" && kind != "wc2026" && kind != "ct2025" && kind != "asia2025" && kind != "ag2026" && kind != "ranji2027" && kind != "duleep2026" && kind != "irani2026" && kind != "smat2026" && kind != "vht2026" && kind != "odc2027" && kind != "blast2027" && kind != "cc2027" && kind != "shield2026" && kind != "audc2026" && kind != "sa4d2026" && kind != "sa50c2026" && kind != "pro20c2026" && kind != "plunket2026" && kind != "ford2026" && kind != "smash2026" && kind != "wi4d2027" && kind != "wi50c2026" && kind != "qeag2026" && kind != "qeas2026" && kind != "ncl2026" && !isCustomKind,
                     domesticLabel = when (kind) { "lpl" -> "Sri Lanka"; "bbl" -> "Australia"; "sa20" -> "South Africa"; else -> "West Indies" },
                     breakoutLabel = if (kind == "lpl") "Sri Lanka, under 23" else "Breakout player",
                     onBack = back
@@ -992,7 +1013,7 @@ fun TournamentFlow(onExit: () -> Unit, startKind: String? = null) {
             } else back()
         }
         is TPage.Hub -> {
-            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10", "lpl", "ilt", "bbl", "mlc", "sa20", "wc2026", "ct2025", "asia2025", "ag2026", "ranji2027", "duleep2026", "irani2026", "smat2026", "vht2026", "odc2027", "blast2027", "cc2027", "shield2026", "audc2026", "sa4d2026", "sa50c2026", "pro20c2026", "plunket2026", "ford2026", "smash2026", "wi4d2027", "wi50c2026", "qeag2026", "qeas2026", "ncl2026" -> TPage.Adt; else -> if (isCustomKind) TPage.Adt else TPage.Cpl } }
+            val back = { page = when (kind) { "ipl" -> TPage.Ipl; "adt10", "lpl", "ilt", "bbl", "mlc", "sa20", "llc", "wc2026", "ct2025", "asia2025", "ag2026", "ranji2027", "duleep2026", "irani2026", "smat2026", "vht2026", "odc2027", "blast2027", "cc2027", "shield2026", "audc2026", "sa4d2026", "sa50c2026", "pro20c2026", "plunket2026", "ford2026", "smash2026", "wi4d2027", "wi50c2026", "qeag2026", "qeas2026", "ncl2026" -> TPage.Adt; else -> if (isCustomKind) TPage.Adt else TPage.Cpl } }
             BackHandler(onBack = back)
             val state = saved
             if (state != null) {
@@ -1357,6 +1378,7 @@ private fun tournamentNameForKind(kind: String, customId: String, stage: String?
         "bbl" -> BigBashLeague.TOURNAMENT_NAME
         "mlc" -> MajorLeagueCricket.TOURNAMENT_NAME
         "sa20" -> Sa20.TOURNAMENT_NAME
+        "llc" -> LegendsLeague.TOURNAMENT_NAME
         "wc2026" -> T20WorldCup.TOURNAMENT_NAME
         "ct2025" -> ChampionsTrophy.TOURNAMENT_NAME
         "asia2025" -> AsiaCup.TOURNAMENT_NAME
@@ -1663,6 +1685,7 @@ private fun LeaguesPage(
     bblSaved: Boolean,
     mlcSaved: Boolean,
     saSaved: Boolean,
+    llcSaved: Boolean,
     onCpl: () -> Unit,
     onAdt: () -> Unit,
     onLpl: () -> Unit,
@@ -1670,6 +1693,7 @@ private fun LeaguesPage(
     onBbl: () -> Unit,
     onMlc: () -> Unit,
     onSa20: () -> Unit,
+    onLlc: () -> Unit,
     onIpl: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -1700,6 +1724,14 @@ private fun LeaguesPage(
                     if (saSaved) " You have a saved tournament." else "",
                 enabled = true,
                 onClick = onSa20
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ChoiceRow(
+                title = "Legends League Cricket 2026",
+                description = "The six real teams of retired stars and their squads: 15 league matches, two semi-finals and the Final." +
+                    if (llcSaved) " You have a saved tournament." else "",
+                enabled = true,
+                onClick = onLlc
             )
             Spacer(modifier = Modifier.height(12.dp))
             ChoiceRow(
@@ -2318,6 +2350,7 @@ private fun VenuesTab(state: TournamentState) {
                 BigBashLeague.TOURNAMENT_ID -> BigBashLeague.stadiums
                 MajorLeagueCricket.TOURNAMENT_ID -> MajorLeagueCricket.stadiums
                 Sa20.TOURNAMENT_ID -> Sa20.stadiums
+                LegendsLeague.TOURNAMENT_ID -> LegendsLeague.stadiums
                 Ranji.TOURNAMENT_ID -> Ranji.stadiums
                 DomesticFc.DULEEP_ID, DomesticFc.IRANI_ID -> DomesticFc.stadiumsFor(state.tournamentId)
                 DomesticWhiteBall.SMAT_ID, DomesticWhiteBall.VHT_ID -> DomesticWhiteBall.stadiumsFor(state.tournamentId)

@@ -66,6 +66,7 @@ import com.cricketsim.logic.Customisation
 import com.cricketsim.logic.InternationalLeagueT20
 import com.cricketsim.logic.LankaPremierLeague
 import com.cricketsim.logic.MajorLeagueCricket
+import com.cricketsim.logic.LegendsLeague
 import com.cricketsim.logic.Player
 import com.cricketsim.logic.PlayerProfiles
 import com.cricketsim.logic.PlayerRole
@@ -322,7 +323,8 @@ internal fun leagueGroups(): List<Pair<String, List<Team>>> {
         "International League T20" to InternationalLeagueT20.buildTeams().first,
         "Big Bash League" to BigBashLeague.buildTeams().first,
         "Major League Cricket" to MajorLeagueCricket.buildTeams().first,
-        "SA20" to Sa20.buildTeams().first
+        "SA20" to Sa20.buildTeams().first,
+        "Legends League Cricket" to LegendsLeague.buildTeams().first
     )
     LeagueGroupsCache.kept = LeagueGroupsCache.Kept(rev, built)
     return built

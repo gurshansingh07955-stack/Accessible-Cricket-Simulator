@@ -20,6 +20,7 @@ object AllStadiums {
         add(BigBashLeague.stadiums)
         add(MajorLeagueCricket.stadiums)
         add(Sa20.stadiums)
+        add(LegendsLeague.stadiums)
         add(T20WorldCup.stadiums)
         add(ChampionsTrophy.stadiums)
         add(AsiaCup.stadiums)

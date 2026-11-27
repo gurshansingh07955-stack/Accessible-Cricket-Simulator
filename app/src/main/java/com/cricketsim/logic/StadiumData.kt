@@ -245,6 +245,38 @@ object StadiumData {
             climate = StadiumClimate(0.35, 75, 22, 10, "Mild and humid with a real chance of rain.")
         ),
         Stadium(
+            id = "indira-gandhi-haldwani", name = "Indira Gandhi International Cricket Stadium", city = "Haldwani", country = "India",
+            homeTeamIds = listOf("team_ind"),
+            pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 424, dewFactor = 0.35,
+            avgT20FirstInningsScore = 170,
+            climate = StadiumClimate(0.1, 40, 24, 8, "Mild days and cool evenings, with little rain.")
+        ),
+        Stadium(
+            id = "sri-ramakrishna-coimbatore", name = "Sri Ramakrishna College of Arts and Science Ground", city = "Coimbatore", country = "India",
+            homeTeamIds = listOf("team_ind"),
+            pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 411, dewFactor = 0.4,
+            avgT20FirstInningsScore = 165,
+            climate = StadiumClimate(0.15, 55, 28, 9, "Warm conditions with a moderate chance of rain.")
+        ),
+        Stadium(
+            id = "gandhi-sports-amritsar", name = "Gandhi Sports Complex Ground", city = "Amritsar", country = "India",
+            homeTeamIds = listOf("team_ind"),
+            pitchType = PitchType.BATTING, pitchDescription = "A flat, true surface that generally favors batters.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 234, dewFactor = 0.3,
+            avgT20FirstInningsScore = 175,
+            climate = StadiumClimate(0.1, 45, 22, 9, "Mild conditions with little rain.")
+        ),
+        Stadium(
+            id = "roop-singh-gwalior", name = "Captain Roop Singh Stadium", city = "Gwalior", country = "India",
+            homeTeamIds = listOf("team_ind"),
+            pitchType = PitchType.BATTING, pitchDescription = "A flat, true surface that generally favors batters.",
+            boundarySize = BoundarySize.MEDIUM, altitudeM = 197, dewFactor = 0.35,
+            avgT20FirstInningsScore = 180,
+            climate = StadiumClimate(0.1, 40, 27, 10, "Warm and dry, with little rain.")
+        ),
+        Stadium(
             id = "sheikh-zayed", name = "Sheikh Zayed Stadium", city = "Abu Dhabi", country = "UAE",
             homeTeamIds = listOf("team_uae"),
             pitchType = PitchType.BALANCED, pitchDescription = "A fair, even contest between bat and ball.",

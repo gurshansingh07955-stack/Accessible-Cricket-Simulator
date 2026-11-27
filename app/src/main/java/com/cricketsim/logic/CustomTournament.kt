@@ -132,6 +132,7 @@ object GameTournaments {
         "bbl" -> BigBashLeague.TOURNAMENT_ID
         "mlc" -> MajorLeagueCricket.TOURNAMENT_ID
         "sa20" -> Sa20.TOURNAMENT_ID
+        "llc" -> LegendsLeague.TOURNAMENT_ID
         "wc2026" -> T20WorldCup.TOURNAMENT_ID
         "ct2025" -> ChampionsTrophy.TOURNAMENT_ID
         "asia2025" -> AsiaCup.TOURNAMENT_ID
@@ -170,6 +171,7 @@ object GameTournaments {
             GameTournament(BigBashLeague.TOURNAMENT_ID, BigBashLeague.TOURNAMENT_NAME, "T20", "League tournaments"),
             GameTournament(MajorLeagueCricket.TOURNAMENT_ID, MajorLeagueCricket.TOURNAMENT_NAME, "T20", "League tournaments"),
             GameTournament(Sa20.TOURNAMENT_ID, Sa20.TOURNAMENT_NAME, "T20", "League tournaments"),
+            GameTournament(LegendsLeague.TOURNAMENT_ID, LegendsLeague.TOURNAMENT_NAME, "T20", "League tournaments"),
             GameTournament(T20WorldCup.TOURNAMENT_ID, T20WorldCup.TOURNAMENT_NAME, "T20", "International tournaments"),
             GameTournament(ChampionsTrophy.TOURNAMENT_ID, ChampionsTrophy.TOURNAMENT_NAME, "ODI", "International tournaments"),
             GameTournament(AsiaCup.TOURNAMENT_ID, AsiaCup.TOURNAMENT_NAME, "T20", "International tournaments"),
@@ -245,7 +247,8 @@ object TeamCatalog {
             "International League T20" to InternationalLeagueT20.buildTeams().first,
             "Big Bash League" to BigBashLeague.buildTeams().first,
             "Major League Cricket" to MajorLeagueCricket.buildTeams().first,
-            "SA20" to Sa20.buildTeams().first
+            "SA20" to Sa20.buildTeams().first,
+            "Legends League Cricket" to LegendsLeague.buildTeams().first
         ).forEach { (title, teams) -> teams.forEach { out.add(entry(LEAGUE, title, it)) } }
         TeamGroups.domesticGroups().forEach { (title, teams) -> teams.forEach { out.add(entry(DOMESTIC, title, it)) } }
         Customisation.customTeamsAsTeams().forEach { out.add(entry(CUSTOM, "Custom teams", it)) }
