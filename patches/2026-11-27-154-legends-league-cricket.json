@@ -1,0 +1,238 @@
+{
+  "name": "Legends League Cricket 2026: six real teams, 15 league matches, semi-finals and Final",
+  "message": "Add the Legends League Cricket tournament, four new grounds and player profiles; wired into Advanced Customisation (patch 154)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/LegendsLeague.kt",
+    "contains": "object LegendsLeague"
+  },
+  "ops": [
+    {
+      "op": "write",
+      "file": "app/src/main/java/com/cricketsim/logic/LegendsLeague.kt",
+      "content": "package com.cricketsim.logic\n\n/**\n * Legends League Cricket 2026 (LLC season 4, 11 to 27 March 2026, India): the league of retired international and\n * veteran stars. Royal Riders Punjab won it.\n *\n *  - SIX TEAMS, the real ones: Mumbai Spartans, India Capitals, India Tigers, Konark Suryas Odisha, Southern Super\n *    Stars and Royal Riders Punjab, with the squads they finished the tournament with. (The league's own site says\n *    \"India Capitals\"; a few news sites print \"India Captains\", so the name is the one thing sources disagree on.)\n *  - THE FORMAT, as published: a single round-robin (15 league matches), then the top four play two semi-finals\n *    (1st v 4th, 2nd v 3rd) and the Final, all T20. The semi-finals and the Final were at Haldwani.\n *  - THE FIXTURES: the 15 league matches in the published order. The real tournament was disturbed (matches were\n *    moved, abandoned, or decided by walkover or disqualification), so the game plays the list as it was\n *    scheduled; the game simulates every result. The grounds of matches 14 and 15 were not published in the\n *    sources I could read (they are an assumption: Gwalior).\n *  - THE RULES used: none beyond the XI of eleven. There is no overseas rule, so every player is tagged DOMESTIC.\n *    NOT built: the league's points rules (the game's table gives 2 a win).\n *\n * Players already in the game (Ashwin, Udana) are COPIED with their ratings. Everybody else is a retired star or an\n * Indian domestic player the game did not have, so every one of them is new with ESTIMATED ratings (the nw() lines).\n * Players the early announcements named who were not in the final squads (Dhawan, Finch, Wagner, Tye and others)\n * are not included. The four grounds are new in the game (StadiumData, ratings estimated).\n * It reuses the CPL machinery as it is.\n */\nobject LegendsLeague {\n\n    const val TOURNAMENT_ID = \"llc_2026\"\n    const val TOURNAMENT_NAME = \"Legends League Cricket 2026\"\n\n    private const val HALDWANI = \"indira-gandhi-haldwani\"\n    private const val COIMBATORE = \"sri-ramakrishna-coimbatore\"\n    private const val AMRITSAR = \"gandhi-sports-amritsar\"\n    private const val GWALIOR = \"roop-singh-gwalior\"\n\n    private class NewSpec(val role: PlayerRole, val bat: Int, val bowl: Int, val style: BowlingStyle)\n    private class Slot(val name: String, val spec: NewSpec?)\n    private class TeamDef(val id: String, val name: String, val shortName: String, val code: String, val squad: List<Slot>)\n\n    private val BAT = PlayerRole.BATSMAN\n    private val BWL = PlayerRole.BOWLER\n    private val AR = PlayerRole.ALL_ROUNDER\n    private val WK = PlayerRole.WICKETKEEPER\n    private val PACE = BowlingStyle.PACE\n    private val SPIN = BowlingStyle.SPIN\n\n    private fun ex(name: String) = Slot(name, null)\n    private fun nw(name: String, role: PlayerRole, bat: Int, bowl: Int, style: BowlingStyle = PACE) =\n        Slot(name, NewSpec(role, bat, bowl, style))\n\n    private val DEFS: List<TeamDef> by lazy {\n        listOf(\n            TeamDef(\"llc_msp\", \"Mumbai Spartans\", \"Spartans\", \"MSP\", listOf(\n                nw(\"Suresh Raina\", BAT, 80, 35, SPIN), nw(\"Carlos Brathwaite\", AR, 68, 70), nw(\"S Sreesanth\", BWL, 20, 70),\n                nw(\"Manan Sharma\", AR, 55, 62, SPIN), nw(\"Chadwick Walton\", WK, 72, 10), ex(\"Isuru Udana\"),\n                nw(\"Bipul Sharma\", AR, 55, 60, SPIN), nw(\"Shoaib Khan\", BAT, 56, 15), nw(\"Bharath Chipli\", BAT, 58, 10),\n                nw(\"Amit Verma\", BAT, 60, 28, SPIN), nw(\"Subodh Bati\", AR, 52, 52), nw(\"KC Cariappa\", BWL, 18, 64, SPIN),\n                nw(\"Asad Pathan\", AR, 54, 54), nw(\"Faiz Fazal\", BAT, 62, 12), nw(\"Ishwar Choudhury\", BWL, 20, 58),\n                nw(\"Jaykishan Kolsawala\", BAT, 54, 10)\n            )),\n            TeamDef(\"llc_inc\", \"India Capitals\", \"Capitals\", \"INC\", listOf(\n                nw(\"Irfan Pathan\", AR, 62, 76), nw(\"Hashim Amla\", BAT, 86, 10), nw(\"Lahiru Thirimanne\", BAT, 68, 20),\n                nw(\"Hamilton Masakadza\", BAT, 72, 22), nw(\"Parvinder Awana\", BWL, 18, 70), nw(\"Asela Gunaratne\", AR, 60, 56),\n                nw(\"Iqbal Abdullah\", AR, 50, 70, SPIN), nw(\"Shreevats Goswami\", WK, 72, 10), nw(\"Diwesh Pathania\", AR, 55, 55),\n                nw(\"Baltej Singh Dhanda\", BWL, 20, 60), nw(\"Abhishek Sakuja\", AR, 55, 62, SPIN), nw(\"Priyank Panchal\", BAT, 68, 10),\n                nw(\"Kuldeep Hooda\", AR, 56, 56, SPIN), nw(\"Robin Bist\", BAT, 66, 20), nw(\"Rajesh Bishnoi\", BWL, 18, 62, SPIN),\n                nw(\"Sheldon Jackson\", WK, 72, 10)\n            )),\n            TeamDef(\"llc_ing\", \"India Tigers\", \"Tigers\", \"ING\", listOf(\n                nw(\"Chris Gayle\", BAT, 88, 40, SPIN), nw(\"Robin Uthappa\", WK, 78, 10), nw(\"Tillakaratne Dilshan\", AR, 80, 48, SPIN),\n                nw(\"Pawan Negi\", AR, 60, 66, SPIN), nw(\"Amitoze Singh\", AR, 56, 56), nw(\"Akalanka Ganegama\", AR, 60, 60),\n                nw(\"Samit Patel\", AR, 66, 72, SPIN), nw(\"Shahbaz Nadeem\", BWL, 28, 68, SPIN), nw(\"Ambati Rayudu\", BAT, 74, 15, SPIN),\n                nw(\"Jeevan Mendis\", AR, 62, 60, SPIN), nw(\"Milinda Siriwardana\", AR, 60, 62, SPIN), nw(\"Thilan Thushara\", BWL, 20, 62),\n                nw(\"Abhimanyu Mithun\", BWL, 22, 68), nw(\"Shadab Jakati\", AR, 50, 66, SPIN), nw(\"Abu Nechim\", BWL, 18, 66),\n                nw(\"Kirk Edwards\", BAT, 66, 10), nw(\"Kamau Leverock\", BWL, 15, 66), nw(\"Sumit Singh\", BWL, 22, 60),\n                nw(\"Amit Paunikar\", BAT, 60, 10)\n            )),\n            TeamDef(\"llc_kso\", \"Konark Suryas Odisha\", \"Suryas\", \"KSO\", listOf(\n                ex(\"Ravichandran Ashwin\"), nw(\"Ben Dunk\", WK, 78, 10), nw(\"Ross Taylor\", BAT, 84, 15, SPIN),\n                nw(\"Piyush Chawla\", BWL, 17, 63, SPIN), nw(\"Chanderpaul Hemraj\", BAT, 62, 12), nw(\"Miguel Cummins\", BWL, 20, 70),\n                nw(\"Jermaine Blackwood\", BAT, 68, 10), nw(\"Lasith Lakshan\", AR, 52, 56), nw(\"Kennar Lewis\", BAT, 60, 10),\n                nw(\"Jesal Karia\", BWL, 18, 62, SPIN), nw(\"Rayad Emrit\", AR, 56, 64), nw(\"Ankit Rajpoot\", BWL, 20, 66),\n                nw(\"Surain Thakar\", BAT, 56, 10), nw(\"Akshay Wakhre\", BWL, 25, 62, SPIN), nw(\"Imtiaz Ahmad\", AR, 52, 54),\n                nw(\"Vikas Tokas\", BWL, 20, 60), nw(\"Monu Kumar\", BWL, 20, 60), nw(\"Rituraj Rajeev Singh\", BAT, 54, 10),\n                nw(\"Junaid Siddiqui\", BWL, 20, 58), nw(\"Malinda Pushpakumara\", BWL, 20, 68, SPIN), nw(\"Chirag Gandhi\", BAT, 60, 10)\n            )),\n            TeamDef(\"llc_sss\", \"Southern Super Stars\", \"Super Stars\", \"SSS\", listOf(\n                nw(\"Harbhajan Singh\", BWL, 40, 84, SPIN), nw(\"Martin Guptill\", BAT, 86, 12, SPIN), nw(\"Dinesh Karthik\", WK, 78, 10),\n                nw(\"Saurabh Tiwary\", BAT, 66, 10), nw(\"Dilshan Munaweera\", BAT, 64, 10), nw(\"Waqarullah Ishaq\", WK, 62, 10),\n                nw(\"Hamid Hassan\", BWL, 15, 72), nw(\"Sarabjit Ladda\", AR, 50, 62), nw(\"Sidharth Trivedi\", BWL, 20, 68),\n                nw(\"Rahul Yadav\", BAT, 56, 10), nw(\"Sudeep Tyagi\", BWL, 20, 66), nw(\"Adeesha Thilanchana\", AR, 52, 58)\n            )),\n            TeamDef(\"llc_rrp\", \"Royal Riders Punjab\", \"Riders\", \"RRP\", listOf(\n                nw(\"Thisara Perera\", AR, 72, 70), nw(\"Cheteshwar Pujara\", BAT, 66, 8, SPIN), nw(\"Rishi Dhawan\", AR, 62, 62),\n                nw(\"Angelo Perera\", BAT, 68, 15), nw(\"Chaturanga de Silva\", AR, 60, 60, SPIN), nw(\"Trevon Griffith\", BAT, 58, 10),\n                nw(\"Seekkuge Prasanna\", AR, 62, 62, SPIN), nw(\"Asghar Afghan\", BAT, 66, 20), nw(\"Mark Deyal\", AR, 54, 54),\n                nw(\"William Perkins\", AR, 52, 52), nw(\"Anureet Singh\", BWL, 20, 64), nw(\"Farman Ahmed\", BWL, 20, 58),\n                nw(\"Ayaan Khan\", AR, 52, 54), nw(\"Mohammad Shahzad\", WK, 74, 10), nw(\"Pawan Suyal\", BWL, 22, 66),\n                nw(\"Sarul Kanwar\", BAT, 56, 10), nw(\"Aftab Alam\", BWL, 18, 70), nw(\"Samiullah Shinwari\", AR, 62, 60, SPIN)\n            ))\n        )\n    }\n\n    fun isTeam(teamId: String): Boolean = DEFS.any { it.id == teamId }\n\n    fun shortNameOrNull(teamId: String): String? = DEFS.find { it.id == teamId }?.shortName\n\n    val stadiums: List<Stadium> by lazy {\n        listOf(HALDWANI, COIMBATORE, AMRITSAR, GWALIOR).mapNotNull { StadiumData.getStadiumById(it) }\n    }\n\n    fun stadium(id: String): Stadium? = stadiums.find { it.id == id }\n\n    private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' }\n\n    private fun avg(values: List<Int>): Int = if (values.isEmpty()) 50 else values.average().toInt().coerceIn(1, 100)\n\n    /** The six teams (strongest first). Everybody is tagged DOMESTIC: no squad rule applies. */\n    fun buildTeams(): Pair<List<Team>, Map<String, SquadTag>> {\n        val roster = CricketData.getAllTeams().flatMap { it.players }.associateBy { norm(it.name) }\n        val tags = LinkedHashMap<String, SquadTag>()\n        val teams = DEFS.map { def ->\n            val players = def.squad.mapIndexed { index, slot ->\n                val id = \"${def.id}_${index + 1}\"\n                val base = if (slot.spec == null) roster[norm(slot.name)] else null\n                val player = if (base != null) {\n                    base.copy(id = id, teamId = def.id, name = slot.name)\n                } else {\n                    val s = slot.spec ?: NewSpec(PlayerRole.BATSMAN, 60, 20, BowlingStyle.PACE)\n                    Player(\n                        id = id, teamId = def.id, name = slot.name, role = PlayerProfiles.role(slot.name, s.role),\n                        battingRating = s.bat, bowlingRating = s.bowl,\n                        fieldingRating = CricketData.deriveFieldingRating(PlayerProfiles.role(slot.name, s.role), s.bat, s.bowl),\n                        bowlingStyle = PlayerProfiles.style(slot.name, s.style)\n                    )\n                }\n                tags[id] = SquadTag.DOMESTIC\n                player\n            }.sortedByDescending { maxOf(it.battingRating, it.bowlingRating) }\n            Team(\n                id = def.id, name = def.name, countryCode = def.code,\n                battingRating = avg(players.map { it.battingRating }.sortedDescending().take(8)),\n                bowlingRating = avg(players.map { it.bowlingRating }.sortedDescending().take(5)),\n                fieldingRating = avg(players.map { it.fieldingRating }),\n                players = players\n            )\n        }\n        return Customisation.applyToBuilt(Pair(teams, tags), true)\n    }\n\n    // M Mumbai Spartans, C India Capitals, T India Tigers, K Konark Suryas Odisha, S Southern Super Stars, R Royal Riders Punjab.\n    private class LeagueMatch(val code: String, val ground: String)\n\n    private val LEAGUE_MATCHES = listOf(\n        LeagueMatch(\"M C\", HALDWANI), LeagueMatch(\"R T\", HALDWANI), LeagueMatch(\"K S\", COIMBATORE), LeagueMatch(\"M T\", HALDWANI),\n        LeagueMatch(\"K R\", COIMBATORE), LeagueMatch(\"C S\", AMRITSAR), LeagueMatch(\"R S\", AMRITSAR), LeagueMatch(\"M K\", GWALIOR),\n        LeagueMatch(\"C T\", COIMBATORE), LeagueMatch(\"M S\", GWALIOR), LeagueMatch(\"K T\", AMRITSAR), LeagueMatch(\"C R\", GWALIOR),\n        LeagueMatch(\"S T\", AMRITSAR), LeagueMatch(\"K C\", GWALIOR), LeagueMatch(\"M R\", GWALIOR)\n    )\n\n    private val TEAM_OF = mapOf('M' to \"llc_msp\", 'C' to \"llc_inc\", 'T' to \"llc_ing\", 'K' to \"llc_kso\", 'S' to \"llc_sss\", 'R' to \"llc_rrp\")\n\n    /** The 15 league matches in the published order, then Semi-final 1, Semi-final 2 and the Final, all at Haldwani. */\n    fun buildSchedule(): List<TournamentFixture> {\n        val fixtures = ArrayList<TournamentFixture>()\n        LEAGUE_MATCHES.forEachIndexed { index, m ->\n            val p = m.code.split(\" \")\n            fixtures.add(TournamentFixture(index, index + 1, CplData.LEAGUE, TEAM_OF.getValue(p[0][0]), TEAM_OF.getValue(p[1][0]), m.ground))\n        }\n        var next = fixtures.size\n        fun playoff(stage: String, note: String) {\n            fixtures.add(TournamentFixture(next, next + 1, stage, null, null, HALDWANI, placeholder = note))\n            next++\n        }\n        playoff(\"Semi-final 1\", \"1st v 4th in the table\")\n        playoff(\"Semi-final 2\", \"2nd v 3rd in the table\")\n        playoff(\"Final\", \"Winners of the two semi-finals\")\n        return fixtures\n    }\n\n    fun newTournament(userTeamId: String, built: Pair<List<Team>, Map<String, SquadTag>>): TournamentState =\n        TournamentState(\n            version = CplData.SAVE_VERSION,\n            tournamentId = TOURNAMENT_ID,\n            name = TOURNAMENT_NAME,\n            userTeamId = userTeamId,\n            teams = built.first,\n            tags = built.second,\n            fixtures = buildSchedule(),\n            playerStats = emptyMap(),\n            createdAt = System.currentTimeMillis()\n        )\n}\n",
+      "mustNotExist": true
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/StadiumData.kt",
+      "find": "        Stadium(\n            id = \"sheikh-zayed\",",
+      "replace": "        Stadium(\n            id = \"indira-gandhi-haldwani\", name = \"Indira Gandhi International Cricket Stadium\", city = \"Haldwani\", country = \"India\",\n            homeTeamIds = listOf(\"team_ind\"),\n            pitchType = PitchType.BALANCED, pitchDescription = \"A fair, even contest between bat and ball.\",\n            boundarySize = BoundarySize.MEDIUM, altitudeM = 424, dewFactor = 0.35,\n            avgT20FirstInningsScore = 170,\n            climate = StadiumClimate(0.1, 40, 24, 8, \"Mild days and cool evenings, with little rain.\")\n        ),\n        Stadium(\n            id = \"sri-ramakrishna-coimbatore\", name = \"Sri Ramakrishna College of Arts and Science Ground\", city = \"Coimbatore\", country = \"India\",\n            homeTeamIds = listOf(\"team_ind\"),\n            pitchType = PitchType.BALANCED, pitchDescription = \"A fair, even contest between bat and ball.\",\n            boundarySize = BoundarySize.MEDIUM, altitudeM = 411, dewFactor = 0.4,\n            avgT20FirstInningsScore = 165,\n            climate = StadiumClimate(0.15, 55, 28, 9, \"Warm conditions with a moderate chance of rain.\")\n        ),\n        Stadium(\n            id = \"gandhi-sports-amritsar\", name = \"Gandhi Sports Complex Ground\", city = \"Amritsar\", country = \"India\",\n            homeTeamIds = listOf(\"team_ind\"),\n            pitchType = PitchType.BATTING, pitchDescription = \"A flat, true surface that generally favors batters.\",\n            boundarySize = BoundarySize.MEDIUM, altitudeM = 234, dewFactor = 0.3,\n            avgT20FirstInningsScore = 175,\n            climate = StadiumClimate(0.1, 45, 22, 9, \"Mild conditions with little rain.\")\n        ),\n        Stadium(\n            id = \"roop-singh-gwalior\", name = \"Captain Roop Singh Stadium\", city = \"Gwalior\", country = \"India\",\n            homeTeamIds = listOf(\"team_ind\"),\n            pitchType = PitchType.BATTING, pitchDescription = \"A flat, true surface that generally favors batters.\",\n            boundarySize = BoundarySize.MEDIUM, altitudeM = 197, dewFactor = 0.35,\n            avgT20FirstInningsScore = 180,\n            climate = StadiumClimate(0.1, 40, 27, 10, \"Warm and dry, with little rain.\")\n        ),\n        Stadium(\n            id = \"sheikh-zayed\","
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/PlayerProfiles.kt",
+      "find": "Salman Irshad|R|b7|-|-\n\"\"\"\n    )\n}",
+      "replace": "Salman Irshad|R|b7|-|-\n\"\"\",\n        \"\"\"\nSuresh Raina|L|b11|-|-\nCarlos Brathwaite|R|b7|-|-\nS Sreesanth|R|b7|-|-\nManan Sharma|L|b4|-|-\nChadwick Walton|R|-|-|-\nBipul Sharma|L|b4|-|-\nAmit Verma|L|b8|-|-\nKC Cariappa|R|b8|-|-\nIrfan Pathan|L|b3|-|-\nHashim Amla|R|-|-|-\nLahiru Thirimanne|L|b9|-|-\nHamilton Masakadza|R|b9|-|-\nParvinder Awana|R|b7|-|-\nAsela Gunaratne|R|b9|-|-\nIqbal Abdullah|L|b4|-|-\nShreevats Goswami|L|b9|-|-\nAbhishek Sakuja|L|b4|-|-\nPriyank Panchal|R|b9|-|-\nChris Gayle|L|b11|-|-\nRobin Uthappa|R|-|-|-\nTillakaratne Dilshan|R|b11|-|-\nPawan Negi|L|b4|-|-\nSamit Patel|R|b4|-|-\nShahbaz Nadeem|R|b4|-|-\nAmbati Rayudu|R|b11|-|-\nJeevan Mendis|R|b8|-|-\nMilinda Siriwardana|L|b4|-|-\nAbhimanyu Mithun|R|b7|-|-\nShadab Jakati|-|b4|-|-\nKirk Edwards|R|-|-|-\nBen Dunk|L|-|-|-\nRoss Taylor|R|b11|-|-\nPiyush Chawla|R|b8|-|-\nChanderpaul Hemraj|L|-|-|-\nMiguel Cummins|R|b6|-|-\nJermaine Blackwood|R|-|-|-\nJesal Karia|R|b8|-|-\nRayad Emrit|R|b7|-|-\nAnkit Rajpoot|R|b7|-|-\nAkshay Wakhre|R|b11|-|-\nMalinda Pushpakumara|-|b4|-|-\nHarbhajan Singh|R|b11|-|-\nMartin Guptill|R|b11|-|-\nDinesh Karthik|R|-|-|-\nSaurabh Tiwary|L|-|-|-\nDilshan Munaweera|L|-|-|-\nHamid Hassan|R|b6|-|-\nSidharth Trivedi|R|b7|-|-\nSudeep Tyagi|R|b7|-|-\nSarabjit Ladda|R|b9|-|-\nThisara Perera|L|b10|-|-\nCheteshwar Pujara|R|b8|-|-\nRishi Dhawan|R|b9|-|-\nAngelo Perera|L|-|-|-\nSeekkuge Prasanna|R|b8|-|-\nAsghar Afghan|R|b9|-|-\nAnureet Singh|R|b7|-|-\nMohammad Shahzad|R|-|-|-\nPawan Suyal|R|b10|-|-\nAftab Alam|R|b6|-|-\nSamiullah Shinwari|R|b8|-|-\n\"\"\"\n    )\n}"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/TournamentSim.kt",
+      "find": "        if (state.tournamentId == MajorLeagueCricket.TOURNAMENT_ID) {\n",
+      "replace": "        if (state.tournamentId == LegendsLeague.TOURNAMENT_ID) {\n            // Legends League Cricket: Semi-final 1 (1st v 4th), Semi-final 2 (2nd v 3rd), then the Final; all three at Haldwani.\n            setTeams(\"Semi-final 1\", table[0].team.id, table[3].team.id)\n            setTeams(\"Semi-final 2\", table[1].team.id, table[2].team.id)\n            val semi1 = stage(\"Semi-final 1\")\n            val semi2 = stage(\"Semi-final 2\")\n            if (semi1?.result != null && semi2?.result != null) setTeams(\"Final\", winnerOf(semi1), winnerOf(semi2))\n            return state.copy(fixtures = fixtures)\n        }\n        if (state.tournamentId == MajorLeagueCricket.TOURNAMENT_ID) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "Sa20.stadium(id) ?: Ranji.stadium(id)",
+      "replace": "Sa20.stadium(id) ?: LegendsLeague.stadium(id) ?: Ranji.stadium(id)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "?: Sa20.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId)",
+      "replace": "?: Sa20.shortNameOrNull(teamId) ?: LegendsLeague.shortNameOrNull(teamId) ?: Ranji.shortNameOrNull(teamId)"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/Tournament.kt",
+      "find": "        else if (Sa20.isTeam(teamId)) Sa20.homeGround(teamId)\n",
+      "replace": "        else if (Sa20.isTeam(teamId)) Sa20.homeGround(teamId)\n        else if (LegendsLeague.isTeam(teamId)) \"\" // the Legends League teams have no home ground\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/AllStadiums.kt",
+      "find": "        add(Sa20.stadiums)\n",
+      "replace": "        add(Sa20.stadiums)\n        add(LegendsLeague.stadiums)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "        \"sa20\" -> Sa20.TOURNAMENT_ID\n",
+      "replace": "        \"sa20\" -> Sa20.TOURNAMENT_ID\n        \"llc\" -> LegendsLeague.TOURNAMENT_ID\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "            GameTournament(Sa20.TOURNAMENT_ID, Sa20.TOURNAMENT_NAME, \"T20\", \"League tournaments\"),\n",
+      "replace": "            GameTournament(Sa20.TOURNAMENT_ID, Sa20.TOURNAMENT_NAME, \"T20\", \"League tournaments\"),\n            GameTournament(LegendsLeague.TOURNAMENT_ID, LegendsLeague.TOURNAMENT_NAME, \"T20\", \"League tournaments\"),\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CustomTournament.kt",
+      "find": "            \"SA20\" to Sa20.buildTeams().first\n",
+      "replace": "            \"SA20\" to Sa20.buildTeams().first,\n            \"Legends League Cricket\" to LegendsLeague.buildTeams().first\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "import com.cricketsim.logic.MajorLeagueCricket\n",
+      "replace": "import com.cricketsim.logic.MajorLeagueCricket\nimport com.cricketsim.logic.LegendsLeague\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/custom/CustomTeamsScreens.kt",
+      "find": "        \"SA20\" to Sa20.buildTeams().first\n",
+      "replace": "        \"SA20\" to Sa20.buildTeams().first,\n        \"Legends League Cricket\" to LegendsLeague.buildTeams().first\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "import com.cricketsim.logic.MajorLeagueCricket\n",
+      "replace": "import com.cricketsim.logic.MajorLeagueCricket\nimport com.cricketsim.logic.LegendsLeague\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    var saSaved by remember { mutableStateOf(false) } // is there a saved SA20 tournament?\n",
+      "replace": "    var saSaved by remember { mutableStateOf(false) } // is there a saved SA20 tournament?\n    var llcSaved by remember { mutableStateOf(false) } // is there a saved Legends League Cricket tournament?\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val saMatchStore = remember { MatchSaveStore(context, \"saved_sa20_match.json\") }\n",
+      "replace": "    val saMatchStore = remember { MatchSaveStore(context, \"saved_sa20_match.json\") }\n    val llcStore = remember { TournamentSaveStore(context, \"saved_tournament_llc2026.json\") }\n    val llcMatchStore = remember { MatchSaveStore(context, \"saved_llc_match.json\") }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa20\" -> saStore;",
+      "replace": "\"sa20\" -> saStore; \"llc\" -> llcStore;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa20\" -> saMatchStore;",
+      "replace": "\"sa20\" -> saMatchStore; \"llc\" -> llcMatchStore;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    val saBuilt = remember { lazy { Sa20.buildTeams() } }\n",
+      "replace": "    val saBuilt = remember { lazy { Sa20.buildTeams() } }\n    val llcBuilt = remember { lazy { LegendsLeague.buildTeams() } }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"sa20\" -> saBuilt.value;",
+      "replace": "\"sa20\" -> saBuilt.value; \"llc\" -> llcBuilt.value;"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        saSaved = saStore.load() != null\n",
+      "replace": "        saSaved = saStore.load() != null\n        llcSaved = llcStore.load() != null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                saSaved = saSaved,\n",
+      "replace": "                saSaved = saSaved,\n                llcSaved = llcSaved,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onSa20 = {\n",
+      "replace": "                onLlc = {\n                    // Legends League Cricket has its own saved tournament and match slot too.\n                    saved = null\n                    pendingMatch = null\n                    loaded = false\n                    kind = \"llc\"\n                    page = TPage.Adt\n                },\n                onSa20 = {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "            val isSa = kind == \"sa20\"\n",
+      "replace": "            val isSa = kind == \"sa20\"\n            val isLlc = kind == \"llc\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                isSa -> Sa20.TOURNAMENT_NAME\n",
+      "replace": "                isSa -> Sa20.TOURNAMENT_NAME\n                isLlc -> LegendsLeague.TOURNAMENT_NAME\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                    isSa -> \"The SA20: the six real teams and their Season 5 squads, every team hosting every other at its own ground, \" +\n",
+      "replace": "                    isLlc -> \"Legends League Cricket 2026: the six real teams of retired stars and their squads, the 15 league matches at Haldwani, \" +\n                        \"Coimbatore, Amritsar and Gwalior, then two semi-finals and the Final at Haldwani. There is no overseas rule: any of your players can play.\"\n                    isSa -> \"The SA20: the six real teams and their Season 5 squads, every team hosting every other at its own ground, \" +\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isWc",
+      "replace": "if (isAdt || isLpl || isIlt || isBbl || isMlc || isSa || isLlc || isWc"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        isMlc -> mlcSaved = saved != null\n",
+      "replace": "                        isMlc -> mlcSaved = saved != null\n                        isLlc -> llcSaved = saved != null\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "kind == \"sa20\" || kind == \"wc2026\" || kind == \"ct2025\"",
+      "replace": "kind == \"sa20\" || kind == \"llc\" || kind == \"wc2026\" || kind == \"ct2025\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                        \"sa20\" -> Sa20.newTournament(teamId, built)\n",
+      "replace": "                        \"sa20\" -> Sa20.newTournament(teamId, built)\n                        \"llc\" -> LegendsLeague.newTournament(teamId, built)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "showOrigin = kind != \"adt10\" && kind != \"wc2026\"",
+      "replace": "showOrigin = kind != \"adt10\" && kind != \"llc\" && kind != \"wc2026\""
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "\"mlc\", \"sa20\", \"wc2026\",",
+      "replace": "\"mlc\", \"sa20\", \"llc\", \"wc2026\","
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "        \"sa20\" -> Sa20.TOURNAMENT_NAME\n",
+      "replace": "        \"sa20\" -> Sa20.TOURNAMENT_NAME\n        \"llc\" -> LegendsLeague.TOURNAMENT_NAME\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    saSaved: Boolean,\n",
+      "replace": "    saSaved: Boolean,\n    llcSaved: Boolean,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "    onSa20: () -> Unit,\n",
+      "replace": "    onSa20: () -> Unit,\n    onLlc: () -> Unit,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                onClick = onSa20\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n",
+      "replace": "                onClick = onSa20\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n            ChoiceRow(\n                title = \"Legends League Cricket 2026\",\n                description = \"The six real teams of retired stars and their squads: 15 league matches, two semi-finals and the Final.\" +\n                    if (llcSaved) \" You have a saved tournament.\" else \"\",\n                enabled = true,\n                onClick = onLlc\n            )\n            Spacer(modifier = Modifier.height(12.dp))\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/tournament/TournamentScreens.kt",
+      "find": "                Sa20.TOURNAMENT_ID -> Sa20.stadiums\n",
+      "replace": "                Sa20.TOURNAMENT_ID -> Sa20.stadiums\n                LegendsLeague.TOURNAMENT_ID -> LegendsLeague.stadiums\n"
+    },
+    {
+      "op": "write",
+      "file": "LEGENDS_LEAGUE.md",
+      "content": "# Legends League Cricket 2026\n\nThe league of retired international and veteran stars (LLC season 4, 11 to 27 March 2026, India; Royal Riders Punjab won it), built the same way as the other real leagues (SA20, Major League Cricket and so on). Tournament > League tournaments > Legends League Cricket 2026.\n\n* **Teams** (`logic/LegendsLeague.kt`): Mumbai Spartans, India Capitals, India Tigers, Konark Suryas Odisha, Southern Super Stars, Royal Riders Punjab, with the squads they finished with (12 to 21 players). The league's own site says \"India Capitals\"; some news sites print \"India Captains\".\n* **Format**: 15 league matches (a single round robin, in the published order), then Semi-final 1 (1st v 4th), Semi-final 2 (2nd v 3rd) and the Final, T20, 18 matches in all. The game's table gives 2 points a win.\n* **Grounds** (new in the game, ratings estimated, in `StadiumData.kt`): Haldwani, Coimbatore, Amritsar, Gwalior. The semi-finals and the Final are at Haldwani. The grounds of league matches 14 and 15 were not published in the sources read: Gwalior is an assumption.\n* **Rules**: none beyond an XI of eleven. No overseas rule (every player is tagged DOMESTIC).\n* **Players**: Ashwin and Isuru Udana were already in the game and keep their ratings. All other players are new with **estimated ratings** (the `nw(...)` lines), and their hand and bowling style are in `PlayerProfiles.kt`. Players named early but not in the final squads (Dhawan, Finch, Wagner, Tye and others) are not included.\n* **Advanced Customisation**: the league is in Edit teams (League teams tab), Add players from other teams, Reset game teams, the custom-tournament team picker and Edit Tournament. A player edited in a league team changes only that team.\n* **Not built**: the real results (the real tournament had walkovers and disqualifications; the game simulates every result), the league's points rules, career-mode offers from this league.\n",
+      "mustNotExist": true
+    }
+  ]
+}
