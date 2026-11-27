@@ -89,18 +89,16 @@ object MatchLines {
 
     /**
      * The batting side's chance of winning, from MatchEngine's own
-     * calculateWinProbability. Second innings only: in the first
-     * innings that function returns a constant 50, which would just be
-     * noise. Not on the web's match screen (it only uses this number to
-     * drive the crowd-tension audio) — added here on request. It is a
-     * deliberately coarse heuristic (five required-run-rate bands,
-     * scaled down when few wickets are left), so it moves in steps
-     * rather than smoothly.
+     * calculateWinProbability. Not on the web's match screen (it only uses
+     * that number to drive the crowd-tension audio) — added here on request.
+     * Patch 153: shown in BOTH innings of a limited-overs match and worked out
+     * by WinProbability, a smooth estimate that changes with every ball (the
+     * old figure was a chase-only table of five bands that moved in steps).
+     * It names both teams, the batting side first.
      */
     fun winProbabilityLine(state: MatchState): String? {
-        if (state.target == null || state.currentInnings != (if (state.test != null) com.cricketsim.logic.TestMatch.inningsCount(state) else 2)) return null
-        val percent = MatchEngine.calculateWinProbability(state)
-        return "Win probability: $percent percent for ${state.battingTeam.name}."
+        val percent = com.cricketsim.logic.WinProbability.percentForBatting(state) ?: return null
+        return "Win probability: ${state.battingTeam.name} $percent percent, ${state.bowlingTeam.name} ${100 - percent} percent."
     }
 
     fun targetLine(state: MatchState): String? {

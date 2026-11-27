@@ -332,10 +332,10 @@ object IplAuction {
     }
 
     /** One other team raises the bid, or null if none of them will. */
-    private fun aiRespond(state: IplAuctionState, lot: LotState, p: AuctionPlayer): LotState? {
+    private fun aiRespond(state: IplAuctionState, lot: LotState, p: AuctionPlayer, includeUser: Boolean = false): LotState? {
         val price = asking(lot, p)
         val keen = IplData.TEAMS.map { it.id }
-            .filter { it != state.userTeamId && it != lot.leaderId }
+            .filter { (includeUser || it != state.userTeamId) && it != lot.leaderId }
             .map { it to maxBid(state, it, p) }
             .filter { it.second >= price }
         if (keen.isEmpty()) return null
@@ -473,6 +473,22 @@ object IplAuction {
         return finishLot(state, lot)
     }
 
+    /**
+     * SIMULATE_WITH_USER_TEAM (patch 153): in "Simulate the rest of the auction" the user's team bids too, run by the same team brain as the other nine. Before, it sat out every
+     * player and was only topped up at the end with the best of what was left at base price, so the same team always finished with nearly the same players. false = the old behaviour.
+     */
+    const val SIMULATE_WITH_USER_TEAM = true
+
+    /** One player when every team, the user's included, is run by the computer. */
+    private fun autoLotAll(state: IplAuctionState): IplAuctionState {
+        val id = currentPlayerId(state) ?: return state
+        val p = playerOf(state, id) ?: return finishLot(state, LotState(id, userOut = true, closed = true))
+        var lot = LotState(id, userOut = true)
+        var guard = 0
+        while (guard++ < 500) lot = aiRespond(state, lot, p, includeUser = true) ?: break
+        return finishLot(state, lot.copy(closed = true))
+    }
+
     fun runToEndOfSet(start: IplAuctionState): IplAuctionState {
         var s = start
         val set = s.setIndex
@@ -484,7 +500,7 @@ object IplAuction {
     fun runAll(start: IplAuctionState): IplAuctionState {
         var s = start
         var guard = 0
-        while (!s.finished && guard++ < 5000) s = autoLot(s)
+        while (!s.finished && guard++ < 5000) s = if (SIMULATE_WITH_USER_TEAM) autoLotAll(s) else autoLot(s)
         return s
     }
 

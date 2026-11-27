@@ -800,7 +800,7 @@ private fun AuctionHall(
         }
         Spacer(modifier = Modifier.height(6.dp))
         OutlinedButton(onClick = onSimulateAll, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-            Text("Simulate the rest of the auction")
+            Text("Simulate the rest of the auction (your team bids too)")
         }
         Spacer(modifier = Modifier.height(6.dp))
         OutlinedButton(onClick = onLeave, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
