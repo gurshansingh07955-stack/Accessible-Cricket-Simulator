@@ -18,6 +18,9 @@ sealed interface Screen {
     /** The front door: Play match, Resume match, Settings, About. */
     object Home : Screen
 
+    /** The welcome screens, shown the first time the game is opened (patch 160): what the game is, credits, difficulty, then the tutorial or the home page. */
+    object Welcome : Screen
+
     /** What this game is and how it is played. */
     object About : Screen
 

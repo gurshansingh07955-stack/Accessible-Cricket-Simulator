@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.cricketsim.audio.GameServices
 import com.cricketsim.audio.LocalGameServices
 import com.cricketsim.logic.Anthems
@@ -21,6 +22,7 @@ import com.cricketsim.logic.CricketData
 import com.cricketsim.logic.Team
 import com.cricketsim.persistence.CrashGuard
 import com.cricketsim.persistence.MatchSnapshot
+import com.cricketsim.persistence.WelcomeStore
 import com.cricketsim.persistence.summary
 import com.cricketsim.ui.Screen
 import com.cricketsim.logic.Customisation
@@ -29,6 +31,7 @@ import com.cricketsim.ui.custom.AdvancedCustomisationFlow
 import com.cricketsim.ui.home.AboutScreen
 import com.cricketsim.ui.home.CreditsScreen
 import com.cricketsim.ui.home.HomeScreen
+import com.cricketsim.ui.home.WelcomeFlow
 import com.cricketsim.ui.match.AnthemScreen
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.practice.NetPracticeFlow
@@ -158,7 +161,9 @@ private fun autoPickOpponentXI(opponentTeam: Team): Team {
 @Composable
 fun CricketSimApp() {
     val services = LocalGameServices.current
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    val appContext = LocalContext.current.applicationContext
+    // The first time the game is opened the welcome screens come first (patch 160); after that, the home page.
+    var screen by remember { mutableStateOf<Screen>(if (WelcomeStore.isDone(appContext)) Screen.Home else Screen.Welcome) }
 
     // The saved match, if any, offered by Home's Resume match. Re-read every
     // time Home is (re)entered — including after leaving a match, whose last
@@ -218,6 +223,11 @@ fun CricketSimApp() {
             onCredits = { screen = Screen.Credits },
             onAbout = { screen = Screen.About }
         )
+        is Screen.Welcome -> WelcomeFlow(onFinished = { startTutorial ->
+            // Seen: it is not shown again. "Continue to tutorial" goes straight to net practice, "Skip tutorial" to the home page.
+            WelcomeStore.markDone(appContext)
+            screen = if (startTutorial) Screen.NetPractice else Screen.Home
+        })
         is Screen.Tournament -> TournamentFlow(onExit = { screen = Screen.Home })
         is Screen.PlayMenu -> PlayMenuScreen(
             onQuickMatch = { screen = Screen.FormatSelection },
