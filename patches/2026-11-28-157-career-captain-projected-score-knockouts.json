@@ -1,0 +1,106 @@
+{
+  "name": "Career captain skips the captain question, projected score under the win percentage, career knockout matches named clearly",
+  "message": "Career captain not asked who the captain is; projected score in the first innings; knockout labels in career (patch 157)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/WinProbability.kt",
+    "contains": "fun projectedScore"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () -> Unit) {\n",
+      "replace": "fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () -> Unit, fixedCaptainId: String? = null) {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "private const val PLAYING_XI_SIZE = 11\n",
+      "replace": "private const val PLAYING_XI_SIZE = 11\n\n/** The captain of an auto-picked XI: a career captain (patch 157) is the captain already, so he stays captain when he is in the XI. */\nprivate fun captainOf(auto: CricketData.AutoXIResult, fixedCaptainId: String?): String =\n    if (fixedCaptainId != null && auto.players.any { it.id == fixedCaptainId }) fixedCaptainId else auto.captainId\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "            \"Auto-picked your Playing XI. Captain ${nameOf(a.captainId)}, vice-captain ${nameOf(a.viceCaptainId)}, \" +\n",
+      "replace": "            \"Auto-picked your Playing XI. Captain ${nameOf(captainOf(a, fixedCaptainId))}, vice-captain ${nameOf(a.viceCaptainId)}, \" +\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "                captainId = auto.captainId\n",
+      "replace": "                captainId = captainOf(auto, fixedCaptainId)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "                            captainId = auto.captainId,\n",
+      "replace": "                            captainId = captainOf(auto, fixedCaptainId),\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "                } else {\n                    step = XIStep.CAPTAIN\n                }\n",
+      "replace": "                } else if (fixedCaptainId != null && fixedCaptainId in selectedIds) {\n                    // A career captain is the captain already (patch 157): only the vice-captain and the wicketkeeper are asked.\n                    captainId = fixedCaptainId\n                    step = XIStep.VICE_CAPTAIN\n                } else {\n                    step = XIStep.CAPTAIN\n                }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/setup/PlayingXIScreen.kt",
+      "find": "                onBack = { step = XIStep.CAPTAIN }\n",
+      "replace": "                onBack = { step = if (fixedCaptainId != null && captainId == fixedCaptainId) XIStep.SQUAD else XIStep.CAPTAIN }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                        PlayingXIScreen(\n                            userTeam = selection,\n",
+      "replace": "                        PlayingXIScreen(\n                            userTeam = selection,\n                            fixedCaptainId = pid,\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "        val vice = if (iVice) me else others.firstOrNull { it.id != captain?.id }\n",
+      "replace": "        // A captain who named his own vice-captain on the XI screen keeps that choice (patch 157).\n        val chosenVice = if (iLead) others.firstOrNull { it.id == xi.viceCaptainId } else null\n        val vice = if (iVice) me else chosenVice ?: others.firstOrNull { it.id != captain?.id }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/WinProbability.kt",
+      "find": "    private fun percent(p: Double): Int = (p * 100.0).roundToInt().coerceIn(1, 99)\n",
+      "replace": "    private fun percent(p: Double): Int = (p * 100.0).roundToInt().coerceIn(1, 99)\n\n    /** False hides the projected score in the first innings (patch 157). */\n    const val PROJECTED_SCORE = true\n\n    /**\n     * The score the batting side is heading for, in the first innings of a limited-overs match (null in a chase, a Test, or when the innings is over).\n     * The balls still to come are worth the run rate so far, blended with the par rate (the more of the innings has gone, the more the run rate so far counts, at most 85 percent),\n     * scaled by the wickets in hand against what a normal innings would have lost by now. At the start of the innings it is the par score of the format and the ground.\n     */\n    fun projectedScore(state: MatchState): Int? {\n        if (!PROJECTED_SCORE || state.test != null) return null\n        if (state.target != null && state.currentInnings != 1) return null\n        val total = state.oversLimit * 6\n        if (total <= 0) return null\n        val maxWickets = (state.battingTeam.players.size - 1).coerceAtLeast(1)\n        val wicketsLeft = maxWickets - state.score.wickets\n        val bowled = state.score.overs * 6 + state.score.balls\n        val left = (total - bowled).coerceAtLeast(0)\n        if (left == 0 || wicketsLeft <= 0) return null\n        val elapsed = bowled.toDouble() / total\n        val parPerBall = par(state) / total\n        val nowPerBall = if (bowled > 0) state.score.runs.toDouble() / bowled else parPerBall\n        val weight = (elapsed * 1.25).coerceAtMost(0.85)\n        val rate = weight * nowPerBall + (1.0 - weight) * parPerBall\n        val projected = state.score.runs + rate * left * wicketFactor(wicketsLeft, elapsed, maxWickets)\n        return projected.roundToInt().coerceAtLeast(state.score.runs)\n    }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchLines.kt",
+      "find": "    fun targetLine(state: MatchState): String? {\n",
+      "replace": "    /** Under the win percentage in the first innings (patch 157): where the innings is heading, from the run rate so far and the wickets in hand. */\n    fun projectedScoreLine(state: MatchState): String? {\n        val projected = com.cricketsim.logic.WinProbability.projectedScore(state) ?: return null\n        return \"Projected score: about $projected, from the run rate so far and the wickets in hand.\"\n    }\n\n    fun targetLine(state: MatchState): String? {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/MatchScreen.kt",
+      "find": "        MatchLines.winProbabilityLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }\n",
+      "replace": "        MatchLines.winProbabilityLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }\n        MatchLines.projectedScoreLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/CareerSeason.kt",
+      "find": "    fun whenText(state: TournamentState, fixture: TournamentFixture): String {\n",
+      "replace": "    /** What a non-league fixture is called when it is spoken (patch 157): \"quarter-final\", \"semi-final\", \"final\", or the stage as named (\"Group A\", \"Super 8\"); null for a league match. */\n    fun stageText(fixture: TournamentFixture): String? = when {\n        fixture.stage == CplData.LEAGUE -> null\n        fixture.stage.startsWith(\"Quarter-final\") -> \"quarter-final\"\n        fixture.stage.startsWith(\"Semi-final\") -> \"semi-final\"\n        fixture.stage == \"Final\" -> \"final\"\n        else -> fixture.stage\n    }\n\n    /** \", match 41, semi-final\" (or just \", match 12\" in the league stage), for the next-match card and the match screen. */\n    fun matchSuffix(fixture: TournamentFixture): String = \", match ${fixture.number}\" + (stageText(fixture)?.let { \", $it\" } ?: \"\")\n\n    fun whenText(state: TournamentState, fixture: TournamentFixture): String {\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "            text = \"${comp.label}, match ${mine.number}: ${fixtureText(state, mine)}. ${CareerSeason.whenText(state, mine)}.\",\n",
+      "replace": "            text = \"${comp.label}${CareerSeason.matchSuffix(mine)}: ${fixtureText(state, mine)}. ${CareerSeason.whenText(state, mine)}.\" +\n                (if (mine.stage == \"Final\") \" This is the final.\" else if (mine.stage.startsWith(\"Semi-final\") || mine.stage.startsWith(\"Quarter-final\")) \" This is a knockout match: lose and you are out.\" else \"\"),\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/career/CareerHubScreens.kt",
+      "find": "                        tournamentName = state.name,\n                        format = AbuDhabiT10.formatFor(state.tournamentId),\n                        rules = TournamentRules.rulesFor(state.tournamentId, fixture?.stage),\n                        careerPlayerId = CareerSeason.playerIdIn(state, career),\n",
+      "replace": "                        tournamentName = state.name + (fixture?.let { if (it.stage == CplData.LEAGUE) \"\" else CareerSeason.matchSuffix(it) } ?: \"\"),\n                        format = AbuDhabiT10.formatFor(state.tournamentId),\n                        rules = TournamentRules.rulesFor(state.tournamentId, fixture?.stage),\n                        careerPlayerId = CareerSeason.playerIdIn(state, career),\n"
+    },
+    {
+      "op": "write",
+      "file": "CAREER_CAPTAIN_PROJECTED_SCORE_KNOCKOUTS.md",
+      "content": "# Career captain, projected score and knockout labels (patch 157)\n\n* **A career captain is not asked who the captain is** (`PlayingXIScreen(fixedCaptainId)`, passed by the career PickXI page). After he picks the XI he is the captain already: only the vice-captain and the wicketkeeper are asked. The vice-captain he names is now kept (`CareerSeason.withLeaders` used to replace it with the best-rated player). An untouched auto-pick keeps him as captain when he is in the XI. If he is not in the XI the old captain step and the \"your own name must be in your XI\" check still apply.\n* **Projected score** (`WinProbability.projectedScore`, `MatchLines.projectedScoreLine`, on the match screen right under the win probability): in the first innings of a limited-overs match, the score the innings is heading for. The balls left are worth the run rate so far blended with the par rate (the more of the innings has gone, the more the run rate counts, at most 85 percent), scaled by the wickets in hand against what a normal innings would have lost by now. At the start it is the par score of the format and the ground. Not shown in a chase or a Test. `WinProbability.PROJECTED_SCORE` switches it off.\n* **Career knockout labels** (`CareerSeason.stageText`, `matchSuffix`): the next-match card says \"T20 World Cup 2026, match 41, semi-final: ...\" (also \"quarter-final\", \"final\", \"Group A\", \"Super 8\"; a league match says only \"match 12\") and adds \"This is a knockout match: lose and you are out.\" for a quarter-final or semi-final, \"This is the final.\" for the final. The same text is the tournament line on the match screen's Match info page and on the result and scorecard text.\n",
+      "mustNotExist": true
+    }
+  ]
+}
