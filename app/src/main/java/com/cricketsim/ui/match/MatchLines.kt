@@ -101,6 +101,12 @@ object MatchLines {
         return "Win probability: ${state.battingTeam.name} $percent percent, ${state.bowlingTeam.name} ${100 - percent} percent."
     }
 
+    /** Under the win percentage in the first innings (patch 157): where the innings is heading, from the run rate so far and the wickets in hand. */
+    fun projectedScoreLine(state: MatchState): String? {
+        val projected = com.cricketsim.logic.WinProbability.projectedScore(state) ?: return null
+        return "Projected score: about $projected, from the run rate so far and the wickets in hand."
+    }
+
     fun targetLine(state: MatchState): String? {
         val target = state.target ?: return null
         return if (state.dlsRevised) "Target: $target (revised for rain)." else "Target: $target."

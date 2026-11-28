@@ -1663,6 +1663,7 @@ fun MatchScreen(
         Text(MatchLines.currentRunRateLine(matchState), style = MaterialTheme.typography.bodyMedium)
         MatchLines.requiredRunRateLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         MatchLines.winProbabilityLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        MatchLines.projectedScoreLine(matchState)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
 
         if (recentCommentary.size > 1) {
             Spacer(modifier = Modifier.height(16.dp))

@@ -61,7 +61,7 @@ import com.cricketsim.logic.Team
  * needing to navigate back up to it after every toggle.
  */
 @Composable
-fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () -> Unit) {
+fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () -> Unit, fixedCaptainId: String? = null) {
     var step by remember { mutableStateOf(XIStep.SQUAD) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var captainId by remember { mutableStateOf<String?>(null) }
@@ -73,7 +73,7 @@ fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () ->
     val autoNote: String? = autoPick?.let { a ->
         if (selectedIds == autoPickIds) {
             fun nameOf(id: String) = a.players.find { it.id == id }?.name ?: ""
-            "Auto-picked your Playing XI. Captain ${nameOf(a.captainId)}, vice-captain ${nameOf(a.viceCaptainId)}, " +
+            "Auto-picked your Playing XI. Captain ${nameOf(captainOf(a, fixedCaptainId))}, vice-captain ${nameOf(a.viceCaptainId)}, " +
                 "wicketkeeper ${nameOf(a.wicketkeeperId)}. Tap Continue to go on, or change players below."
         } else {
             "You changed the Playing XI, so you will choose captain, vice-captain and wicketkeeper next."
@@ -91,7 +91,7 @@ fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () ->
                 val auto = CricketData.autoSelectPlayingXI(userTeam)
                 autoPick = auto
                 selectedIds = auto.players.map { it.id }.toSet()
-                captainId = auto.captainId
+                captainId = captainOf(auto, fixedCaptainId)
                 viceCaptainId = auto.viceCaptainId
             },
             onContinue = {
@@ -102,11 +102,15 @@ fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () ->
                         CricketData.buildMatchSquad(
                             fullTeam = userTeam,
                             selectedPlayerIds = auto.players.map { it.id },
-                            captainId = auto.captainId,
+                            captainId = captainOf(auto, fixedCaptainId),
                             viceCaptainId = auto.viceCaptainId,
                             wicketkeeperId = auto.wicketkeeperId
                         )
                     )
+                } else if (fixedCaptainId != null && fixedCaptainId in selectedIds) {
+                    // A career captain is the captain already (patch 157): only the vice-captain and the wicketkeeper are asked.
+                    captainId = fixedCaptainId
+                    step = XIStep.VICE_CAPTAIN
                 } else {
                     step = XIStep.CAPTAIN
                 }
@@ -136,7 +140,7 @@ fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () ->
                     viceCaptainId = id
                     step = XIStep.WICKETKEEPER
                 },
-                onBack = { step = XIStep.CAPTAIN }
+                onBack = { step = if (fixedCaptainId != null && captainId == fixedCaptainId) XIStep.SQUAD else XIStep.CAPTAIN }
             )
         }
         XIStep.WICKETKEEPER -> {
@@ -171,6 +175,10 @@ fun PlayingXIScreen(userTeam: Team, onXIConfirmed: (Team) -> Unit, onBack: () ->
 private enum class XIStep { SQUAD, CAPTAIN, VICE_CAPTAIN, WICKETKEEPER }
 
 private const val PLAYING_XI_SIZE = 11
+
+/** The captain of an auto-picked XI: a career captain (patch 157) is the captain already, so he stays captain when he is in the XI. */
+private fun captainOf(auto: CricketData.AutoXIResult, fixedCaptainId: String?): String =
+    if (fixedCaptainId != null && auto.players.any { it.id == fixedCaptainId }) fixedCaptainId else auto.captainId
 
 @Composable
 private fun SquadSelectionStep(

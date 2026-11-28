@@ -50,6 +50,33 @@ object WinProbability {
 
     private fun percent(p: Double): Int = (p * 100.0).roundToInt().coerceIn(1, 99)
 
+    /** False hides the projected score in the first innings (patch 157). */
+    const val PROJECTED_SCORE = true
+
+    /**
+     * The score the batting side is heading for, in the first innings of a limited-overs match (null in a chase, a Test, or when the innings is over).
+     * The balls still to come are worth the run rate so far, blended with the par rate (the more of the innings has gone, the more the run rate so far counts, at most 85 percent),
+     * scaled by the wickets in hand against what a normal innings would have lost by now. At the start of the innings it is the par score of the format and the ground.
+     */
+    fun projectedScore(state: MatchState): Int? {
+        if (!PROJECTED_SCORE || state.test != null) return null
+        if (state.target != null && state.currentInnings != 1) return null
+        val total = state.oversLimit * 6
+        if (total <= 0) return null
+        val maxWickets = (state.battingTeam.players.size - 1).coerceAtLeast(1)
+        val wicketsLeft = maxWickets - state.score.wickets
+        val bowled = state.score.overs * 6 + state.score.balls
+        val left = (total - bowled).coerceAtLeast(0)
+        if (left == 0 || wicketsLeft <= 0) return null
+        val elapsed = bowled.toDouble() / total
+        val parPerBall = par(state) / total
+        val nowPerBall = if (bowled > 0) state.score.runs.toDouble() / bowled else parPerBall
+        val weight = (elapsed * 1.25).coerceAtMost(0.85)
+        val rate = weight * nowPerBall + (1.0 - weight) * parPerBall
+        val projected = state.score.runs + rate * left * wicketFactor(wicketsLeft, elapsed, maxWickets)
+        return projected.roundToInt().coerceAtLeast(state.score.runs)
+    }
+
     /** The batting team's chance of winning, from 1 to 99 (0 and 100 when the match is decided), or null where no figure is shown. */
     fun percentForBatting(state: MatchState): Int? {
         if (state.test != null) {

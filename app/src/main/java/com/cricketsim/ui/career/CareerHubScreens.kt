@@ -398,6 +398,7 @@ fun CareerHub(
                     key(flow.attempt) {
                         PlayingXIScreen(
                             userTeam = selection,
+                            fixedCaptainId = pid,
                             onXIConfirmed = { xi ->
                                 val problem = CplSimulator.xiProblem(xi, state.tags, state.tournamentId)
                                 if (problem != null) {
@@ -471,7 +472,7 @@ fun CareerHub(
                 val stadium = flow.resume?.stadium ?: fixture?.let { CplData.stadium(it.stadiumId) }
                 if (stadium != null) {
                     MatchScreen(
-                        tournamentName = state.name,
+                        tournamentName = state.name + (fixture?.let { if (it.stage == CplData.LEAGUE) "" else CareerSeason.matchSuffix(it) } ?: ""),
                         format = AbuDhabiT10.formatFor(state.tournamentId),
                         rules = TournamentRules.rulesFor(state.tournamentId, fixture?.stage),
                         careerPlayerId = CareerSeason.playerIdIn(state, career),
@@ -834,7 +835,8 @@ private fun PlayTab(
         val comp = CareerSeason.competitionOf(state)
         Text("Your next match", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         Text(
-            text = "${comp.label}, match ${mine.number}: ${fixtureText(state, mine)}. ${CareerSeason.whenText(state, mine)}.",
+            text = "${comp.label}${CareerSeason.matchSuffix(mine)}: ${fixtureText(state, mine)}. ${CareerSeason.whenText(state, mine)}." +
+                (if (mine.stage == "Final") " This is the final." else if (mine.stage.startsWith("Semi-final") || mine.stage.startsWith("Quarter-final")) " This is a knockout match: lose and you are out." else ""),
             style = MaterialTheme.typography.bodyLarge
         )
         if (decision.reason.isNotEmpty()) {

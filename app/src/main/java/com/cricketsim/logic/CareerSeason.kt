@@ -273,6 +273,18 @@ object CareerSeason {
     fun dateText(millis: Long): String = SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(Date(millis))
 
     /** "Saturday 6 December 2026", or "Friday 5 December 2026 to Sunday 7 December 2026" for a three-day match. */
+    /** What a non-league fixture is called when it is spoken (patch 157): "quarter-final", "semi-final", "final", or the stage as named ("Group A", "Super 8"); null for a league match. */
+    fun stageText(fixture: TournamentFixture): String? = when {
+        fixture.stage == CplData.LEAGUE -> null
+        fixture.stage.startsWith("Quarter-final") -> "quarter-final"
+        fixture.stage.startsWith("Semi-final") -> "semi-final"
+        fixture.stage == "Final" -> "final"
+        else -> fixture.stage
+    }
+
+    /** ", match 41, semi-final" (or just ", match 12" in the league stage), for the next-match card and the match screen. */
+    fun matchSuffix(fixture: TournamentFixture): String = ", match ${fixture.number}" + (stageText(fixture)?.let { ", $it" } ?: "")
+
     fun whenText(state: TournamentState, fixture: TournamentFixture): String {
         val start = dateMillis(state, fixture)
         val days = competitionOf(state).days
@@ -326,7 +338,9 @@ object CareerSeason {
             else -> career.stateRole == CareerLeadership.VICE
         }
         val captain = if (iLead) me else others.firstOrNull()
-        val vice = if (iVice) me else others.firstOrNull { it.id != captain?.id }
+        // A captain who named his own vice-captain on the XI screen keeps that choice (patch 157).
+        val chosenVice = if (iLead) others.firstOrNull { it.id == xi.viceCaptainId } else null
+        val vice = if (iVice) me else chosenVice ?: others.firstOrNull { it.id != captain?.id }
         return xi.copy(captainId = captain?.id, viceCaptainId = vice?.id)
     }
 
