@@ -1,6 +1,6 @@
-Build run: 46141145508 (attempt 1)
-Commit: 04c2ff380ca29550e5c816966361a0a5bee1d3d8
-Timestamp (UTC): 2026-11-28T11:45:30Z
+Build run: 46161923764 (attempt 1)
+Commit: c8457eaae605e2373cd83af28b70894e50a672f8
+Timestamp (UTC): 2026-11-28T15:52:18Z
 Gradle exit status: success
 ----- last 400 lines of build output -----
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
@@ -21,7 +21,6 @@ Daemon will be stopped at the end of the build
 > Task :app:parseDebugLocalResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
-> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
@@ -30,13 +29,14 @@ Daemon will be stopped at the end of the build
 > Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
 > Task :app:mergeDebugStartupProfile
-> Task :app:mergeDebugJniLibFolders
+> Task :app:processDebugManifestForPackage
 > Task :app:checkDebugDuplicateClasses
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeLibDexDebug
 > Task :app:mergeDebugNativeLibs NO-SOURCE
 > Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
-> Task :app:mergeLibDexDebug
 > Task :app:writeDebugSigningConfigVersions
 > Task :app:processDebugResources
 > Task :app:mergeExtDexDebug
@@ -76,7 +76,7 @@ w: file:///home/runner/work/Accessible-Cricket-Simulator/Accessible-Cricket-Simu
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1795866173207.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1795881016921.json
 
-BUILD SUCCESSFUL in 2m 41s
+BUILD SUCCESSFUL in 2m 5s
 37 actionable tasks: 37 executed
