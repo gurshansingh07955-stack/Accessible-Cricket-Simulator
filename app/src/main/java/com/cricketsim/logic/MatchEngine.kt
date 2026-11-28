@@ -732,7 +732,9 @@ object MatchEngine {
             bowlingSwing = bowlingDecision.swingType,
             shot = battingDecision?.shot, shotIntent = battingDecision?.intent, shotTiming = battingDecision?.timingTier,
             shotSector = battingDecision?.let { BattingSystem.getShotDirection(it.shot, it.intent)?.sector },
-            shotAerial = battingDecision?.let { BattingSystem.getShotDirection(it.shot, it.intent)?.isAerial } ?: false
+            shotAerial = battingDecision?.let { BattingSystem.getShotDirection(it.shot, it.intent)?.isAerial } ?: false,
+            chaserName = BallCommentary.chaserFor(matchState, battingDecision)?.first,
+            chaserPosition = BallCommentary.chaserFor(matchState, battingDecision)?.second
         )
         val playText = if (leftAlone && !isWicket && !isWide && byes + legByes == 0) {
             BallCommentary.generate(result, batsman.name, bowler.name) ?: leaveText(batsman.name)

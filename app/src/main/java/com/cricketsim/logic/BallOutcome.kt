@@ -65,5 +65,8 @@ data class BallOutcome(
     val shotIntent: IntentDirection? = null,
     val shotTiming: BowlingQualityTier? = null,
     val shotSector: FieldingSector? = null,
-    val shotAerial: Boolean = false
+    val shotAerial: Boolean = false,
+    // Patch 159: the fielder going after the ball and where he stands ("at deep mid-wicket"), the same one manual running names for this ball.
+    val chaserName: String? = null,
+    val chaserPosition: String? = null
 )

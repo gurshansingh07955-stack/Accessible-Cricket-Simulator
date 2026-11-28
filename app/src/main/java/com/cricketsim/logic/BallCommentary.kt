@@ -191,6 +191,33 @@ object BallCommentary {
         else -> "$n runs"
     }
 
+    /**
+     * The fielder going after the ball and where he stands ("at deep mid-wicket"), as a name and a position. He is picked from the field the bowling side
+     * really set, the way manual running picks him ([RunDecisions.buildChance]: a deep fielder in the shot's sector for a ball in the air, an inner one for a ball
+     * along the ground, else the nearest sector), so the commentary and the running announcement always name the same man. Keep the two in step.
+     */
+    fun chaserFor(state: MatchState, decision: BattingDecision?): Pair<String, String>? {
+        if (decision == null) return null
+        val keeperId = state.bowlingTeam.wicketkeeperId ?: state.bowlingTeam.players.find { it.role == PlayerRole.WICKETKEEPER }?.id
+        val placed = state.fieldPlacements.filter { it.playerId.isNotEmpty() && it.playerId != state.currentBowler.id && it.playerId != keeperId }
+        if (placed.isEmpty()) return null
+        val direction = BattingSystem.getShotDirection(decision.shot, decision.intent)
+        val sector = direction?.sector
+        val aerial = direction?.isAerial == true
+        val pick = when {
+            sector == null -> placed.firstOrNull { it.depth == FieldingDepth.CLOSE }
+                ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, FieldingSector.MID_ON) }
+            else -> {
+                val inSector = placed.filter { it.sector == sector }
+                val here = if (aerial) inSector.firstOrNull { it.depth == FieldingDepth.DEEP } ?: inSector.firstOrNull()
+                else inSector.firstOrNull { it.depth != FieldingDepth.DEEP } ?: inSector.firstOrNull()
+                here ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, sector) }
+            }
+        } ?: return null
+        val name = state.bowlingTeam.players.find { it.id == pick.playerId }?.name ?: return null
+        return Pair(name, "at ${FieldingSystem.getPositionLabel(pick).lowercase()}")
+    }
+
     /** The commentary for one ball, or null when the ball has no stored delivery facts (an older save) or the style is switched off. */
     fun generate(o: BallOutcome, batter: String, bowler: String): String? {
         if (!CRICBUZZ_STYLE) return null
@@ -265,25 +292,32 @@ object BallCommentary {
         val timing = timingWord(o.shotTiming)
         val t = if (timing.isEmpty()) "" else ", $timing"
         val edge = o.isEdge == true
+        // The fielder going after it: the same man manual running names for this ball ("Smith at deep mid-wicket").
+        val ch = o.chaserName?.let { n -> "$n ${o.chaserPosition ?: "in the field"}" }
         return when {
             defensive ->
                 if (runs == 0) pick(listOf("$b $act.", "$b $act, no run.")) else "$b $act and sneaks ${runWords(runs)}."
             runs == 6 ->
                 if (edge) "$b $act and gets a top edge, it sails ${edgePlace(sector, true)} for SIX!"
-                else "$b $act$t, ${where ?: "high and handsome"} and that is gone for SIX!"
+                else "$b $act$t, ${where ?: "high and handsome"} and that is gone for SIX!" + (if (ch != null) " $ch can only watch it go." else "")
             runs == 4 ->
                 if (edge) "$b $act but gets an edge, it runs away ${edgePlace(sector, false)} for FOUR."
-                else pick(listOf(
-                    "$b $act$t, ${where ?: "into the gap"} and it races away to the boundary.",
-                    "$b $act$t, ${where ?: "into the gap"}, and that is FOUR."
-                ))
+                else {
+                    val chase = if (ch != null) " $ch gives chase but cannot stop it." else ""
+                    pick(listOf(
+                        "$b $act$t, ${where ?: "into the gap"} and it races away to the boundary.$chase",
+                        "$b $act$t, ${where ?: "into the gap"}, and that is FOUR.$chase"
+                    ))
+                }
             runs in 1..3 ->
-                "$b $act$t, ${where ?: "into the gap"}, for ${runWords(runs)}."
+                if (ch != null) "$b $act$t, ${where ?: "into the gap"}. $ch fields it and they take ${runWords(runs)}."
+                else "$b $act$t, ${where ?: "into the gap"}, for ${runWords(runs)}."
             runs >= 5 ->
                 "$b $act$t, ${where ?: "into the gap"}, and they run $runs."
             else -> {
                 val mistimed = o.shotTiming == BowlingQualityTier.BAD || o.shotTiming == BowlingQualityTier.VERY_BAD
                 if (mistimed) pick(listOf("$b $act but mistimes it, no run.", "$b $act but does not middle it, and there is no run."))
+                else if (ch != null) "$b $act, but $ch cuts it off, no run."
                 else if (sector != null) "$b $act, but the fielder at ${spotName(sector)} cuts it off, no run."
                 else "$b $act, but finds the fielder, no run."
             }
