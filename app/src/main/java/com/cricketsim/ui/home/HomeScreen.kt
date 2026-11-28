@@ -79,6 +79,7 @@ fun HomeScreen(
     onPlay: () -> Unit,
     onResume: () -> Unit,
     onTournament: () -> Unit,
+    onChallenge: () -> Unit,
     onAdvanced: () -> Unit,
     onCareer: () -> Unit,
     onNetPractice: () -> Unit,
@@ -146,6 +147,14 @@ fun HomeScreen(
                 emphasised = false,
                 enabled = true,
                 onClick = onTournament
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            MenuButton(
+                title = "Challenge mode",
+                description = "Five new challenges every day: chase a target, defend a total, or take over a match in the middle.",
+                emphasised = false,
+                enabled = true,
+                onClick = onChallenge
             )
             Spacer(modifier = Modifier.height(14.dp))
             MenuButton(

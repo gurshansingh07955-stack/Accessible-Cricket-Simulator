@@ -32,6 +32,7 @@ import com.cricketsim.ui.home.AboutScreen
 import com.cricketsim.ui.home.CreditsScreen
 import com.cricketsim.ui.home.HomeScreen
 import com.cricketsim.ui.home.WelcomeFlow
+import com.cricketsim.ui.challenge.ChallengeFlow
 import com.cricketsim.ui.match.AnthemScreen
 import com.cricketsim.ui.match.MatchScreen
 import com.cricketsim.ui.practice.NetPracticeFlow
@@ -214,6 +215,7 @@ fun CricketSimApp() {
                 }
             },
             onTournament = { screen = Screen.Tournament },
+            onChallenge = { screen = Screen.Challenge },
             onAdvanced = { screen = Screen.AdvancedCustomisation },
             onCareer = { screen = Screen.Career },
             onNetPractice = { screen = Screen.NetPractice },
@@ -228,6 +230,7 @@ fun CricketSimApp() {
             WelcomeStore.markDone(appContext)
             screen = if (startTutorial) Screen.NetPractice else Screen.Home
         })
+        is Screen.Challenge -> ChallengeFlow(onExit = { screen = Screen.Home })
         is Screen.Tournament -> TournamentFlow(onExit = { screen = Screen.Home })
         is Screen.PlayMenu -> PlayMenuScreen(
             onQuickMatch = { screen = Screen.FormatSelection },

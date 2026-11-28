@@ -21,6 +21,9 @@ sealed interface Screen {
     /** The welcome screens, shown the first time the game is opened (patch 160): what the game is, credits, difficulty, then the tutorial or the home page. */
     object Welcome : Screen
 
+    /** Challenge mode (patch 161): five new challenges a day, each a match situation to win. */
+    object Challenge : Screen
+
     /** What this game is and how it is played. */
     object About : Screen
 
