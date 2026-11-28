@@ -1,0 +1,64 @@
+{
+  "name": "Commentary names the same fielder as manual running (chases the four, fields the single)",
+  "message": "Cricbuzz commentary: the fielder going after the ball, the same one manual running names (patch 159)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/BallCommentary.kt",
+    "contains": "fun chaserFor"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallOutcome.kt",
+      "find": "    val shotAerial: Boolean = false\n)\n",
+      "replace": "    val shotAerial: Boolean = false,\n    // Patch 159: the fielder going after the ball and where he stands (\"at deep mid-wicket\"), the same one manual running names for this ball.\n    val chaserName: String? = null,\n    val chaserPosition: String? = null\n)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/MatchEngine.kt",
+      "find": "            shotAerial = battingDecision?.let { BattingSystem.getShotDirection(it.shot, it.intent)?.isAerial } ?: false\n        )\n",
+      "replace": "            shotAerial = battingDecision?.let { BattingSystem.getShotDirection(it.shot, it.intent)?.isAerial } ?: false,\n            chaserName = BallCommentary.chaserFor(matchState, battingDecision)?.first,\n            chaserPosition = BallCommentary.chaserFor(matchState, battingDecision)?.second\n        )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallCommentary.kt",
+      "find": "    /** The commentary for one ball, or null when the ball has no stored delivery facts (an older save) or the style is switched off. */\n",
+      "replace": "    /**\n     * The fielder going after the ball and where he stands (\"at deep mid-wicket\"), as a name and a position. He is picked from the field the bowling side\n     * really set, the way manual running picks him ([RunDecisions.buildChance]: a deep fielder in the shot's sector for a ball in the air, an inner one for a ball\n     * along the ground, else the nearest sector), so the commentary and the running announcement always name the same man. Keep the two in step.\n     */\n    fun chaserFor(state: MatchState, decision: BattingDecision?): Pair<String, String>? {\n        if (decision == null) return null\n        val keeperId = state.bowlingTeam.wicketkeeperId ?: state.bowlingTeam.players.find { it.role == PlayerRole.WICKETKEEPER }?.id\n        val placed = state.fieldPlacements.filter { it.playerId.isNotEmpty() && it.playerId != state.currentBowler.id && it.playerId != keeperId }\n        if (placed.isEmpty()) return null\n        val direction = BattingSystem.getShotDirection(decision.shot, decision.intent)\n        val sector = direction?.sector\n        val aerial = direction?.isAerial == true\n        val pick = when {\n            sector == null -> placed.firstOrNull { it.depth == FieldingDepth.CLOSE }\n                ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, FieldingSector.MID_ON) }\n            else -> {\n                val inSector = placed.filter { it.sector == sector }\n                val here = if (aerial) inSector.firstOrNull { it.depth == FieldingDepth.DEEP } ?: inSector.firstOrNull()\n                else inSector.firstOrNull { it.depth != FieldingDepth.DEEP } ?: inSector.firstOrNull()\n                here ?: placed.minByOrNull { FieldingSystem.sectorGapDegrees(it.sector, sector) }\n            }\n        } ?: return null\n        val name = state.bowlingTeam.players.find { it.id == pick.playerId }?.name ?: return null\n        return Pair(name, \"at ${FieldingSystem.getPositionLabel(pick).lowercase()}\")\n    }\n\n    /** The commentary for one ball, or null when the ball has no stored delivery facts (an older save) or the style is switched off. */\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallCommentary.kt",
+      "find": "        val edge = o.isEdge == true\n        return when {\n            defensive ->\n",
+      "replace": "        val edge = o.isEdge == true\n        // The fielder going after it: the same man manual running names for this ball (\"Smith at deep mid-wicket\").\n        val ch = o.chaserName?.let { n -> \"$n ${o.chaserPosition ?: \"in the field\"}\" }\n        return when {\n            defensive ->\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallCommentary.kt",
+      "find": "                else \"$b $act$t, ${where ?: \"high and handsome\"} and that is gone for SIX!\"\n",
+      "replace": "                else \"$b $act$t, ${where ?: \"high and handsome\"} and that is gone for SIX!\" + (if (ch != null) \" $ch can only watch it go.\" else \"\")\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallCommentary.kt",
+      "find": "                else pick(listOf(\n                    \"$b $act$t, ${where ?: \"into the gap\"} and it races away to the boundary.\",\n                    \"$b $act$t, ${where ?: \"into the gap\"}, and that is FOUR.\"\n                ))\n",
+      "replace": "                else {\n                    val chase = if (ch != null) \" $ch gives chase but cannot stop it.\" else \"\"\n                    pick(listOf(\n                        \"$b $act$t, ${where ?: \"into the gap\"} and it races away to the boundary.$chase\",\n                        \"$b $act$t, ${where ?: \"into the gap\"}, and that is FOUR.$chase\"\n                    ))\n                }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallCommentary.kt",
+      "find": "            runs in 1..3 ->\n                \"$b $act$t, ${where ?: \"into the gap\"}, for ${runWords(runs)}.\"\n",
+      "replace": "            runs in 1..3 ->\n                if (ch != null) \"$b $act$t, ${where ?: \"into the gap\"}. $ch fields it and they take ${runWords(runs)}.\"\n                else \"$b $act$t, ${where ?: \"into the gap\"}, for ${runWords(runs)}.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/BallCommentary.kt",
+      "find": "                else if (sector != null) \"$b $act, but the fielder at ${spotName(sector)} cuts it off, no run.\"\n",
+      "replace": "                else if (ch != null) \"$b $act, but $ch cuts it off, no run.\"\n                else if (sector != null) \"$b $act, but the fielder at ${spotName(sector)} cuts it off, no run.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "BALL_COMMENTARY.md",
+      "find": "* The place the ball goes is the game's one sector per shot, not a physical track: the engine does not simulate where in the ground each ball lands.\n",
+      "replace": "* **Where the ball went, and who got it**: the direction is the game's one sector per shot (not a physical track, so a cover drive always goes toward cover, and the engine does not simulate an exact landing point). The fielder is real: `BallCommentary.chaserFor` picks him from the field the bowling side set, exactly as manual running does (`RunDecisions.buildChance`), so a four says \"Smith at deep mid-wicket gives chase but cannot stop it\", a six \"can only watch it go\", and a single \"Smith at cover fields it\". Patch 159.\n"
+    }
+  ]
+}
