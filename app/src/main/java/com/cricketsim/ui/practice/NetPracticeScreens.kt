@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -427,6 +428,11 @@ private fun NetBattingSession(
     val settings = services?.settings
     val director = remember(services) { services?.let { MatchAudioDirector(it) } }
     val stadium = remember { NetPractice.netStadium() }
+    // The match crowd is in the nets too (it was silent there): it starts with the session and fades out when the session is left.
+    DisposableEffect(services) {
+        services?.sound?.startCrowdAmbience()
+        onDispose { services?.sound?.stopCrowdAmbience() }
+    }
     val isFast = kind == NetKind.FAST
 
     var phase by remember { mutableStateOf(NetPhase.READY) }
@@ -852,6 +858,11 @@ private fun NetBowlingSession(
     val settings = services?.settings
     val director = remember(services) { services?.let { MatchAudioDirector(it) } }
     val stadium = remember { NetPractice.netStadium() }
+    // The match crowd is in the nets too (it was silent there): it starts with the session and fades out when the session is left.
+    DisposableEffect(services) {
+        services?.sound?.startCrowdAmbience()
+        onDispose { services?.sound?.stopCrowdAmbience() }
+    }
 
     var phase by remember { mutableStateOf(BowlPhase.READY) }
     var showHelp by remember { mutableStateOf(false) }

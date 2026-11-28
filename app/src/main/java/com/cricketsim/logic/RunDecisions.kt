@@ -195,7 +195,11 @@ object RunDecisions {
     private const val MAX_OVERTHROWS = 3
 
     /** What the throw did: a run out (by [fielder], who broke the stumps), or not out with [overthrows] extra runs; [line] is what is said ("" when nothing is worth saying). */
-    class ThrowResult(val out: Boolean, val overthrows: Int, val line: String, val fielder: String?)
+    class ThrowResult(
+        val out: Boolean, val overthrows: Int, val line: String, val fielder: String?,
+        /** Patch 156, for an overthrow: the throw was straight at the stumps, who it was meant for when it was not, and what is said of the wild throw. */
+        val direct: Boolean = false, val receiver: String = "", val astray: String = ""
+    )
 
     private fun ratingOf(c: RunChance): Double = c.fielderRating.coerceIn(0, 100) / 100.0
 
@@ -269,7 +273,8 @@ object RunDecisions {
         if (random.nextDouble() < overthrowChance(c, direct)) {
             val extra = if (random.nextDouble() < 0.2) 2 else 1
             val astray = if (direct) "$f's throw at the stumps is wild. Overthrow!" else "$receiver cannot gather the throw. Overthrow!"
-            return ThrowResult(false, extra, (missed + " " + astray + " They take " + (if (extra == 1) "one more." else "two more.")).trim(), null)
+            return ThrowResult(false, extra, (missed + " " + astray + " They take " + (if (extra == 1) "one more." else "two more.")).trim(), null,
+                direct, receiver, (missed + " " + astray).trim())
         }
         return ThrowResult(false, 0, missed, null)
     }
@@ -360,6 +365,61 @@ object RunDecisions {
     }
 
     fun runOutLine(c: RunChance): String = "No! ${c.fielderName} hits the stumps and the batter is run out."
+
+    // ---- Overthrows (patch 156): the extra runs are the batter's to take, they are no longer added by themselves ----
+
+    /** The most overthrow runs one wild throw can offer. */
+    const val MAX_OVERTHROW_RUNS = 2
+
+    private fun runsDoneText(completed: Int): String = when (completed) {
+        0 -> ""
+        1 -> "One run completed."
+        2 -> "Two runs completed."
+        else -> "Three runs completed."
+    }
+
+    /** Who is going after the loose ball: the man the throw was meant for, else the keeper (or, when the keeper threw it, the nearest fielder). */
+    private fun chaserOf(c: RunChance, t: ThrowResult?): String = when {
+        t != null && !t.direct && t.receiver.isNotEmpty() -> t.receiver
+        chaserIsKeeper(c) -> c.relayName.ifEmpty { "a fielder" }
+        else -> c.keeperName
+    }
+
+    /** Where the ball is after a throw that went astray, and who is chasing it (said once, when the overthrow happens). */
+    fun overthrowWhere(c: RunChance, t: ThrowResult, random: Random): String {
+        val chaser = chaserOf(c, t)
+        if (!t.direct) return "The ball has got away from ${t.receiver.ifEmpty { chaser }} and is running towards the boundary. $chaser is chasing it."
+        val place = listOf(
+            "past the stumps and away towards the boundary behind the wicketkeeper",
+            "past the stumps and away down the leg side",
+            "past the stumps and away down the off side"
+        )[random.nextInt(3)]
+        return "The ball has gone $place. $chaser is chasing it."
+    }
+
+    /**
+     * What is said when the overthrow happens ([taken] = 0: the run he was taking, the wild throw, where the ball is) and after each overthrow run he takes
+     * (the ball is still loose), then how to answer. [left] is how many overthrow runs are still on offer. The ball is away from the fielders, so these runs are safe.
+     */
+    fun overthrowPrompt(c: RunChance, completed: Int, taken: Int, left: Int, where: String, t: ThrowResult?, byButtons: Boolean): String {
+        val ask = if (c.partnerCall) {
+            "${c.strikerName} calls for another. " + (if (byButtons) "Accept or refuse." else "Swipe up with two fingers to accept, down to refuse.") + " Five seconds."
+        } else {
+            (if (byButtons) "Choose Run or Stay." else "Swipe up with two fingers to run again, down to stay.") + " Five seconds."
+        }
+        if (taken == 0) {
+            val count = if (left >= 2) " There could be two runs in this." else ""
+            return listOf(
+                runsDoneText(completed), t?.astray.orEmpty(), where,
+                "The fielders are nowhere near it, so another run is safe.$count", ask
+            ).filter { it.isNotEmpty() }.joinToString(" ")
+        }
+        return "Overthrow run completed. The ball is still loose and ${chaserOf(c, t)} has not got to it. Another run is safe. $ask"
+    }
+
+    /** After the last overthrow run: the ball is gathered and the page ends. */
+    fun overthrowEnd(c: RunChance, taken: Int, t: ThrowResult?): String =
+        "${if (taken == 1) "Overthrow run completed." else "Two overthrow runs completed."} ${chaserOf(c, t)} finally gathers the ball. That is all the runs."
 
     /**
      * The ball after what he did, or null if it stands exactly as simulated (he took the runs the ball was worth, and no run out). Fewer runs: not out, the

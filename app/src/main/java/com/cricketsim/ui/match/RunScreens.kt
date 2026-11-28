@@ -68,6 +68,12 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
     // Overthrows so far, and what was said about the last throw (patch 151).
     var overthrows by remember(chance) { mutableStateOf(0) }
     var throwNote by remember(chance) { mutableStateOf("") }
+    // An overthrow (patch 156): the runs still on offer, a counter that restarts the announcement for each, the throw and where the ball is. [overthrows] now
+    // counts the overthrow runs he actually took.
+    var overLeft by remember(chance) { mutableStateOf(0) }
+    var overStep by remember(chance) { mutableStateOf(0) }
+    var overThrow by remember(chance) { mutableStateOf<RunDecisions.ThrowResult?>(null) }
+    var overWhere by remember(chance) { mutableStateOf("") }
     var shown by remember(chance) { mutableStateOf(RunDecisions.opening(chance, byButtons)) }
     val random = remember(chance) { kotlin.random.Random.Default }
 
@@ -115,6 +121,21 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
             sound?.vibrate(60, 40, 160)
             shown = "Yes!"
             call("run_yes", "Yes!")
+            if (overLeft > 0) {
+                // An overthrow run (patch 156): the ball is away from the fielders, so he makes it.
+                overthrows += 1
+                overLeft -= 1
+                if (overLeft == 0) {
+                    val line = RunDecisions.overthrowEnd(chance, overthrows, overThrow)
+                    shown = line
+                    say(line, 2500L)
+                    conclude(completed, false)
+                } else {
+                    deciding = false
+                    overStep++
+                }
+                return@launch
+            }
             // The throw (patch 151): to the keeper or a fielder nearby, or straight at the stumps; it can run the batter out or go astray for overthrows.
             val thrown = RunDecisions.resolveAttempt(chance, completed, random)
             if (thrown.out) {
@@ -123,9 +144,18 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
                 conclude(completed, true, thrown.fielder, thrown.line)
                 return@launch
             }
-            overthrows = (overthrows + thrown.overthrows).coerceAtMost(3)
-            throwNote = thrown.line
             val n = completed + 1
+            if (thrown.overthrows > 0) {
+                // An overthrow (patch 156): the run he was taking is completed and the ball is loose; the extra runs are his to take.
+                overThrow = thrown
+                overWhere = RunDecisions.overthrowWhere(chance, thrown, random)
+                overLeft = thrown.overthrows.coerceIn(1, RunDecisions.MAX_OVERTHROW_RUNS)
+                completed = n
+                overStep++
+                deciding = false
+                return@launch
+            }
+            throwNote = thrown.line
             if (n >= RunDecisions.maxRunsFor(chance)) {
                 val line = RunDecisions.afterRun(chance, n, true, byButtons, throwNote)
                 shown = line
@@ -141,9 +171,13 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
 
     BackHandler { }
 
-    LaunchedEffect(chance, completed) {
+    LaunchedEffect(chance, completed, overStep) {
         if (finished) return@LaunchedEffect
-        val text = if (completed == 0) RunDecisions.opening(chance, byButtons) else RunDecisions.afterRun(chance, completed, false, byButtons, throwNote)
+        val text = when {
+            overLeft > 0 -> RunDecisions.overthrowPrompt(chance, completed, overthrows, overLeft, overWhere, overThrow, byButtons)
+            completed == 0 -> RunDecisions.opening(chance, byButtons)
+            else -> RunDecisions.afterRun(chance, completed, false, byButtons, throwNote)
+        }
         shown = text
         secondsLeft = 0
         say(text)
@@ -176,6 +210,8 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
                 .then(swipeModifier)
                 .semantics {
                     contentDescription = when {
+                        overLeft > 0 && byButtons -> "Overthrow! The ball is loose. Choose Run or Stay."
+                        overLeft > 0 -> "Overthrow! The ball is loose. Swipe up with two fingers to run again, down with two fingers to stay."
                         byButtons && chance.partnerCall -> "Your partner calls for a run. Choose Accept the run or Refuse the run."
                         byButtons -> "Running decision. Choose Run or Stay."
                         chance.partnerCall -> "Your partner calls for a run. Swipe up with two fingers to accept, down with two fingers to refuse."
@@ -190,8 +226,11 @@ fun RunDecisionScreen(chance: RunChance, byButtons: Boolean = false, onDone: (Ru
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(if (chance.partnerCall) "Your partner calls" else "Take a run?", style = MaterialTheme.typography.headlineMedium)
-                Text("Runs so far: $completed", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (overLeft > 0) "Overthrow! Run again?" else if (chance.partnerCall) "Your partner calls" else "Take a run?",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Text("Runs so far: ${completed + overthrows}", style = MaterialTheme.typography.titleMedium)
                 Text(shown, style = MaterialTheme.typography.titleMedium)
                 Text(if (secondsLeft > 0) "Time left: $secondsLeft" else "", style = MaterialTheme.typography.headlineSmall)
             }
