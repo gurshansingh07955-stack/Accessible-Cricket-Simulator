@@ -64,15 +64,16 @@ fun AdvancedCustomisationFlow(onExit: () -> Unit) {
         1 -> CustomFormatFlow(onExit = { section = 0 })
         2 -> CustomTeamsFlow(onExit = { section = 0 })
         3 -> CustomTournamentsFlow(onExit = { section = 0 })
+        4 -> CustomStadiumsFlow(onExit = { section = 0 })
         else -> {
             BackHandler(onBack = onExit)
-            AdvancedMenu(onCreateFormat = { section = 1 }, onCreateTeams = { section = 2 }, onCreateTournaments = { section = 3 }, onBack = onExit)
+            AdvancedMenu(onCreateFormat = { section = 1 }, onCreateTeams = { section = 2 }, onCreateTournaments = { section = 3 }, onCreateStadiums = { section = 4 }, onBack = onExit)
         }
     }
 }
 
 @Composable
-private fun AdvancedMenu(onCreateFormat: () -> Unit, onCreateTeams: () -> Unit, onCreateTournaments: () -> Unit, onBack: () -> Unit) {
+private fun AdvancedMenu(onCreateFormat: () -> Unit, onCreateTeams: () -> Unit, onCreateTournaments: () -> Unit, onCreateStadiums: () -> Unit, onBack: () -> Unit) {
     PageColumn {
         BackButton(onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -100,6 +101,14 @@ private fun AdvancedMenu(onCreateFormat: () -> Unit, onCreateTeams: () -> Unit, 
             enabled = true,
             emphasised = false,
             onClick = onCreateTournaments
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OptionButton(
+            title = "Create Custom Stadiums",
+            description = "Design your own stadium: its pitch, weather and boundary size. The game works out its average T20 score.",
+            enabled = true,
+            emphasised = false,
+            onClick = onCreateStadiums
         )
     }
 }

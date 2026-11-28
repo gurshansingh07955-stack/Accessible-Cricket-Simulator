@@ -36,7 +36,7 @@ object WinProbability {
     private fun par(state: MatchState): Double {
         val overs = state.oversLimit
         val base = runRate(overs) * overs
-        val average = StadiumData.STADIUMS.firstOrNull { it.id == state.stadiumId }?.avgT20FirstInningsScore
+        val average = StadiumData.getStadiumById(state.stadiumId)?.avgT20FirstInningsScore
         // The ground's T20 average says how high-scoring it is (160 is the norm).
         val ground = if (average != null) (average / 160.0).coerceIn(0.8, 1.25) else 1.0
         return base * ground

@@ -357,7 +357,7 @@ object CareerInternational {
         )
         val me = CareerDomestic.asPlayer(career, mine.id)
         val myTeam = CareerDomestic.withPlayer(mine, me)
-        val all = AllStadiums.list()
+        val all = AllStadiums.builtIn()
         val start = CareerSeason.firstSaturday(career)
         var offsetWeeks = 0
         val out = ArrayList<TournamentState>()

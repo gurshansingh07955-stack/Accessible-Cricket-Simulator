@@ -950,9 +950,13 @@ object StadiumData {
         ),
     )
 
-    fun getAllStadiums(): List<Stadium> = STADIUMS
+    /** The game's own grounds, then the player's custom stadiums (all listed under the country "Custom"). */
+    fun getAllStadiums(): List<Stadium> = STADIUMS + CustomStadiums.stadiums()
 
-    fun getStadiumById(id: String): Stadium? = STADIUMS.find { it.id == id }
+    /** A custom stadium the player has since deleted is played as a plain neutral ground, so a saved tournament or series never breaks. */
+    fun getStadiumById(id: String): Stadium? =
+        STADIUMS.find { it.id == id } ?: CustomStadiums.find(id)
+            ?: if (id.startsWith(CustomStadiums.ID_PREFIX)) CustomStadiums.DELETED else null
 
     /**
      * Puts a team's home venues first (still returns every stadium, just
@@ -960,7 +964,7 @@ object StadiumData {
      */
     fun getStadiumsPrioritized(teamIds: List<String>): List<Stadium> {
         fun isHome(s: Stadium) = s.homeTeamIds.any { teamIds.contains(it) }
-        return STADIUMS.sortedByDescending { isHome(it) }
+        return getAllStadiums().sortedByDescending { isHome(it) }
     }
 
     /**
@@ -980,10 +984,10 @@ object StadiumData {
 
     fun getAllFilterCountries(): List<String> {
         val names = mutableSetOf<String>()
-        for (stadium in STADIUMS) names.addAll(getStadiumFilterCountries(stadium))
+        for (stadium in getAllStadiums()) names.addAll(getStadiumFilterCountries(stadium))
         return names.sorted()
     }
 
     fun getStadiumsForCountry(country: String): List<Stadium> =
-        STADIUMS.filter { getStadiumFilterCountries(it).contains(country) }
+        getAllStadiums().filter { getStadiumFilterCountries(it).contains(country) }
 }

@@ -160,7 +160,7 @@ object CareerSeason {
         val teams = clubs.mapIndexed { i, c -> clubTeam(career.id, i, c) }
         val tags = LinkedHashMap<String, SquadTag>()
         teams.forEach { t -> t.players.forEach { tags[it.id] = SquadTag.DOMESTIC } }
-        val all = AllStadiums.list()
+        val all = AllStadiums.builtIn()
         val grounds = all.filter { it.country == career.country }.ifEmpty { all }
         val offset = abs(career.state.hashCode()) % grounds.size
         val groundOf = teams.indices.associate { teams[it].id to grounds[(offset + it * 3) % grounds.size].id }

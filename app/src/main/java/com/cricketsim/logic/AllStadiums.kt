@@ -6,6 +6,9 @@ package com.cricketsim.logic
  * One entry per id.
  */
 object AllStadiums {
+    /** Every ground except the player's custom stadiums (a career's fixtures must not use a ground the player can delete). */
+    fun builtIn(): List<Stadium> = list().filter { it.country != CustomStadiums.COUNTRY }
+
     fun list(): List<Stadium> {
         val out = LinkedHashMap<String, Stadium>()
         fun add(grounds: List<Stadium>) {

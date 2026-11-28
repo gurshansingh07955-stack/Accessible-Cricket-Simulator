@@ -96,6 +96,7 @@ object Customisation {
         file = File(dir, "customisation.json")
         logoDir = File(dir, "team_logos")
         formatsFile = File(dir, "custom_formats.json")
+        CustomStadiums.init(context) // the player's own stadiums
         data = try {
             val f = file
             if (f != null && f.exists()) gson.fromJson(f.readText(), CustomData::class.java) ?: CustomData() else CustomData()
