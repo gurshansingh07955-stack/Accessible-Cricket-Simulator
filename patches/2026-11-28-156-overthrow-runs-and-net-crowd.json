@@ -1,0 +1,88 @@
+{
+  "name": "Overthrows you can run on (manual running) and the crowd in net practice",
+  "message": "Overthrow runs are announced with where the ball is and are the batter's to take; crowd sound in net practice (patch 156)",
+  "alreadyAppliedIf": {
+    "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+    "contains": "MAX_OVERTHROW_RUNS"
+  },
+  "ops": [
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    class ThrowResult(val out: Boolean, val overthrows: Int, val line: String, val fielder: String?)\n",
+      "replace": "    class ThrowResult(\n        val out: Boolean, val overthrows: Int, val line: String, val fielder: String?,\n        /** Patch 156, for an overthrow: the throw was straight at the stumps, who it was meant for when it was not, and what is said of the wild throw. */\n        val direct: Boolean = false, val receiver: String = \"\", val astray: String = \"\"\n    )\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "            return ThrowResult(false, extra, (missed + \" \" + astray + \" They take \" + (if (extra == 1) \"one more.\" else \"two more.\")).trim(), null)\n",
+      "replace": "            return ThrowResult(false, extra, (missed + \" \" + astray + \" They take \" + (if (extra == 1) \"one more.\" else \"two more.\")).trim(), null,\n                direct, receiver, (missed + \" \" + astray).trim())\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/logic/RunDecisions.kt",
+      "find": "    fun runOutLine(c: RunChance): String = \"No! ${c.fielderName} hits the stumps and the batter is run out.\"\n",
+      "replace": "    fun runOutLine(c: RunChance): String = \"No! ${c.fielderName} hits the stumps and the batter is run out.\"\n\n    // ---- Overthrows (patch 156): the extra runs are the batter's to take, they are no longer added by themselves ----\n\n    /** The most overthrow runs one wild throw can offer. */\n    const val MAX_OVERTHROW_RUNS = 2\n\n    private fun runsDoneText(completed: Int): String = when (completed) {\n        0 -> \"\"\n        1 -> \"One run completed.\"\n        2 -> \"Two runs completed.\"\n        else -> \"Three runs completed.\"\n    }\n\n    /** Who is going after the loose ball: the man the throw was meant for, else the keeper (or, when the keeper threw it, the nearest fielder). */\n    private fun chaserOf(c: RunChance, t: ThrowResult?): String = when {\n        t != null && !t.direct && t.receiver.isNotEmpty() -> t.receiver\n        chaserIsKeeper(c) -> c.relayName.ifEmpty { \"a fielder\" }\n        else -> c.keeperName\n    }\n\n    /** Where the ball is after a throw that went astray, and who is chasing it (said once, when the overthrow happens). */\n    fun overthrowWhere(c: RunChance, t: ThrowResult, random: Random): String {\n        val chaser = chaserOf(c, t)\n        if (!t.direct) return \"The ball has got away from ${t.receiver.ifEmpty { chaser }} and is running towards the boundary. $chaser is chasing it.\"\n        val place = listOf(\n            \"past the stumps and away towards the boundary behind the wicketkeeper\",\n            \"past the stumps and away down the leg side\",\n            \"past the stumps and away down the off side\"\n        )[random.nextInt(3)]\n        return \"The ball has gone $place. $chaser is chasing it.\"\n    }\n\n    /**\n     * What is said when the overthrow happens ([taken] = 0: the run he was taking, the wild throw, where the ball is) and after each overthrow run he takes\n     * (the ball is still loose), then how to answer. [left] is how many overthrow runs are still on offer. The ball is away from the fielders, so these runs are safe.\n     */\n    fun overthrowPrompt(c: RunChance, completed: Int, taken: Int, left: Int, where: String, t: ThrowResult?, byButtons: Boolean): String {\n        val ask = if (c.partnerCall) {\n            \"${c.strikerName} calls for another. \" + (if (byButtons) \"Accept or refuse.\" else \"Swipe up with two fingers to accept, down to refuse.\") + \" Five seconds.\"\n        } else {\n            (if (byButtons) \"Choose Run or Stay.\" else \"Swipe up with two fingers to run again, down to stay.\") + \" Five seconds.\"\n        }\n        if (taken == 0) {\n            val count = if (left >= 2) \" There could be two runs in this.\" else \"\"\n            return listOf(\n                runsDoneText(completed), t?.astray.orEmpty(), where,\n                \"The fielders are nowhere near it, so another run is safe.$count\", ask\n            ).filter { it.isNotEmpty() }.joinToString(\" \")\n        }\n        return \"Overthrow run completed. The ball is still loose and ${chaserOf(c, t)} has not got to it. Another run is safe. $ask\"\n    }\n\n    /** After the last overthrow run: the ball is gathered and the page ends. */\n    fun overthrowEnd(c: RunChance, taken: Int, t: ThrowResult?): String =\n        \"${if (taken == 1) \"Overthrow run completed.\" else \"Two overthrow runs completed.\"} ${chaserOf(c, t)} finally gathers the ball. That is all the runs.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "    var throwNote by remember(chance) { mutableStateOf(\"\") }\n",
+      "replace": "    var throwNote by remember(chance) { mutableStateOf(\"\") }\n    // An overthrow (patch 156): the runs still on offer, a counter that restarts the announcement for each, the throw and where the ball is. [overthrows] now\n    // counts the overthrow runs he actually took.\n    var overLeft by remember(chance) { mutableStateOf(0) }\n    var overStep by remember(chance) { mutableStateOf(0) }\n    var overThrow by remember(chance) { mutableStateOf<RunDecisions.ThrowResult?>(null) }\n    var overWhere by remember(chance) { mutableStateOf(\"\") }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "            call(\"run_yes\", \"Yes!\")\n",
+      "replace": "            call(\"run_yes\", \"Yes!\")\n            if (overLeft > 0) {\n                // An overthrow run (patch 156): the ball is away from the fielders, so he makes it.\n                overthrows += 1\n                overLeft -= 1\n                if (overLeft == 0) {\n                    val line = RunDecisions.overthrowEnd(chance, overthrows, overThrow)\n                    shown = line\n                    say(line, 2500L)\n                    conclude(completed, false)\n                } else {\n                    deciding = false\n                    overStep++\n                }\n                return@launch\n            }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "            overthrows = (overthrows + thrown.overthrows).coerceAtMost(3)\n            throwNote = thrown.line\n            val n = completed + 1\n",
+      "replace": "            val n = completed + 1\n            if (thrown.overthrows > 0) {\n                // An overthrow (patch 156): the run he was taking is completed and the ball is loose; the extra runs are his to take.\n                overThrow = thrown\n                overWhere = RunDecisions.overthrowWhere(chance, thrown, random)\n                overLeft = thrown.overthrows.coerceIn(1, RunDecisions.MAX_OVERTHROW_RUNS)\n                completed = n\n                overStep++\n                deciding = false\n                return@launch\n            }\n            throwNote = thrown.line\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "    LaunchedEffect(chance, completed) {\n        if (finished) return@LaunchedEffect\n        val text = if (completed == 0) RunDecisions.opening(chance, byButtons) else RunDecisions.afterRun(chance, completed, false, byButtons, throwNote)\n",
+      "replace": "    LaunchedEffect(chance, completed, overStep) {\n        if (finished) return@LaunchedEffect\n        val text = when {\n            overLeft > 0 -> RunDecisions.overthrowPrompt(chance, completed, overthrows, overLeft, overWhere, overThrow, byButtons)\n            completed == 0 -> RunDecisions.opening(chance, byButtons)\n            else -> RunDecisions.afterRun(chance, completed, false, byButtons, throwNote)\n        }\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "                Text(if (chance.partnerCall) \"Your partner calls\" else \"Take a run?\", style = MaterialTheme.typography.headlineMedium)\n                Text(\"Runs so far: $completed\", style = MaterialTheme.typography.titleMedium)\n",
+      "replace": "                Text(\n                    if (overLeft > 0) \"Overthrow! Run again?\" else if (chance.partnerCall) \"Your partner calls\" else \"Take a run?\",\n                    style = MaterialTheme.typography.headlineMedium\n                )\n                Text(\"Runs so far: ${completed + overthrows}\", style = MaterialTheme.typography.titleMedium)\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/match/RunScreens.kt",
+      "find": "                    contentDescription = when {\n",
+      "replace": "                    contentDescription = when {\n                        overLeft > 0 && byButtons -> \"Overthrow! The ball is loose. Choose Run or Stay.\"\n                        overLeft > 0 -> \"Overthrow! The ball is loose. Swipe up with two fingers to run again, down with two fingers to stay.\"\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/practice/NetPracticeScreens.kt",
+      "find": "import androidx.compose.runtime.Composable\nimport androidx.compose.runtime.LaunchedEffect\n",
+      "replace": "import androidx.compose.runtime.Composable\nimport androidx.compose.runtime.DisposableEffect\nimport androidx.compose.runtime.LaunchedEffect\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/practice/NetPracticeScreens.kt",
+      "find": "    val stadium = remember { NetPractice.netStadium() }\n    val isFast = kind == NetKind.FAST\n",
+      "replace": "    val stadium = remember { NetPractice.netStadium() }\n    // The match crowd is in the nets too (it was silent there): it starts with the session and fades out when the session is left.\n    DisposableEffect(services) {\n        services?.sound?.startCrowdAmbience()\n        onDispose { services?.sound?.stopCrowdAmbience() }\n    }\n    val isFast = kind == NetKind.FAST\n"
+    },
+    {
+      "op": "replace",
+      "file": "app/src/main/java/com/cricketsim/ui/practice/NetPracticeScreens.kt",
+      "find": "    val stadium = remember { NetPractice.netStadium() }\n\n    var phase by remember { mutableStateOf(BowlPhase.READY) }\n",
+      "replace": "    val stadium = remember { NetPractice.netStadium() }\n    // The match crowd is in the nets too (it was silent there): it starts with the session and fades out when the session is left.\n    DisposableEffect(services) {\n        services?.sound?.startCrowdAmbience()\n        onDispose { services?.sound?.stopCrowdAmbience() }\n    }\n\n    var phase by remember { mutableStateOf(BowlPhase.READY) }\n"
+    },
+    {
+      "op": "write",
+      "file": "OVERTHROWS_AND_NET_CROWD.md",
+      "content": "# Overthrows you can run on, and the crowd in net practice (patch 156)\n\n**Overthrows** (`RunDecisions`, `RunScreens.kt`; Settings > Running between the wickets, manual running). Before, a wild throw (patch 151) added its one or two extra runs by itself. Now:\n\n* The run he was taking is completed, then the phone says what happened: the runs completed, the wild throw, **where the ball is now** (\"past the stumps and away towards the boundary behind the wicketkeeper\", or \"got away from <receiver> and is running towards the boundary\") and who is chasing it, that another run is safe, and how to answer.\n* He answers as in normal running (two-finger swipe up to run again, down to stay, or the Run / Stay buttons; five seconds; no answer = no run). One or two runs are on offer (`RunDecisions.MAX_OVERTHROW_RUNS`); after each run taken the phone says the ball is still loose, and after the last it says the ball is gathered and the page ends.\n* The overthrow runs are **safe** (the fielders are far from the ball), so there is no run out on them. Runs taken are counted as overthrow runs in the commentary (\"Overthrow: 1 more run.\").\n* Not built: the fielder retrieving the ball and throwing again; a run out on an overthrow run.\n\n**Net practice crowd** (`NetPracticeScreens.kt`): the crowd bed now starts with a batting or bowling net session and stops when the session is left (it was silent). It uses Settings > sound effects and Crowd volume like a match.\n",
+      "mustNotExist": true
+    }
+  ]
+}
