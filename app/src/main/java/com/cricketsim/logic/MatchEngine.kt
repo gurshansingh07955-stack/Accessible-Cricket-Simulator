@@ -727,10 +727,15 @@ object MatchEngine {
             dismissalType = dismissalType, isEdge = isEdge,
             bowlingQualityTier = bowlingDecision.qualityTier, bowlingActualLength = bowlingDecision.actualLength,
             outBatsmanId = outBatterId, fielderName = outFielderName, fielderPosition = outFielderPosition, leftAlone = leftAlone,
-            byes = byes, legByes = legByes, padHit = padHit
+            byes = byes, legByes = legByes, padHit = padHit,
+            speedKmh = bowlingDecision.speedKmh, bowlingLine = bowlingDecision.line, bowlingVariation = bowlingDecision.variation,
+            bowlingSwing = bowlingDecision.swingType,
+            shot = battingDecision?.shot, shotIntent = battingDecision?.intent, shotTiming = battingDecision?.timingTier,
+            shotSector = battingDecision?.let { BattingSystem.getShotDirection(it.shot, it.intent)?.sector },
+            shotAerial = battingDecision?.let { BattingSystem.getShotDirection(it.shot, it.intent)?.isAerial } ?: false
         )
         val playText = if (leftAlone && !isWicket && !isWide && byes + legByes == 0) {
-            leaveText(batsman.name)
+            BallCommentary.generate(result, batsman.name, bowler.name) ?: leaveText(batsman.name)
         } else {
             generateCommentary(result, outBatterName ?: batsman.name, bowler.name)
         }
@@ -888,6 +893,8 @@ object MatchEngine {
      * the AI voice never describe the ball differently.
      */
     fun generateCommentary(outcome: BallOutcome, batsmanName: String, bowlerName: String): String {
+        // Cricbuzz style (patch 158): the delivery, the shot really played and where it went. An older ball without those facts falls through to the old lines.
+        BallCommentary.generate(outcome, batsmanName, bowlerName)?.let { return it }
         val actualLength = outcome.bowlingActualLength
         val lengthPrefix = if (
             actualLength != null &&

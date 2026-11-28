@@ -1,0 +1,14 @@
+# Cricbuzz-style text commentary (patch 158)
+
+The text commentary used to ignore the ball: a pull for four could read "Beautiful cover drive", and no line said how fast or where the ball was pitched. `logic/BallCommentary.kt` now words every ball from its facts, which `MatchEngine.simulateBall` stores on the `BallOutcome` (new fields: `speedKmh`, `bowlingLine`, `bowlingVariation`, `bowlingSwing`, `shot`, `shotIntent`, `shotTiming`, `shotSector`, `shotAerial`, next to the existing `bowlingActualLength`, `isEdge` and `fielderName/Position`).
+
+    Bumrah to Warner, FOUR, 143 km/h, back of a length on off stump. Warner pulls, well timed, over mid-wicket and it races away to the boundary.
+    Rashid to Buttler, 1 run, 88 km/h, a googly, full on middle stump. Buttler sweeps, past square leg, for a single.
+    Starc to Rohit, OUT, 147 km/h, full on off stump, swinging in. Rohit drives, gets a thick edge and Pant takes a good catch behind the stumps.
+
+* **First sentence, the delivery**: bowler to batter, the result (FOUR, SIX, no run, 2 runs, WIDE, OUT, byes), the speed, then the length (bouncer, short, back of a length, good length, full, half-volley, yorker, full toss, long hop), the line (outside off, on off stump, on middle stump, on leg stump, down the leg side), a variation (slower ball, off-cutter, googly, flipper and so on) and swing when there is one.
+* **Second sentence, the shot**: the shot he really played (a verb for each of the 20), stepping out when he came down the track, how it was timed (perfectly, well, a little mistimed, badly mistimed) and **where it went**: the sector the game already uses for that shot (`BattingSystem.getShotDirection`), on the ground ("through the covers", "past square leg", "down to fine leg", "straight down the ground") or in the air ("over mid-wicket", "over the bowler's head"). An edge goes past the slips, down to third man, to fine leg or over the keeper. A dot ball says who cut it off or that it was mistimed. A wicket says how he tried to play and, for a catch, who took it and where.
+* Now and then (about one ball in three) a short remark on a loose or an excellent delivery.
+* **Where**: `MatchEngine.generateCommentary` (used by the live ball and by the run-decision balls) and the leave in `simulateBall` call `BallCommentary.generate`; it returns null for a ball without the stored facts (an older save), which gets the old lines. `BallCommentary.CRICBUZZ_STYLE` false brings the old lines back for every ball.
+* **Not changed**: the recorded voice commentary (its clips are chosen by outcome category, not by shot), the "Ball quality / Shot played / Timing" part that follows the commentary, computer-v-computer matches (no ball-by-ball text), the fielding-event lines (dropped catch, stumping missed, run saved).
+* The place the ball goes is the game's one sector per shot, not a physical track: the engine does not simulate where in the ground each ball lands.

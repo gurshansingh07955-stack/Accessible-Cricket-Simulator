@@ -55,5 +55,15 @@ data class BallOutcome(
     /** Leg byes: runs run off a legal ball that hit the batter's body. Counted like byes. */
     val legByes: Int = 0,
     /** Patch 142: the ball hit the batter's pad or body (an LBW the game decided, leg byes, or now and then a dot ball on the stumps), so the fielding side may appeal. */
-    val padHit: Boolean = false
+    val padHit: Boolean = false,
+    // Patch 158 (Cricbuzz-style commentary): how fast and where the ball was pitched, how it was played and where it went. Null on a ball from an older save.
+    val speedKmh: Int? = null,
+    val bowlingLine: BowlingLine? = null,
+    val bowlingVariation: BowlingVariation? = null,
+    val bowlingSwing: SwingType? = null,
+    val shot: NamedShot? = null,
+    val shotIntent: IntentDirection? = null,
+    val shotTiming: BowlingQualityTier? = null,
+    val shotSector: FieldingSector? = null,
+    val shotAerial: Boolean = false
 )
